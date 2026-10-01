@@ -729,6 +729,7 @@ pub fn projection_systems(app: &mut App) {
     app.init_resource::<crate::project::TreeReportState>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<LastRefusal>()
+        .init_resource::<crate::pick::SelectedDwarf>()
         .init_resource::<TickClock>()
         .init_resource::<crate::project::DwarfHeadings>()
         .add_systems(
@@ -737,6 +738,8 @@ pub fn projection_systems(app: &mut App) {
                 setup_slice_readout,
                 setup_lighting_readout,
                 setup_clock_readout,
+                setup_name_readout,
+                refuse_select_of_a_missing_dwarf,
             ),
         )
         .add_systems(
@@ -753,6 +756,7 @@ pub fn projection_systems(app: &mut App) {
                 // from the previous tick's movement.
                 crate::project::start_dwarf_walk,
                 crate::project::drive_dwarf_walk,
+                crate::project::apply_dwarf_tunics,
             )
                 .chain()
                 .in_set(ProjectionSet),
@@ -762,7 +766,8 @@ pub fn projection_systems(app: &mut App) {
         // half of the story the readout exists for. It must read the level AFTER the keyboard has
         // written it, or the displayed level trails the cut by one frame.
         .add_systems(Update, update_slice_readout.after(ProjectionSet))
-        .add_systems(Update, update_clock_readout.after(ProjectionSet));
+        .add_systems(Update, update_clock_readout.after(ProjectionSet))
+        .add_systems(Update, update_name_readout.after(ProjectionSet));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
     // another is the same defect this function's own doc comment describes: `crates/gui/tests/
@@ -969,6 +974,8 @@ struct Args {
     static_world: bool,
     slice_level: Option<i32>,
     distance: Option<f32>,
+    /// `--select <id>`: start with this dwarf selected, as if he had been clicked.
+    select: Option<u32>,
     camera: Option<CameraStart>,
     cursor: Option<Vec2>,
     at_tick: Option<u64>,
@@ -1099,6 +1106,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut static_world = false;
     let mut slice_level = None;
     let mut distance = None;
+    let mut select = None;
     let mut camera = None;
     let mut cursor = None;
     let mut at_tick = None;
@@ -1204,6 +1212,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                 bail!("--distance must be finite");
             }
             distance = Some(parsed);
+        } else if arg == "--select" {
+            let value = args.next().context("--select requires a dwarf id")?;
+            select = Some(
+                value
+                    .to_string_lossy()
+                    .parse()
+                    .context("invalid --select id")?,
+            );
         } else if arg == "--camera" {
             let value = args
                 .next()
@@ -1301,6 +1317,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         static_world,
         slice_level,
         distance,
+        select,
         camera,
         cursor,
         at_tick,
@@ -1478,6 +1495,9 @@ fn mode_key(mode: DesignateMode) -> KeyCode {
 fn insert_capture_resources(app: &mut App, args: &Args) {
     if let Some(distance) = args.distance {
         app.insert_resource(CaptureDistance(distance));
+    }
+    if let Some(id) = args.select {
+        app.insert_resource(crate::pick::SelectedDwarf(Some(id)));
     }
     if let Some(camera) = args.camera {
         app.insert_resource(camera);
@@ -1672,6 +1692,58 @@ pub struct Hud;
 
 #[derive(Component)]
 pub struct ClockReadout;
+
+/// The selected dwarf's name, in his tunic colour. Empty with no selection.
+#[derive(Component)]
+pub struct NameReadout;
+
+fn setup_name_readout(mut commands: Commands) {
+    commands.spawn((
+        Text::new(""),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::WHITE),
+        // Under the clock readout, on the same right edge.
+        Node {
+            position_type: PositionType::Absolute,
+            top: px(48),
+            right: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        NameReadout,
+        Hud,
+        ClientLocal,
+    ));
+}
+
+fn update_name_readout(
+    mirror: Res<MirrorResource>,
+    selected: Res<crate::pick::SelectedDwarf>,
+    mut readout: Query<(&mut Text, &mut TextColor), With<NameReadout>>,
+) {
+    let identity = selected.0.and_then(|id| {
+        mirror
+            .0
+            .entities()
+            .find(|entity| entity.id == id)
+            .and_then(|entity| entity.identity)
+    });
+    let (text, color) = match identity {
+        Some(identity) => (
+            client_core::dwarf_name_text(identity.name),
+            crate::appearance::dwarf_tunic_color(identity.colour),
+        ),
+        None => ("", Color::WHITE),
+    };
+    for (mut readout, mut text_color) in &mut readout {
+        if readout.0 != text {
+            readout.0 = text.to_owned();
+        }
+        if text_color.0 != color {
+            text_color.0 = color;
+        }
+    }
+}
 
 /// 8.3 (Wolf): time of day, sim time elapsed, and the daemon's speed, in one line.
 ///
@@ -2400,6 +2472,11 @@ fn fog_density_ramp_image() -> Image {
     image
 }
 
+/// The drawn height of a dwarf, in cells: the authored 1.2 m figure times `METRES_TO_CELLS`.
+// NOTE: 1.2 m is the r17 asset's height; a new dwarf asset must update it. The focus point below
+// is half of it.
+const DWARF_HEIGHT_CELLS: f32 = 1.2 * crate::project::METRES_TO_CELLS;
+
 /// The point depth of field must focus, in render space, or `None` for the rig's own aim point.
 ///
 /// A SELECTED DWARF is the subject, and he is not where the aim point is. `frame_selected_dwarf`
@@ -2407,6 +2484,10 @@ fn fog_density_ramp_image() -> Image {
 /// the composition push -- about 7.3 units at `SELECT_DISTANCE`. At boot there is no selection and
 /// the subject IS `world_to_render(rig.focus)`, which is why every boot-framing figure in this
 /// story's record stands unchanged.
+///
+/// His BODY, not his `Transform`: the asset's origin is his feet, so `translation` is the ground
+/// under him and, at the closest zoom, the plane through his boots leaves his head off the focal
+/// plane (#136).
 fn dof_subject(
     selected: &crate::pick::SelectedDwarf,
     drawn: &crate::pick::DrawnEntities,
@@ -2415,7 +2496,43 @@ fn dof_subject(
     drawn
         .iter()
         .find(|(marker, _)| marker.0 == id)
-        .map(|(_, transform)| transform.translation)
+        .map(|(_, transform)| transform.translation + Vec3::Y * (DWARF_HEIGHT_CELLS / 2.0))
+}
+
+/// Fails the run when `--select` names no dwarf in the connect snapshot.
+///
+/// The click path can only ever select a dwarf (`nearest_dwarf_to`); `--select` takes any id, and
+/// a missing one framed nothing while a campfire's framed the campfire -- an ordinary-looking
+/// capture of the wrong subject, with no log line. A `Startup` system, so it judges the startup
+/// selection only, against the snapshot the client connected with.
+fn refuse_select_of_a_missing_dwarf(
+    selected: Res<crate::pick::SelectedDwarf>,
+    mirror: Res<MirrorResource>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    let Some(id) = selected.0 else {
+        return;
+    };
+    if !mirror
+        .0
+        .entities()
+        .any(|entity| entity.id == id && entity.kind == protocol::EntityKind::Dwarf)
+    {
+        eprintln!("--select {id}: no dwarf has that id in the daemon's snapshot");
+        exit.write(AppExit::error());
+    }
+}
+
+/// The aperture for a selected subject `focal_distance` away.
+///
+/// `DOF_APERTURE_F_STOPS` was tuned at the boot framing, about 61.7 units from the camp. The circle
+/// of confusion goes as 1/(N * focal^2), so the same f-stop at distance 4 is `(61.7/4)^2` = 238x
+/// blurrier for the same offset from the focal plane, and a dwarf's own head is off it. Scaling the
+/// f-stop by the square of the ratio holds the blur at what boot framing has; it only ever widens
+/// (`max`), so a subject farther than boot keeps the tuned value.
+fn selected_aperture(focal_distance: f32) -> f32 {
+    let boot = depth_of_field_for_boot_camera().focal_distance;
+    DOF_APERTURE_F_STOPS * (boot / focal_distance).powi(2).max(1.0)
 }
 
 fn update_dof_from_camera(
@@ -2425,10 +2542,16 @@ fn update_dof_from_camera(
 ) {
     let subject = dof_subject(&selected, &drawn);
     for (transform, rig, mut dof) in &mut cameras {
-        dof.focal_distance = match subject {
-            Some(point) => transform.translation().distance(point),
-            None => dof_focal_distance(transform.translation(), rig),
-        };
+        match subject {
+            Some(point) => {
+                dof.focal_distance = transform.translation().distance(point);
+                dof.aperture_f_stops = selected_aperture(dof.focal_distance);
+            }
+            None => {
+                dof.focal_distance = dof_focal_distance(transform.translation(), rig);
+                dof.aperture_f_stops = DOF_APERTURE_F_STOPS;
+            }
+        }
     }
 }
 
@@ -3341,6 +3464,56 @@ mod tests {
         assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed paused");
     }
 
+    /// 12.2 AC6. Captures hide every HUD element, so the evidence is this test: the name line
+    /// shows the SELECTED dwarf's name in his tunic colour, and nothing with no selection.
+    #[test]
+    fn the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears() {
+        use protocol::{DwarfColour, DwarfName, Identity};
+        let named = |id, x, name, colour| protocol::Entity {
+            id,
+            kind: protocol::EntityKind::Dwarf,
+            pos: [x, 0, 0],
+            state: protocol::JobState::Idle,
+            light: None,
+            identity: Some(Identity { name, colour }),
+        };
+        let mut snapshot = snapshot_at_tick(0, Speed::Normal);
+        snapshot.entities = vec![
+            named(4, 0, DwarfName::Durin, DwarfColour::Red),
+            named(7, 1, DwarfName::Bifur, DwarfColour::Blue),
+        ];
+        let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
+        app.update();
+        let readout = |app: &mut App| {
+            let world = app.world_mut();
+            let (text, colour) = world
+                .query_filtered::<(&Text, &bevy::prelude::TextColor), With<super::NameReadout>>()
+                .single(world)
+                .unwrap();
+            (
+                text.0.clone(),
+                bevy::color::ColorToPacked::to_u8_array_no_alpha(colour.0.to_srgba()),
+            )
+        };
+        assert_eq!(readout(&mut app).0, "", "no selection shows nothing");
+        let select = |app: &mut App, id| {
+            app.world_mut()
+                .insert_resource(crate::pick::SelectedDwarf(id));
+            app.update();
+        };
+        select(&mut app, Some(4));
+        // Independent oracle: the approved hexes, written out.
+        assert_eq!(readout(&mut app), ("Durin".to_owned(), [0xB2, 0x3A, 0x34]));
+        select(&mut app, Some(7));
+        assert_eq!(readout(&mut app), ("Bifur".to_owned(), [0x3C, 0x62, 0xBA]));
+        select(&mut app, None);
+        assert_eq!(
+            readout(&mut app).0,
+            "",
+            "clearing the selection empties the line"
+        );
+    }
+
     #[test]
     fn refusal_hud_follows_wire_and_clears_on_the_next_world_command() {
         use crate::{
@@ -3428,8 +3601,8 @@ mod tests {
             keys.release_all();
             keys.clear();
         };
-        // Slice, lighting, clock and the designate hint.
-        assert_eq!(visibilities(&mut app).len(), 5);
+        // Slice, lighting, clock, the selected dwarf's name and the designate hint.
+        assert_eq!(visibilities(&mut app).len(), 6);
         press_h(&mut app);
         assert!(
             visibilities(&mut app)
@@ -3467,7 +3640,7 @@ mod tests {
                 .iter(app.world())
                 .copied()
                 .collect::<Vec<_>>();
-            visibilities.len() == 5
+            visibilities.len() == 6
                 && visibilities
                     .iter()
                     .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden)
@@ -3835,6 +4008,7 @@ mod tests {
                 pos: [0, 0, 0],
                 state: protocol::JobState::Idle,
                 light: Some(protocol::LightKind::Campfire),
+                identity: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -4723,6 +4897,136 @@ mod tests {
         );
     }
 
+    /// `--select` must reach the live selection, and an explicit `--distance` must survive it:
+    /// `frame_selected_dwarf` drops the zoom to `SELECT_DISTANCE` on the frame the selection
+    /// changes, and the startup selection is a change on frame one.
+    #[test]
+    fn the_select_flag_starts_a_selection_and_distance_still_wins() {
+        let one_dwarf = || Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![protocol::Entity {
+                id: 2,
+                kind: protocol::EntityKind::Dwarf,
+                pos: [1, 0, 0],
+                state: protocol::JobState::Idle,
+                light: None,
+                identity: None,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let parsed = super::parse_args_from(
+            ["--select", "2"]
+                .iter()
+                .map(std::ffi::OsString::from)
+                .collect::<Vec<_>>(),
+        )
+        .expect("--select takes a dwarf id");
+        let mut app = App::new();
+        super::insert_capture_resources(&mut app, &parsed);
+        assert_eq!(
+            app.world().resource::<crate::pick::SelectedDwarf>().0,
+            Some(2),
+            "a parsed --select must reach the resource the camera and DoF read"
+        );
+        assert!(
+            super::parse_args_from([std::ffi::OsString::from("--select")]).is_err(),
+            "--select needs a value"
+        );
+        assert!(
+            super::parse_args_from(["--select", "x"].iter().map(std::ffi::OsString::from)).is_err(),
+            "--select needs a numeric id"
+        );
+
+        let rig_distance = |args: &[&str]| {
+            let (mut app, _sender, _server) = configured_app_with_snapshot(args, one_dwarf());
+            app.update();
+            app.update();
+            let world = app.world_mut();
+            world
+                .query::<&CameraRig>()
+                .single(world)
+                .expect("one camera")
+                .distance
+        };
+        assert_eq!(
+            rig_distance(&["--capture", "x.png", "--frames", "1", "--select", "2"]),
+            20.0,
+            "with no --distance the selection still drops the zoom to the readable one"
+        );
+        assert_eq!(
+            rig_distance(&[
+                "--capture",
+                "x.png",
+                "--frames",
+                "1",
+                "--select",
+                "2",
+                "--distance",
+                "4"
+            ]),
+            4.0,
+            "an explicit --distance must win over the selection's zoom"
+        );
+    }
+
+    /// `--select` of an id that is not a drawn dwarf must fail the run, not shoot the unselected
+    /// frame: a missing id framed nothing and a campfire id framed the campfire, both silently.
+    #[test]
+    fn select_of_a_missing_or_non_dwarf_id_fails_the_run() {
+        let camp = || Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: Dims { x: 2, y: 1, z: 1 },
+            tiles: vec![Tile::Solid(protocol::Material::Stone), Tile::Empty],
+            entities: vec![
+                protocol::Entity {
+                    id: 2,
+                    kind: protocol::EntityKind::Dwarf,
+                    pos: [1, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: None,
+                    identity: None,
+                },
+                protocol::Entity {
+                    id: 5,
+                    kind: protocol::EntityKind::Campfire,
+                    pos: [0, 0, 0],
+                    state: protocol::JobState::Idle,
+                    light: Some(protocol::LightKind::Campfire),
+                    identity: None,
+                },
+            ],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        };
+        let exit_after_one_frame = |id: &str| {
+            let (mut app, _sender, _server) = configured_app_with_snapshot(
+                &["--capture", "x.png", "--frames", "1", "--select", id],
+                camp(),
+            );
+            app.update();
+            app.should_exit()
+        };
+        assert!(
+            exit_after_one_frame("2").is_none(),
+            "a real dwarf's id must run on"
+        );
+        for id in ["99", "5"] {
+            assert!(
+                exit_after_one_frame(id).is_some_and(|exit| exit.is_error()),
+                "--select {id} names no dwarf and must fail the run"
+            );
+        }
+    }
+
     /// Depth of field must focus the SELECTED DWARF, not the rig's aim point.
     ///
     /// `frame_selected_dwarf` centres him with `CameraRig::frame_render_point`, which writes the
@@ -4731,6 +5035,9 @@ mod tests {
     /// figure the operator just picked OUTSIDE the focal plane at the ruled f/0.05, while every
     /// boot-framing measurement stays correct, because at boot the subject IS the aim point.
     /// Wolf reported it from the seat, 2026-09-21.
+    ///
+    /// And clearing the selection must hand DoF back: the aim point and the tuned f/0.05, or an
+    /// Escape keeps the widened close-range aperture (AC7, "behaves exactly as today").
     #[test]
     fn depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point() {
         let snapshot = Snapshot {
@@ -4743,6 +5050,7 @@ mod tests {
                 pos: [1, 0, 0],
                 state: protocol::JobState::Idle,
                 light: None,
+                identity: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -4764,10 +5072,12 @@ mod tests {
             let mut q = world.query::<(&WorldProjected, &bevy::prelude::Transform)>();
             q.iter(world)
                 .find(|(marker, _)| marker.0 == 2)
-                .map(|(_, transform)| transform.translation)
+                // His FEET are his `Transform`; the subject is his body, half of the 0.75-cell
+                // figure up (#136). Written as a literal so the test is not the constant.
+                .map(|(_, transform)| transform.translation + bevy::prelude::Vec3::Y * 0.375)
                 .expect("the selected dwarf must be drawn")
         };
-        let (camera, rig_aim, focal) = {
+        let (camera, rig_aim, focal, aperture) = {
             let world = app.world_mut();
             let mut q = world.query::<(&CameraRig, &super::DepthOfField)>();
             let (rig, dof) = q.single(world).expect("one camera");
@@ -4778,6 +5088,7 @@ mod tests {
                 camera,
                 camera.distance(super::world_to_render_f32(rig.focus)),
                 dof.focal_distance,
+                dof.aperture_f_stops,
             )
         };
         let to_dwarf = camera.distance(dwarf);
@@ -4789,10 +5100,51 @@ mod tests {
             "this fixture cannot separate the two rules: dwarf at {to_dwarf}, aim point at \
              {rig_aim}"
         );
+        // And the body point must be distinguishable from his feet, or focusing the feet (the
+        // pre-#136 rule) would pass: the camera looks down, so half a figure moves the distance
+        // by only a fraction of it.
+        let to_feet = camera.distance(dwarf - bevy::prelude::Vec3::Y * 0.375);
         assert!(
-            (focal - to_dwarf).abs() < 0.25,
+            (to_dwarf - to_feet).abs() > 0.1,
+            "this fixture cannot separate his body from his feet: {to_dwarf} vs {to_feet}"
+        );
+        assert!(
+            (focal - to_dwarf).abs() < 0.03,
             "a selected dwarf must be the focal subject: focal_distance={focal} but he stands \
              {to_dwarf} away (the rig's aim point is {rig_aim})"
+        );
+        // The aperture follows the focal distance: f/0.05 was tuned 61.7 units out, and CoC goes
+        // as 1/(N * focal^2). Independent oracle: 0.05 * (61.7 / focal)^2.
+        let expected = 0.05 * (61.7 / to_dwarf).powi(2);
+        assert!(
+            (aperture - expected).abs() / expected < 0.05,
+            "the selected aperture must scale with the focal distance: f/{aperture} at {to_dwarf}, \
+             expected about f/{expected}"
+        );
+
+        // Escape: the no-selection rule again, from where the selection left the camera.
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(None));
+        app.update();
+        let (rig_aim, focal, aperture) = {
+            let world = app.world_mut();
+            let mut q = world.query::<(&CameraRig, &super::DepthOfField)>();
+            let (rig, dof) = q.single(world).expect("one camera");
+            let camera = rig.transform().translation;
+            (
+                camera.distance(super::world_to_render_f32(rig.focus)),
+                dof.focal_distance,
+                dof.aperture_f_stops,
+            )
+        };
+        assert!(
+            (focal - rig_aim).abs() < 0.03,
+            "a cleared selection must focus the rig's aim point again: focal_distance={focal}, \
+             aim point {rig_aim} (the dwarf was {to_dwarf})"
+        );
+        assert!(
+            (aperture - 0.05).abs() < 1e-6,
+            "a cleared selection must restore the tuned f/0.05, not keep f/{aperture}"
         );
     }
 
@@ -4809,6 +5161,7 @@ mod tests {
                     pos: [0, 0, 0],
                     state: protocol::JobState::Idle,
                     light: Some(protocol::LightKind::Campfire),
+                    identity: None,
                 },
                 protocol::Entity {
                     id: 2,
@@ -4816,6 +5169,7 @@ mod tests {
                     pos: [1, 0, 0],
                     state: protocol::JobState::Idle,
                     light: Some(protocol::LightKind::Lantern),
+                    identity: None,
                 },
             ],
             designations: Vec::new(),
@@ -5193,6 +5547,8 @@ mod tests {
             ),
             "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
             "22:00   elapsed 0d 00:00   speed normal".to_string(),
+            "".to_string(),
+            // The selected dwarf's name line, empty with no selection.
             "".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),

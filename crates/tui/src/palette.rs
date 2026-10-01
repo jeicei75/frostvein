@@ -1,4 +1,4 @@
-use protocol::{DesignationKind, EntityKind, JobState, Material, Tile};
+use protocol::{DesignationKind, DwarfColour, EntityKind, JobState, Material, Tile};
 
 use crate::view::Mode;
 
@@ -96,6 +96,18 @@ pub fn entity_cell(kind: EntityKind, state: JobState) -> Cell {
             glyph: '♨',
             fg: (244, 92, 40),
         },
+    }
+}
+
+/// The dwarf's tunic colour, from the approved 12.2 look draft. Used for the roster row and, on
+/// Wolf's seat ruling, for a named dwarf's `☻` glyph (job and carry state no longer show on it).
+pub fn dwarf_colour(colour: DwarfColour) -> Rgb {
+    match colour {
+        DwarfColour::Red => (0xB2, 0x3A, 0x34),
+        DwarfColour::Gold => (0xD6, 0xA4, 0x2C),
+        DwarfColour::Green => (0x3E, 0x92, 0x4C),
+        DwarfColour::Blue => (0x3C, 0x62, 0xBA),
+        DwarfColour::Purple => (0x80, 0x4C, 0xA8),
     }
 }
 
@@ -242,6 +254,16 @@ mod tests {
                 entity_cell(EntityKind::Dwarf, state),
                 Cell { glyph: '☺', fg }
             );
+        }
+
+        for (colour, fg) in [
+            (DwarfColour::Red, (178, 58, 52)),
+            (DwarfColour::Gold, (214, 164, 44)),
+            (DwarfColour::Green, (62, 146, 76)),
+            (DwarfColour::Blue, (60, 98, 186)),
+            (DwarfColour::Purple, (128, 76, 168)),
+        ] {
+            assert_eq!(dwarf_colour(colour), fg);
         }
 
         assert_eq!(

@@ -65,9 +65,10 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: `spawn_dwarves` took `&heights` when this was written and now takes
 # `camp_origin`. Intent unchanged -- reuse the worldgen stream (`rng`, still in scope) instead of
 # the dedicated spawn stream, which is exactly what the seed pin exists to catch.
-old = "        world.spawn_dwarves(camp_origin, &mut spawn_rng);\n"
+# Re-pointed 2026-09-29 (12.2): the call gained an `identities` argument.
+old = "        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities);\n"
 assert s.count(old) == 1
-p.write_text(s.replace(old, "        world.spawn_dwarves(camp_origin, &mut rng);\n"))
+p.write_text(s.replace(old, "        world.spawn_dwarves(camp_origin, &mut rng, identities);\n"))
 PY
 
 # --- Added by code review (2026-08-03). One per review patch: a patch whose test

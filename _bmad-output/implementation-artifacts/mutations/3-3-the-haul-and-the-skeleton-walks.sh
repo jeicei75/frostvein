@@ -307,28 +307,30 @@ PY
 mutation "the carrier glyph is never drawn" tui items_draw_only_on_the_viewed_level_and_a_shared_cell_draws_the_carrier <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = '''            } else if item_counts.get(&index).copied().unwrap_or(0) > 0 {
-                carrier_cell()
+# Re-pointed 2026-09-30: 12.2 nested the carrier choice so a named dwarf's tunic can recolour it.
+old = '''                let cell = if item_counts.get(&index).copied().unwrap_or(0) > 0 {
+                    carrier_cell()
 '''
 assert old in s
-p.write_text(s.replace(old, '''            } else if false {
-                carrier_cell()
+p.write_text(s.replace(old, '''                let cell = if false {
+                    carrier_cell()
 '''))
 PY
 
 mutation "the carrier glyph wins over the crowd glyph" tui two_dwarves_on_one_cell_draw_the_crowd_glyph <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+# Re-pointed 2026-09-30: 12.2 nested the carrier choice under the crowd check's `else`.
 old = '''            framebuffer.cells[index] = if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
                 crowd_cell()
-            } else if item_counts.get(&index).copied().unwrap_or(0) > 0 {
-                carrier_cell()
+            } else {
 '''
 assert old in s
 new = '''            framebuffer.cells[index] = if item_counts.get(&index).copied().unwrap_or(0) > 0 {
                 carrier_cell()
             } else if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
                 crowd_cell()
+            } else {
 '''
 p.write_text(s.replace(old, new))
 PY

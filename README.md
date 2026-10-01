@@ -63,11 +63,12 @@ per tick from there.
 
 You open at the **centre of the map**, on the z-level with the most standable ground.
 Terrain is one z-level at a time in 24-bit colour — snow `░`, ice `▒`, soil `▓`, stone `█`,
-ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves `☺` on top, torches `†` and a
-campfire `♨` beneath them, `☻` where a dwarf shares a cell with a stone and `⚇` where two
-dwarves share one. Where a tile is empty the ground up to three levels below shows through,
-dimmed with depth. The bottom row reports the tick, the speed, the z-level and the dwarf
-count.
+ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves on top, torches `†` and a
+campfire `♨` beneath them. A named dwarf is `☻` in his tunic colour; a nameless one is `☺`,
+or `☻` where he shares a cell with a stone; `⚇` marks two dwarves sharing one cell. Where a tile is empty the ground up to three levels below shows through,
+dimmed with depth. The bottom row is the key hint; the row above it reports the tick, the
+speed, the z-level and the dwarf count; the row above that is the roster: each dwarf's name,
+ascending by id, in his tunic colour.
 
 **The camp is not on the level you open at.** The dwarves, the campfire and the torches all
 sit at z 9 on the shipped seed, while the most-standable-ground rule opens you at z 19 — a
@@ -254,6 +255,7 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--frames N` / `--at-tick N` | when to capture |
 | `--camera <yaw,pitch,distance,fx,fy,fz>` | open at a framing; works interactively too |
 | `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |
+| `--select <id>` | start with dwarf `<id>` selected, as if clicked; an explicit `--distance` keeps its zoom, and an id that is not a dwarf in the daemon's snapshot fails the run |
 | `--z <level>` | pin the slice level |
 | `--subdiv <n>` | terrain subdivision; defaults to the shipped 4, and the recipes pass it anyway so the frame says what it was |
 | `--expect-haul` | fail the capture unless a stone was seen on a stockpile tile (`items on stockpile=N` on the `motion:` line) |

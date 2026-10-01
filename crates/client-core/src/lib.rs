@@ -13,6 +13,28 @@ pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
     }
 }
 
+/// The one spelling of a dwarf's name, shared by both clients.
+pub fn dwarf_name_text(name: protocol::DwarfName) -> &'static str {
+    match name {
+        protocol::DwarfName::Durin => "Durin",
+        protocol::DwarfName::Dvalin => "Dvalin",
+        protocol::DwarfName::Nori => "Nori",
+        protocol::DwarfName::Ori => "Ori",
+        protocol::DwarfName::Dori => "Dori",
+        protocol::DwarfName::Bifur => "Bifur",
+        protocol::DwarfName::Bofur => "Bofur",
+        protocol::DwarfName::Gloin => "Gloin",
+        protocol::DwarfName::Nain => "Nain",
+        protocol::DwarfName::Thrain => "Thrain",
+        protocol::DwarfName::Frar => "Frar",
+        protocol::DwarfName::Loni => "Loni",
+        protocol::DwarfName::Regin => "Regin",
+        protocol::DwarfName::Alf => "Alf",
+        protocol::DwarfName::Fjalar => "Fjalar",
+        protocol::DwarfName::Frosti => "Frosti",
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Changes {
     pub tiles: Vec<[i32; 3]>,
@@ -315,6 +337,31 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn every_dwarf_name_has_its_one_spelling() {
+        use protocol::DwarfName::*;
+        for (name, text) in [
+            (Durin, "Durin"),
+            (Dvalin, "Dvalin"),
+            (Nori, "Nori"),
+            (Ori, "Ori"),
+            (Dori, "Dori"),
+            (Bifur, "Bifur"),
+            (Bofur, "Bofur"),
+            (Gloin, "Gloin"),
+            (Nain, "Nain"),
+            (Thrain, "Thrain"),
+            (Frar, "Frar"),
+            (Loni, "Loni"),
+            (Regin, "Regin"),
+            (Alf, "Alf"),
+            (Fjalar, "Fjalar"),
+            (Frosti, "Frosti"),
+        ] {
+            assert_eq!(dwarf_name_text(name), text);
+        }
+    }
+
     fn snapshot() -> Snapshot {
         Snapshot {
             msg_type: MessageType::Snapshot,
@@ -326,6 +373,7 @@ mod tests {
                 pos: [0, 0, 0],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -378,6 +426,7 @@ mod tests {
                 pos: [1, 0, 0],
                 state: JobState::Walk,
                 light: None,
+                identity: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -431,6 +480,7 @@ mod tests {
             pos: [1, 0, 0],
             state: JobState::Idle,
             light: None,
+            identity: None,
         });
         initial.entities.push(Entity {
             id: 3,
@@ -438,6 +488,7 @@ mod tests {
             pos: [0, 0, 0],
             state: JobState::Idle,
             light: None,
+            identity: None,
         });
         let mut mirror = Mirror::from_snapshot(initial).unwrap();
 
@@ -452,6 +503,7 @@ mod tests {
                     pos: [1, 0, 0],
                     state: JobState::Walk,
                     light: None,
+                    identity: None,
                 },
                 Entity {
                     id: 2,
@@ -459,6 +511,7 @@ mod tests {
                     pos: [1, 0, 0],
                     state: JobState::Idle,
                     light: None,
+                    identity: None,
                 },
                 Entity {
                     id: 8,
@@ -466,6 +519,7 @@ mod tests {
                     pos: [0, 0, 0],
                     state: JobState::Idle,
                     light: None,
+                    identity: None,
                 },
             ],
             designations: Vec::new(),

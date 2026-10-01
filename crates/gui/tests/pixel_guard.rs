@@ -615,6 +615,223 @@ fn dof_keeps_depth_separation_at_distance_40() {
     );
 }
 
+/// Mean absolute per-channel difference of one rectangle between two frames of the same size.
+fn window_diff(
+    a: &[[u8; 4]],
+    b: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+) -> f32 {
+    let (x0, y0, x1, y1) = rect;
+    let mut total = 0_u64;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            for c in 0..3 {
+                total += u64::from(a[y * width + x][c].abs_diff(b[y * width + x][c]));
+            }
+        }
+    }
+    total as f32 / (3 * (x1 - x0) * (y1 - y0)) as f32
+}
+
+/// Mean colour of a rectangle as CHROMATICITY (each channel over the channel sum). Lighting
+/// scales a tunic's brightness and the warm sun pulls every chromaticity toward orange, so a
+/// distance in RGB or a hue angle calls a lit purple "red"; what survives is which of two frames'
+/// windows lies nearer a given table colour.
+fn chromaticity_mean(
+    pixels: &[[u8; 4]],
+    width: usize,
+    rect: (usize, usize, usize, usize),
+) -> [f32; 3] {
+    let (x0, y0, x1, y1) = rect;
+    let mut sum = [0_u64; 3];
+    for y in y0..y1 {
+        for x in x0..x1 {
+            for c in 0..3 {
+                sum[c] += u64::from(pixels[y * width + x][c]);
+            }
+        }
+    }
+    let total = (sum[0] + sum[1] + sum[2]) as f32;
+    sum.map(|c| c as f32 / total)
+}
+
+fn chromaticity_of_hex(rgb: [u8; 3]) -> [f32; 3] {
+    let total = rgb.iter().map(|c| f32::from(*c)).sum::<f32>();
+    rgb.map(|c| f32::from(c) / total)
+}
+
+fn chromaticity_distance(a: [f32; 3], b: [f32; 3]) -> f32 {
+    a.iter()
+        .zip(b)
+        .map(|(a, b)| (a - b).powi(2))
+        .sum::<f32>()
+        .sqrt()
+}
+
+impl Daemon {
+    /// The colour id the daemon's snapshot gives dwarf `id`, read off the wire the client reads.
+    fn dwarf_colour(&self, id: u64) -> String {
+        let stream = std::net::TcpStream::connect(("127.0.0.1", self.port))
+            .expect("the daemon must accept a probe connection");
+        let mut line = String::new();
+        BufReader::new(stream)
+            .read_line(&mut line)
+            .expect("the daemon must send its snapshot first");
+        let snapshot: serde_json::Value = serde_json::from_str(&line).expect("a json snapshot");
+        snapshot["entities"]
+            .as_array()
+            .expect("entities")
+            .iter()
+            .find(|entity| entity["kind"] == "dwarf" && entity["id"] == id)
+            .and_then(|entity| entity["identity"]["colour"].as_str())
+            .expect("the dwarf must carry an identity colour")
+            .to_owned()
+    }
+}
+
+/// The approved tunic hexes (`12-2-signoff/draft.md`), by wire name. Written out here, not read from
+/// the client, so the guard is an independent oracle for what the client paints.
+fn tunic_hex(colour: &str) -> [u8; 3] {
+    match colour {
+        "red" => [0xB2, 0x3A, 0x34],
+        "gold" => [0xD6, 0xA4, 0x2C],
+        "green" => [0x3E, 0x92, 0x4C],
+        "blue" => [0x3C, 0x62, 0xBA],
+        "purple" => [0x80, 0x4C, 0xA8],
+        other => panic!("unknown colour id {other}"),
+    }
+}
+
+/// The instrument test for `--select`, and AC5 on the rendered model: two captures that select
+/// different dwarves must frame different dwarves, so the centre window changes, and each dwarf's
+/// tunic window must lie nearer his own approved tunic colour than the OTHER dwarf's window does.
+///
+/// That is a RELATIVE rule, weaker than Task 4's "nearer its own table colour than the other's",
+/// and it is the one Wolf accepted (12.2 review, 2026-10-01): the absolute rule fails on the real
+/// frame, where the red dwarf's window [0.4275, 0.2947, 0.2778] lies 0.2334 from red but 0.2129
+/// from purple and 0.2128 from gold. The relative rule still kills an all-red sabotage (0.020).
+///
+/// Distance 4 and DoF off, so neither the selection zoom nor blur is in the comparison. One fresh
+/// daemon per capture (the world is the same: a fresh daemon freezes at the same tick and seeds
+/// the same identities); `--clock 8`, not the noon 12: at noon the exposure washes every tunic to about (195, 160, 165) and red and purple read alike (measured), while at 8 the two windows' chromaticities are 0.36/0.31/0.32 and 0.43/0.29/0.28.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn select_frames_a_different_dwarf_per_id_and_wears_his_own_colour() {
+    const DWARF: (usize, usize, usize, usize) = (540, 170, 740, 390);
+    /// Tunic-only windows (skirt cloth for dwarf 0, back cloth for dwarf 2; no beard, skin or pack)
+    /// at distance 4, read off the captures. NOTE: tied to `DEFAULT_SEED`'s dwarf positions.
+    const TUNIC_A: (usize, usize, usize, usize) = (614, 304, 646, 332);
+    const TUNIC_B: (usize, usize, usize, usize) = (592, 266, 628, 300);
+    /// Chromaticity margin by which each tunic window must lie nearer its own table colour than
+    /// the OTHER dwarf's window does (the relative rule; see the doc comment above).
+    /// Measured 0.040 / 0.077 on the shipped tunics; with every dwarf painted red, dwarf 0 reads
+    /// 0.020. The floor sits between.
+    const TUNIC_MARGIN_FLOOR: f32 = 0.03;
+    /// Mean per-channel change the centre window must show between the two selections.
+    const WINDOW_CHANGE_FLOOR: f32 = 5.0;
+    let flags = |id: &'static str| {
+        [
+            "--static-world",
+            "--lights-steady",
+            "--subdiv",
+            "4",
+            "--clock",
+            "8",
+            "--fx-off",
+            "dof",
+            "--distance",
+            "4",
+            "--select",
+            id,
+        ]
+    };
+    let daemon_a = Daemon::spawn();
+    let colour_a = daemon_a.dwarf_colour(0);
+    let (a, width, _) = daemon_a.capture("select-a", &flags("0"));
+    let daemon_b = Daemon::spawn();
+    let colour_b = daemon_b.dwarf_colour(2);
+    let (b, _, _) = daemon_b.capture("select-b", &flags("2"));
+    assert_ne!(
+        colour_a, colour_b,
+        "the two selected dwarves must differ in colour"
+    );
+    let change = window_diff(&a, &b, width, DWARF);
+    let (chroma_a, chroma_b) = (
+        chromaticity_mean(&a, width, TUNIC_A),
+        chromaticity_mean(&b, width, TUNIC_B),
+    );
+    let (table_a, table_b) = (
+        chromaticity_of_hex(tunic_hex(&colour_a)),
+        chromaticity_of_hex(tunic_hex(&colour_b)),
+    );
+    // How much nearer each window lies to its own dwarf's table colour than the OTHER window does.
+    let margin_a =
+        chromaticity_distance(chroma_b, table_a) - chromaticity_distance(chroma_a, table_a);
+    let margin_b =
+        chromaticity_distance(chroma_a, table_b) - chromaticity_distance(chroma_b, table_b);
+    println!(
+        "--select guard: window change {change:.3}; dwarf 0 ({colour_a}) chromaticity {chroma_a:?} \
+         margin {margin_a:.4}; dwarf 2 ({colour_b}) {chroma_b:?} margin {margin_b:.4}"
+    );
+    assert!(
+        change >= WINDOW_CHANGE_FLOOR,
+        "--select 0 and --select 2 frame the same picture (window change {change:.3})"
+    );
+    assert!(
+        margin_a >= TUNIC_MARGIN_FLOOR,
+        "dwarf 0's tunic ({colour_a}) is not nearer {colour_a} than dwarf 2's is: margin {margin_a:.4}"
+    );
+    assert!(
+        margin_b >= TUNIC_MARGIN_FLOOR,
+        "dwarf 2's tunic ({colour_b}) is not nearer {colour_b} than dwarf 0's is: margin {margin_b:.4}"
+    );
+}
+
+/// #136, on the rendered frame: a selected dwarf at the closest zoom must be sharp.
+///
+/// The same capture twice, DoF on and `--fx-off dof`, one fresh daemon each. The window is sized to
+/// the dwarf's figure at distance 4 (the composition push puts him left of centre); the rest of it
+/// is flat noon snow, so the Laplacian is his.
+///
+/// RED, measured on `5d0cacf` (before the fix): see the story's Debug Log for the ratio.
+#[test]
+#[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]
+fn a_selected_dwarf_at_the_closest_zoom_is_sharp_with_dof_on() {
+    const DWARF: (usize, usize, usize, usize) = (540, 170, 740, 390);
+    /// AC7: DoF-on sharpness must be at least this fraction of the DoF-off sharpness.
+    const SHARPNESS_FLOOR: f32 = 0.8;
+    let flags = [
+        "--static-world",
+        "--lights-steady",
+        "--subdiv",
+        "4",
+        "--clock",
+        "12",
+        "--select",
+        "0",
+        "--distance",
+        "4",
+    ];
+    let (on, width, _) = Daemon::spawn().capture("select-dof-on", &flags);
+    let (off, _, _) = Daemon::spawn().capture(
+        "select-dof-off",
+        &[&flags[..], &["--fx-off", "dof"]].concat(),
+    );
+    let sharp_on = rec601_lap_mean(&on, width, DWARF);
+    let sharp_off = rec601_lap_mean(&off, width, DWARF);
+    let ratio = sharp_on / sharp_off;
+    println!(
+        "#136 pixel guard (Rec.601 Laplacian): dwarf window DoF-off {sharp_off:.4} DoF-on \
+         {sharp_on:.4} ratio={ratio:.3}"
+    );
+    assert!(
+        ratio >= SHARPNESS_FLOOR,
+        "a selected dwarf at distance 4 blurs under DoF: sharpness ratio {ratio:.3} \
+         ({sharp_on:.4}/{sharp_off:.4}) is below {SHARPNESS_FLOOR}"
+    );
+}
+
 /// AC7/AC8: volume haze must raise distant level AND lower its local contrast without dimming sky.
 #[test]
 #[ignore = "renders two real frames; scripts/gate.sh runs it in the full tier"]

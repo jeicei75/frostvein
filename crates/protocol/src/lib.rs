@@ -57,6 +57,43 @@ pub enum LightKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum DwarfName {
+    Durin,
+    Dvalin,
+    Nori,
+    Ori,
+    Dori,
+    Bifur,
+    Bofur,
+    Gloin,
+    Nain,
+    Thrain,
+    Frar,
+    Loni,
+    Regin,
+    Alf,
+    Fjalar,
+    Frosti,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DwarfColour {
+    Red,
+    Gold,
+    Green,
+    Blue,
+    Purple,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Identity {
+    pub name: DwarfName,
+    pub colour: DwarfColour,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum JobState {
     Idle,
     Walk,
@@ -149,6 +186,8 @@ pub struct Entity {
     pub pos: [i32; 3],
     pub state: JobState,
     pub light: Option<LightKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<Identity>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -277,6 +316,28 @@ mod tests {
     }
 
     #[test]
+    fn an_identified_dwarf_round_trips_and_other_entities_stay_byte_identical() {
+        let wire = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null,"identity":{"name":"durin","colour":"red"}}"#;
+        let entity: Entity = serde_json::from_str(wire).unwrap();
+        assert_eq!(
+            entity.identity,
+            Some(Identity {
+                name: DwarfName::Durin,
+                colour: DwarfColour::Red,
+            })
+        );
+        assert_eq!(serde_json::to_string(&entity).unwrap(), wire);
+        let bare = Entity {
+            identity: None,
+            ..entity
+        };
+        assert_eq!(
+            serde_json::to_string(&bare).unwrap(),
+            r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null}"#
+        );
+    }
+
+    #[test]
     fn decodes_the_documented_wire_format() {
         let snapshot = decoded();
 
@@ -294,6 +355,7 @@ mod tests {
                 pos: [4, 5, 6],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             }]
         );
         assert_eq!(
@@ -352,6 +414,7 @@ mod tests {
                 pos: [4, 5, 6],
                 state: JobState::Walk,
                 light: None,
+                identity: None,
             }]
         );
         assert_eq!(
@@ -489,6 +552,35 @@ mod tests {
             (LightKind::Torch, "\"torch\""),
             (LightKind::Campfire, "\"campfire\""),
             (LightKind::Lantern, "\"lantern\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (DwarfName::Durin, "\"durin\""),
+            (DwarfName::Dvalin, "\"dvalin\""),
+            (DwarfName::Nori, "\"nori\""),
+            (DwarfName::Ori, "\"ori\""),
+            (DwarfName::Dori, "\"dori\""),
+            (DwarfName::Bifur, "\"bifur\""),
+            (DwarfName::Bofur, "\"bofur\""),
+            (DwarfName::Gloin, "\"gloin\""),
+            (DwarfName::Nain, "\"nain\""),
+            (DwarfName::Thrain, "\"thrain\""),
+            (DwarfName::Frar, "\"frar\""),
+            (DwarfName::Loni, "\"loni\""),
+            (DwarfName::Regin, "\"regin\""),
+            (DwarfName::Alf, "\"alf\""),
+            (DwarfName::Fjalar, "\"fjalar\""),
+            (DwarfName::Frosti, "\"frosti\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (DwarfColour::Red, "\"red\""),
+            (DwarfColour::Gold, "\"gold\""),
+            (DwarfColour::Green, "\"green\""),
+            (DwarfColour::Blue, "\"blue\""),
+            (DwarfColour::Purple, "\"purple\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }

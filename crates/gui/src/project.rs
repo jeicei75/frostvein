@@ -12,6 +12,7 @@ use bevy::prelude::{
 };
 use bevy::{
     asset::RenderAssetUsages,
+    image::Image,
     mesh::{Indices, PrimitiveTopology},
     world_serialization::{WorldAsset, WorldAssetRoot},
 };
@@ -118,6 +119,7 @@ pub type DynamicProjectionQuery<'w, 's> = Query<
         BevyEntity,
         &'static WorldProjected,
         Option<&'static ProjectedLight>,
+        Option<&'static ProjectedTunic>,
     ),
     (
         Without<TerrainTile>,
@@ -173,6 +175,12 @@ const DETAIL_SEED: u32 = 0xF005_7E1A;
 /// wire changes kind; presentation owns its animated intensity afterwards.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedLight(pub protocol::LightKind);
+
+/// The tunic colour a projected dwarf wears, from his wire identity. Set at spawn and re-applied
+/// when a snapshot gives an existing id a different identity (a load renumbers nobody, but the
+/// dwarf behind an id can change).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedTunic(pub protocol::DwarfColour);
 
 pub const CHIPS_PER_TILE: usize = 4;
 
@@ -1750,7 +1758,7 @@ pub fn reconcile(
         .collect();
     let item_ids: std::collections::BTreeSet<_> = visible_items.iter().map(|(id, _)| *id).collect();
     wanted.extend(visible_items.iter().map(|(id, pos)| (*id, (*pos, None))));
-    for (bevy_entity, marker, _) in projected.iter() {
+    for (bevy_entity, marker, _, _) in projected.iter() {
         if !terrain.get(bevy_entity).is_ok() && !wanted.contains_key(&marker.0) {
             commands.entity(bevy_entity).despawn();
         }
@@ -1759,9 +1767,16 @@ pub fn reconcile(
         // NOTE: terrain and simulation entities retain the same marker component and
         // numeric range. Keep this query filtered to prevent a terrain id colliding
         // with a simulation id until a story needs separate marker types.
-        if let Some((bevy_entity, _, projected_light)) =
-            projected.iter().find(|(_, marker, _)| marker.0 == id)
+        if let Some((bevy_entity, _, projected_light, projected_tunic)) =
+            projected.iter().find(|(_, marker, _, _)| marker.0 == id)
         {
+            if let Some(identity) = mirror_entity.and_then(|entity| entity.identity)
+                && projected_tunic.is_none_or(|existing| existing.0 != identity.colour)
+            {
+                commands
+                    .entity(bevy_entity)
+                    .insert(ProjectedTunic(identity.colour));
+            }
             // Translation belongs solely to `blend_entities` after spawn. Re-inserting it here
             // makes an otherwise-correct blend present-but-inert on the next reconcile.
             if let Some(light) = mirror_entity.and_then(|entity| entity.light) {
@@ -1820,6 +1835,9 @@ pub fn reconcile(
                             Transform::from_translation(world_to_render(position))
                                 .with_scale(bevy::prelude::Vec3::splat(appearance.scale)),
                         ));
+                    }
+                    if let Some(identity) = mirror_entity.identity {
+                        entity.insert(ProjectedTunic(identity.colour));
                     }
                     if let Some(light) = mirror_entity.light {
                         entity.insert((point_light(light), ProjectedLight(light)));
@@ -2988,12 +3006,263 @@ fn for_each_position(dims: Dims, mut visit: impl FnMut([i32; 3])) {
     }
 }
 
+/// The r17 dwarf atlas's tunic cells as `(row, col)` in 32-px cells, from the 12.2 draft's
+/// UV-to-skin-joint census: row 9 cols 0-3, and row 10 col 15 (chest, hips and shoulders).
+// NOTE: these come from the r17 atlas census. A new dwarf asset repacks its atlas, so it must be
+// re-censused and this table updated, or the recolour paints whatever now sits in these cells.
+pub const TUNIC_CELLS: [(u32, u32); 5] = [(9, 0), (9, 1), (9, 2), (9, 3), (10, 15)];
+const ATLAS_CELL_PX: u32 = 32;
+
+/// The five colour ids, in the order `DwarfTunics` holds their materials. `protocol` has no `ALL`
+/// and this is the only client that needs one.
+const TUNIC_COLOURS: [protocol::DwarfColour; 5] = [
+    protocol::DwarfColour::Red,
+    protocol::DwarfColour::Gold,
+    protocol::DwarfColour::Green,
+    protocol::DwarfColour::Blue,
+    protocol::DwarfColour::Purple,
+];
+
+/// The atlas with its tunic cells recoloured: each tunic texel becomes `colour x lum(texel) /
+/// max tunic lum`, so the shading steps between cells survive and the brightest tunic texel is the
+/// colour itself. Every other texel is untouched, byte for byte.
+///
+/// Done in sRGB BYTES, as the draft's render did: the atlas is `Rgba8UnormSrgb`, so scaling the
+/// stored bytes keeps white the fixed point and needs no transfer function. `None` when the image
+/// keeps no CPU copy of its pixels or is not four bytes a texel.
+pub fn recolour_tunic(atlas: &Image, colour: protocol::DwarfColour) -> Option<Image> {
+    let mut image = atlas.clone();
+    let (width, height) = (image.width() as usize, image.height() as usize);
+    let data = image.data.as_mut()?;
+    if data.len() != width * height * 4 {
+        return None;
+    }
+    let lum = |px: &[u8]| {
+        0.2126 * f32::from(px[0]) + 0.7152 * f32::from(px[1]) + 0.0722 * f32::from(px[2])
+    };
+    let cell_texels = |(row, col): (u32, u32)| {
+        (row * ATLAS_CELL_PX..(row + 1) * ATLAS_CELL_PX).flat_map(move |y| {
+            (col * ATLAS_CELL_PX..(col + 1) * ATLAS_CELL_PX)
+                .map(move |x| (y as usize * width + x as usize) * 4)
+        })
+    };
+    let reference = TUNIC_CELLS
+        .into_iter()
+        .flat_map(cell_texels)
+        .map(|at| lum(&data[at..at + 4]))
+        .fold(0.0_f32, f32::max);
+    if reference <= 0.0 {
+        return None;
+    }
+    let rgb = bevy::color::ColorToPacked::to_u8_array_no_alpha(
+        crate::appearance::dwarf_tunic_color(colour).to_srgba(),
+    );
+    for at in TUNIC_CELLS.into_iter().flat_map(cell_texels) {
+        let scale = lum(&data[at..at + 4]) / reference;
+        for channel in 0..3 {
+            data[at + channel] = (f32::from(rgb[channel]) * scale).round().min(255.0) as u8;
+        }
+    }
+    Some(image)
+}
+
+/// One material per colour id, cloned from the GLB's own with only the atlas swapped. Built the
+/// first time a dwarf's scene has spawned, because the GLB's material is what it is cloned from.
+#[derive(Resource)]
+pub struct DwarfTunics(pub [Handle<StandardMaterial>; 5]);
+
+impl DwarfTunics {
+    fn handle(&self, colour: protocol::DwarfColour) -> Handle<StandardMaterial> {
+        self.0[TUNIC_COLOURS
+            .iter()
+            .position(|c| *c == colour)
+            .expect("ALL lists every colour")]
+        .clone()
+    }
+}
+
+type NewMeshQuery<'w, 's> = Query<'w, 's, BevyEntity, Added<MeshMaterial3d<StandardMaterial>>>;
+
+/// Swaps the mesh material of each dwarf's spawned scene for his colour's tunic material.
+///
+/// A dwarf's scene spawns some frames after his entity, so two things arm this: a mesh material
+/// appearing under a `ProjectedTunic` ancestor (the scene arrived), and a `ProjectedTunic`
+/// changing (a snapshot gave his id a new identity). The `AnimationPlayer` and the hierarchy are
+/// left alone: only the `MeshMaterial3d` handle is replaced.
+// Every parameter is a distinct ECS partition: the two triggers, the hierarchy walks, and the
+// asset stores the five materials are built from.
+#[allow(clippy::too_many_arguments)]
+pub fn apply_dwarf_tunics(
+    mut commands: Commands,
+    tunics: Option<Res<DwarfTunics>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+    images: Option<ResMut<Assets<Image>>>,
+    mut meshes: bevy::prelude::ParamSet<(
+        NewMeshQuery,
+        Query<&mut MeshMaterial3d<StandardMaterial>>,
+    )>,
+    changed: Query<BevyEntity, bevy::prelude::Changed<ProjectedTunic>>,
+    tunic_of: Query<&ProjectedTunic>,
+    parents: Query<&ChildOf>,
+    children: Query<&bevy::prelude::Children>,
+    mut reported: bevy::prelude::Local<bool>,
+) {
+    let (Some(mut materials), Some(mut images)) = (materials, images) else {
+        return;
+    };
+    let mut targets: Vec<(BevyEntity, protocol::DwarfColour)> = Vec::new();
+    for mesh in meshes.p0().iter() {
+        let mut current = mesh;
+        for _ in 0..8 {
+            if let Ok(tunic) = tunic_of.get(current) {
+                targets.push((mesh, tunic.0));
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+    }
+    for dwarf in &changed {
+        let colour = tunic_of.get(dwarf).expect("Changed<ProjectedTunic>").0;
+        let mut stack = vec![dwarf];
+        while let Some(node) = stack.pop() {
+            if meshes.p1().get(node).is_ok() {
+                targets.push((node, colour));
+            }
+            if let Ok(kids) = children.get(node) {
+                stack.extend(kids.iter());
+            }
+        }
+    }
+    if targets.is_empty() {
+        return;
+    }
+    let tunics = match tunics {
+        Some(tunics) => tunics.0.clone(),
+        None => {
+            // The GLB's own material, read off the first spawned dwarf mesh.
+            let base = meshes
+                .p1()
+                .get(targets[0].0)
+                .ok()
+                .and_then(|handle| materials.get(&handle.0))
+                .cloned();
+            let atlas = base
+                .as_ref()
+                .and_then(|base| base.base_color_texture.as_ref())
+                .and_then(|texture| images.get(texture))
+                .cloned();
+            let built: Option<Vec<Handle<StandardMaterial>>> =
+                base.zip(atlas).and_then(|(base, atlas)| {
+                    TUNIC_COLOURS
+                        .iter()
+                        .map(|colour| {
+                            let recoloured = recolour_tunic(&atlas, *colour)?;
+                            let mut material = base.clone();
+                            material.base_color_texture = Some(images.add(recoloured));
+                            Some(materials.add(material))
+                        })
+                        .collect()
+                });
+            let Some(built) = built else {
+                if !*reported {
+                    *reported = true;
+                    eprintln!(
+                        "gui dwarf tunic: the dwarf atlas has no readable CPU pixels; tunics keep the shipped colour"
+                    );
+                }
+                return;
+            };
+            let handles: [Handle<StandardMaterial>; 5] =
+                built.try_into().expect("one material per colour");
+            commands.insert_resource(DwarfTunics(handles.clone()));
+            handles
+        }
+    };
+    let lookup = DwarfTunics(tunics);
+    for (mesh, colour) in targets {
+        if let Ok(mut material) = meshes.p1().get_mut(mesh) {
+            material.0 = lookup.handle(colour);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use client_core::Mirror;
     use protocol::{Dims, MessageType, Snapshot, Speed, Tile};
 
     use super::*;
+
+    fn synthetic_atlas() -> Image {
+        let mut data = vec![0_u8; 512 * 512 * 4];
+        for texel in data.chunks_exact_mut(4) {
+            texel.copy_from_slice(&[100, 90, 80, 255]);
+        }
+        let mut set = |x: usize, y: usize, rgba: [u8; 4]| {
+            data[(y * 512 + x) * 4..][..4].copy_from_slice(&rgba)
+        };
+        // The brightest tunic texel (row 9, col 0) and one exactly half as bright (row 10, col 15).
+        set(0, 9 * 32, [200, 200, 200, 255]);
+        set(15 * 32, 10 * 32, [100, 100, 100, 255]);
+        Image::new(
+            bevy::render::render_resource::Extent3d {
+                width: 512,
+                height: 512,
+                depth_or_array_layers: 1,
+            },
+            bevy::render::render_resource::TextureDimension::D2,
+            data,
+            bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        )
+    }
+
+    /// The recolour touches the tunic cells and NOTHING else, and works in sRGB bytes: the brightest
+    /// tunic texel becomes exactly the approved colour, a half-as-bright one exactly half of it.
+    #[test]
+    fn recolour_paints_only_the_tunic_cells_in_srgb_bytes() {
+        let atlas = synthetic_atlas();
+        let painted = recolour_tunic(&atlas, protocol::DwarfColour::Red).unwrap();
+        let (before, after) = (atlas.data.as_ref().unwrap(), painted.data.as_ref().unwrap());
+        let texel = |data: &[u8], x: usize, y: usize| -> [u8; 4] {
+            data[(y * 512 + x) * 4..][..4].try_into().unwrap()
+        };
+        // Independent oracle: the approved red #B23A34, written out.
+        assert_eq!(texel(after, 0, 9 * 32), [0xB2, 0x3A, 0x34, 255]);
+        assert_eq!(texel(after, 15 * 32, 10 * 32), [89, 29, 26, 255]);
+        // A tunic texel of the flat grey (lum 91.5 / 200) scales the same way.
+        assert_eq!(texel(after, 1, 9 * 32 + 1), [81, 27, 24, 255]);
+        // Non-tunic texels, in the rows either side of the tunic band and in the legs (row 9,
+        // col 4), are byte-identical.
+        for (x, y) in [
+            (0, 0),
+            (200, 8 * 32 + 31),
+            (4 * 32, 9 * 32),
+            (300, 11 * 32),
+            (511, 511),
+        ] {
+            assert_eq!(texel(before, x, y), texel(after, x, y), "texel ({x}, {y})");
+        }
+        // Every byte outside the five cells is identical.
+        let inside = |x: usize, y: usize| {
+            TUNIC_CELLS
+                .iter()
+                .any(|&(row, col)| (y / 32) as u32 == row && (x / 32) as u32 == col)
+        };
+        for y in 0..512 {
+            for x in 0..512 {
+                if !inside(x, y) {
+                    assert_eq!(texel(before, x, y), texel(after, x, y));
+                }
+            }
+        }
+        let mut no_cpu_copy = atlas.clone();
+        no_cpu_copy.data = None;
+        assert!(recolour_tunic(&no_cpu_copy, protocol::DwarfColour::Red).is_none());
+    }
 
     /// Once a `--static-world` pause lands, every stride is held at one phase -- and not before,
     /// or a moving world's dwarves would stop walking.

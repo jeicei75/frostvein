@@ -1,0 +1,625 @@
+---
+baseline_commit: 16be274
+model: claude-opus-5-5  # session default, same as 12.1's creation
+---
+
+# Story 12.2: Five Dwarves You Can Name
+
+Status: done
+
+## Story
+
+As the boss,
+I want each dwarf to have a name and a colour of their own,
+so that I can tell them apart at a glance and care which one is doing what.
+
+## Not stacked: branch off `main`
+
+`main` is `16be274` (PR #155 merged), clean. Branch `story-12-2-five-dwarves-you-can-name` exists
+locally and carries this file, `12-2-signoff/` and the board edit. It closes **#136**. Epic 12's
+nine standing ACs (`epics.md`, "Standing acceptance criteria") bind this story and are not restated
+here. The standing wire-diff AC is satisfied by the "Wire diff" section below.
+
+## Found at creation (2026-09-29, on `16be274`)
+
+- **No identity exists anywhere today.** A fresh `simd 7482` snapshot's dwarves carry exactly
+  `id, kind, light, pos, state`. `tui 7482 --frames 1 --z 9` ends with the status row
+  `tick 15  normal  z 9/31  dwarves 5  N up`, and no name appears.
+- **#136's premise is half stale.** DoF has focused the selected dwarf since `6194756`
+  (`update_dof_from_camera`, `ingest.rs:2421`). He blurs anyway, for two compounding reasons
+  (derived from Bevy 0.19's `dof.wgsl`, not yet measured):
+  - **Wrong focus point.** The focus is his `Transform.translation`, which is his FEET: the
+    spawn adds `entity_draw_offset` −0.5 Y, and the asset's origin is at min Y = 0
+    (`project.rs:1797-1800`).
+  - **Aperture calibrated for boot distance.** `DOF_APERTURE_F_STOPS = 0.05` (`ingest.rs:92`)
+    was tuned at the boot framing, about 61.7 units away. Circle of confusion grows about as
+    1/F², so at `MIN_DISTANCE` 4 (`camera.rs:7`) the in-focus band is roughly 225× thinner.
+    Estimate: a head 0.33 units off the focal plane blurs about 9 px at 720p.
+- **The dwarf has one material and one atlas**, `M_VoxelDwarf_r17` / `T_VoxelDwarf_r17`, 512²,
+  NEAREST. There is no tunic slot. A UV→skin-joint census of the shipped GLB found the tunic
+  cells: row 9 cols 0–3 and row 10 col 15 (32-px cells; see `12-2-signoff/draft.md`).
+- **Look draft made at creation**: `12-2-signoff/draft.md` + `draft-crew.png` (a Blender render of
+  the real GLB with the tunic cells recoloured). **Wolf approved it unchanged on 2026-09-29 (Task 0).**
+
+## Wire diff (standing AC 4)
+
+- NEW `protocol::DwarfName`: 16 variants, `snake_case`. The pool is `draft.md` §2.
+- NEW `protocol::DwarfColour`: `Red | Gold | Green | Blue | Purple`, `snake_case`.
+- NEW `protocol::Identity { name: DwarfName, colour: DwarfColour }`.
+- `protocol::Entity` gains a last field, `identity: Option<Identity>`, with
+  `#[serde(default, skip_serializing_if = "Option::is_none")]`.
+  - A dwarf's line gains `"identity":{"name":"durin","colour":"red"}`.
+  - Emitter lines are byte-identical.
+  - `Entity` stays `Copy`.
+
+## Acceptance Criteria
+
+1. `World::generate` gives each of the five dwarves an identity: a name from the 16-name pool and a
+   colour id. Names are distinct among the five, and so are colours. Both come from a NEW
+   purpose-named stream, `STREAM_IDENTITY`, and never from `spawn_rng`. This is a determinism
+   mechanism (AD-7), and it is load-bearing: spawn positions on every seed must stay exactly as
+   they are today.
+2. The identity is sim state. `save → load → tick N ≡ never-saved → tick N` compares identities, and
+   seed + commands ⇒ identical identities. A test names two seeds whose name sets differ.
+3. The real daemon is the judge. Its snapshot and its deltas carry each dwarf's identity; five
+   distinct names and five distinct colours. After a daemon `save` then `load`, the fresh snapshot
+   carries the same identity per id. A save whose dwarves repeat a name or a colour is refused
+   with a log line.
+4. The tui shows a roster row above the status row: the five names, ascending by id, each in its
+   dwarf's colour. It adds no key, changes no status or hint text, and fits 80 columns. Under
+   `NO_COLOR` the names still appear.
+5. In the gui, each dwarf's tunic shows his colour id's colour. The rest of the model keeps the
+   shipped atlas colours. A snapshot that gives an existing id a different identity (a load)
+   re-colours that dwarf.
+6. In the gui, while a dwarf is selected, a HUD line shows his name in his colour. With no
+   selection, it shows nothing.
+7. #136: with a dwarf selected and the camera at distance 4, his figure is sharp. The dwarf
+   window's Laplacian sharpness with DoF on is ≥ 0.8× the same window under `--fx-off dof`. With
+   no selection, DoF behaves exactly as today: it focuses the rig's orbit centre, and every
+   existing DoF guard passes unchanged. #136 closes with that rule written on it.
+8. At the seat, Wolf names each of the five dwarves by sight. Selecting one shows the name.
+   Zooming in on a selected dwarf keeps him sharp. An attached tui shows the roster (success
+   criterion 2).
+
+## Tasks / Subtasks
+
+- [x] **Task 0: draft approval (standing AC 7).** Wolf approves or amends `12-2-signoff/draft.md`
+  (tunic colours, name pool, gui name line, tui roster row, the no-selection DoF rule). Record
+  his words and date here. If he changes a hex or a name, update `draft.md` and use his values in
+  Tasks 1, 3 and 5. Tasks 1–4 may run before approval. **Tasks 5–6 may not.**
+  - **Approved 2026-09-29, unchanged (Wolf, at story creation: "1 ok 2 ok 3 ok").**
+    1. The draft as written: tunic-only colour in the five hexes, the 16-name pool, the gui name
+       line and the tui roster row.
+    2. The no-selection DoF rule: focus stays on the rig's orbit centre.
+    3. Old saves do not load: the load is refused with a log line, and there is no migration.
+- [x] **Task 1: sim-core identity (AC1, AC2).**
+  - [x] `lib.rs`, beside `LightKind`: `pub enum DwarfName { Durin, Dvalin, Nori, Ori, Dori, Bifur, Bofur, Gloin, Nain, Thrain, Frar, Loni, Regin, Alf, Fjalar, Frosti }`,
+        `pub enum DwarfColour { Red, Gold, Green, Blue, Purple }`, and
+        `#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)] pub struct Identity { pub name: DwarfName, pub colour: DwarfColour }`.
+        The enums derive `Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize`,
+        and each has a `pub const ALL: [Self; N]` in declaration order. The shuffles read `ALL`.
+  - [x] `const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"` beside the others
+        (`lib.rs:26-29`). In `generate` (`:1198`), seed `ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY)`.
+        Copy `DwarfName::ALL` and `DwarfColour::ALL` into arrays, `shuffle` each
+        (`rand::seq::SliceRandom`, rand 0.10.2), and assign index `i` to the i-th dwarf in
+        ascending id order. `spawn_dwarves` (`:1675`) takes the identities as a parameter and adds
+        `Identity` to the spawn bundle (`:1699`). **Do not draw from `spawn_rng`**; that shifts
+        every spawn position.
+  - [x] Add `pub fn identities(&self) -> Vec<(Id, Identity)>`, sorted by id. It is a sibling
+        reader, like `carrying()` (`:1617`). **Do not widen `dwarves()`**: its tuple has about 90
+        destructuring call sites.
+  - [x] `save.rs`: `SavedDwarf` gains `pub identity: Identity` (stays `Copy`). `to_save`
+        (`:1248`) and `from_save` (`:1341`) carry it. The `filter_map` in `to_save` silently drops
+        a dwarf missing any component (comment `:1240-1243`), so add the component at both spawn
+        sites. Fix the 4 test literals (`save_load.rs:346,356`, `scenario.rs:1283,1293`).
+        **Old saves (no `identity`) fail to decode**, and simd logs and refuses the load. That
+        is intended. `// NOTE:` it on the field.
+  - [x] Tests:
+        - `worldgen.rs::five_dwarves_on_walkable_surface` (`:657`) also asserts 5 distinct names
+          and 5 distinct colours.
+        - `same_seed_produces_identical_worlds` (`:54`) also compares `identities()`.
+        - NEW: `DEFAULT_SEED` and seed 42 yield different name sets.
+        - `save_load_then_tick_matches_never_saved` (`save_load.rs:9`, list at `:165-176`) and
+          `same_seed_and_commands_remain_deterministic` (`scenario.rs:1397`) also compare
+          `identities()`.
+        - The existing spawn-position tests must pass untouched.
+- [x] **Task 2: protocol + simd (AC3; the wire diff above).**
+  - [x] `protocol`: the three types and the field, as in "Wire diff". Fix every `Entity { .. }`
+        literal (about 56; let the compiler list them). Emitters and fixture dwarves that don't
+        care get `identity: None`.
+  - [x] Pin tests in `protocol`:
+        - the existing entity literal (`:301`) and the delta literal (`:265`) stay byte-identical;
+        - NEW literal `{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null,"identity":{"name":"durin","colour":"red"}}`
+          round-trips;
+        - `every_material_and_tile_variant_has_a_pinned_wire_name` (`:447`) gains blocks for
+          both enums.
+  - [x] `bridge.rs`: `dwarf_name` and `dwarf_colour` as exhaustive `match`es with no wildcard,
+        beside `light_kind` (`:158`). Both dwarf maps (`:22`, `:81`) set
+        `identity: Some(..)` from `world.identities()`, looked up by id. Keep them identical;
+        extract one `dwarf_entity` fn if it keeps them so.
+  - [x] `simd/src/main.rs` save validation (dwarf loop `:516`): `bail!` on a repeated name or a
+        repeated colour. Add one `serve.rs` test in the shape of
+        `duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking` (`:652`).
+  - [x] Extend `save_then_load_rewinds_every_client` (`serve.rs:528`): the connect snapshot carries
+        5 distinct names and 5 distinct colours, and the post-load snapshot carries the same
+        `(id, identity)` set.
+- [x] **Task 3: client-core + tui (AC4).**
+  - [x] `client-core`: `pub fn dwarf_name_text(name: protocol::DwarfName) -> &'static str`, an
+        exhaustive `match` (`Durin => "Durin"`, …). It is the only spelling of a name, shared by
+        both clients, like `refusal_text` (`lib.rs:10`).
+  - [x] `tui/src/palette.rs`: `pub fn dwarf_colour(colour: protocol::DwarfColour) -> Rgb`, an
+        exhaustive `match` using the approved hexes. Pin it in `every_look_is_pinned` (`:200`).
+        **The `☺` glyph keeps its job-state colour**; the pinned state colours and `WALK_SGR`
+        (`tests/client.rs:1353`) must not change. *(Superseded by Task 9 for a named dwarf: he is `☻` in his
+        tunic colour. A nameless dwarf keeps `☺` and its job-state colour.)*
+  - [x] `view.rs::render` (`:228`): `map_h = h - 3`, and the roster row goes at `h-3`. Draw each
+        name with `dwarf_colour` as `fg`, joined by two spaces, ascending by id, truncated to `w`.
+        A dwarf with `identity: None` is skipped. The second `map_h` site (`:626`, the camera
+        clamp) must match. Otherwise the cursor can scroll under the roster.
+        Repoint `status_and_hint_occupy_the_bottom_two_rows` (`:1449`),
+        `one_row_terminal_renders_blank` (`:981`), and the h=3 status tests (`:1440`, `:2044`).
+  - [x] **The instrument is `tui --frames N` (real binary).** Add a `tests/client.rs` test with a
+        stub daemon that sends a snapshot with two identified dwarves. Assert that the row above
+        the `tick ` row contains both names, and that one name is wrapped in its colour's SGR.
+        Then send a delta that swaps their identities and assert the row changes. Under
+        `NO_COLOR=1`, the names still appear. Use `capture_walking_dwarf` (`:1359`) as the model.
+- [x] **Task 4: gui instrument `--select ID`, then #136 RED → fix (AC7).**
+  - [x] `parse_args_from` (`ingest.rs:1093`): `--select <id>` sets the startup `SelectedDwarf`.
+        Trap: `frame_selected_dwarf` (`pick.rs:217`) sets `rig.distance = SELECT_DISTANCE`
+        whenever the selection `is_changed()`, which includes the first frame, so a
+        `--distance D` passed alongside would be overwritten. `--distance` must win when given.
+        Add a parse test.
+  - [x] Test the instrument: a pixel guard in `tests/pixel_guard.rs` captures
+        `--select A` and `--select B` (two dwarves of different colour) at `--clock 12`, with
+        the harness flags and one fresh daemon per capture (`:287`). The centre window must
+        change between the two captures. After Task 5, each window's mean colour must be nearer
+        its own dwarf's table colour than the other's.
+  - [x] **RED first:** a pixel guard captures `--select 0 --distance 4` twice, once with DoF on
+        and once with `--fx-off dof`. It compares `rec601_lap_mean` (`:95`) over a centre window
+        sized to the dwarf. Record the failing ratio in the Debug Log. **If the RED ratio is
+        already ≥ 0.8, stop and report to Wolf; #136 would then not be reproduced at the pinned
+        venue.**
+  - [x] Fix, selected path only. Focus on the body, not the feet: `translation` plus half the
+        drawn figure height. Also make the aperture follow the focal distance so the subject
+        stays in focus at close range; clamping or scaling `aperture_f_stops` are both fine.
+        The no-selection path (`dof_focal_distance`, `ingest.rs:2352`) and its constants must
+        not change. `dof_softens_the_far_ridge…` (`pixel_guard.rs:517`),
+        `dof_keeps_depth_separation_at_distance_40` (`:572`) and the unit tests at `:3666` and
+        `:4204` must pass untouched. Update
+        `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` (`:4735`) to the
+        body point.
+- [x] **Task 5: gui tunic colour (AC5). Only after Task 0.**
+  - [x] `appearance.rs`, beside `entity_appearance` (`:377`):
+        `pub fn dwarf_tunic_color(colour: protocol::DwarfColour) -> Color`, with the approved
+        hexes, exhaustive, and pinned in the palette pin test (`:590-612`).
+  - [x] Build 5 recoloured atlases plus 5 `StandardMaterial`s, one per colour id, cloned from the
+        GLB's material. Use the draft's rule: the tunic cells only, each texel becomes
+        `colour × lum(texel) / max tunic lum`.
+        - Name the cells in one const (`TUNIC_CELLS: [(u32, u32); 5]`), with a `// NOTE:` that
+          they come from the r17 atlas census and a new dwarf asset must re-census them.
+        - **Trap:** the glTF image may keep no CPU copy (`RenderAssetUsages`). Verify you can read
+          its pixels. If you can't, load the atlas with main-world usage retained.
+        - **Colour-space trap** ([[colour-space-bug-hides-as-palette-mismatch]]): the atlas is
+          sRGB. Recolour in sRGB bytes, and assert in a test that a non-tunic texel is
+          byte-identical after recolouring.
+  - [x] Apply the material per dwarf. When a dwarf's scene instance has spawned, swap its
+        mesh's `MeshMaterial3d` for its colour's material. Use `Added<MeshMaterial3d<StandardMaterial>>`
+        and walk `ChildOf` up to the `WorldProjected` dwarf, as `drive_dwarf_walk` does
+        (`project.rs:2077`). Leave the `AnimationPlayer` and the hierarchy untouched.
+  - [x] Carry the colour on the projected dwarf as a component set at spawn (`project.rs:1795`).
+        The existing-entity branch re-applies it when the mirror's identity differs, beside the
+        `light` re-sync (`:1762-1776`).
+  - [x] Headless tests (`tests/headless.rs`):
+        - two dwarves of different colour end up with different material handles;
+        - a snapshot that swaps their identities swaps the handles.
+        - Unverified at creation: whether the GLB scene instance spawns under the headless
+          minimal plugins. If it does not, assert on the projected dwarf's colour component and
+          on the colour → material lookup instead, say so in the Debug Log, and the Task 4
+          pixel guard carries the on-model evidence.
+- [x] **Task 6: gui name line (AC6). Only after Task 0.** Add a HUD `Text` tagged `Hud` and
+  `ClientLocal`, placed per the approved draft, using the clock-readout pattern
+  (`setup_clock_readout` `ingest.rs:1702`). Its text is `dwarf_name_text` for the selected id,
+  its `TextColor` is `dwarf_tunic_color`, and it is empty with no selection. Captures hide every
+  HUD element, so the evidence is an in-crate test modelled on
+  `the_live_clock_readout_follows_the_daemons_tick_and_speed` (`:3313`):
+  - select id A → the text is A's name;
+  - select B → B's name;
+  - clear the selection → empty.
+- [x] **Task 7: the record.**
+  - [x] Write mutation set `_bmad-output/implementation-artifacts/mutations/12-2.sh`. Every row
+        must be KILLED, by the test named:
+        1. identity drawn from `spawn_rng` → a spawn-position or identity test;
+        2. `from_save` ignores the saved identity → `save_load_then_tick…`;
+        3. all five get one colour → `five_dwarves_on_walkable_surface`;
+        4. the bridge sends `identity: None` → the `serve.rs` test;
+        5. the tui never draws the roster → the client test;
+        6. one material for all dwarves → the headless material test;
+        7. reconcile ignores an identity change → the swap test;
+        8. the HUD never shows the name → the ingest test;
+        9. DoF focus reverted to `translation` → the #136 pixel guard.
+  - [x] Comment on #136: the cause as measured, the fix, and the no-selection rule. It closes via
+        the PR (`Closes #136`; the whole issue is fixed). Posted:
+        https://github.com/jeicei75/frostvein/issues/136#issuecomment-5896512247
+- [x] **Task 8: seat (AC8), then the full gate.** Write `12-2-signoff/vehicle-card.md` in the
+  seat's launch form: in WSL `simd 7451`; in PowerShell
+  `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')`; attach `tui 7451` in WSL. Steps:
+  - (a) Wolf names all five by tunic colour at working zoom, then checks by clicking each one to
+    see the name;
+  - (b) select one, wheel to the closest zoom, and he stays sharp;
+  - (c) Escape, and DoF is back to the camp-focused look;
+  - (d) the tui roster matches.
+  Tell him old `frostvein.save` files will not load (Ctrl+S a fresh one first). Then run the
+  full `scripts/gate.sh` at `RUST_TEST_THREADS=1` ([[gate-ooms-at-default-parallelism]]).
+
+- [x] **Task 9: tui dwarf glyphs in tunic colour (Wolf's seat ruling, 2026-09-30).** At (d) Wolf: the tui dwarves
+  are all orange/yellow; draw them in their colours. The glyph colour was job state (FR22/FR4), three orange-brown
+  shades he could not tell apart; Wolf RULED tunic colour, job state leaves a named dwarf's glyph.
+  - [x] ~~A named dwarf's `☺` and carrier `☻` take `dwarf_colour`~~ (superseded 2026-10-01 by the `☻` ruling in the
+        last subtask: a named dwarf is `☻` in `dwarf_colour`); crowd `⚇` and a nameless dwarf are unchanged.
+        Test `a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour`: RED (walk orange
+        (214,154,78) where blue was due), then GREEN.
+  - [x] Mutation row 11 in `12-2.sh` KILLED; two 3.3 rows re-pointed (the carrier choice is now nested) and KILLED.
+  - [x] FR22 amended in `epics.md`; seat card (d) updated.
+  - [x] 2026-10-01, Wolf at the seat: "only yellow dwarves". The escapes carried the five tunic colours (live
+        capture, `--z 9`, 3 frames x 5); Windows Terminal paints the emoji-capable `☺` (U+263A) as a yellow emoji
+        face that ignores the colour, while `☻` (not an emoji character) took it in his terminal. Wolf RULED: a
+        named dwarf is `☻` in his tunic colour, carry state dropped from it too. Test RED (`☺` where `☻` was due)
+        then GREEN on `66e6ed4`; new `12-2.sh` row 12 + row 11 run alone: 2/2 KILLED. FR22 and README amended.
+  - [x] Wolf sees the five colours on the tui map (2026-10-01: "yes"). Red, blue and purple read dim on the near-black
+        background (contrast ~3.3:1 vs gold 8.7, green 5.1); parked, not tuned here.
+
+### Review Findings
+
+Code review run 1, 2026-10-01, on `1068bb0` (diff `main...HEAD`, 39 files). Four layers, none timed out, and every
+layer ran cargo (1.97.1) in its own target dir: Blind Hunter (sonnet), Edge Case Hunter (sonnet), Acceptance
+Auditor (opus), Feature Auditor (opus). Each finding below carries its layer and severity. **Executed and seen:**
+wire identity in the snapshot and deltas; emitter lines byte-identical to main's daemon; save/load refusals (old
+save, duplicate name or colour); the tui roster and `☻` tunic colours; tunic colours on the rendered GLB; a
+re-colour after a live load; #136 ratio 1.000; `12-2.sh` rows 1-12 KILLED (re-run in /tmp copies). **Seat-only, and
+closed at the seat:** AC6 on screen (Wolf saw the selected dwarf's name under the clock, 2026-09-30) and AC8 (seat card
+(a)-(d) passed 2026-09-30; the tui `☻` colours 2026-10-01). No gui code changed after that sitting. **Not yet done:** a full gate on HEAD (the last one was `2d12195`; Task 9 changed tui code
+after it).
+
+- [x] [Review][Decision] **Resolved 2026-10-01, Wolf: "1": accept the relative rule, record it as a deviation and
+  correct the guard's doc comment (now a patch item below).** The `--select` colour guard checks a weaker rule than Task 4 asked for (accept, MED). Task 4
+  says each window must read nearer its own dwarf's table colour than the other dwarf's. The guard checks something
+  else: that window A is nearer table A than window B is (`pixel_guard.rs:762-766`). The spec's rule fails on the
+  real frame: at `--clock 8`, the red dwarf's window [0.4275, 0.2947, 0.2778] lies 0.2334 from red, 0.2129 from
+  purple and 0.2128 from gold. Margins are 0.0397 and 0.0766 against a floor of 0.03; the all-red sabotage reads
+  0.020. The Debug Log records the `--clock 8` move but not the rule change, and the guard's doc comment still
+  states the spec's rule.
+- [x] [Review][Patch] Record the `--select` guard's relative rule as a deviation in the Debug Log, and make the guard's
+  doc comment say what it checks (from the decision above). [crates/gui/tests/pixel_guard.rs:705-708, this file Debug Log]
+- [x] [Review][Patch] Pin the deselect reset (edge, LOW, latent silent failure). Nothing asserts that clearing the
+  selection restores the no-selection focal distance and `DOF_APERTURE_F_STOPS`. Dropping the reset leaves every
+  test green, and an Escape would keep the widened aperture, breaking AC7's "behaves exactly as today".
+  Extend `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` to clear the selection and assert both
+  values, then add a `12-2.sh` row. [crates/gui/src/ingest.rs:2527]
+- [x] [Review][Patch] `--select` of an id that is not a drawn dwarf is a silent no-op (edge, MED, instrument).
+  `--select 99` or `--select 4294967295` captures an ordinary unselected frame with no log line. A non-dwarf id such
+  as the campfire's would frame the campfire. The click path checks for a dwarf (`nearest_dwarf_to`) and `--select`
+  does not. Fix: refuse loudly, so a capture asked to select a missing or non-dwarf id fails rather than shooting
+  the unselected frame. [crates/gui/src/ingest.rs:1214, crates/gui/src/pick.rs:225]
+- [x] [Review][Patch] The tui's `NO_COLOR` warning still says the colour carries job state (feature, LOW,
+  misreports an instrument). Since Task 9, colour carries each named dwarf's tunic and the roster. [crates/tui/src/main.rs:439]
+- [x] [Review][Patch] `same_seed_and_commands_remain_deterministic` does not compare `identities()`, though Task 1
+  is ticked for it (accept, LOW, false record). [crates/sim-core/tests/scenario.rs:1406]
+- [x] [Review][Patch] A doc comment is on the wrong test (edge, LOW). The `--select` test was inserted under
+  `depth_of_field_focuses_…`'s #136 doc comment, so that comment now heads the `--select` test.
+  [crates/gui/src/ingest.rs:4874]
+- [x] [Review][Patch] Some records still describe the pre-`☻` rule (accept, LOW). The seat card's (d) still says
+  "`☺` … (and `☻` while he carries a stone)". Scope guardrail 2 and Task 3's "`☺` keeps its job-state colour" are
+  not marked superseded by Task 9. [12-2-signoff/vehicle-card.md (d), this file :152, :275]
+- [x] [Review][Patch] The README is missing `--select <id>` from the gui flag table and the roster row from the tui
+  paragraph (accept, LOW). [README.md:249-266]
+- [x] [Review][Patch] Record fixes (accept+feature, LOW):
+  - The File List omits the Tasks 1-3 files.
+  - The Verification recipe's gui command lacks the `--frames` that a capture requires.
+  [this file, File List and Verification]
+- [x] [Review][Defer] Tunic materials are built from `targets[0]`'s material only and applied to every dwarf mesh
+  [crates/gui/src/project.rs:~3114] — deferred, latent (blind LOW): the r17 GLB has one material and one mesh.
+- [x] [Review][Defer] The atlas size and format are not checked against `TUNIC_CELLS` [crates/gui/src/project.rs:~3000]
+  — deferred, latent (blind LOW): the atlas is 512² sRGB today.
+- [x] [Review][Defer] A first tunic build that fails is never retried [crates/gui/src/project.rs:3140-3166]
+  — deferred, latent (blind+feature LOW): it logs once, and today the atlas is always readable.
+- [x] [Review][Defer] The ancestor walk is capped at 8 levels with no signal [crates/gui/src/project.rs:~3128]
+  — deferred, latent (blind LOW).
+- [x] [Review][Defer] `ProjectedTunic` is never removed when an id's identity becomes `None`
+  [crates/gui/src/project.rs:1773] — deferred, latent (blind+feature LOW): the daemon always names a dwarf.
+- [x] [Review][Defer] `to_save`'s `filter_map` drops a dwarf that lacks `Identity` [crates/sim-core/src/lib.rs:~1331]
+  — deferred, pre-existing shape (blind LOW): both spawn sites insert it.
+- [x] [Review][Defer] No golden pin of the identities for a seed [crates/sim-core/tests/worldgen.rs] — deferred (blind
+  LOW): a `rand` bump would rename every seed's dwarves without a test failing.
+- [x] [Review][Defer] The bridge's name and colour arms have no independent oracle [crates/simd/src/bridge.rs:170-199]
+  — deferred (edge LOW): a swapped pair would stay green. All 21 arms were checked by eye.
+- [x] [Review][Defer] Delta identity is untested, and 6-2's snapshot and delta rows now sabotage one site
+  [crates/simd/tests/serve.rs, mutations/6-2-lanterns-in-the-dark.sh] — deferred (accept LOW): seen live, 5/5.
+- [x] [Review][Defer] The roster's mid-name truncation and its skipping of nameless dwarves are unpinned
+  [crates/tui/src/view.rs:~429-443] — deferred (edge LOW): correct live at 6 sizes.
+
+Review cost $18.96 (320 turns; 4 subagent transcripts are 79.2% of tokens). Reaped 104.1 GB of `/tmp` build dirs (52.1 GB free space reclaimed).
+
+Dismissed (8):
+- `--distance` disabling the click-zoom live: false. `--distance requires --capture` (`ingest.rs:1274`).
+- `--select` zoom depending on the first frame: the two-update test covers it.
+- The named glyph losing carry and job state: Wolf ruled it (Task 9).
+- A refused load being silent in the clients: AC3 and NFR11 ask for a daemon log line.
+- The selected DoF look being nearly off: accepted at the seat, (b) and (c).
+- The HUD line being easy to miss: the seat passed, and the card now says where it is.
+- The full gate on HEAD: it is the next step, not a code finding.
+- The README File List: folded into the record-fixes item.
+
+Patch pass 1, 2026-10-01 (fresh session, `2fac78e`..`0833033`). All 9 patches landed. Full gate
+`RUST_TEST_THREADS=1 scripts/gate.sh` on `0833033`: **GREEN, exit 0, 3004 s**. New `12-2.sh` rows 13-17 run alone:
+5/5 KILLED, each on the assertion it names. No row is REWORK: this is the first patch round, so no earlier
+round's fix is being re-closed.
+
+| Item | Side written for | Side tested | Pre-existing-state fixture |
+| --- | --- | --- | --- |
+| `--select` guard records its relative rule | the record (doc + Debug Log) | the code: the doc now restates the guard's `margin_a`/`margin_b` asserts, and the guard passed in the full gate | the shipped `--clock 8` frame figures from the review (window [0.4275, 0.2947, 0.2778]) |
+| Deselect reset pinned | clearing a selection | the selected side too: the body-focus and scaled-aperture asserts still pass first, then the cleared side | the camera left where `frame_selected_dwarf` put it, DoF at the selected values (`depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point`); rows 13-14 KILLED |
+| `--select` of no dwarf fails the run | a missing id (99) and a non-dwarf id (campfire 5) | a real dwarf's id (2) runs on; on the real daemon, the two pixel guards select dwarves 0 and 2 and pass in the full gate | `select_of_a_missing_or_non_dwarf_id_fails_the_run`'s connect snapshot of a dwarf plus a campfire; rows 15-16 KILLED |
+| tui `NO_COLOR` warning | the named-dwarf world (tunic + roster) | the nameless dwarf's job-state clause kept; the client test reading the warning (`stderr.contains("NO_COLOR")`) passes | `tests/client.rs` NO_COLOR capture (`capture_walking_dwarf` with `no_color`) |
+| `same_seed_and_commands…` compares `identities()` | identity determinism | that it holds on the real seed-42 worldgen for 200 ticks, and fails when two same-seed worlds draw different identities | `World::generate(42, Dims::DEFAULT)` pair; row 17 KILLED at the new line, inside the tick loop |
+| #136 doc comment back on its test | the DoF test | the `--select` test keeps only its own comment | n/a, comment only |
+| Records describe the `☻` rule | seat card (d), Task 3, guardrail 2 | read against `view.rs`'s named/nameless arms and the Task 9 rulings | `12-2-signoff/vehicle-card.md` as Wolf sat it; nameless `☺` kept in both |
+| README `--select` + roster row | the gui flag table, the tui paragraph | read against `parse_args_from`, `refuse_select_of_a_missing_dwarf` and `view.rs`'s roster at `h-3` | README as on `27824a9` |
+| Record fixes (File List, recipe `--frames`) | the File List / Verification | the recipe's `--frames 160` is the harness's `FRAMES` (`pixel_guard.rs:30`) | the Tasks 1-3 commits `1b4f8c7`..`00c9314` |
+
+Code review run 2, 2026-10-01, on `6def196` (diff `ae01a47..6def196`, the patch pass; `ae01a47`'s tooling install
+excluded by choice). Four layers, none timed out, every layer ran cargo 1.97.1 in its own target dir: Blind Hunter
+(sonnet), Edge Case Hunter (sonnet), Acceptance Auditor (opus), Feature Auditor (opus).
+**Delta vs run 1:**
+- NEW findings: 1 (MED). It sits in Task 4's code, which run 1 reviewed and missed; this patch pass did not touch it.
+- REWORK (run-1 fixes half-closed): 4, all LOW records or docs: items 1, 7, 8 and 9 each left a sibling site.
+- Severity: 0 HIGH, 1 MED, 4 LOW.
+- **Stopping rule:** no HIGH among the new findings, so the static audit ENDS here. The next spend goes to the live
+  gate, not to a run 3.
+
+**Closure-table audit:** rows 13-17 were re-run in a /tmp copy and each was KILLED by the named test at the new
+assertion. Row 13 panics at `ingest.rs:5140`, row 14 at `:5144`, row 15 at `:5022`, row 16 at `:5023` and row 17 at
+`scenario.rs:1438`. All 9 items are CLOSED in substance.
+
+**Executed and seen:**
+- `gui --select 99`, `5` (the campfire), `6` (a torch) and `4294967295` each exit 1, write no PNG and log
+  `--select N: no dwarf has that id in the daemon's snapshot`. This holds both with `--capture` and live (headless).
+- `--select 1` and `--select 2` run on.
+- `NO_COLOR=1 tui` prints the new warning; every clause in it is true of the frame.
+
+**Unit-proven only:** Esc → DoF reset. No headless instrument can press a key.
+
+- [x] [Review][Defer] **Resolved 2026-10-01, Wolf: "3": filed as #157, left for a later story** (the seat never
+  used `--select`; AC8 passed with a real click). `--select` frames a dwarf the slice hides (feature, MED, observed; Task 4 code, not this
+  pass). `gui 7495 --headless --capture a2.png --frames 160 --select 2`, with no `--z`, shoots a frame that is about
+  two-thirds a flat blue-grey cut plane, and Bifur is not visible. Adding `--z 9` shows the camp and the dwarf.
+  - "As if clicked" is untrue: a click can only pick a dwarf you can see, while `--select` does not move the slice to
+    his level.
+  - Every guard passes `--distance 4`, so none exercises the default `SELECT_DISTANCE` frame.
+  - The README row (`README.md:257`) does not mention it.
+  - Options: (a) `--select` also sets the slice to the dwarf's z, unless `--z` is given; (b) a README note only:
+    "pair with `--z 9` on the shipped seed"; (c) file an issue and leave it for a later story.
+  [crates/gui/src/pick.rs:~225, crates/gui/src/ingest.rs:1499, README.md:257]
+- [x] [Review][Patch] REWORK of item 8: the README's tui row description is wrong at its base, so the new roster
+  sentence points at the status row (feature+accept, LOW, misdirects an operator).
+  - "The bottom row reports the tick…" is false: the hint is at `h-1`, the status at `h-2` and the roster at `h-3`
+    (`view.rs:429,445,454`).
+  - Fix: name the three rows in order from the bottom: hint, status, roster. [README.md:69-70]
+- [x] [Review][Patch] REWORK of item 1: the `TUNIC_MARGIN_FLOOR` doc still states the absolute rule ("must lie
+  nearer its own table colour by"). Only the test's doc comment was corrected (edge+accept, LOW).
+  [crates/gui/tests/pixel_guard.rs:726]
+- [x] [Review][Patch] REWORK of item 7: Task 9's first subtask still reads "A named dwarf's `☺` and carrier `☻` take
+  `dwarf_colour`", ticked and not marked superseded by the `☻` ruling four lines below (accept, LOW).
+  [this file, Task 9 first subtask]
+- [x] [Review][Patch] REWORK of item 9: the File List does not name `crates/tui/src/main.rs`, which the patch pass
+  changed (accept, LOW). [this file, File List]
+- [x] [Review][Defer] A refused capture leaves an older PNG at the `--capture` path untouched (feature LOW) —
+  deferred, pre-existing: every capture failure before the screenshot does the same. The exit code (1) and the
+  stderr line are the signal, and every harness reads the exit code. [crates/gui/src/ingest.rs:2508]
+- [x] [Review][Defer] The README says the tui opens at z 19, while a live run opened at `z 18/31` (feature side
+  note, LOW, not investigated) — deferred, pre-existing, outside this diff. [README.md:73]
+
+Patch pass for run 2, 2026-10-01, in the review session (Wolf: "1"). All 4 landed. All four are REWORK: each
+re-closes a run-1 item that was left with a stale sibling. Only text changed (a README paragraph, a test-constant doc
+comment, story records), so no mutation row applies. The code last passed the full gate on `0833033`.
+
+| Item | Side written for | Side tested | Pre-existing-state fixture |
+| --- | --- | --- | --- |
+| REWORK item 8: README tui rows | the roster sentence | the base sentence too: the status row and the hint row, read against `view.rs` `roster_y = h - 3`, `status_y = h - 2`, `hint_y = h - 1` | the live tui tail seen by the run-2 auditor (`tui 7493 --frames 3 --z 9`): roster, `tick …`, hint |
+| REWORK item 1: `TUNIC_MARGIN_FLOOR` doc | the constant's doc | the asserts it bounds: `margin_a`/`margin_b` = the OTHER window's distance minus his own | `pixel_guard.rs` on `6def196` (the first doc fix had corrected only the test's doc comment) |
+| REWORK item 7: Task 9 first subtask | the `☺` subtask | the `☻` ruling subtask and `view.rs`'s named arm (`glyph: '☻'`) | this file on `6def196` |
+| REWORK item 9: File List | the patch pass's files | `git diff --name-only ae01a47..6def196`: all 7 non-record paths now listed | this file on `6def196` |
+
+Review run 2 cost $12.07 (287 turns; 4 subagent transcripts are 71.6% of tokens), its patch pass $0.75. Fast gate
+GREEN on `3421fe0`. Reaped 112.5 GB of `/tmp` build dirs (56.9 GB free space reclaimed).
+
+Dismissed (9):
+- `identities()` could compare `[] == []` (blind): row 17 proves the list is populated, and worldgen pins five.
+- A dwarf in the snapshot but not drawn would pass the refusal (edge): no such state exists at startup, and it was
+  not reproducible.
+- Row 17's counter leaves the first world unmutated (blind): the test builds two worlds, which differ
+  deterministically.
+- After Esc the frame goes soft at distance 20 (feature): AC7's "behaves exactly as today" mandates f/0.05 at the
+  aim point.
+- `--select` refusal also ends a live run (accept): recorded as "fails the run" in the README, the Change Log and
+  the closure table.
+- The determinism test catches only nondeterminism (accept): the golden pin is already deferred from run 1.
+- The `NO_COLOR` text is unpinned (accept): the closure table discloses it.
+- The single-assignment hop between the Esc test and the DoF test (feature): both halves are pinned.
+- `--select 2` exit 101 (edge): the known near-white ceiling on lavapipe. The PNG was saved, and another daemon's
+  `--select 2` passed.
+
+## Dev Notes
+
+### Scope guardrails (do NOT)
+
+- Do not put a `String` on the wire. The name is a closed enum (AD-6), which keeps `Entity` and
+  `SavedDwarf` `Copy`. The spelling lives only in `client-core::dwarf_name_text`.
+- ~~Do not recolour the tui's `☺`, the carrier `☻` or the crowd `⚇`. The roster row is the tui's
+  whole identity display (NFR10 display parity; no new tui input).~~ *Superseded by Task 9 (Wolf's
+  rulings, 2026-09-30 and 2026-10-01): a named dwarf is `☻` in his tunic colour. The crowd `⚇` and a
+  nameless dwarf are unchanged, and there is still no new tui input.*
+- Do not add floating name labels, outlines or a selection ring in the gui. The draft specifies
+  one HUD line.
+- Do not touch DoF with no selection, the boot framing, or any DoF constant the no-selection path
+  reads.
+- Do not edit the dwarf GLB or its Blender source. The recolour is client-side.
+- Do not add rename, a colour picker, or more than five colours. FR40 (variation beyond colour) is
+  12.13.
+- Do not make old saves load (no `#[serde(default)]` on `identity`). A refused load is loud, which
+  NFR11 allows.
+
+### What already exists (build on it)
+
+- `SelectedDwarf` + click select + Escape + `frame_selected_dwarf` (story 10.10, `pick.rs:68-245`).
+  Selection is client-local and sends nothing.
+- `update_dof_from_camera` already switches to the selected dwarf. Only the focus point and the
+  close-range aperture are wrong.
+- `pixel_guard.rs` has the daemon + capture harness, `rec601_lap_mean`, and the one-daemon-per-capture rule.
+- `client-core::refusal_text` is the pattern for shared client text. The `Mirror` stores whole
+  `protocol::Entity` values, so identity reaches both clients with no mirror change.
+- The seeded-stream pattern: `seed ^ STREAM_X` constants (`lib.rs:26-29`), and worldgen-only
+  streams are not saved.
+
+### Key decisions & traps
+
+- **`identity: Option<Identity>`, skipped when `None`:** `Entity` also carries torches and the
+  campfire. Skipping `None` keeps every pinned and recorded emitter line byte-identical.
+- **Five colours, exactly one per dwarf:** a permutation guarantees every pair differs in hue.
+  **Sixteen names, pick five:** worlds differ.
+- **A load can change the identity behind an id.** Two worlds both number their dwarves 0–4. The
+  gui re-applies on change; a spawn-only apply would leave the old world's tunics on.
+- **Hue evidence is a daytime capture** (`--clock 12`). Captures default to the boot hour 22, when
+  firelight tints everything warm.
+- **The HUD line cannot be pixel-evidenced.** Captures hide `Hud` (`ingest.rs:1775`). The in-crate
+  test and the seat carry AC6.
+
+### Verification
+
+Deliberate RED, observed at creation on `16be274`:
+
+```bash
+cargo build -q -p simd -p tui && ./target/debug/simd 7482 &
+python3 -c "import socket,json;f=socket.create_connection(('127.0.0.1',7482)).makefile();s=json.loads(f.readline());print([sorted(e) for e in s['entities'] if e['kind']=='dwarf'][0])"
+#   RED (observed): ['id', 'kind', 'light', 'pos', 'state']   GREEN: 'identity' present, 5 distinct names and colours
+./target/debug/tui 7482 --frames 1 --z 9 | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | tail -4
+#   RED (observed): the map, then `tick 15 ... dwarves 5  N up`, then the hint; no names
+#   GREEN: the row above `tick ` holds five names
+pkill -x simd
+```
+
+After the fix, break it on purpose: mutation row 4 (the bridge sends `None`). The python line
+shows no `identity`, and the tui roster row is empty. Restore, and both are back.
+
+The gui instrument cannot run until Task 4 builds it. Recipe (the Task 4 guards automate it; one
+fresh daemon per capture):
+`gui <port> --headless --static-world --lights-steady --subdiv 4 --select 0 --distance 4 --frames 160 --capture /abs/on.png`,
+then the same command with `--fx-off dof` → `/abs/off.png`.
+- RED: the centre-window sharpness ratio is < 0.8.
+- GREEN: it is ≥ 0.8.
+Exit 0 is not a result; the ratio is.
+
+### Project Structure Notes
+
+- `crates/sim-core/src/{lib.rs,save.rs}`, `tests/{worldgen,save_load,scenario}.rs`: UPDATE
+- `crates/protocol/src/lib.rs`: UPDATE (3 types, 1 field, pins)
+- `crates/simd/src/{bridge.rs,main.rs}`, `tests/serve.rs`: UPDATE
+- `crates/client-core/src/lib.rs`: UPDATE (`dwarf_name_text`, literals)
+- `crates/tui/src/{palette.rs,view.rs}`, `tests/client.rs`: UPDATE
+- `crates/gui/src/{ingest.rs,pick.rs,project.rs,appearance.rs}`, `tests/{headless,pixel_guard,capture}.rs`: UPDATE
+- `_bmad-output/implementation-artifacts/mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`: NEW
+- `12-2-signoff/{draft.md,draft-crew.png,draft.py}`: created at story creation
+
+### References
+
+- `epics.md` Epic 12 intro (standing ACs) and Story 12.2; PRD `prd-frostvein-2026-09-28` FR38,
+  FR39, NFR9–NFR11, success criterion 2
+- Parent spine AD-6, AD-7, AD-8, AD-9, AD-11, Consistency Conventions (Vocabulary enums, Color);
+  M2 spine AD-13, AD-14, AD-17
+- Issue #136; commit `6194756` (DoF follows the selection); story 10.10 (selection); story 12.1
+  (`refusal_text` pattern, `Delta` literal sweep)
+- Memory: [[dof-inert-at-world-scale]], [[colour-space-bug-hides-as-palette-mismatch]],
+  [[headless-gui-instruments]], [[freeze-point-tracks-daemon-uptime]]
+
+### Previous story intelligence (12.1)
+
+- A new field on a wire struct breaks every literal (12.1: about 35 `Delta`s; here about 56
+  `Entity`s). It is mechanical, so let the compiler list them. `Entity` has no `Default`, and
+  adding one is not this story's job.
+- The full gate goes green only at `RUST_TEST_THREADS=1` (2652 s). At 2 threads, pixel guards die
+  on load. This story adds pixel guards, so budget for it.
+- A test assertion placed early can absorb a mutation meant for a later one (12.1's scenario
+  vacuity). Put each mutation's killing assertion where only that mutation reaches it.
+
+## Dev Agent Record
+
+### Agent Model Used
+
+claude-sonnet-5-5 (three sequential dev agents: Tasks 1-3, Tasks 4-6, Task 7 + the seat card), orchestrated
+and verified phase by phase by claude-opus-5-5. Delegated to Sonnet subagents at Wolf's request, not Codex.
+
+### Debug Log References
+
+- Task 4 RED, on `5d0cacf` (before the fix): `--select 0 --distance 4 --clock 12`, window (540,170)-(740,390), Rec.601 Laplacian mean, DoF off 5.8911, DoF on 2.2679, **ratio 0.385** (< 0.8, so no halt). Fix at `8ae5f2c`.
+- Task 4 GREEN: DoF off 5.8911, DoF on 5.8893, **ratio 1.000**.
+- Existing guards after the fix, unedited: `dof_softens_the_far_ridge_while_retaining_camp_focus_and_stars` (ratio 11.753) and `dof_keeps_depth_separation_at_distance_40` (ratio 3.303) pass.
+- The fix: the selected subject is his body (`translation` + half of `DWARF_HEIGHT_CELLS` = 0.375), and the aperture scales by `(61.7/focal)^2` when the focal distance is under boot's (`selected_aperture`). The no-selection arm still writes `DOF_APERTURE_F_STOPS`.
+- Task 4 `--select` guard: at `--clock 12` the tunics wash to about (195,160,165) (red and purple read alike), so the guard uses `--clock 8`. Chromaticity margins 0.040 (dwarf 0, purple) and 0.077 (dwarf 2, red); with every dwarf painted red dwarf 0 reads 0.020; the floor is 0.03.
+- **Deviation (recorded at the review, Wolf's decision 2026-10-01):** the `--select` guard checks a RELATIVE rule, not
+  Task 4's. Task 4 asks each window to read nearer its own dwarf's table colour than the other dwarf's; the guard asks
+  that window A lie nearer table A than window B does (and the same for B). The spec's rule fails on the real frame: at
+  `--clock 8` the red dwarf's window [0.4275, 0.2947, 0.2778] is 0.2334 from red, 0.2129 from purple and 0.2128 from
+  gold. Wolf accepted the relative rule; the guard's doc comment now says what it checks.
+- Task 5: the real GLB atlas keeps its CPU pixels (no `no readable CPU pixels` line in a capture, and the tunics render coloured on the model). The GLB scene does NOT spawn under the headless `MinimalPlugins` (no `AssetServer`), so the headless test stands in a mesh child of each projected dwarf carrying a synthetic base material and atlas; from there the production path runs. The pixel guard carries the on-model evidence.
+- Task 4 mutation finding: focusing the FEET (the pre-#136 point) is NOT killed by the #136 pixel guard, because the widened aperture leaves the figure sharp either way (ratio 1.000). The unit test `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` kills it (tolerance tightened 0.25 to 0.03 with a discrimination assert), and an unscaled aperture is killed by the pixel guard (ratio 0.468).
+- Task 7 mutation table `mutations/12-2.sh` (`64e9237`, `a9d89d5`), run with `RUST_TEST_THREADS=1 scripts/mutate.sh`, all 10 KILLED: 1 identity from `spawn_rng` by `spawn_positions_for_seed_42_are_pinned`; 2 `from_save` ignores identity by `save_load_then_tick_matches_never_saved`; 3 one colour by `five_dwarves_on_walkable_surface`; 4 bridge `identity: None` by `save_then_load_rewinds_every_client`; 5 no roster by `the_roster_row_names_each_dwarf_in_his_colour_and_follows_an_identity_swap`; 6 one material and 7 reconcile ignores identity change, both by `a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it`; 8 HUD never shows the name by `the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears`; 9 DoF focus on `translation` by `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` (not the pixel guard); 10 aperture unscaled by the pixel guard `a_selected_dwarf_at_the_closest_zoom_is_sharp_with_dof_on`. Row 10 targets an `#[ignore]`d test, so it needs mutate.sh's `ignored` argument (the first run reported NOT-RUN).
+- Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` on `2d12195`, **GREEN, 4170 s**.
+- Task 8 seat (AC8), Wolf, 2026-09-30, on the pushed branch: (a) names by tunic colour, and the HUD name on click: yes
+  ("names are ok"). He first reported he could not see the name and then found it: the card never said WHERE the line
+  is (top-right, under the clock), and a 22 px tunic-coloured word on a dark sky is easy to miss. (b) sharp at the
+  closest zoom: yes. (c) Escape empties the name and restores the camp-focused DoF: yes. (d) the tui roster: yes.
+  Wolf's idea at (d): colour the tui dwarf glyphs by tunic too. Not built in 12.2, because the glyph colour already
+  carries job state and a later Epic 12 story adds profession colour. **Wolf then RULED it in (Task 9): tunic colour,
+  job state dropped from a named dwarf's glyph.**
+- Patch pass 1 mutations, `12-2.sh` rows 13-17 run alone with `RUST_TEST_THREADS=1 scripts/mutate.sh`, 5/5 KILLED: 13 deselect keeps the focal distance and 14 deselect keeps the widened aperture, both by `depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point` (its two new cleared-selection asserts); 15 `--select` of a missing dwarf runs on and 16 `--select` accepts a campfire id, both by `select_of_a_missing_or_non_dwarf_id_fails_the_run`; 17 same seed draws different identities by `same_seed_and_commands_remain_deterministic` (the new `identities()` line).
+- Task 9 on `e59b1af`: new test RED then GREEN; `12-2.sh` row 11 + the two re-pointed 3.3 rows (carrier never drawn,
+  carrier over crowd) run alone with `RUST_TEST_THREADS=1 scripts/mutate.sh`: 3/3 KILLED. The tui walk-colour client
+  test still holds: its dwarf is nameless.
+
+### Completion Notes List
+
+- Tasks 4-6 done (dev agent, sonnet-5.5). Commits: `5d0cacf` (`--select`), `57c9d1a` (RED guard), `06d3b94`+`d191d9b` (`--select` guard), `8ae5f2c` (the #136 fix), `8846b15` (tunic recolour), `46e9554` (focus test tightened), `9ac89c7` (HUD name).
+- Re-pointed mutation rows (sabotage and killing test unchanged): `10-10-...sh` (the follow-pins-zoom row), `11-2-the-miniature.sh` (two frozen-camera DoF rows), `5-3-a-window-onto-the-valley.sh` (the reconcile find gained a fourth tuple element), `8-3-...sh` (the clock-readout row, now chained before the name readout).
+- Deviations: the `--select` guard runs at `--clock 8`, not 12 (see Debug Log). Three existing HUD-count tests went 5 to 6 texts for the new name line. `DwarfColour` has no `ALL` in `protocol`, so the client keeps its own `TUNIC_COLOURS` order.
+
+- Tasks 1-3 done (dev agent, sonnet-5.5). Commits: 1b4f8c7 (sim-core), 6a56a89 (protocol + simd), 8ad0fce and 00c9314 (tui roster).
+- Re-pointed two mutation tables the change broke: `2-2-...sh` (spawn_dwarves call gained `identities`) and `6-2-...sh` (the two bridge dwarf maps are now one `dwarf_entities` fn, so both rows hit the single site).
+- Deviations: `render` now blanks below 3 rows (was 2), because three rows are reserved. The cursor-pan unit test viewport went (5,5) to (5,7) so a wrong map_h in `apply_key` is killed (3 and 4 rows pan identically). A `dwarf_name_text` spelling pin test in client-core was added because the client test only checked substrings.
+
+### File List
+
+- Tasks 1-3: `crates/sim-core/src/{lib.rs,save.rs}`, `crates/sim-core/tests/{worldgen,save_load,scenario}.rs`,
+  `crates/protocol/src/lib.rs`, `crates/simd/src/{bridge.rs,main.rs}`, `crates/simd/tests/serve.rs`,
+  `crates/client-core/src/lib.rs`, `crates/tui/src/{palette.rs,view.rs}`, `crates/tui/tests/client.rs`, and every
+  `Entity { .. }` literal the new field broke; mutation tables re-pointed: `mutations/{2-2,6-2}-*.sh`
+- `crates/gui/src/{ingest.rs,pick.rs,project.rs,appearance.rs}`, `crates/gui/tests/{headless.rs,pixel_guard.rs}`
+- Mutation tables re-pointed: `mutations/{10-10-take-the-camera-where-you-want-it,11-2-the-miniature,5-3-a-window-onto-the-valley,8-3-master-of-time-and-the-skeleton-walks-in-3d}.sh`
+- Task 7/8 files: `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`
+- Task 9: `crates/tui/src/{view.rs,palette.rs}`, `crates/tui/tests/client.rs` (doc line), `mutations/{12-2,3-3-the-haul-and-the-skeleton-walks}.sh`, `planning-artifacts/epics.md` (FR22), `README.md` (glyph legend)
+- Patch pass 1: `crates/gui/src/ingest.rs`, `crates/gui/tests/pixel_guard.rs`, `crates/sim-core/tests/scenario.rs`,
+  `crates/tui/src/main.rs`, `mutations/12-2.sh`, `12-2-signoff/vehicle-card.md`, `README.md`
+- Review run 2 patches: `README.md` (tui rows), `crates/gui/tests/pixel_guard.rs` (doc comment)
+
+## Change Log
+
+| Date | Change |
+| --- | --- |
+| 2026-10-01 | Code review run 2 on `6def196` (the patch pass): 0 HIGH, 1 MED (`--select` frames a dwarf the slice hides, Task 4 code) filed as #157 per Wolf, 4 LOW REWORK record fixes applied in-session. Status `done`. |
+| 2026-10-01 | Patch pass 1: 9/9 review patches landed (`2fac78e`..`0833033`); `--select` of no dwarf now fails the run; deselect DoF reset pinned; `12-2.sh` rows 13-17 KILLED; full gate GREEN on `0833033` (3004 s). Status to `review` for round 2. |
+| 2026-10-01 | Code review run 1 on `1068bb0` (4 layers): 0 HIGH; Wolf took decision 1 (accept the relative `--select` guard, record it), left 9 patches as action items, 10 deferred. Status to `in-progress`. |
+| 2026-10-01 | Task 9 closed: Wolf confirmed the five `☻` colours. Status to `review`. |
+| 2026-10-01 | Task 9: Wolf saw five yellow `☺` (the terminal's emoji font ignores the colour); named dwarves are now `☻` in tunic colour, carry state off them too. FR22 amended again. |
+| 2026-09-30 | Task 9 (Wolf's seat ruling): named dwarves' tui glyphs in tunic colour, job state off them; FR22 amended. Status back to `in-progress` until Wolf sees it. |
+| 2026-09-30 | Task 8: Wolf's seat passed (a)-(d). Status to `review`. |
+| 2026-09-29 | Tasks 1-7 done (Sonnet 5.5 dev agents, Opus 5.5 orchestrator). #136 RED 0.385 to GREEN 1.000; `12-2.sh` 10/10 KILLED; #136 commented; full gate GREEN on `2d12195` (4170 s, `RUST_TEST_THREADS=1`). Seat card written; Task 8's sitting still open. |
+| 2026-09-29 | Task 0: Wolf approved the draft, the no-selection DoF rule and the no-old-saves rule, all unchanged. |
+| 2026-09-29 | Story created on `16be274`. RED observed live: the wire carries no identity and the tui shows no names. #136 premise corrected: DoF already follows the selection, but focuses his feet with an aperture tuned for boot distance. Look draft rendered from the real GLB (`12-2-signoff/`). |

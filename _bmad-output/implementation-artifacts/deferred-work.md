@@ -2340,3 +2340,42 @@ the story, and one of them is also issue #125.
 - **Three cited mutation proofs are not in the table** (accept LOW). `/tmp/12-1-boundary-red.sh` and
   `/tmp/12-1-wire-red.sh` rows (emitter unit test, empty gui drag, `skip_serializing_if`) are not in
   `mutations/12-1.sh`, so the gate never re-checks them.
+
+## Deferred from: code review of 12-2-five-dwarves-you-can-name (2026-10-01)
+
+- **The tunic materials are cloned from one mesh's material** (blind LOW, latent). `apply_dwarf_tunics` reads the
+  base material from `targets[0]` and gives the clone to every dwarf mesh (`crates/gui/src/project.rs:~3114`).
+  The r17 GLB has one material and one mesh. If a future dwarf asset has a second material, it would be silently
+  replaced.
+- **The atlas is not checked against `TUNIC_CELLS`** (blind LOW, latent). Only `len == w*h*4` is checked. A smaller
+  repack panics out of bounds, a larger one recolours the wrong cells, and a linear-format atlas gets sRGB maths
+  (`crates/gui/src/project.rs:~3000`).
+- **A first tunic build that fails is never retried** (blind+feature LOW, latent). If the atlas is unreadable when
+  the first mesh appears, the system logs once, and that `Added` event is spent; those dwarves keep the shipped
+  colour until an identity changes (`crates/gui/src/project.rs:3140-3166`).
+- **The ancestor walk is capped at 8 levels with no signal** (blind LOW, latent). In a deeper scene the mesh is never
+  matched and nothing is logged (`crates/gui/src/project.rs:~3128`).
+- **`ProjectedTunic` is never removed** when an id's identity becomes `None` (blind+feature LOW, latent;
+  `crates/gui/src/project.rs:1773`). The daemon always names a dwarf.
+- **`to_save` silently drops a dwarf that lacks `Identity`** (blind LOW). This is the existing `filter_map` shape
+  (`crates/sim-core/src/lib.rs:~1331`), and both spawn sites insert it.
+- **No golden pin of the identities for a seed** (blind LOW). A `rand` bump would reshuffle every seed's names
+  without a test failing.
+- **The bridge's name and colour arms have no independent oracle** (edge LOW). A swapped pair stays green
+  (`crates/simd/src/bridge.rs:170-199`). All 21 arms were checked by eye on 2026-10-01.
+- **Delta identity is untested** (accept LOW). `save_then_load_rewinds_every_client` checks snapshots only, and
+  6-2's snapshot and delta dwarf rows now sabotage the same `dwarf_entities` site. It was seen live, 5/5 dwarves.
+- **The tui roster's truncation and nameless-skip are unpinned** (edge LOW; `crates/tui/src/view.rs:~429-443`).
+  Correct live at six terminal sizes.
+
+## Deferred from: code review of 12-2-five-dwarves-you-can-name, run 2 (2026-10-01)
+
+- **A refused `gui` capture leaves an older PNG at the `--capture` path untouched** (feature LOW, pre-existing
+  shape). `cp a2.png stale.png; gui ... --capture stale.png --select 99` exits 1 and the md5 is unchanged. Every
+  capture failure before the screenshot does the same; the exit code is the signal and the harnesses read it. A
+  script checking only "PNG exists" would grade the old frame (`crates/gui/src/ingest.rs:2508`).
+- **README says the tui opens at z 19; a live run on 2026-10-01 opened at `z 18/31`** (feature side note, LOW, not
+  investigated: possibly the most-standable level moving as dwarves dig, or a stale line) (`README.md:73`).
+- **`gui --select` frames a dwarf the slice hides unless `--z` is given** (feature MED, Task 4 code) — Wolf ruled
+  2026-10-01: filed as **#157**, left for a later story (the seat never used `--select`; AC8 passed with a click).
+  THE ISSUE IS THE STATE.

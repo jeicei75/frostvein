@@ -2,22 +2,22 @@
 # NOTE: re-pointed 2026-09-08 by story 10.8, which moved this literal. The row's SABOTAGE
 # is unchanged; only the value it starts from moved. A row that cannot apply pins nothing.
 
+# Re-pointed 2026-09-29 (12.2): the snapshot and delta dwarf maps were extracted into the one
+# `dwarf_entities` fn, so both rows now sabotage that single site; the killing test is unchanged.
 mutation "snapshot dwarf arm drops lanterns" simd every_dwarf_carries_a_lantern_in_snapshot_and_delta_without_duplication <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
-old = '                light: Some(light_kind(light)),\n'
-assert s.count(old) == 2
-p.write_text(s.replace(old, '                light: None,\n', 1))
+old = '            light: Some(light_kind(light)),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            light: None,\n', 1))
 PY
 
 mutation "delta dwarf arm drops lanterns" simd every_dwarf_carries_a_lantern_in_snapshot_and_delta_without_duplication <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
-old = '                light: Some(light_kind(light)),\n'
-assert s.count(old) == 2
-head, separator, tail = s.rpartition(old)
-assert separator
-p.write_text(head + '                light: None,\n' + tail)
+old = '            light: Some(light_kind(light)),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            light: None,\n', 1))
 PY
 
 mutation "static emitter bridge accepts lanterns" simd static_lantern_emitters_remain_rejected_by_the_bridge_guard <<'PY'

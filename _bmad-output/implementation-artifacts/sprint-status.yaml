@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-09-29
+last_updated: 2026-10-01
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2493,7 +2493,13 @@ development_status:
   #     and unreachable, so dwarves pick up and drop the same stone endlessly (98 pick-ups, 0
   #     deliveries) and stack stones beside the fire. Refusal RED observed live in the tui.
   #   Refusal shape decided here for all of M3: a typed `refusals` list on the next delta.
-  12-2-five-dwarves-you-can-name: backlog
+  12-2-five-dwarves-you-can-name: done
+  #   Created 2026-09-29 on 16be274. RED observed live: no identity on the wire, no names in the tui.
+  #     #136 premise corrected: DoF already follows the selection but focuses his FEET with an
+  #     aperture tuned at boot distance. Look draft (tunic recolour of the real GLB) in 12-2-signoff/;
+  #     Draft APPROVED unchanged by Wolf 2026-09-29 (Task 0), with the no-selection DoF rule and no old-save load.
+  #   Dev done 2026-09-29 (Sonnet 5.5 agents); full gate GREEN on 2d12195; Wolf's seat PASSED 2026-09-30,
+  #     then RULED tui glyphs in tunic colour (Task 9, built e59b1af); back to review once he sees it.
   12-3-no-dwarf-stuck-after-digging: backlog
   12-4-every-dwarf-has-a-trade: backlog
   12-5-dwarves-at-work-dig-and-haul: backlog

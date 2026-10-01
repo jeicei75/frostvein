@@ -212,7 +212,8 @@ PY
 mutation "the follow pins the zoom every frame instead of once" gui the_focus_tracks_the_selected_dwarf_as_he_walks <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
-old = '        if selected.is_changed() {\n'
+# re-pointed 2026-09-29: 12.2 added `&& capture_distance.is_none()` to this condition; sabotage unchanged
+old = '        if selected.is_changed() && capture_distance.is_none() {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        if true {\n'))
 PY

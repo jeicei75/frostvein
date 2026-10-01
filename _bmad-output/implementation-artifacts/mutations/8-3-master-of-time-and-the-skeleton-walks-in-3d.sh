@@ -91,9 +91,10 @@ PY
 mutation "the clock readout never follows the wire" gui the_live_clock_readout_follows_the_daemons_tick_and_speed <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '        .add_systems(Update, update_clock_readout.after(ProjectionSet));\n'
+# re-pointed 2026-09-29: 12.2 chained the name readout after it; sabotage unchanged (the clock system is dropped)
+old = '        .add_systems(Update, update_clock_readout.after(ProjectionSet))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ';\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "elapsed forgets whole days" gui the_clock_readout_names_the_hour_the_elapsed_sim_time_and_the_speed <<'PY'

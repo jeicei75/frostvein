@@ -709,6 +709,7 @@ fn the_lantern_sweep_sees_terrain_that_exists_only_as_chunk_meshes() {
             pos: [x, 0, 1],
             state: JobState::Idle,
             light: Some(LightKind::Lantern),
+            identity: None,
         }],
         designations: Vec::new(),
         zones: Vec::new(),
@@ -779,6 +780,7 @@ fn static_world_skips_the_motion_assertions_on_an_at_tick_capture() {
         pos: [0, 0, 0],
         state: protocol::JobState::Idle,
         light: None,
+        identity: None,
     };
     let snapshot = Snapshot {
         msg_type: MessageType::Snapshot,

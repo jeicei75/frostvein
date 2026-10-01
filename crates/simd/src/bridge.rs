@@ -16,16 +16,7 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
             z: dims.z,
         },
         tiles: world.tiles().iter().copied().map(tile).collect(),
-        entities: world
-            .dwarves()
-            .into_iter()
-            .map(|(id, pos, state, light)| protocol::Entity {
-                id: id.0,
-                kind: protocol::EntityKind::Dwarf,
-                pos: [pos.x, pos.y, pos.z],
-                state: job_state(state),
-                light: Some(light_kind(light)),
-            })
+        entities: dwarf_entities(world)
             .chain(world.emitters().into_iter().map(emitter_entity))
             .collect(),
         designations: world
@@ -75,16 +66,7 @@ pub fn delta(
                 tile: tile(tile_value),
             })
             .collect(),
-        entities: world
-            .dwarves()
-            .into_iter()
-            .map(|(id, pos, state, light)| protocol::Entity {
-                id: id.0,
-                kind: protocol::EntityKind::Dwarf,
-                pos: [pos.x, pos.y, pos.z],
-                state: job_state(state),
-                light: Some(light_kind(light)),
-            })
+        entities: dwarf_entities(world)
             .chain(world.emitters().into_iter().map(emitter_entity))
             .collect(),
         // NOTE: AD-8 full-resends every mark in every delta, but sim-core bounds the
@@ -144,7 +126,29 @@ fn emitter_entity(
         pos: [pos.x, pos.y, pos.z],
         state: protocol::JobState::Idle,
         light: Some(light_kind(light)),
+        identity: None,
     }
+}
+
+fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Entity> {
+    let identities = world.identities();
+    world
+        .dwarves()
+        .into_iter()
+        .map(move |(id, pos, state, light)| protocol::Entity {
+            id: id.0,
+            kind: protocol::EntityKind::Dwarf,
+            pos: [pos.x, pos.y, pos.z],
+            state: job_state(state),
+            light: Some(light_kind(light)),
+            identity: identities
+                .iter()
+                .find(|(identity_id, _)| *identity_id == id)
+                .map(|(_, identity)| protocol::Identity {
+                    name: dwarf_name(identity.name),
+                    colour: dwarf_colour(identity.colour),
+                }),
+        })
 }
 
 fn entity_kind(light: sim_core::LightKind) -> protocol::EntityKind {
@@ -160,6 +164,37 @@ fn light_kind(light: sim_core::LightKind) -> protocol::LightKind {
         sim_core::LightKind::Torch => protocol::LightKind::Torch,
         sim_core::LightKind::Campfire => protocol::LightKind::Campfire,
         sim_core::LightKind::Lantern => protocol::LightKind::Lantern,
+    }
+}
+
+fn dwarf_name(v: sim_core::DwarfName) -> protocol::DwarfName {
+    match v {
+        sim_core::DwarfName::Durin => protocol::DwarfName::Durin,
+        sim_core::DwarfName::Dvalin => protocol::DwarfName::Dvalin,
+        sim_core::DwarfName::Nori => protocol::DwarfName::Nori,
+        sim_core::DwarfName::Ori => protocol::DwarfName::Ori,
+        sim_core::DwarfName::Dori => protocol::DwarfName::Dori,
+        sim_core::DwarfName::Bifur => protocol::DwarfName::Bifur,
+        sim_core::DwarfName::Bofur => protocol::DwarfName::Bofur,
+        sim_core::DwarfName::Gloin => protocol::DwarfName::Gloin,
+        sim_core::DwarfName::Nain => protocol::DwarfName::Nain,
+        sim_core::DwarfName::Thrain => protocol::DwarfName::Thrain,
+        sim_core::DwarfName::Frar => protocol::DwarfName::Frar,
+        sim_core::DwarfName::Loni => protocol::DwarfName::Loni,
+        sim_core::DwarfName::Regin => protocol::DwarfName::Regin,
+        sim_core::DwarfName::Alf => protocol::DwarfName::Alf,
+        sim_core::DwarfName::Fjalar => protocol::DwarfName::Fjalar,
+        sim_core::DwarfName::Frosti => protocol::DwarfName::Frosti,
+    }
+}
+
+fn dwarf_colour(v: sim_core::DwarfColour) -> protocol::DwarfColour {
+    match v {
+        sim_core::DwarfColour::Red => protocol::DwarfColour::Red,
+        sim_core::DwarfColour::Gold => protocol::DwarfColour::Gold,
+        sim_core::DwarfColour::Green => protocol::DwarfColour::Green,
+        sim_core::DwarfColour::Blue => protocol::DwarfColour::Blue,
+        sim_core::DwarfColour::Purple => protocol::DwarfColour::Purple,
     }
 }
 
@@ -488,6 +523,7 @@ mod tests {
                     sim_core::LightKind::Campfire => protocol::LightKind::Campfire,
                     sim_core::LightKind::Lantern => unreachable!("lanterns are not spawned"),
                 }),
+                identity: None,
             })
             .collect();
 

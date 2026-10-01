@@ -19,7 +19,7 @@ use bevy_ecs::{
     system::{Commands, Query, Res, ResMut},
     world::World as EcsWorld,
 };
-use rand::{RngExt, SeedableRng};
+use rand::{RngExt, SeedableRng, seq::SliceRandom};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +28,7 @@ const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
 const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
+const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 /// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
@@ -126,6 +127,66 @@ pub enum LightKind {
     Torch,
     Campfire,
     Lantern,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum DwarfName {
+    Durin,
+    Dvalin,
+    Nori,
+    Ori,
+    Dori,
+    Bifur,
+    Bofur,
+    Gloin,
+    Nain,
+    Thrain,
+    Frar,
+    Loni,
+    Regin,
+    Alf,
+    Fjalar,
+    Frosti,
+}
+
+impl DwarfName {
+    pub const ALL: [Self; 16] = [
+        Self::Durin,
+        Self::Dvalin,
+        Self::Nori,
+        Self::Ori,
+        Self::Dori,
+        Self::Bifur,
+        Self::Bofur,
+        Self::Gloin,
+        Self::Nain,
+        Self::Thrain,
+        Self::Frar,
+        Self::Loni,
+        Self::Regin,
+        Self::Alf,
+        Self::Fjalar,
+        Self::Frosti,
+    ];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum DwarfColour {
+    Red,
+    Gold,
+    Green,
+    Blue,
+    Purple,
+}
+
+impl DwarfColour {
+    pub const ALL: [Self; 5] = [Self::Red, Self::Gold, Self::Green, Self::Blue, Self::Purple];
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Identity {
+    pub name: DwarfName,
+    pub colour: DwarfColour,
 }
 
 /// Every dwarf carries the same permanent lantern.
@@ -1226,7 +1287,17 @@ impl World {
             BTreeMap::new(),
             BTreeSet::new(),
         );
-        world.spawn_dwarves(camp_origin, &mut spawn_rng);
+        // Identity has its own stream so it never shifts a spawn position.
+        let mut identity_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY);
+        let mut names = DwarfName::ALL;
+        let mut colours = DwarfColour::ALL;
+        names.shuffle(&mut identity_rng);
+        colours.shuffle(&mut identity_rng);
+        let identities = std::array::from_fn(|i| Identity {
+            name: names[i],
+            colour: colours[i],
+        });
+        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities);
         world.spawn_emitters(camp_origin);
         world
     }
@@ -1257,6 +1328,7 @@ impl World {
                         .map(|progress| progress.0)
                         .unwrap_or(0),
                     carrying: carrying.0,
+                    identity: *entity.get::<Identity>()?,
                 })
             })
             .collect();
@@ -1349,6 +1421,7 @@ impl World {
                     },
                     CurrentJob(current_job),
                     Carrying(dwarf.carrying),
+                    dwarf.identity,
                 ))
                 .id();
             if current_job.is_some() {
@@ -1625,6 +1698,18 @@ impl World {
         carrying
     }
 
+    /// Sorted ascending by dwarf `Id`. A sibling reader like `carrying()`; `dwarves()` stays as is.
+    pub fn identities(&self) -> Vec<(Id, Identity)> {
+        let mut identities: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, *entity.get::<Identity>()?)))
+            .collect();
+        identities.sort_by_key(|(id, _)| *id);
+        identities
+    }
+
     /// Sorted ascending by `Id`.
     pub fn items(&self) -> Vec<(Id, Pos)> {
         let mut items: Vec<_> = self
@@ -1672,7 +1757,7 @@ impl World {
         dwarves
     }
 
-    fn spawn_dwarves(&mut self, camp: Pos, rng: &mut ChaCha8Rng) {
+    fn spawn_dwarves(&mut self, camp: Pos, rng: &mut ChaCha8Rng, identities: [Identity; 5]) {
         let emitter_positions: BTreeSet<_> = camp_emitters(camp)
             .into_iter()
             .map(|(pos, _)| pos)
@@ -1692,7 +1777,7 @@ impl World {
             candidates
         };
 
-        for _ in 0..5 {
+        for identity in identities {
             let candidate = rng.random_range(0..candidates.len());
             let pos = candidates.swap_remove(candidate);
             let id = self.ecs.resource_mut::<IdAllocator>().allocate();
@@ -1710,6 +1795,7 @@ impl World {
                 },
                 CurrentJob(None),
                 Carrying(None),
+                identity,
             ));
         }
     }

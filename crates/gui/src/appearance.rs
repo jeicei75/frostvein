@@ -401,6 +401,18 @@ pub fn entity_appearance(kind: EntityKind) -> EntityAppearance {
     }
 }
 
+/// A dwarf's tunic colour, from the approved 12.2 draft (`12-2-signoff/draft.md`). The tui draws
+/// the same five hexes for the roster (`tui::palette::dwarf_colour`); both clients own their copy.
+pub fn dwarf_tunic_color(colour: protocol::DwarfColour) -> Color {
+    match colour {
+        protocol::DwarfColour::Red => Color::srgb_u8(0xB2, 0x3A, 0x34),
+        protocol::DwarfColour::Gold => Color::srgb_u8(0xD6, 0xA4, 0x2C),
+        protocol::DwarfColour::Green => Color::srgb_u8(0x3E, 0x92, 0x4C),
+        protocol::DwarfColour::Blue => Color::srgb_u8(0x3C, 0x62, 0xBA),
+        protocol::DwarfColour::Purple => Color::srgb_u8(0x80, 0x4C, 0xA8),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use bevy::color::ColorToPacked;
@@ -608,6 +620,24 @@ mod tests {
             let actual = entity_appearance(kind);
             assert_eq!(actual.color.to_srgba().to_u8_array_no_alpha(), rgb);
             assert_eq!(actual.scale, scale);
+        }
+
+        // 12.2's approved tunic hexes (draft.md), written out here, not read from the function.
+        let tunics = [
+            (protocol::DwarfColour::Red, [0xB2, 0x3A, 0x34]),
+            (protocol::DwarfColour::Gold, [0xD6, 0xA4, 0x2C]),
+            (protocol::DwarfColour::Green, [0x3E, 0x92, 0x4C]),
+            (protocol::DwarfColour::Blue, [0x3C, 0x62, 0xBA]),
+            (protocol::DwarfColour::Purple, [0x80, 0x4C, 0xA8]),
+        ];
+        for (colour, rgb) in tunics {
+            assert_eq!(
+                super::dwarf_tunic_color(colour)
+                    .to_srgba()
+                    .to_u8_array_no_alpha(),
+                rgb,
+                "{colour:?}"
+            );
         }
     }
 

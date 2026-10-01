@@ -6,7 +6,8 @@ use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
     BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, carrier_cell, crowd_cell, cursor_cell, designation_cell,
-    dim, entity_cell, item_cell, pending_rect_cell, stored_item_cell, tile_cell, zone_cell,
+    dim, dwarf_colour, entity_cell, item_cell, pending_rect_cell, stored_item_cell, tile_cell,
+    zone_cell,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -234,12 +235,13 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
     // NOTE: deliberate — below two rows there is no map to draw, so a 1-row terminal renders
     // blank rather than a lone status line (which is what it did before the status/hint split).
     // A terminal this small cannot show the game; pinned by `one_row_terminal_renders_blank` so
-    // the behaviour is a decision rather than an accident of `map_h = h - 2`.
-    if w == 0 || h < 2 {
+    // the behaviour is a decision rather than an accident of `map_h = h - 3`.
+    if w == 0 || h < 3 {
         return framebuffer;
     }
 
-    let map_h = h - 2;
+    // Three rows are reserved below the map: roster, status, hint.
+    let map_h = h - 3;
     for sy in 0..map_h {
         let wy = state.camera.1 + i64::from(sy) - i64::from(map_h) / 2;
         for sx in 0..w {
@@ -348,10 +350,22 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         {
             framebuffer.cells[index] = if dwarf_counts.get(&index).copied().unwrap_or(0) > 1 {
                 crowd_cell()
-            } else if item_counts.get(&index).copied().unwrap_or(0) > 0 {
-                carrier_cell()
             } else {
-                entity_cell(entity.kind, entity.state)
+                let cell = if item_counts.get(&index).copied().unwrap_or(0) > 0 {
+                    carrier_cell()
+                } else {
+                    entity_cell(entity.kind, entity.state)
+                };
+                // 12.2 (Wolf): a named dwarf is `☻` in his tunic colour; job and carry state leave
+                // his glyph. Not `☺`: it is emoji-capable, and Windows Terminal paints it as a
+                // yellow emoji face that ignores the colour.
+                match entity.identity {
+                    Some(identity) => Cell {
+                        glyph: '☻',
+                        fg: dwarf_colour(identity.colour),
+                    },
+                    None => cell,
+                }
             };
         }
     }
@@ -412,6 +426,22 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         }
         status
     };
+    let roster_y = h - 3;
+    let roster = mirror
+        .entities()
+        .filter_map(|entity| entity.identity)
+        .map(|identity| (client_core::dwarf_name_text(identity.name), identity.colour))
+        .flat_map(|(name, colour)| {
+            let fg = dwarf_colour(colour);
+            // Two blank cells between names.
+            name.chars()
+                .map(move |glyph| Cell { glyph, fg })
+                .chain([BLANK, BLANK])
+        });
+    for (x, cell) in (0..w).zip(roster) {
+        framebuffer.cells[usize::from(x) + usize::from(roster_y) * usize::from(w)] = cell;
+    }
+
     let status_y = h - 2;
     for (x, glyph) in (0..w).zip(status.chars()) {
         framebuffer.cells[usize::from(x) + usize::from(status_y) * usize::from(w)] = Cell {
@@ -623,7 +653,7 @@ fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u
     state.cursor.1 = (state.cursor.1 + dy).clamp(0, max_y);
 
     let (w, h) = viewport;
-    let map_h = h.saturating_sub(2);
+    let map_h = h.saturating_sub(3);
     if w == 0 || map_h == 0 {
         state.camera = state.cursor;
         return;
@@ -979,24 +1009,25 @@ mod tests {
 
     #[test]
     fn one_row_terminal_renders_blank() {
-        // Pins the `h < 2` early return as a decision, not an accident of `map_h = h - 2`.
+        // Pins the `h < 3` early return as a decision, not an accident of `map_h = h - 3`.
         // Before the status/hint split a 1-row terminal drew a status line; it now draws
-        // nothing, because two rows are reserved and no map row is left. Asserted at h = 1
-        // and h = 0, with h = 2 as the control proving the guard is not simply always-blank.
+        // nothing, because three rows are reserved (roster, status, hint) and no map row is
+        // left. Asserted at h = 0..2, with h = 3 as the control proving the guard is not simply
+        // always-blank.
         let dims = Dims { x: 3, y: 3, z: 1 };
         let snapshot = empty_snapshot(dims);
         let state = normal_state((1, 1), 0);
-        for h in [0, 1] {
+        for h in [0, 1, 2] {
             let framebuffer = render(&mirror(&snapshot), &state, 10, h);
             assert!(
                 framebuffer.cells.iter().all(|cell| *cell == BLANK),
                 "h={h} should render blank"
             );
         }
-        let framebuffer = render(&mirror(&snapshot), &state, 10, 2);
+        let framebuffer = render(&mirror(&snapshot), &state, 10, 3);
         assert!(
             framebuffer.cells.iter().any(|cell| *cell != BLANK),
-            "h=2 must still draw the status and hint rows"
+            "h=3 must still draw the status and hint rows"
         );
     }
 
@@ -1013,7 +1044,7 @@ mod tests {
         snapshot.tiles[index(dims, 2, 2, 2)] = Tile::Solid(Material::Ice);
         let state = normal_state((2, 1), 2);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 7, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 7, 5);
         let expected = [
             (' ', (8, 10, 14)),
             ('█', (86, 92, 104)),
@@ -1028,6 +1059,13 @@ mod tests {
             (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
             ('▲', (86, 92, 104)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
             ('t', (150, 160, 170)),
             ('i', (150, 160, 170)),
@@ -1066,6 +1104,7 @@ mod tests {
                 pos: [1, 1, 1],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             },
             Entity {
                 id: 2,
@@ -1073,11 +1112,12 @@ mod tests {
                 pos: [3, 1, 2],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             },
         ];
         let state = normal_state((2, 1), 1);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 5, 5);
 
         assert_eq!(
             framebuffer.cell(1, 1),
@@ -1103,6 +1143,62 @@ mod tests {
         );
     }
 
+    /// 12.2 (Wolf at the seat): a named dwarf is `☻` in his tunic colour, carrying or not, so the
+    /// map tells the five apart. Job and carry state no longer show on a named dwarf's glyph.
+    #[test]
+    fn a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour() {
+        let dims = Dims { x: 5, y: 3, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.items = vec![Item {
+            id: 9,
+            pos: [3, 1, 1],
+        }];
+        let named = |id, x, colour| Entity {
+            id,
+            kind: EntityKind::Dwarf,
+            pos: [x, 1, 1],
+            state: JobState::Walk,
+            light: None,
+            identity: Some(protocol::Identity {
+                name: protocol::DwarfName::Ori,
+                colour,
+            }),
+        };
+        snapshot.entities = vec![
+            named(1, 1, protocol::DwarfColour::Blue),
+            named(2, 3, protocol::DwarfColour::Red),
+            Entity {
+                id: 3,
+                kind: EntityKind::Dwarf,
+                pos: [4, 1, 1],
+                state: JobState::Walk,
+                light: None,
+                identity: None,
+            },
+        ];
+
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+
+        assert_eq!(
+            framebuffer.cell(1, 1),
+            Cell {
+                glyph: '☻',
+                fg: dwarf_colour(protocol::DwarfColour::Blue),
+            }
+        );
+        assert_eq!(
+            framebuffer.cell(3, 1),
+            Cell {
+                glyph: carrier_cell().glyph,
+                fg: dwarf_colour(protocol::DwarfColour::Red),
+            }
+        );
+        assert_eq!(
+            framebuffer.cell(4, 1),
+            entity_cell(EntityKind::Dwarf, JobState::Walk)
+        );
+    }
+
     /// Repointed at story 3.3: a dwarf on a stone used to hide it behind a plain `☺`, which is
     /// exactly the state the haul loop has to be able to show.
     #[test]
@@ -1125,9 +1221,10 @@ mod tests {
             pos: [1, 1, 1],
             state: JobState::Idle,
             light: None,
+            identity: None,
         }];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
 
         assert_eq!(framebuffer.cell(1, 1), carrier_cell());
         assert_eq!(framebuffer.cell(3, 1), BLANK);
@@ -1144,12 +1241,12 @@ mod tests {
         // The stone one level up must not count towards the dwarf's cell: the count has to use
         // the same z filter the draw does.
         snapshot.items[0].pos = [1, 1, 2];
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
         assert_eq!(framebuffer.cell(1, 1).glyph, '☺');
 
         snapshot.items[0].pos = [1, 1, 1];
         snapshot.entities.clear();
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
         assert_eq!(framebuffer.cell(1, 1).glyph, '*');
     }
 
@@ -1170,7 +1267,7 @@ mod tests {
             },
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
 
         assert_eq!(framebuffer.cell(1, 1), stored_item_cell());
         assert_eq!(framebuffer.cell(2, 1), zone_cell());
@@ -1196,9 +1293,10 @@ mod tests {
             pos: [127, 127, 0],
             state: JobState::Idle,
             light: None,
+            identity: None,
         }];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((127, 127), 0), 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((127, 127), 0), 5, 5);
 
         assert!(framebuffer.cells.iter().all(|cell| *cell != item_cell()));
         assert!(
@@ -1225,6 +1323,7 @@ mod tests {
                 pos: [1, 1, 0],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             },
             Entity {
                 id: 2,
@@ -1232,10 +1331,11 @@ mod tests {
                 pos: [1, 1, 0],
                 state: JobState::Walk,
                 light: None,
+                identity: None,
             },
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((1, 1), 0), 3, 4);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((1, 1), 0), 3, 5);
 
         assert_eq!(framebuffer.cell(1, 1).glyph, '⚇');
         assert_eq!(
@@ -1264,7 +1364,7 @@ mod tests {
         ];
         snapshot.zones = vec![Zone { pos: [3, 2, 1] }, Zone { pos: [2, 2, 0] }];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 2), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 2), 1), 5, 6);
 
         assert_eq!(framebuffer.cell(1, 1).glyph, '×');
         assert_eq!(framebuffer.cell(3, 1).glyph, '≡');
@@ -1310,6 +1410,7 @@ mod tests {
                 pos: [3, 1, 0],
                 state: JobState::Idle,
                 light: Some(protocol::LightKind::Torch),
+                identity: None,
             },
             Entity {
                 id: 9,
@@ -1317,6 +1418,7 @@ mod tests {
                 pos: [4, 1, 0],
                 state: JobState::Idle,
                 light: Some(protocol::LightKind::Campfire),
+                identity: None,
             },
             Entity {
                 id: 1,
@@ -1324,6 +1426,7 @@ mod tests {
                 pos: [4, 1, 0],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             },
             Entity {
                 id: 2,
@@ -1331,6 +1434,7 @@ mod tests {
                 pos: [5, 1, 0],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             },
         ];
         let state = ViewState {
@@ -1340,7 +1444,7 @@ mod tests {
             ..normal_state((3, 1), 0)
         };
 
-        let framebuffer = render(&mirror(&snapshot), &state, 7, 5);
+        let framebuffer = render(&mirror(&snapshot), &state, 7, 6);
 
         assert_eq!(framebuffer.cell(0, 1).glyph, '≡');
         assert_eq!(framebuffer.cell(1, 1).glyph, '×');
@@ -1366,6 +1470,7 @@ mod tests {
                 pos: [0, 0, 0],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             },
             Entity {
                 id: 2,
@@ -1373,11 +1478,12 @@ mod tests {
                 pos: [2, 0, 0],
                 state: JobState::Walk,
                 light: None,
+                identity: None,
             },
         ];
         let state = normal_state((1, 0), 0);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 3, 3);
+        let framebuffer = render(&mirror(&snapshot), &state, 3, 4);
 
         // The glyph is deliberately the same for both: what must differ is the colour, so
         // assert on `fg` alone. Comparing whole cells would also pass on a glyph change.
@@ -1397,7 +1503,7 @@ mod tests {
         snapshot.tiles[index(dims, 1, 0, 3)] = Tile::Solid(Material::Snow);
         let state = normal_state((1, 0), 7);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 4, 3);
+        let framebuffer = render(&mirror(&snapshot), &state, 4, 4);
 
         assert_eq!(
             framebuffer.cell(1, 0),
@@ -1425,6 +1531,7 @@ mod tests {
                 pos: [1, 1, 30],
                 state: JobState::Idle,
                 light: None,
+                identity: None,
             })
             .collect();
         snapshot.entities.push(Entity {
@@ -1433,11 +1540,12 @@ mod tests {
             pos: [2, 2, 30],
             state: JobState::Idle,
             light: Some(protocol::LightKind::Campfire),
+            identity: None,
         });
         let state = normal_state((12, 34), 19);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 78, 3);
-        let status: String = (0..78).map(|x| framebuffer.cell(x, 1).glyph).collect();
+        let framebuffer = render(&mirror(&snapshot), &state, 78, 4);
+        let status: String = (0..78).map(|x| framebuffer.cell(x, 2).glyph).collect();
 
         assert_eq!(
             status,
@@ -1541,6 +1649,7 @@ mod tests {
                     pos: [1, 1, 30],
                     state: JobState::Idle,
                     light: None,
+                    identity: None,
                 })
                 .collect();
             // Worst case with the compass appended is 46 of 80 columns, so the budget this
@@ -1704,7 +1813,7 @@ mod tests {
     #[test]
     fn cursor_moves_clamps_and_pans_camera_only_after_crossing_the_window_edge() {
         let dims = Dims { x: 20, y: 20, z: 3 };
-        let viewport = (5, 5);
+        let viewport = (5, 7);
         let mut state = normal_state((5, 5), 1);
         let _ = apply_key(&mut state, press(KeyCode::Char('d')), dims, viewport);
 
@@ -1845,7 +1954,7 @@ mod tests {
         snapshot.tiles[index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         let state = normal_state((0, 0), 0);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 5, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 5, 5);
 
         assert_eq!(framebuffer.cell(2, 1).glyph, '█');
         for (x, y) in [(0, 0), (1, 0), (2, 0), (0, 1), (1, 1)] {
@@ -1997,6 +2106,7 @@ mod tests {
             pos: [8, 1, 5],
             state: JobState::Idle,
             light: None,
+            identity: None,
         });
         assert_eq!(initial(&mirror(&snapshot), None), before);
 
@@ -2040,8 +2150,8 @@ mod tests {
             ..normal_state((0, 0), 0)
         };
 
-        let framebuffer = render(&mirror(&snapshot), &state, 11, 3);
-        let status: String = (0..11).map(|x| framebuffer.cell(x, 1).glyph).collect();
+        let framebuffer = render(&mirror(&snapshot), &state, 11, 4);
+        let status: String = (0..11).map(|x| framebuffer.cell(x, 2).glyph).collect();
 
         assert_eq!(status, "quit? (y/n)");
     }
