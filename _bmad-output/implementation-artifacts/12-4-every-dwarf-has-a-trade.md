@@ -551,7 +551,7 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
   `every_profession_has_its_one_spelling` (client-core), `the_roster_shows_a_trade_after_the_name_and_a_dwarf_without_one_shows_his_name_only`
   (view.rs), `each_trade_word_sits_after_its_own_dwarfs_name_...` and `the_trade_words_survive_no_color` (AC8; client.rs).
   The pre-commit hook failed on the untracked `12-4.sh` (row 11 anchor matches 2, not 3), which is Task 6's.
-- **AC10 is open until Wolf's seat** (`12-4-signoff/vehicle-card.md`, steps a-c). Every other AC is evidenced by the tests, mutations and live recipe above.
+- **AC10 CLOSED at the seat** (Wolf, 2026-10-02: "1 ok" to the seat step, `12-4-signoff/vehicle-card.md` a-c). He then asked for the roster and trades in the gui too; not built here (story scope: no gui display), routed by his ruling.
 
 ### File List
 

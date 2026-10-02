@@ -11,3 +11,5 @@ Old `frostvein.save` files will not load: a save from before trades existed is r
 (c) Watch a dwarf carry a stone to the stockpile while channel marks are still standing. On the devpod the first stone lands with 17 of 25 marks left (`first_delivery.py`). Before this story the marks all went first, and the first stone landed after the last one.
 
 The woodcutter has no work yet (that comes in 12.7). He just wanders.
+
+Seat result (Wolf, 2026-10-02): "1 ok". He also asked whether the gui should show the full roster and trades, which would need a small design pass. It was not built in this story.
