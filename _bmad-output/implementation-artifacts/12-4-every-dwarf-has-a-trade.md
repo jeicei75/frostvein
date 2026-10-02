@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.3's creation
 
 # Story 12.4: Every Dwarf Has a Trade
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
