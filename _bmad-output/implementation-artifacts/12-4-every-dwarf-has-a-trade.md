@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.3's creation
 
 # Story 12.4: Every Dwarf Has a Trade
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -317,6 +317,103 @@ stays open, so the PR says `Refs #159` and never `Closes`
         Tell him old `frostvein.save` files will not load.
   - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~75 min, [[gate-ooms-at-default-parallelism]]).
 
+### Review Findings
+
+Review run 1 (2026-10-02) on `05a16a4` vs `f4d9ba5`. Four layers ran, and every one ran cargo with its own
+`CARGO_TARGET_DIR`. None timed out and none was a coverage hole.
+- Blind Hunter (Sonnet) took `crates/sim-core/src` and `crates/client-core/src`.
+- Edge Case Hunter (Sonnet) took simd, tui, protocol, gui and every `tests/` directory.
+- The Acceptance Auditor and Feature Auditor (Opus) took the whole diff.
+
+Severity was set at triage. There were 0 HIGH findings.
+
+Live, confirmed independently by three layers: the roster reads
+`Nain woodcutter  Ori hauler  Bifur miner  Frar hauler  Dori miner`, and `first_delivery.py` gives
+`marks_left 17 of 25` on four fresh daemons. The feature layer also observed live:
+- snapshots and deltas carry the trades;
+- save and load keep the set;
+- a save with `profession` stripped is refused with `missing field 'profession'`.
+
+The gui was not built by any layer, so AC10 rests on Wolf's seat ("1 ok").
+
+13 findings were dismissed:
+- Two findings were by design: the woodcutter is idle until 12.7, and old saves are refused (ruled).
+- Three cost findings were dismissed because the per-dwarf bound is Wolf's ruled cost bound: the 5× worst-case search ceiling, exhausted floods going uncached, and expensive reachable jobs being stamped. The last is the open #159 residual.
+- "No 2/2/1 test across seeds" is false: AC1's 64-seed test covers it.
+- "`professions()` has no caller" is false: `bridge.rs` calls it.
+- A dwarf without a `Profession` cannot be spawned by any path, and the same holds for `identity`.
+- Re-stamping the cached-out case is correct.
+- Roster overflow past 80 columns cannot happen: with the fixed 2/2/1 pool and names of at most 6 characters, the worst row is 75 columns.
+- Offset-brittle colour asserts.
+- The gui stores the trade without reading it; that is the scoped intent (12.6).
+- One `simd` serve-test failure was caused by the review: a sibling layer ran `pkill -x simd` during that run. The test passes alone.
+
+| # | Layer | Sev | Route | Finding |
+| --- | --- | --- | --- | --- |
+| 1 | feature | MED | decision -> accepted | Dig backlog clears ~2.3x slower under the ruled 2/2/1 pool |
+| 2 | accept | MED | patch | AC12's "the other dwarves go on claiming" is untested; two sabotages survive |
+| 3 | accept | LOW | patch (same test) | "Trade filter before the budget check" ordering is unpinned |
+| 4 | accept | LOW | patch (silent instrument) | Mutation row 11 duplicates row 10 and does not test stamp-and-stop |
+| 5 | accept | LOW | patch (record) | Board and Change Log still say "AC10 awaits the seat" |
+| 6 | accept | LOW | defer | Determinism test named in the spec does not compare `professions()` |
+| 7 | accept | LOW | defer | Dev Agent Record line refs point into mutated sources |
+| 8 | accept | LOW | defer | AC7's "deltas carry a profession" has no automated test |
+| 9 | accept | LOW | defer | AC4's RED was never re-measured on the committed fixture |
+| 10 | blind | LOW | defer | A job with no free dwarf of its trade re-plans its work positions every tick |
+| 11 | feature | LOW | defer | A trade with zero dwarves leaves its jobs unclaimed silently |
+
+- [x] [Review][Decision] **RESOLVED (Wolf, option 1): accepted as ruled. The numbers are recorded here and as a NOTE on 12.6 in `epics.md`, together with finding 11's zero-trade trap.** Dig backlog clears ~2.3x slower under the ruled 2/2/1 pool. The feature layer
+  ran the same 25-channel recipe until every mark was gone.
+  - `main` (`f4d9ba5`, built from a read-only `git archive`) cleared it in **218 ticks**, with or without a pile.
+  - This branch took **495 ticks with a pile** and **529 without**.
+  - Only 2 of 5 dwarves can dig now. Without a pile, the haulers logged 964 idle samples against 96 walking.
+  - The story measured only "marks left at the first delivery" (AC4/AC9) and never the time to clear
+    the backlog, so nothing records the cost. It follows directly from Wolf's Task 0 pool ruling. 12.6
+    (reassigning trades) and 12.7 (woodcutter work) are where it eases.
+- [ ] [Review][Patch] AC12's "the other dwarves go on claiming" is untested [crates/sim-core/src/lib.rs:538,556; test at :3506].
+  - The AC12 fixture's four other miners are sealed in one-cell pockets and can claim nothing.
+  - AC11's plates never exhaust, so no test shows a second dwarf claiming in the same tick after another exhausted.
+  - Two sabotages survive the whole sim-core suite, run by the auditor in a scratch copy:
+    - **mutA:** both `(None, true, _) => continue` arms become "stamp, then `return`" (the issue's stamp-and-stop on per-dwarf budgets).
+    - **mutB:** both arms become `break`, which leaves the dwarf loop.
+  - Fix: add a fixture in which a higher-id miner can reach the very job a lower-id miner exhausted on,
+    and assert that the higher-id miner holds it on the same tick. One assertion kills both mutations.
+- [ ] [Review][Patch] "Trade filter before the budget check" ordering is unpinned [crates/sim-core/src/lib.rs:503,517].
+  - **mutC** (the auditor's) moves the `budgets[slot] == 0` sat-out check above the trade filter. The whole sim-core suite stays green.
+  - Under it, an exhausted miner marks an unreachable haul as sat-out, so the haul is never stamped and is re-searched every tick.
+  - Fix, in the same test as above: after a miner exhausts, an unreachable haul with a free hauler must still be stamped `tick + 20`.
+- [ ] [Review][Patch] Mutation row 11 duplicates row 10 [_bmad-output/implementation-artifacts/mutations/12-4.sh:95-97].
+  - Row 11 restores the SHARED budget, which is row 10's exact sabotage, then adds stamp-and-stop. It
+    dies at the same AC11 tick-100 assert that the shared budget alone already fails.
+  - The record still says it covers "the issue's candidate". Stamp-and-stop on per-dwarf budgets is
+    mutA, and mutA survives.
+  - Fix: re-point row 11 to mutA against the new assertion, and add rows for mutB and mutC. Run all
+    three and record the killing assertion.
+- [ ] [Review][Patch] Board and Change Log are stale after the seat
+  [_bmad-output/implementation-artifacts/sprint-status.yaml:2514; Change Log above].
+  - Both still say "AC10 awaits Wolf's seat". `40b6535` recorded the pass only in the Completion Notes and `vehicle-card.md`.
+- [x] [Review][Defer] Determinism test named in the spec does not compare `professions()`
+  [crates/sim-core/tests/scenario.rs:1755] — deferred.
+  - The dev added the compare to `designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly` (`:1089`) instead.
+  - That test is also seed + commands, so AC6 is met. The swap is undocumented.
+- [x] [Review][Defer] Dev Agent Record line refs point into mutated sources — deferred.
+  - `lib.rs:3401`, `:3500`, `:3562` and `:3261` are mutate.sh panic sites in the mutated files.
+  - In the committed tree they are blank lines or fields. The kills are real (rows 2 and 11 reproduced).
+- [x] [Review][Defer] AC7's "deltas carry a profession" has no automated test [crates/simd/tests/serve.rs] — deferred.
+  - `save_then_load_rewinds_every_client` checks only snapshots.
+  - Deltas share `dwarf_entities` (`bridge.rs:69`), and two layers observed them carrying trades live.
+- [x] [Review][Defer] AC4's RED was never re-measured on the committed fixture — deferred.
+  - The test anchors on the first Miner rather than `dwarves()[2]`, a documented deviation.
+  - Mutation row 1 stands in for the RED.
+- [x] [Review][Defer] A job with no free dwarf of its trade re-plans its work positions every tick [crates/sim-core/src/lib.rs:483-495] — deferred.
+  - The goal set is computed before the trade filter, and such a job is never stamped.
+  - It now happens whenever both haulers are busy, not only when all five dwarves are.
+  - The cost was not measured.
+- [x] [Review][Defer] A trade with zero dwarves leaves its jobs unclaimed silently [crates/sim-core/src/lib.rs:503,570] — deferred to 12.6.
+  - `attempted` stays false, so nothing is stamped or logged.
+  - It is unreachable today (always 2/2/1, saves only from `to_save`).
+  - It becomes reachable when 12.6 lets the player reassign the last hauler or miner, so 12.6 should decide what the player sees.
+
 ### Scenario test skeleton (Task 3; the creation probe, which ran RED on main)
 
 ```rust
@@ -584,6 +681,7 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
 
 | Date | Change |
 | --- | --- |
+| 2026-10-02 | Code review run 1 (4 layers, none timed out, 0 HIGH). Decision 1 (2/2/1 digs ~2.3x slower) accepted by Wolf, with a NOTE on 12.6. 4 patches left as action items for a fresh-session patch pass. 6 deferred to `deferred-work.md`, 13 dismissed. Status in-progress. Review cost $11.85 over 232 turns (subagents 69.6% of tokens). The review build caches were reaped from /tmp: 20.0 GB, 13.8 GB of it freed. |
 | 2026-10-02 | Dev done (Sonnet 5.5 subagents + Opus orchestrator): professions (2M/2H/1W, own stream), trade filter, #159 fix B′ (budget per dwarf + sat-out rule), wire field, tui roster trades. 12-4.sh 12/12 and 6 re-pointed rows KILLED; live recipe GREEN 17 of 25 / RED 0 of 25; #159 commented + retitled; full gate GREEN 3161 s on `3f705b3`. Status review; AC10 awaits the seat. |
 | 2026-10-02 | Task 0 ruled by Wolf: 2M/2H/1W pool, the grey-trade roster, old saves refused, and #159 FOLDED IN with fix B (a budget per dwarf). #159 reproduced on `main` (never claimed at N = 10/25/60). Prototypes measured A (fails N > 20) and B. B's sat-out rule was found while writing AC12 and verified (claim at tick 110; sabotages give never / tick 100). AC11, AC12 and Task 2b added. |
 | 2026-10-02 | Story created on `f4d9ba5`. RED reproduced in the sim (seed 42: 0 marks left at the first delivery) and on the live daemon (`first_delivery.py`: 0 of 25). A throwaway prototype went GREEN (12 marks left in the sim, 19 of 25 live) and mapped the fixture fallout. |

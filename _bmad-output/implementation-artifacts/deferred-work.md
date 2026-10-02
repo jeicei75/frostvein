@@ -2407,3 +2407,23 @@ the story, and one of them is also issue #125.
   odd-row floor cells are not asserted standable or unreachable from the valley. In
   `a_sealed_off_pile_cell_does_not_starve_a_reachable_dig` (~`:1844`), the target and floor are overwritten
   without a prior-state assertion. Today the live RED and the mutation rows carry the discrimination.
+
+## Deferred from: code review of 12-4-every-dwarf-has-a-trade (2026-10-02)
+
+- **Determinism test named in the spec does not compare `professions()`** (accept LOW; `crates/sim-core/tests/scenario.rs:1755`).
+  The compare landed in `designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly` (`:1089`), which is
+  also seed + commands, so AC6 holds. The swap is undocumented in the story.
+- **12.4's Dev Agent Record line refs point into MUTATED sources** (accept LOW). `lib.rs:3401/:3500/:3562/:3261` are
+  mutate.sh panic sites. In the committed tree they are blank lines or fields, so a reader cannot follow them to the
+  assertion.
+- **AC7's "deltas carry a profession" has no automated test** (accept LOW; `crates/simd/tests/serve.rs`).
+  Only snapshots are checked. Deltas share `dwarf_entities` (`bridge.rs:69`), and two review layers saw them carry
+  trades live.
+- **AC4's RED was never re-measured on the committed fixture** (accept LOW). The fixture anchors on the first Miner
+  rather than `dwarves()[2]`. Mutation row 1 stands in for the RED.
+- **A job with no free dwarf of its trade re-plans its work positions every tick** (blind LOW;
+  `crates/sim-core/src/lib.rs:483-495`). The goal set is computed before the trade filter, and such a job is never
+  stamped. It now happens whenever both haulers are busy. The cost was not measured.
+- **A trade with zero dwarves leaves its jobs unclaimed SILENTLY** (feature LOW; `lib.rs:503,570`). It is unreachable
+  today (always 2/2/1). It becomes reachable when 12.6 lets the player reassign the last hauler or miner, so it is
+  input for 12.6's design: what does the player see?
