@@ -3498,13 +3498,9 @@ mod tests {
         );
     }
 
-    // #159 (12.4, AC12). One miner in a 55,003-cell area (five plates joined by ramp staircases),
-    // four in sealed one-cell pockets, 10 unreachable digs, then one reachable dig in his area.
-    // He exhausts his own budget on one dig per tick, so he reaches the reachable one at tick 110;
-    // a job is stamped only when no dwarf of its trade sat it out for budget.
-    #[test]
-    fn a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on() {
-        let mut world = World::generate(42, Dims::DEFAULT);
+    /// Solid stone except one 55,003-cell walkable area (five plates joined by ramp staircases),
+    /// from (0, 0, 1). It floods past `MAX_ASTAR_NODES`, so a search for a goal outside it exhausts.
+    fn joined_plates(world: &World) -> Vec<Tile> {
         let dims = world.dims();
         let idx =
             |x: i32, y: i32, z: i32| super::worldgen::index(dims, x as u32, y as u32, z as u32);
@@ -3525,6 +3521,20 @@ mod tests {
             tiles[idx(109, 99, z)] = Tile::Ramp(Material::Stone);
             tiles[idx(110, 99, z + 2)] = Tile::Empty;
         }
+        tiles
+    }
+
+    // #159 (12.4, AC12). One miner in a 55,003-cell area (five plates joined by ramp staircases),
+    // four in sealed one-cell pockets, 10 unreachable digs, then one reachable dig in his area.
+    // He exhausts his own budget on one dig per tick, so he reaches the reachable one at tick 110;
+    // a job is stamped only when no dwarf of its trade sat it out for budget.
+    #[test]
+    fn a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let idx =
+            |x: i32, y: i32, z: i32| super::worldgen::index(dims, x as u32, y as u32, z as u32);
+        let mut tiles = joined_plates(&world);
         let pockets = [120, 122, 124, 126].map(|x| Pos { x, y: 120, z: 20 });
         for pocket in pockets {
             tiles[idx(pocket.x, pocket.y, pocket.z)] = Tile::Empty;
@@ -3584,6 +3594,62 @@ mod tests {
                 );
             }
         }
+    }
+
+    // #159 (12.4, AC12 review). Miner 0 in the joined plates exhausts on dig 0, which sits beside
+    // miner 1's sealed pocket: miner 1 must claim it on the same tick (no stamp-and-stop, no leaving
+    // the dwarf loop). Haul 1 follows, unreachable for hauler 2 in his own pocket: miner 0's empty
+    // budget must not mark it sat out, because the trade filter comes before the budget check.
+    #[test]
+    fn a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+        let mut tiles = joined_plates(&world);
+        let pocket = |x, y| Pos { x, y, z: 20 };
+        let (stone, pile) = (pocket(124, 124), pocket(126, 124));
+        let spots = [
+            Pos { x: 0, y: 0, z: 1 },
+            pocket(120, 120),
+            pocket(124, 120),
+            pocket(126, 120),
+            pocket(120, 124),
+        ];
+        for cell in spots[1..].iter().chain([&stone, &pile]) {
+            tiles[idx(*cell)] = Tile::Empty;
+        }
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(&mut world, spots);
+        set_profession(&mut world, 2, super::Profession::Hauler);
+        // Dig 0's only work position is miner 1's pocket.
+        insert_dig(&mut world, 0, pocket(121, 120));
+        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(1),
+            kind: JobKind::Haul { item: 50 },
+            target: stone,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        assert_eq!(
+            world.claims()[1],
+            (super::Id(1), Some(JobId(0))),
+            "miner 1 claims the dig miner 0 exhausted on, on the same tick"
+        );
+        assert!(world.claims()[0].1.is_none());
+        let stamps: Vec<u64> = world.jobs().iter().map(|job| job.retry_after).collect();
+        assert_eq!(
+            stamps,
+            [0, 120],
+            "the claimed dig is unstamped; the unreachable haul is stamped despite miner 0's empty budget"
+        );
     }
 
     #[test]
