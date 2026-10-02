@@ -433,8 +433,8 @@ fn trade(kind: JobKind) -> Profession {
 }
 
 // AD-12: one claiming system. It filters by trade (a dwarf is considered only for jobs whose
-// `trade` is his profession), then FIFO by `JobId`, ascending dwarf `Id`, reaction delay,
-// `retry_after` and one shared node budget.
+// `trade` is his profession), then FIFO by `JobId`, ascending dwarf `Id`, reaction delay and
+// `retry_after`, and spends one node budget per dwarf (#159).
 #[allow(clippy::too_many_arguments)]
 fn claim_jobs(
     mut commands: Commands,
