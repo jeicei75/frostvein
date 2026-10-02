@@ -1611,6 +1611,146 @@ fn applying_a_command_does_not_advance_the_world() {
     assert_eq!(world.dwarves(), dwarves);
 }
 
+/// Seed 42, a corridor beside the first miner with 20 reachable digs on either side of it and a
+/// 2-cell pile at its near end. (RED before 12.4: the first delivery came with 0 marks left.)
+fn backlog_world() -> (World, BTreeSet<Pos>) {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let miner = world
+        .professions()
+        .into_iter()
+        .find(|(_, profession)| *profession == Profession::Miner)
+        .unwrap()
+        .0;
+    let worker = world
+        .dwarves()
+        .into_iter()
+        .find(|(id, ..)| *id == miner)
+        .unwrap()
+        .1;
+    let dx = if worker.x + 16 < world.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    let cell = |s: i32, dy: i32| Pos {
+        x: worker.x + dx * s,
+        y: worker.y + dy,
+        ..worker
+    };
+    for s in 1..=13 {
+        make_standable(&mut world, cell(s, 0));
+    }
+    let mut targets = Vec::new();
+    for s in 3..13 {
+        for dy in [-1, 1] {
+            let t = cell(s, dy);
+            // The floor under the target, so the stone it yields lands standable.
+            world.set_tile(Pos { z: t.z - 1, ..t }, Tile::Solid(Material::Stone));
+            world.set_tile(t, Tile::Solid(Material::Stone));
+            targets.push(t);
+        }
+    }
+    world.drain_dirty();
+    for t in &targets {
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(*t, *t),
+        });
+    }
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(cell(1, 0), cell(2, 0)),
+    });
+    let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
+    (world, zones)
+}
+
+fn stone_on_the_pile(world: &World, zones: &BTreeSet<Pos>) -> bool {
+    world.items().iter().any(|(_, pos)| zones.contains(pos))
+}
+
+#[test]
+fn hauling_starts_while_the_dig_backlog_is_still_queued() {
+    let (mut world, zones) = backlog_world();
+    assert_eq!(world.designations().len(), 20);
+
+    while !stone_on_the_pile(&world, &zones) {
+        assert!(world.tick() < 5000, "no stone ever reached the pile");
+        world.step();
+    }
+
+    let marks_left = world.designations().len();
+    println!(
+        "first delivery at tick {}: {marks_left} marks left",
+        world.tick()
+    );
+    assert!(
+        marks_left > 5,
+        "the first delivery came with only {marks_left} of 20 marks left"
+    );
+}
+
+#[test]
+fn each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders() {
+    let (mut world, zones) = backlog_world();
+    let professions = world.professions();
+    let woodcutter = professions
+        .iter()
+        .find(|(_, p)| *p == Profession::Woodcutter)
+        .unwrap()
+        .0;
+    let position_of = |world: &World| {
+        world
+            .dwarves()
+            .into_iter()
+            .find(|(id, ..)| *id == woodcutter)
+            .unwrap()
+            .1
+    };
+    let mut woodcutter_moves = 0;
+    let mut last = position_of(&world);
+    let mut delivered_at = None;
+    let mut holders = 0;
+    loop {
+        world.step();
+        assert!(world.tick() < 5000, "no stone ever reached the pile");
+        if delivered_at.is_none() && stone_on_the_pile(&world, &zones) {
+            delivered_at = Some(world.tick());
+        }
+        if delivered_at.is_some_and(|tick| world.tick() >= tick + 200) {
+            break;
+        }
+        let jobs = world.jobs();
+        for (id, held) in world.claims() {
+            let profession = professions.iter().find(|(i, _)| *i == id).unwrap().1;
+            let Some(held) = held else { continue };
+            holders += 1;
+            let kind = jobs.iter().find(|job| job.id == held).unwrap().kind;
+            match (profession, kind) {
+                (Profession::Miner, JobKind::Dig | JobKind::Channel)
+                | (Profession::Hauler, JobKind::Haul { .. }) => {}
+                _ => panic!(
+                    "tick {}: {profession:?} {id:?} holds {kind:?}",
+                    world.tick()
+                ),
+            }
+        }
+        let now = position_of(&world);
+        if now != last {
+            woodcutter_moves += 1;
+            last = now;
+        }
+    }
+
+    assert!(
+        holders > 0,
+        "nobody ever held a job, so the check proved nothing"
+    );
+    assert!(
+        woodcutter_moves >= 1,
+        "the jobless woodcutter never wandered"
+    );
+}
+
 #[test]
 fn same_seed_and_commands_remain_deterministic() {
     let mut first = World::generate(42, Dims::DEFAULT);
