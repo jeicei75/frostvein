@@ -285,7 +285,19 @@ fn save_round_trip_preserves_items_and_current_job() {
 #[test]
 fn save_load_preserves_in_progress_work() {
     let mut control = World::generate(42, Dims::DEFAULT);
-    let worker = control.dwarves()[2].1;
+    // A dig is claimed by a miner only; seeds assign trades in different orders.
+    let miner = control
+        .professions()
+        .into_iter()
+        .find(|(_, profession)| *profession == Profession::Miner)
+        .unwrap()
+        .0;
+    let worker = control
+        .dwarves()
+        .into_iter()
+        .find(|(id, ..)| *id == miner)
+        .unwrap()
+        .1;
     let target = Pos {
         x: worker.x + 1,
         ..worker

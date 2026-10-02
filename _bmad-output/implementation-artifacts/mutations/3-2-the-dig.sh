@@ -274,9 +274,10 @@ mutation "claim_jobs walks dwarves descending" sim-core claim_jobs_prefers_the_l
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: the claim query tuple widened from four elements to five.
-old = '    dwarves.sort_by_key(|(_, id, _, _, _)| **id);\n'
+# Re-pointed 2026-10-02 (12.4): and to six, with `&Profession`.
+old = '    dwarves.sort_by_key(|(_, id, _, _, _, _)| **id);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    dwarves.sort_by_key(|(_, id, _, _, _)| std::cmp::Reverse(**id));\n'))
+p.write_text(s.replace(old, '    dwarves.sort_by_key(|(_, id, _, _, _, _)| std::cmp::Reverse(**id));\n'))
 PY
 
 mutation "claim_jobs ignores reaction delay" sim-core claim_jobs_waits_for_the_reaction_delay <<'PY'

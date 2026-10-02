@@ -203,6 +203,11 @@ graph LR
   is claimable iff it is `None`. FIFO = ascending job id among unclaimed
   jobs; dwarves are considered in ascending entity `Id` (AD-7). Job-kind
   stories add variants and execution systems — never claiming logic.
+- **Amended 2026-10-02 (Story 12.4):** claiming considers a dwarf only for
+  jobs whose trade (`trade(JobKind)`) is its `Profession`; FIFO and id order
+  hold within a trade. "Job-kind stories add variants and execution systems
+  — never claiming logic" now reads: they add their variant, its execution
+  and its `trade` arm — never a second claiming system.
 
 ## Consistency Conventions
 

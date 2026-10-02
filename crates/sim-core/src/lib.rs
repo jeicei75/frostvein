@@ -424,9 +424,17 @@ fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
     5 + hash % 26
 }
 
-// AD-12: claiming LOGIC is unchanged — FIFO by `JobId`, ascending dwarf `Id`, reaction delay,
-// `retry_after` and one shared node budget. Only the goal set it asks for learned `Haul`, which
-// is why the stockpile and the stones have to reach this system.
+/// The trade a job needs. Exhaustive on purpose: a new `JobKind` must name its trade.
+fn trade(kind: JobKind) -> Profession {
+    match kind {
+        JobKind::Dig | JobKind::Channel => Profession::Miner,
+        JobKind::Haul { .. } => Profession::Hauler,
+    }
+}
+
+// AD-12: one claiming system. It filters by trade (a dwarf is considered only for jobs whose
+// `trade` is his profession), then FIFO by `JobId`, ascending dwarf `Id`, reaction delay,
+// `retry_after` and one shared node budget.
 #[allow(clippy::too_many_arguments)]
 fn claim_jobs(
     mut commands: Commands,
@@ -437,18 +445,18 @@ fn claim_jobs(
     mut jobs: ResMut<Jobs>,
     stones: Query<(&Id, &Pos), With<Item>>,
     emitters: Query<&Pos, With<Emitter>>,
-    mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying)>,
+    mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying, &Profession)>,
 ) {
     let blocked = blocked_cells(emitters.iter());
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
-    dwarves.sort_by_key(|(_, id, _, _, _)| **id);
+    dwarves.sort_by_key(|(_, id, _, _, _, _)| **id);
     let mut claimed: BTreeSet<_> = dwarves
         .iter()
-        .filter_map(|(_, _, _, current, _)| current.0)
+        .filter_map(|(_, _, _, current, _, _)| current.0)
         .collect();
     let carried: BTreeSet<u32> = dwarves
         .iter()
-        .filter_map(|(_, _, _, _, carrying)| carrying.0)
+        .filter_map(|(_, _, _, _, carrying, _)| carrying.0)
         .collect();
     let items: BTreeMap<u32, Pos> = stones
         .iter()
@@ -488,7 +496,11 @@ fn claim_jobs(
         };
         let mut attempted = false;
         let mut assigned = false;
-        for (entity, id, pos, current, carrying) in &mut dwarves {
+        for (entity, id, pos, current, carrying, profession) in &mut dwarves {
+            if trade(job.kind) != **profession {
+                // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
+                continue;
+            }
             debug_assert!(
                 current.0.is_some() || carrying.0.is_none(),
                 "a dwarf holding no job must be carrying nothing"
@@ -1957,6 +1969,20 @@ mod tests {
         Terrain, Tile, World,
     };
 
+    /// Tests insert the trade directly: there is no public setter until 12.6 adds the command.
+    fn set_profession(world: &mut World, id: u32, profession: super::Profession) {
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| {
+                entity.contains::<super::Dwarf>()
+                    && entity.get::<super::Id>().is_some_and(|i| i.0 == id)
+            })
+            .expect("dwarf exists")
+            .id();
+        world.ecs.entity_mut(entity).insert(profession);
+    }
+
     fn flat_terrain(x: u32, y: u32) -> Terrain {
         let dims = Dims { x, y, z: 2 };
         let mut tiles = vec![Tile::Empty; (x * y * 2) as usize];
@@ -3012,6 +3038,7 @@ mod tests {
     #[test]
     fn claim_jobs_waits_for_the_reaction_delay() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut world, 2, super::Profession::Miner);
         let worker = world.dwarves()[2].1;
         let target = Pos {
             x: if worker.x + 1 < world.dims().x as i32 {
@@ -3055,6 +3082,7 @@ mod tests {
     #[test]
     fn claim_jobs_takes_fifo_and_skips_busy_dwarves_and_claimed_jobs() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut world, 0, super::Profession::Miner);
         let worker = world.dwarves()[0].1;
         let first_target = Pos {
             x: worker.x + 1,
@@ -3096,6 +3124,7 @@ mod tests {
         assert_eq!(world.claims()[0], (super::Id(0), Some(JobId(0))));
 
         let mut claimed = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut claimed, 0, super::Profession::Miner);
         let claimed_worker = claimed.dwarves()[0].1;
         let claimed_first_target = Pos {
             x: claimed_worker.x + 1,
@@ -3144,6 +3173,9 @@ mod tests {
     #[test]
     fn claim_jobs_prefers_the_lowest_free_dwarf_id() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        for id in 0..5 {
+            set_profession(&mut world, id, super::Profession::Miner);
+        }
         world.ecs.resource_mut::<super::Tick>().0 = 100;
         let worker = world.dwarves()[0].1;
         let target = Pos {
@@ -3174,6 +3206,8 @@ mod tests {
     #[test]
     fn an_unreachable_lower_id_does_not_starve_a_reachable_dwarf() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut world, 0, super::Profession::Miner);
+        set_profession(&mut world, 1, super::Profession::Miner);
         let unreachable = Pos { x: 10, y: 10, z: 1 };
         let reachable = Pos { x: 20, y: 20, z: 1 };
         let target = Pos { x: 21, y: 20, z: 1 };
@@ -3242,6 +3276,136 @@ mod tests {
         assert!(world.jobs().is_empty());
     }
 
+    /// A standable cell next to a dwarf's spawn cell, off every emitter and every listed cell.
+    fn free_cell_beside(world: &World, near: Pos, taken: &[Pos]) -> Pos {
+        let emitters: Vec<Pos> = world
+            .emitters()
+            .into_iter()
+            .map(|(_, pos, _)| pos)
+            .collect();
+        let terrain = world.ecs.resource::<Terrain>();
+        [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (2, 0),
+            (-2, 0),
+            (0, 2),
+            (0, -2),
+        ]
+        .into_iter()
+        .map(|(dx, dy)| Pos {
+            x: near.x + dx,
+            y: near.y + dy,
+            ..near
+        })
+        .find(|cell| {
+            terrain.is_standable(*cell) && !emitters.contains(cell) && !taken.contains(cell)
+        })
+        .expect("the camp has a free standable cell beside every dwarf")
+    }
+
+    fn dwarf_of(world: &World, profession: super::Profession, nth: usize) -> (super::Id, Pos) {
+        let id = world
+            .professions()
+            .into_iter()
+            .filter(|(_, p)| *p == profession)
+            .nth(nth)
+            .expect("seed 42 has this many of the trade")
+            .0;
+        let pos = world
+            .dwarves()
+            .into_iter()
+            .find(|(i, ..)| *i == id)
+            .unwrap()
+            .1;
+        (id, pos)
+    }
+
+    #[test]
+    fn claim_jobs_takes_fifo_within_a_trade() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (miner, miner_pos) = dwarf_of(&world, super::Profession::Miner, 0);
+        let (hauler, hauler_pos) = dwarf_of(&world, super::Profession::Hauler, 0);
+        let dig_target = Pos {
+            x: miner_pos.x + 1,
+            ..miner_pos
+        };
+        let stone = free_cell_beside(&world, hauler_pos, &[dig_target, miner_pos]);
+        let pile = free_cell_beside(&world, stone, &[dig_target, miner_pos, stone]);
+        assert!(world.set_tile(dig_target, Tile::Solid(Material::Stone)));
+        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        {
+            let mut jobs = world.ecs.resource_mut::<Jobs>();
+            // The haul is queued FIRST, so a trade-blind FIFO would hand it to the lowest free id.
+            assert!(jobs.insert(Job {
+                id: JobId(0),
+                kind: JobKind::Haul { item: 50 },
+                target: stone,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+            assert!(jobs.insert(Job {
+                id: JobId(1),
+                kind: JobKind::Dig,
+                target: dig_target,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        for (id, job) in world.claims() {
+            let expected = if id == miner {
+                Some(JobId(1))
+            } else if id == hauler {
+                Some(JobId(0))
+            } else {
+                None
+            };
+            assert_eq!(job, expected, "dwarf {id:?}");
+        }
+    }
+
+    #[test]
+    fn a_job_with_no_free_dwarf_of_its_trade_gets_no_retry_stamp() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        for id in 0..5 {
+            set_profession(&mut world, id, super::Profession::Miner);
+        }
+        let (_, near) = dwarf_of(&world, super::Profession::Miner, 0);
+        let stone = free_cell_beside(&world, near, &[]);
+        let pile = free_cell_beside(&world, stone, &[stone]);
+        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 50 },
+            target: stone,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        assert_eq!(world.jobs()[0].retry_after, 0, "no miner may stamp a haul");
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+
+        // Control: with one hauler free, the same job is claimed rather than ignored.
+        set_profession(&mut world, 3, super::Profession::Hauler);
+        schedule.run(&mut world.ecs);
+        assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
+    }
+
     // 12.3 amendment: the old fixture (one shared floor, five dwarves) now has each failed flood
     // reused as a known component, so jobs 5..9 are stamped for free and the "jobs 5..9 never
     // attempted" shape this test used to pin is gone. Each dwarf now stands on its own 11,000-cell
@@ -3249,6 +3413,9 @@ mod tests {
     #[test]
     fn claim_jobs_bounds_aggregate_astar_expansions_per_tick() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        for id in 0..5 {
+            set_profession(&mut world, id, super::Profession::Miner);
+        }
         let dims = world.dims();
         let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
         // Plate k is the floor at z = 1 + 2k, stone above and below, so no plate touches another.
