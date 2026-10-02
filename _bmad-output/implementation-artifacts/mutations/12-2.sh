@@ -39,9 +39,10 @@ PY
 mutation "tui never draws the roster" tui the_roster_row_names_each_dwarf_in_his_colour_and_follows_an_identity_swap <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = '        .filter_map(|entity| entity.identity)\n'
+# Re-pointed 2026-10-02 (12.4): the roster now pairs each identity with the dwarf's profession.
+old = '                .identity\n                .map(|identity| (identity, entity.profession))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .filter_map(|entity| entity.identity.filter(|_| false))\n'))
+p.write_text(s.replace(old, '                .identity\n                .filter(|_| false)\n                .map(|identity| (identity, entity.profession))\n'))
 PY
 
 mutation "one material for all dwarves" gui a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it <<'PY'

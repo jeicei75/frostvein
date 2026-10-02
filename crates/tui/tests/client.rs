@@ -1548,18 +1548,20 @@ fn identified_dwarf(
     id: u32,
     name: protocol::DwarfName,
     colour: protocol::DwarfColour,
+    profession: protocol::Profession,
 ) -> protocol::Entity {
     protocol::Entity {
         identity: Some(protocol::Identity { name, colour }),
+        profession: Some(profession),
         id,
         ..dwarf_at(id as i32 + 4)
     }
 }
 
-/// Streams a snapshot with Durin (red, id 0) and Nori (blue, id 1), one unchanged delta, then a
-/// delta that swaps their identities, through the real `tui --frames 2`, and returns stdout.
+/// Streams a snapshot with Durin (red miner, id 0) and Nori (blue hauler, id 1), one unchanged
+/// delta, then a delta that swaps their identities and turns id 1 into a woodcutter, through the real `tui --frames 2`, and returns stdout.
 fn capture_roster(no_color: bool) -> String {
-    use protocol::{DwarfColour::*, DwarfName::*};
+    use protocol::{DwarfColour::*, DwarfName::*, Profession::*};
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");
     let port = listener
         .local_addr()
@@ -1582,12 +1584,12 @@ fn capture_roster(no_color: bool) -> String {
     let server = thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("tui must connect");
         let crew = vec![
-            identified_dwarf(0, Durin, Red),
-            identified_dwarf(1, Nori, Blue),
+            identified_dwarf(0, Durin, Red, Miner),
+            identified_dwarf(1, Nori, Blue, Hauler),
         ];
         let swapped = vec![
-            identified_dwarf(0, Nori, Blue),
-            identified_dwarf(1, Durin, Red),
+            identified_dwarf(0, Nori, Blue, Miner),
+            identified_dwarf(1, Durin, Red, Woodcutter),
         ];
         let snapshot = protocol::Snapshot {
             msg_type: protocol::MessageType::Snapshot,
@@ -1675,6 +1677,8 @@ fn roster_rows(stdout: &str) -> Vec<String> {
 /// Colour of Red and Blue from `palette::dwarf_colour`, as the terminal receives it.
 const RED_SGR: &str = "38;2;178;58;52";
 const BLUE_SGR: &str = "38;2;60;98;186";
+/// `palette::STATUS_TEXT`, the colour of a trade word.
+const GREY_SGR: &str = "38;2;150;160;170";
 
 #[test]
 fn the_roster_row_names_each_dwarf_in_his_colour_and_follows_an_identity_swap() {
@@ -1720,5 +1724,48 @@ fn the_roster_names_survive_no_color() {
         rows[1].find("Nori") < rows[1].find("Durin"),
         "{:?}",
         rows[1]
+    );
+}
+
+#[test]
+fn each_trade_word_sits_after_its_own_dwarfs_name_in_grey_and_follows_a_profession_change() {
+    let rows = roster_rows(&capture_roster(false));
+
+    assert_eq!(rows.len(), 2, "one roster row per frame: {rows:?}");
+    let plain: Vec<String> = rows.iter().map(|row| strip_ansi(row)).collect();
+    assert!(
+        plain[0].contains("Durin miner  Nori hauler"),
+        "frame 1 must put each trade after its own name: {:?}",
+        plain[0]
+    );
+    assert!(
+        plain[1].contains("Nori miner  Durin woodcutter"),
+        "frame 2 must carry the changed trade after Durin: {:?}",
+        plain[1]
+    );
+    assert!(
+        rows[0].contains(&format!("{RED_SGR}mDurin\u{1b}[{GREY_SGR}m miner")),
+        "the trade word must be status grey, straight after the red name: {:?}",
+        rows[0]
+    );
+}
+
+#[test]
+fn the_trade_words_survive_no_color() {
+    let plain: Vec<String> = roster_rows(&capture_roster(true))
+        .iter()
+        .map(|row| strip_ansi(row))
+        .collect();
+
+    assert_eq!(plain.len(), 2);
+    assert!(
+        plain[0].contains("Durin miner  Nori hauler"),
+        "{:?}",
+        plain[0]
+    );
+    assert!(
+        plain[1].contains("Nori miner  Durin woodcutter"),
+        "{:?}",
+        plain[1]
     );
 }

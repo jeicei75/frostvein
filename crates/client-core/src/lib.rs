@@ -35,6 +35,15 @@ pub fn dwarf_name_text(name: protocol::DwarfName) -> &'static str {
     }
 }
 
+/// The one spelling of a dwarf's trade, shared by both clients.
+pub fn profession_text(profession: protocol::Profession) -> &'static str {
+    match profession {
+        protocol::Profession::Miner => "miner",
+        protocol::Profession::Hauler => "hauler",
+        protocol::Profession::Woodcutter => "woodcutter",
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Changes {
     pub tiles: Vec<[i32; 3]>,
@@ -359,6 +368,18 @@ mod tests {
             (Frosti, "Frosti"),
         ] {
             assert_eq!(dwarf_name_text(name), text);
+        }
+    }
+
+    #[test]
+    fn every_profession_has_its_one_spelling() {
+        use protocol::Profession::*;
+        for (profession, text) in [
+            (Miner, "miner"),
+            (Hauler, "hauler"),
+            (Woodcutter, "woodcutter"),
+        ] {
+            assert_eq!(profession_text(profession), text);
         }
     }
 

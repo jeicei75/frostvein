@@ -68,7 +68,7 @@ campfire `♨` beneath them. A named dwarf is `☻` in his tunic colour; a namel
 or `☻` where he shares a cell with a stone; `⚇` marks two dwarves sharing one cell. Where a tile is empty the ground up to three levels below shows through,
 dimmed with depth. The bottom row is the key hint; the row above it reports the tick, the
 speed, the z-level and the dwarf count; the row above that is the roster: each dwarf's name,
-ascending by id, in his tunic colour.
+ascending by id, in his tunic colour, then his trade (miner, hauler or woodcutter) in grey.
 
 **The camp is not on the level you open at.** The dwarves, the campfire and the torches all
 sit at z 9 on the shipped seed, while the most-standable-ground rule opens you at z 19 — a
