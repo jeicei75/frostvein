@@ -3636,6 +3636,18 @@ mod tests {
         }));
         // Dig 2's only work position is miner 3's pocket.
         insert_dig(&mut world, 2, pocket(127, 120));
+        // Precondition: miner 0's search for dig 0 exhausts a fresh budget. Without it no dwarf
+        // exhausts, and every assertion below passes vacuously.
+        let blocked = super::blocked_cells(world.emitters().iter().map(|(_, pos, _)| pos));
+        let mut budget = super::MAX_ASTAR_NODES;
+        let (_, exhausted, _) = super::astar_with_budget(
+            world.ecs.resource::<Terrain>(),
+            &blocked,
+            spots[0],
+            &BTreeSet::from([spots[1]]),
+            &mut budget,
+        );
+        assert!(exhausted, "miner 0 must exhaust his budget on dig 0");
         world.ecs.resource_mut::<super::Tick>().0 = 100;
         let mut schedule = bevy_ecs::schedule::Schedule::default();
         schedule.add_systems(super::claim_jobs);

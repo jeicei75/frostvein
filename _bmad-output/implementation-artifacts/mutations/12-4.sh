@@ -150,3 +150,13 @@ old = """                if budgets[slot] == 0 {
 assert s.count(old) == 1
 p.write_text(s.replace(old, old.replace('continue;', 'break;')))
 PY
+
+# Row 16 (12.4 review run 2): a budget bump past the joined plates' 55,003 cells means no miner
+# exhausts. The precondition must fail rather than the test passing vacuously.
+mutation "budget raised past the joined plates" sim-core a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = 'const MAX_ASTAR_NODES: usize = 50_000;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'const MAX_ASTAR_NODES: usize = 60_000;\n'))
+PY
