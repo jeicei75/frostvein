@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.3's creation
 
 # Story 12.4: Every Dwarf Has a Trade
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -430,6 +430,64 @@ comes from the new `joined_plates` helper, which AC12's test now shares.
 Exclusivity: each mutation was run against its one named test, as `mutate.sh` does. Before this pass, review run 1 had
 mutA, mutB and mutC survive the WHOLE sim-core suite. So the new test is the only sim-core test that kills them.
 
+**Review run 2 (2026-10-02, fresh session)** on `05a16a4..b0c1bd0`, which is patch pass 1. Test code and records only: every
+`crates` hunk is inside `#[cfg(test)]`.
+- Four layers ran, each running cargo with its own `CARGO_TARGET_DIR`. None timed out and none was a coverage hole.
+- The shells had no diff, so the Edge Case Hunter was reassigned `mutations/12-4.sh` and the boundaries of the new test.
+- The Blind Hunter took the sim-core test diff. Both auditors took the whole diff.
+
+**Delta vs run 1: 4 NEW, 0 REWORK. Severity 0 HIGH, 1 MED, 3 LOW.** The stopping rule applies: no new finding is HIGH,
+so the static audit ends here.
+
+**The closure table was audited, and all of it holds.** Three layers re-ran rows 11, 13 and 14 independently in
+scratch copies, and each died at the assertion the table names:
+- mutA at `lib.rs:3647`;
+- mutB at `:3641`;
+- mutC at `:3648` (`[0, 0]` vs `[0, 120]`), after passing the earlier claim assertion.
+
+The Edge Case Hunter applied rows 9-14 without an APPLY-FAILED. Row 11 no longer restores the shared budget.
+
+**Live, by the Feature Auditor:**
+- `first_delivery.py` gives `FIRST DELIVERY tick 186 marks_left 17 of 25` on two fresh daemons. The roster is unchanged.
+- A probe-instrumented `simd` logged **0 exhaustions and 0 sat-outs** across the whole live recipe. The lowest budget
+  left at any claim was 49,978.
+- So the AC11/AC12 paths (`lib.rs:517-519`, `:538`, `:556`) never fire on DEFAULT_SEED. AC11/AC12 rest on the sim-core
+  fixtures and mutation rows alone, which drive the real `claim_jobs` with the real `MAX_ASTAR_NODES`.
+- The live GREEN says nothing about AC12. AC10 rests on Wolf's seat.
+
+Four findings were dismissed:
+- "Ordering pinned only by mutC": this is a description, not a defect.
+- `sat_out = false` survives the new test: row 12 and AC12's test kill it, and the closure table never claimed it.
+- The `[0, 120]` expectation depends on the reaction delay: it holds, and the edge layer walked it.
+- The old run-1 "Next" comment in the board: the newer line above it supersedes it.
+
+| # | Layer | Sev | Route | Finding |
+| --- | --- | --- | --- | --- |
+| 1 | blind (confirmed by orchestrator) | MED | patch | Sat-out `continue` -> `break` survives the whole sim-core suite |
+| 2 | blind+edge+accept | LOW | patch (latent silent failure, same test) | The new test never asserts miner 0 exhausted |
+| 3 | accept | LOW | patch (record) | Debug Log / Task 6 still describe the old row 11 and 12/12; the File List is missing two files |
+| 4 | accept | LOW | patch (record) | Two run-1 deferrals in `deferred-work.md` lack a usable file:line |
+
+- [ ] [Review][Patch] Sat-out `continue` -> `break` survives the whole sim-core suite [crates/sim-core/src/lib.rs:519; test at :3604].
+  - **mutD** is `budgets[slot] == 0 { sat_out = true; break; }`. The orchestrator re-ran it in a scratch copy: sim-core passes 67 + 10 + 39 + 19 tests.
+  - The new test's comment says "no leaving the dwarf loop", but only the two exhaustion arms (`:538`, `:556`) are pinned.
+  - In the new test, miner 0 exhausts on the FIRST job, so the `budgets[slot] == 0` branch is never reached ahead of another miner on a later miner job.
+  - Live effect under mutD: once the lowest-id miner exhausts in a tick, every later miner job that tick breaks at him. The other miners then get one job per tick: the #159 slowdown, through the sibling site.
+  - Fix: add a third job, a dig beside miner 3's pocket (126,120,20), for example at (127,120,20), with an id after haul 1. Assert `claims()[3] == (Id(3), Some(JobId(2)))`. Add a `12-4.sh` row 15 for mutD against this test, run it, and record the killing assertion.
+- [ ] [Review][Patch] The new test never asserts that miner 0 exhausted [crates/sim-core/src/lib.rs:3524 (`joined_plates`), :3604].
+  - The fixture's exhaustion rests only on 55,003 > `MAX_ASTAR_NODES` (50,000), a 10% margin.
+  - The accept layer applied mutC and raised `MAX_ASTAR_NODES` to 60,000: the new test PASSED with the mutant still in place. Only AC12's test failed (`:3577`).
+  - The blind layer saw the same thing at 5,000,000 with no mutant.
+  - A budget bump would make the new test vacuous silently.
+  - Fix: one precondition assert in the new test. For example, call `astar_with_budget` from (0,0,1) to dig 0's work position with a fresh `MAX_ASTAR_NODES` budget and assert it exhausts. Or assert the joined area exceeds `MAX_ASTAR_NODES`. Re-run rows 11, 13 and 14 after the change (strengthened-test rule).
+- [ ] [Review][Patch] Stale Dev Agent Record for row 11 [this file: Task 6 row 11 (~:294), Debug Log (~:626-640), File List].
+  - The Debug Log still says `12-4.sh` 12/12 KILLED and describes row 11 as "stamp-and-stop on a shared budget -> AC11's tick-100 claim". Task 6 maps row 11 to AC11's test.
+  - Mark both as superseded by patch pass 1 (row 11 is mutA; rows 13 and 14 were added; 14/14).
+  - Add `deferred-work.md` and `planning-artifacts/epics.md` to the File List.
+- [ ] [Review][Patch] Two run-1 deferrals lack a usable file:line [_bmad-output/implementation-artifacts/deferred-work.md:2411-2429].
+  - "AC4's RED was never re-measured" should cite `crates/sim-core/tests/scenario.rs:1672` (assertion at `:1687`).
+  - "Dev Agent Record line refs" should give the crate path for `lib.rs:3401/...`.
+
 ### Scenario test skeleton (Task 3; the creation probe, which ran RED on main)
 
 ```rust
@@ -697,6 +755,7 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
 
 | Date | Change |
 | --- | --- |
+| 2026-10-02 | Code review run 2 on `05a16a4..b0c1bd0` (4 layers, none timed out). 0 REWORK: the patch pass 1 closure table held, and mutA/mutB/mutC were re-killed at the named assertions by three layers. 4 NEW findings (0 HIGH, 1 MED, 3 LOW), so the stopping rule ends the static audit. All 4 were left as action items (Wolf: option 2): mutD (sat-out `continue` -> `break`) survives sim-core, the exhaustion precondition is unasserted, and two record fixes. 4 dismissed. Live 17 of 25 re-observed; AC11/AC12 never fire on DEFAULT_SEED. Status in-progress. Review cost $7.51 over 165 turns (subagents 52.0% of tokens). Review caches reaped from /tmp: 21.5 GB, 14.2 GB freed. |
 | 2026-10-02 | Review patch pass 1 (fresh session): all 4 patches landed (`6938841`, `ef7f523`, `0b38aca`). 12-4.sh 14/14 KILLED (row 11 re-pointed to mutA; mutB/mutC added as rows 13/14). FULL GATE GREEN 3093 s on `0b38aca`. Status review, for code review run 2. Patch cost $2.76 over 62 turns. |
 | 2026-10-02 | Code review run 1 (4 layers, none timed out, 0 HIGH). Decision 1 (2/2/1 digs ~2.3x slower) accepted by Wolf, with a NOTE on 12.6. 4 patches left as action items for a fresh-session patch pass. 6 deferred to `deferred-work.md`, 13 dismissed. Status in-progress. Review cost $11.85 over 232 turns (subagents 69.6% of tokens). The review build caches were reaped from /tmp: 20.0 GB, 13.8 GB of it freed. |
 | 2026-10-02 | AC10 passed at Wolf's seat ("1 ok", `12-4-signoff/vehicle-card.md` a-c, recorded in `40b6535`). He asked for the roster and trades in the gui too; that went to 12.6 (`05a16a4`). |

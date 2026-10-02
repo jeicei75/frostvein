@@ -2509,7 +2509,10 @@ development_status:
   #     dwarves, `break 'jobs` skips its retry stamp, and every later job starves forever. Suspect 2
   #     (channel support lost) releases in 2 ticks: not a defect. Ramp-shielded empty-goal digs (task6's
   #     "floor of ~50") are FR8 by-design and left to Wolf (question 1); sealed-off pile loop is question 2.
-  12-4-every-dwarf-has-a-trade: review
+  12-4-every-dwarf-has-a-trade: in-progress
+  #   Review run 2 2026-10-02 (4 layers, none timed out): 0 HIGH, 0 REWORK, 1 MED + 3 LOW patches LEFT AS ACTION ITEMS
+  #     (mutD survives sim-core; exhaustion precondition unasserted; 2 record fixes). Stopping rule: no run 3.
+  #     Next: /clear + /bmad-review-patch (patch pass 2), then PR (Refs #159) on Wolf's yes.
   #   Patch pass 1 2026-10-02: 4/4 patches landed, 12-4.sh 14/14 KILLED, FULL GATE GREEN 3093 s on 0b38aca.
   #     Next: /clear + /bmad-code-review (run 2, both-sides audit), then PR (Refs #159) on Wolf's yes.
   #   Review run 1 2026-10-02 (4 layers, none timed out): 0 HIGH. 1 decision (2/2/1 digs ~2.3x slower:
