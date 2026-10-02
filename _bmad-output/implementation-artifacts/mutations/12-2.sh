@@ -13,9 +13,10 @@ PY
 mutation "from_save ignores the saved identity" sim-core save_load_then_tick_matches_never_saved <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    dwarf.identity,\n                ))\n'
+# Re-pointed 2026-10-02 (12.4): `dwarf.profession,` now follows the identity in the spawn tuple.
+old = '                    dwarf.identity,\n                    dwarf.profession,\n                ))\n'
 assert s.count(old) == 1
-new = '                    Identity {\n                        name: DwarfName::Durin,\n                        colour: DwarfColour::Red,\n                    },\n                ))\n'
+new = '                    Identity {\n                        name: DwarfName::Durin,\n                        colour: DwarfColour::Red,\n                    },\n                    dwarf.profession,\n                ))\n'
 p.write_text(s.replace(old, new))
 PY
 

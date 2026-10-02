@@ -29,6 +29,7 @@ const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
 const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"
+const STREAM_PROFESSION: u64 = 0x5052_4f46_4553_534e; // "PROFESSN"
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 /// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
@@ -187,6 +188,14 @@ impl DwarfColour {
 pub struct Identity {
     pub name: DwarfName,
     pub colour: DwarfColour,
+}
+
+/// A dwarf's trade. Its own component, not part of `Identity`, because 12.6 makes it mutable.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Profession {
+    Miner,
+    Hauler,
+    Woodcutter,
 }
 
 /// Every dwarf carries the same permanent lantern.
@@ -1347,7 +1356,17 @@ impl World {
             name: names[i],
             colour: colours[i],
         });
-        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities);
+        // Professions have their own stream too, so they never shift a spawn or an identity.
+        let mut profession_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_PROFESSION);
+        let mut professions = [
+            Profession::Miner,
+            Profession::Miner,
+            Profession::Hauler,
+            Profession::Hauler,
+            Profession::Woodcutter,
+        ];
+        professions.shuffle(&mut profession_rng);
+        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions);
         world.spawn_emitters(camp_origin);
         world
     }
@@ -1379,6 +1398,7 @@ impl World {
                         .unwrap_or(0),
                     carrying: carrying.0,
                     identity: *entity.get::<Identity>()?,
+                    profession: *entity.get::<Profession>()?,
                 })
             })
             .collect();
@@ -1472,6 +1492,7 @@ impl World {
                     CurrentJob(current_job),
                     Carrying(dwarf.carrying),
                     dwarf.identity,
+                    dwarf.profession,
                 ))
                 .id();
             if current_job.is_some() {
@@ -1760,6 +1781,18 @@ impl World {
         identities
     }
 
+    /// Sorted ascending by dwarf `Id`. A sibling reader like `identities()`.
+    pub fn professions(&self) -> Vec<(Id, Profession)> {
+        let mut professions: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, *entity.get::<Profession>()?)))
+            .collect();
+        professions.sort_by_key(|(id, _)| *id);
+        professions
+    }
+
     /// Sorted ascending by `Id`.
     pub fn items(&self) -> Vec<(Id, Pos)> {
         let mut items: Vec<_> = self
@@ -1807,7 +1840,13 @@ impl World {
         dwarves
     }
 
-    fn spawn_dwarves(&mut self, camp: Pos, rng: &mut ChaCha8Rng, identities: [Identity; 5]) {
+    fn spawn_dwarves(
+        &mut self,
+        camp: Pos,
+        rng: &mut ChaCha8Rng,
+        identities: [Identity; 5],
+        professions: [Profession; 5],
+    ) {
         let emitter_positions: BTreeSet<_> = camp_emitters(camp)
             .into_iter()
             .map(|(pos, _)| pos)
@@ -1827,7 +1866,7 @@ impl World {
             candidates
         };
 
-        for identity in identities {
+        for (identity, profession) in identities.into_iter().zip(professions) {
             let candidate = rng.random_range(0..candidates.len());
             let pos = candidates.swap_remove(candidate);
             let id = self.ecs.resource_mut::<IdAllocator>().allocate();
@@ -1846,6 +1885,7 @@ impl World {
                 CurrentJob(None),
                 Carrying(None),
                 identity,
+                profession,
             ));
         }
     }

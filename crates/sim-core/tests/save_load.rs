@@ -1,6 +1,6 @@
 use sim_core::{
     DesignationKind, Dims, DwarfColour, DwarfName, Identity, Job, JobId, JobKind, JobState,
-    LightKind, Material, Pos, Rect, SavedDwarf, SimCommand, Tile, WORK_TICKS, World,
+    LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile, WORK_TICKS, World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -171,6 +171,7 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.claims(), control.claims());
         assert_eq!(loaded.carrying(), control.carrying());
         assert_eq!(loaded.identities(), control.identities());
+        assert_eq!(loaded.professions(), control.professions());
         assert_eq!(loaded.items(), control.items());
         assert_eq!(loaded.emitters(), control.emitters());
         assert_eq!(loaded.designations(), control.designations());
@@ -357,6 +358,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
                 name: DwarfName::Durin,
                 colour: DwarfColour::Red,
             },
+            profession: Profession::Miner,
         },
         SavedDwarf {
             id: 1,
@@ -371,6 +373,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
                 name: DwarfName::Nori,
                 colour: DwarfColour::Blue,
             },
+            profession: Profession::Miner,
         },
     ];
     save.designations = vec![

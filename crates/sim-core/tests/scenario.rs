@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use sim_core::{
     DesignationKind, Dims, DwarfColour, DwarfName, Identity, Job, JobId, JobKind, JobState,
-    Material, Pos, Rect, SavedDwarf, SimCommand, Tile, World,
+    Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile, World,
 };
 
 fn rect(min: Pos, max: Pos) -> Rect {
@@ -1086,6 +1086,7 @@ fn designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly() {
         assert_eq!(first.claims(), second.claims());
         assert_eq!(first.carrying(), second.carrying());
         assert_eq!(first.identities(), second.identities());
+        assert_eq!(first.professions(), second.professions());
         assert_eq!(first.items(), second.items());
         // AC10, checked on every tick of a real haul: a stone is only ever held by a dwarf that
         // is holding that stone's job.
@@ -1500,6 +1501,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
                 name: DwarfName::Durin,
                 colour: DwarfColour::Red,
             },
+            profession: Profession::Hauler,
         },
         SavedDwarf {
             id: 1,
@@ -1514,6 +1516,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
                 name: DwarfName::Nori,
                 colour: DwarfColour::Blue,
             },
+            profession: Profession::Hauler,
         },
     ];
     save.items = vec![(2, first), (3, second)];
