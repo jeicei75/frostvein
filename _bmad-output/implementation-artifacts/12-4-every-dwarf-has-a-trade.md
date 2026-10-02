@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.3's creation
 
 # Story 12.4: Every Dwarf Has a Trade
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -278,7 +278,7 @@ stays open, so the PR says `Refs #159` and never `Closes`
           trade shows in frame 2;
         - the `NO_COLOR` test (`:1699`) also asserts the trade words.
   - [x] README tui paragraph (`README.md:70`): the roster also names each dwarf's trade.
-- [ ] **Task 6: the record.**
+- [x] **Task 6: the record.**
   - [x] Write `_bmad-output/implementation-artifacts/mutations/12-4.sh`. Every row must be KILLED, by
         the test named:
         1. the trade check removed → `hauling_starts_while_the_dig_backlog_is_still_queued`;
@@ -299,11 +299,11 @@ stays open, so the PR says `Refs #159` and never `Closes`
   - [x] Re-point any older mutation row the change breaks (12.2 re-pointed four tables), and list them.
         `3-2-the-dig.sh:938` is known (Task 2b). Check 12-3.sh's rows too; they sabotage the
         component cache that `sat_out` sits beside.
-  - [ ] Comment on #159: the measured cause, fix B′, the AC11/AC12 tests, and the residual that stays
+  - [x] Comment on #159: the measured cause, fix B′, the AC11/AC12 tests, and the residual that stays
         open. Retitle it to the residual: "A dwarf in one walkable area over MAX_ASTAR_NODES starves a
         reachable job behind more than RETRY_COOLDOWN unreachable ones". The PR body says
         `Refs #159`, never `Closes`.
-- [ ] **Task 7: the live recipe and the seat (AC9, AC10), then the full gate.**
+- [x] **Task 7: the live recipe and the seat (AC9, AC10), then the full gate.**
   - [x] Run the Verification recipe on the branch, GREEN then the deliberate RED, and record both
         outputs in the Debug Log.
   - [x] Write `12-4-signoff/vehicle-card.md` in the seat's launch form:
@@ -315,7 +315,7 @@ stays open, so the PR says `Refs #159` and never `Closes`
         - (b) channel a block of the camp floor and drag a stockpile west of the fire;
         - (c) a stone reaches the pile while channel marks remain.
         Tell him old `frostvein.save` files will not load.
-  - [ ] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~75 min, [[gate-ooms-at-default-parallelism]]).
+  - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~75 min, [[gate-ooms-at-default-parallelism]]).
 
 ### Scenario test skeleton (Task 3; the creation probe, which ran RED on main)
 
@@ -528,6 +528,8 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
     `FIRST DELIVERY tick 299 marks_left 0 of 25`, exactly the creation RED. GREEN re-run on the clean build after: 17 of 25.
 - **Roster instrument (AC8),** fresh daemon: `tui 7530 --frames 1 --z 9` row reads
   `Nain woodcutter  Ori hauler  Bifur miner  Frar hauler  Dori miner` (DEFAULT_SEED `[W,H,M,H,M]`); the same row under `NO_COLOR`.
+- **#159 commented and retitled** (Wolf: post now): https://github.com/jeicei75/frostvein/issues/159#issuecomment-5947062459 ; title is now the single-area residual; the issue stays OPEN.
+- **FULL GATE GREEN** on `3f705b3`, `RUST_TEST_THREADS=1 scripts/gate.sh`, 3161 s (pixel guards 2906 s). Only the story record changed after it.
 
 ### Completion Notes List
 
@@ -549,6 +551,7 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
   `every_profession_has_its_one_spelling` (client-core), `the_roster_shows_a_trade_after_the_name_and_a_dwarf_without_one_shows_his_name_only`
   (view.rs), `each_trade_word_sits_after_its_own_dwarfs_name_...` and `the_trade_words_survive_no_color` (AC8; client.rs).
   The pre-commit hook failed on the untracked `12-4.sh` (row 11 anchor matches 2, not 3), which is Task 6's.
+- **AC10 is open until Wolf's seat** (`12-4-signoff/vehicle-card.md`, steps a-c). Every other AC is evidenced by the tests, mutations and live recipe above.
 
 ### File List
 
@@ -581,5 +584,6 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
 
 | Date | Change |
 | --- | --- |
+| 2026-10-02 | Dev done (Sonnet 5.5 subagents + Opus orchestrator): professions (2M/2H/1W, own stream), trade filter, #159 fix B′ (budget per dwarf + sat-out rule), wire field, tui roster trades. 12-4.sh 12/12 and 6 re-pointed rows KILLED; live recipe GREEN 17 of 25 / RED 0 of 25; #159 commented + retitled; full gate GREEN 3161 s on `3f705b3`. Status review; AC10 awaits the seat. |
 | 2026-10-02 | Task 0 ruled by Wolf: 2M/2H/1W pool, the grey-trade roster, old saves refused, and #159 FOLDED IN with fix B (a budget per dwarf). #159 reproduced on `main` (never claimed at N = 10/25/60). Prototypes measured A (fails N > 20) and B. B's sat-out rule was found while writing AC12 and verified (claim at tick 110; sabotages give never / tick 100). AC11, AC12 and Task 2b added. |
 | 2026-10-02 | Story created on `f4d9ba5`. RED reproduced in the sim (seed 42: 0 marks left at the first delivery) and on the live daemon (`first_delivery.py`: 0 of 25). A throwaway prototype went GREEN (12 marks left in the sim, 19 of 25 live) and mapped the fixture fallout. |

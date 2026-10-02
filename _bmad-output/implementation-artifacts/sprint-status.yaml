@@ -2509,8 +2509,9 @@ development_status:
   #     dwarves, `break 'jobs` skips its retry stamp, and every later job starves forever. Suspect 2
   #     (channel support lost) releases in 2 ticks: not a defect. Ramp-shielded empty-goal digs (task6's
   #     "floor of ~50") are FR8 by-design and left to Wolf (question 1); sealed-off pile loop is question 2.
-  12-4-every-dwarf-has-a-trade: in-progress
-  #   Dev started 2026-10-02.
+  12-4-every-dwarf-has-a-trade: review
+  #   Dev done 2026-10-02 (Sonnet 5.5 subagents + Opus): 12-4.sh 12/12 KILLED, live 17 of 25 (RED 0), FULL GATE GREEN 3161 s on 3f705b3.
+  #     #159 commented + retitled (stays open). AC10 awaits Wolf's seat. Next: seat, then fresh-session code review.
   #   Created 2026-10-02 on f4d9ba5. RED REPRODUCED: sim probe (seed 42, 20 reachable digs) first delivery with 0
   #     marks left; live 12-4-signoff/first_delivery.py (25 channel marks) 0 of 25 at tick 299. A wall dig block
   #     does NOT reproduce (retry cooldowns free the dwarves). Throwaway prototype GREEN: 12 left / 19 of 25.
