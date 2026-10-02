@@ -250,34 +250,34 @@ stays open, so the PR says `Refs #159` and never `Closes`
           tick, and count the woodcutter's position changes.
   - [x] Run the whole sim-core suite. Any other test that now fails because of WHICH dwarf claims
         gets a fixture fix, not a weakened assert. List each one in the Debug Log.
-- [ ] **Task 4: protocol + simd (AC7; the wire diff above).**
-  - [ ] `protocol`: the enum and the field. Fix every `Entity { .. }` literal (about 63; let the
+- [x] **Task 4: protocol + simd (AC7; the wire diff above).**
+  - [x] `protocol`: the enum and the field. Fix every `Entity { .. }` literal (about 63; let the
         compiler list them) with `profession: None`, except the dwarf fixtures a test reads.
-  - [ ] Pin tests in `protocol`:
+  - [x] Pin tests in `protocol`:
         - the existing entity and delta literals stay byte-identical;
         - the identity literal at `:320` gains `,"profession":"miner"` and round-trips;
         - `every_material_and_tile_variant_has_a_pinned_wire_name` (`:510`) gains a `Profession`
           block.
-  - [ ] `bridge.rs`: `fn profession(v: sim_core::Profession) -> protocol::Profession`, an exhaustive
+  - [x] `bridge.rs`: `fn profession(v: sim_core::Profession) -> protocol::Profession`, an exhaustive
         `match` beside `dwarf_colour` (`:191`). `dwarf_entities` (`:133`) sets it from
         `world.professions()`, looked up by id the way `identities` is.
-  - [ ] Extend `save_then_load_rewinds_every_client` (`serve.rs:544`): the connect snapshot gives all
+  - [x] Extend `save_then_load_rewinds_every_client` (`serve.rs:544`): the connect snapshot gives all
         five dwarves `Some(profession)` with each trade present, and the post-load snapshot carries
         the same `(id, profession)` set. No new simd save validation: any trade mix is a valid save
         (12.6).
-- [ ] **Task 5: client-core + tui (AC8). Format per Task 0.**
-  - [ ] `client-core`: `pub fn profession_text(p: protocol::Profession) -> &'static str`, an exhaustive
+- [x] **Task 5: client-core + tui (AC8). Format per Task 0.**
+  - [x] `client-core`: `pub fn profession_text(p: protocol::Profession) -> &'static str`, an exhaustive
         `match` beside `dwarf_name_text` (`lib.rs:17`). It is the only spelling, and 12.6's gui reads
         it too. Pin the three spellings in a unit test.
-  - [ ] `view.rs` roster (`:429-443`): after each name, a blank, then `profession_text` in `STATUS_TEXT`.
+  - [x] `view.rs` roster (`:429-443`): after each name, a blank, then `profession_text` in `STATUS_TEXT`.
         A dwarf with `profession: None` shows his name only. No layout row moves.
-  - [ ] **The instrument is `tui --frames N` (real binary).** Extend `capture_roster` (`client.rs:1555`):
+  - [x] **The instrument is `tui --frames N` (real binary).** Extend `capture_roster` (`client.rs:1555`):
         - the two stub dwarves get professions;
         - its second frame changes one dwarf's profession as well as swapping identities;
         - a new test asserts each trade word sits after its own dwarf's name, and that the changed
           trade shows in frame 2;
         - the `NO_COLOR` test (`:1699`) also asserts the trade words.
-  - [ ] README tui paragraph (`README.md:70`): the roster also names each dwarf's trade.
+  - [x] README tui paragraph (`README.md:70`): the roster also names each dwarf's trade.
 - [ ] **Task 6: the record.**
   - [ ] Write `_bmad-output/implementation-artifacts/mutations/12-4.sh`. Every row must be KILLED, by
         the test named:
@@ -491,6 +491,10 @@ the row holds names only.
   `2-2-dwarves-wander-the-frost.sh` "spawn consumes the worldgen stream again"; `3-2-the-dig.sh` "claim_jobs walks dwarves descending"
   (6-tuple), "unreachable lower id starves a reachable dwarf" (`budgets[slot]`, `continue`), and "each claim search gets a fresh
   node budget" (now pointed at AC12's test, Task 2b).
+- **Task 4 RED:** `save_then_load_rewinds_every_client` panicked "every dwarf carries a profession" with the bridge sending `None`;
+  green after `profession_out` and the `professions()` lookup. `Profession` pin test and the identity literal (now `,"profession":"miner"`) added in `protocol`.
+- **Task 5 RED:** `each_trade_word_sits_after_its_own_dwarfs_name_in_grey_and_follows_a_profession_change` and `the_trade_words_survive_no_color`
+  failed with names only (`"Durin  Nori"`); green after the `view.rs` roster change.
 
 ### Completion Notes List
 
@@ -506,6 +510,12 @@ the row holds names only.
   `each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders` (AC5).
 - Deviations: the story's three failing unit tests differed from reality (see Debug Log). `make_standable`-style fixtures in AC4/AC5
   anchor on the first Miner from `professions()` instead of `dwarves()[2]`. AC12 uses `Dims::DEFAULT` (128x128x32), which fits the skeleton.
+- Tasks 4-5: `Entity` literals got `profession: None` by compiler-driven sweep: 45 in the first pass (gui 9, tui 24, client-core 7, simd 3, protocol 2)
+  and 16 gui tests, 61 in all. Tests: `an_identified_dwarf_round_trips...` and `every_material_and_tile_variant_has_a_pinned_wire_name` (protocol),
+  `save_then_load_rewinds_every_client` and NEW `save_without_a_profession_is_logged_and_the_daemon_keeps_ticking` (AC6, AC7; serve.rs),
+  `every_profession_has_its_one_spelling` (client-core), `the_roster_shows_a_trade_after_the_name_and_a_dwarf_without_one_shows_his_name_only`
+  (view.rs), `each_trade_word_sits_after_its_own_dwarfs_name_...` and `the_trade_words_survive_no_color` (AC8; client.rs).
+  The pre-commit hook failed on the untracked `12-4.sh` (row 11 anchor matches 2, not 3), which is Task 6's.
 
 ### File List
 
@@ -519,6 +529,17 @@ the row holds names only.
 - _bmad-output/implementation-artifacts/mutations/2-2-dwarves-wander-the-frost.sh
 - _bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh
 - _bmad-output/implementation-artifacts/12-4-every-dwarf-has-a-trade.md
+- crates/protocol/src/lib.rs
+- crates/simd/src/bridge.rs
+- crates/simd/tests/serve.rs
+- crates/client-core/src/lib.rs
+- crates/tui/src/view.rs
+- crates/tui/tests/client.rs
+- crates/gui/src/capture.rs
+- crates/gui/src/ingest.rs
+- crates/gui/tests/capture.rs
+- crates/gui/tests/headless.rs
+- README.md
 
 ## Change Log
 
