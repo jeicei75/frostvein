@@ -1532,22 +1532,22 @@
   "d3bef786-8494-4158-bbf0-e326fad50e61.jsonl": {
     "by_model": {
       "claude-opus-5-5": {
-        "cache_creation": 507543,
-        "cache_read": 20619061,
-        "input": 248,
-        "output": 147948
+        "cache_creation": 716013,
+        "cache_read": 46578932,
+        "input": 440,
+        "output": 309416
       }
     },
-    "cache_creation": 507543,
-    "cache_read": 20619061,
-    "input": 248,
-    "last_ts": "2026-10-02T04:40:14.448Z",
+    "cache_creation": 716013,
+    "cache_read": 46578932,
+    "input": 440,
+    "last_ts": "2026-10-02T05:44:05.922Z",
     "marked_at": null,
-    "output": 147948,
+    "output": 309416,
     "primary_only": false,
     "quota_last": null,
     "schema": 2,
-    "turns": 124
+    "turns": 220
   },
   "d56b7c28-c33e-408a-98b6-916cf652e5b7.jsonl": {
     "by_model": {
