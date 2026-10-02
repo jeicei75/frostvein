@@ -2579,8 +2579,11 @@ So that I can shape my crew to the work I want done.
 **Given** a set-profession command the sim cannot apply (an unknown dwarf id),
 **Then** it is refused loudly (NFR11).
 
+**Given** the Bevy client with no dwarf selected,
+**Then** it shows the full crew roster, each dwarf's name and trade, like the TUI roster row 12.4 added (Wolf, 2026-10-02, at 12.4's seat).
+
 **Given** the look,
-**Then** Wolf approves a draft of the selection and profession UI before it is built, and the TUI gains no new input (NFR10).
+**Then** Wolf approves a draft of the selection, roster and profession UI before it is built, and the TUI gains no new input (NFR10).
 
 ### Story 12.7: Timber
 
