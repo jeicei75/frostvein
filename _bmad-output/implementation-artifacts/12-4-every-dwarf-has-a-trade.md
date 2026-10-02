@@ -291,7 +291,10 @@ stays open, so the PR says `Refs #159` and never `Closes`
         8. the roster drops the trade word → the new client test;
         9. exhaustion `continue` → `break 'jobs` (`main`'s shape) → AC11's test (it is never claimed);
         10. one shared budget again (`budgets[slot]` → a single counter) → AC11's test;
-        11. stamp-and-stop (the issue's candidate) → AC11's test (25 > 20);
+        11. stamp-and-stop (the issue's candidate) → AC11's test (25 > 20). **Superseded by patch pass 1:**
+            row 11 is now mutA (stamp-and-stop on a budget per dwarf) against
+            `a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp`, and rows 13 and
+            14 were added (14/14). Patch pass 2 added rows 15 and 16 (16/16);
         12. the sat-out rule dropped (`&& !sat_out` removed) → AC12's test (never claimed).
         A fresh budget per search is `3-2-the-dig.sh:938`'s row, re-pointed to AC12's test (claimed
         at tick 100 instead of 110).
@@ -682,13 +685,16 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
   8. roster drops the trade -> `each_trade_word_sits_after_its_own_dwarfs_name_...` (client.rs:1736);
   9. exhaustion `return`s (`main`'s `break 'jobs`) -> AC12's tick-100 stamps (lib.rs:3567);
   10. one shared budget -> AC11's tick-100 claim (lib.rs:3494);
-  11. stamp-and-stop on a shared budget -> AC11's tick-100 claim (lib.rs:3500);
+  11. stamp-and-stop on a shared budget -> AC11's tick-100 claim (lib.rs:3500). **Superseded by patch pass 1:** row 11 is mutA on a
+      budget per dwarf and dies at "miner 1 claims the dig miner 0 exhausted on". mutB and mutC were added as rows 13 and 14, giving 14/14.
+      Patch pass 2 added rows 15 and 16, giving 16/16. See Review Findings for the current killing assertions;
   12. sat-out rule dropped -> AC12's tick-100 stamps (lib.rs:3567).
   Re-pointed: fresh budget per search -> AC12's stamps (lib.rs:3562); unreachable lower id -> lib.rs:3261; walks descending -> lib.rs:3200;
   from_save ignores identity -> save_load.rs:173; tui never draws the roster -> client.rs:1688; spawn consumes worldgen -> worldgen.rs:423.
 - **Rows 9 and 11 deviate from the story's mapping, deliberately.** Under a budget per dwarf nobody in AC11's 11k-cell plates ever
   exhausts, so an exhaustion-arm sabotage is unreachable there and would SURVIVE. Row 9 is pointed at AC12, whose 55k area exhausts.
-  Row 11 restores the shared budget the issue's candidate was written against, then applies stamp-and-stop.
+  Row 11 restores the shared budget the issue's candidate was written against, then applies stamp-and-stop. (Superseded by patch
+  pass 1: that row duplicated row 10, and it is now mutA.)
 - **AC12's later assertions, shown to fail on their own** (trap 1): rows 9, 12 and the fresh-budget row all die at the tick-100 stamp
   assert, so in a scratch worktree (never the shared tree) that assert was removed and each sabotage re-run. Control passed; sat-out
   dropped -> "tick 110 reaches the reachable dig" (never claimed); exhaustion `return` -> the same; fresh budget per search ->
@@ -750,6 +756,8 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
 - _bmad-output/implementation-artifacts/mutations/12-4.sh
 - _bmad-output/implementation-artifacts/12-4-signoff/vehicle-card.md
 - _bmad-output/implementation-artifacts/sprint-status.yaml
+- _bmad-output/implementation-artifacts/deferred-work.md
+- _bmad-output/planning-artifacts/epics.md
 
 ## Change Log
 

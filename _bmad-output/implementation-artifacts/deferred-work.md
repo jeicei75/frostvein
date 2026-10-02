@@ -2413,13 +2413,14 @@ the story, and one of them is also issue #125.
 - **Determinism test named in the spec does not compare `professions()`** (accept LOW; `crates/sim-core/tests/scenario.rs:1755`).
   The compare landed in `designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly` (`:1089`), which is
   also seed + commands, so AC6 holds. The swap is undocumented in the story.
-- **12.4's Dev Agent Record line refs point into MUTATED sources** (accept LOW). `lib.rs:3401/:3500/:3562/:3261` are
+- **12.4's Dev Agent Record line refs point into MUTATED sources** (accept LOW). `crates/sim-core/src/lib.rs:3401/:3500/:3562/:3261` are
   mutate.sh panic sites. In the committed tree they are blank lines or fields, so a reader cannot follow them to the
   assertion.
 - **AC7's "deltas carry a profession" has no automated test** (accept LOW; `crates/simd/tests/serve.rs`).
   Only snapshots are checked. Deltas share `dwarf_entities` (`bridge.rs:69`), and two review layers saw them carry
   trades live.
-- **AC4's RED was never re-measured on the committed fixture** (accept LOW). The fixture anchors on the first Miner
+- **AC4's RED was never re-measured on the committed fixture** (accept LOW;
+  `hauling_starts_while_the_dig_backlog_is_still_queued`, `crates/sim-core/tests/scenario.rs:1671`, assertion at `:1687`). The fixture anchors on the first Miner
   rather than `dwarves()[2]`. Mutation row 1 stands in for the RED.
 - **A job with no free dwarf of its trade re-plans its work positions every tick** (blind LOW;
   `crates/sim-core/src/lib.rs:483-495`). The goal set is computed before the trade filter, and such a job is never
