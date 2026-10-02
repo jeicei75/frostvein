@@ -279,7 +279,7 @@ stays open, so the PR says `Refs #159` and never `Closes`
         - the `NO_COLOR` test (`:1699`) also asserts the trade words.
   - [x] README tui paragraph (`README.md:70`): the roster also names each dwarf's trade.
 - [ ] **Task 6: the record.**
-  - [ ] Write `_bmad-output/implementation-artifacts/mutations/12-4.sh`. Every row must be KILLED, by
+  - [x] Write `_bmad-output/implementation-artifacts/mutations/12-4.sh`. Every row must be KILLED, by
         the test named:
         1. the trade check removed → `hauling_starts_while_the_dig_backlog_is_still_queued`;
         2. the trade check moved after `attempted = true` → `a_job_with_no_free_dwarf_of_its_trade_gets_no_retry_stamp`;
@@ -296,7 +296,7 @@ stays open, so the PR says `Refs #159` and never `Closes`
         A fresh budget per search is `3-2-the-dig.sh:938`'s row, re-pointed to AC12's test (claimed
         at tick 100 instead of 110).
         Put each killing assertion where only its mutation reaches it ([[strengthened-test-needs-remutation]]).
-  - [ ] Re-point any older mutation row the change breaks (12.2 re-pointed four tables), and list them.
+  - [x] Re-point any older mutation row the change breaks (12.2 re-pointed four tables), and list them.
         `3-2-the-dig.sh:938` is known (Task 2b). Check 12-3.sh's rows too; they sabotage the
         component cache that `sat_out` sits beside.
   - [ ] Comment on #159: the measured cause, fix B′, the AC11/AC12 tests, and the residual that stays
@@ -304,9 +304,9 @@ stays open, so the PR says `Refs #159` and never `Closes`
         reachable job behind more than RETRY_COOLDOWN unreachable ones". The PR body says
         `Refs #159`, never `Closes`.
 - [ ] **Task 7: the live recipe and the seat (AC9, AC10), then the full gate.**
-  - [ ] Run the Verification recipe on the branch, GREEN then the deliberate RED, and record both
+  - [x] Run the Verification recipe on the branch, GREEN then the deliberate RED, and record both
         outputs in the Debug Log.
-  - [ ] Write `12-4-signoff/vehicle-card.md` in the seat's launch form:
+  - [x] Write `12-4-signoff/vehicle-card.md` in the seat's launch form:
         - in WSL, `simd 7451`;
         - in PowerShell, `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')`;
         - in WSL, attach `tui 7451`.
@@ -470,6 +470,8 @@ the row holds names only.
 
 ### Agent Model Used
 
+Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified by Claude Opus 5.5, which also wrote Task 6's table, ran every mutation and Task 7.
+
 ### Debug Log References
 
 - **RED, AC11 and AC12, on the unchanged claim code** (after Task 2's filter, before Task 2b's budget change):
@@ -495,6 +497,37 @@ the row holds names only.
   green after `profession_out` and the `professions()` lookup. `Profession` pin test and the identity literal (now `,"profession":"miner"`) added in `protocol`.
 - **Task 5 RED:** `each_trade_word_sits_after_its_own_dwarfs_name_in_grey_and_follows_a_profession_change` and `the_trade_words_survive_no_color`
   failed with names only (`"Durin  Nori"`); green after the `view.rs` roster change.
+- **Orchestrator re-point, Task 5:** `12-2.sh` "tui never draws the roster" (the roster now pairs identity with profession; the
+  sabotage still empties the identity stream).
+- **Mutations, run by the orchestrator** (`RUST_TEST_THREADS=1 scripts/mutate.sh`, on committed `5f4ad04`): `12-4.sh` **12/12 KILLED**,
+  and the six re-pointed older rows (extracted into a scratch table) **6/6 KILLED**. Killing assertion per row:
+  1. trade check removed -> `hauling_starts_...` `marks_left > 5` (scenario.rs:1686);
+  2. trade check moved after attempted -> AC3's "no miner may stamp a haul" (lib.rs:3401);
+  3. `Haul` -> `Miner` -> AC5's per-tick holder check (scenario.rs:1731);
+  4. professions from `spawn_rng` -> `spawn_positions_for_seed_42_are_pinned` (worldgen.rs:423);
+  5. no hauler in the pool -> the 64-seed test, "seed 0" (worldgen.rs:70);
+  6. `from_save` ignores the profession -> `save_load_then_tick_matches_never_saved` professions compare (save_load.rs:174);
+  7. bridge sends `None` -> `save_then_load_rewinds_every_client` "every dwarf carries a profession" (serve.rs:551);
+  8. roster drops the trade -> `each_trade_word_sits_after_its_own_dwarfs_name_...` (client.rs:1736);
+  9. exhaustion `return`s (`main`'s `break 'jobs`) -> AC12's tick-100 stamps (lib.rs:3567);
+  10. one shared budget -> AC11's tick-100 claim (lib.rs:3494);
+  11. stamp-and-stop on a shared budget -> AC11's tick-100 claim (lib.rs:3500);
+  12. sat-out rule dropped -> AC12's tick-100 stamps (lib.rs:3567).
+  Re-pointed: fresh budget per search -> AC12's stamps (lib.rs:3562); unreachable lower id -> lib.rs:3261; walks descending -> lib.rs:3200;
+  from_save ignores identity -> save_load.rs:173; tui never draws the roster -> client.rs:1688; spawn consumes worldgen -> worldgen.rs:423.
+- **Rows 9 and 11 deviate from the story's mapping, deliberately.** Under a budget per dwarf nobody in AC11's 11k-cell plates ever
+  exhausts, so an exhaustion-arm sabotage is unreachable there and would SURVIVE. Row 9 is pointed at AC12, whose 55k area exhausts.
+  Row 11 restores the shared budget the issue's candidate was written against, then applies stamp-and-stop.
+- **AC12's later assertions, shown to fail on their own** (trap 1): rows 9, 12 and the fresh-budget row all die at the tick-100 stamp
+  assert, so in a scratch worktree (never the shared tree) that assert was removed and each sabotage re-run. Control passed; sat-out
+  dropped -> "tick 110 reaches the reachable dig" (never claimed); exhaustion `return` -> the same; fresh budget per search ->
+  "tick 101: one exhausted dig per tick" (claimed early). Worktree removed after.
+- **Live recipe (AC9),** fresh `simd 7530` each run, on `5f4ad04`:
+  - GREEN, three runs, identical: `backlog: tick 13 marks 25 pile cells 9` / `FIRST DELIVERY tick 186 marks_left 17 of 25`.
+  - Deliberate RED (row 1 applied in a scratch worktree, its own target dir): `BACKLOG EXHAUSTED tick 220, no stone on the pile yet` /
+    `FIRST DELIVERY tick 299 marks_left 0 of 25`, exactly the creation RED. GREEN re-run on the clean build after: 17 of 25.
+- **Roster instrument (AC8),** fresh daemon: `tui 7530 --frames 1 --z 9` row reads
+  `Nain woodcutter  Ori hauler  Bifur miner  Frar hauler  Dori miner` (DEFAULT_SEED `[W,H,M,H,M]`); the same row under `NO_COLOR`.
 
 ### Completion Notes List
 
@@ -540,6 +573,9 @@ the row holds names only.
 - crates/gui/tests/capture.rs
 - crates/gui/tests/headless.rs
 - README.md
+- _bmad-output/implementation-artifacts/mutations/12-4.sh
+- _bmad-output/implementation-artifacts/12-4-signoff/vehicle-card.md
+- _bmad-output/implementation-artifacts/sprint-status.yaml
 
 ## Change Log
 
