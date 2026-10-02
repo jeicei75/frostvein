@@ -463,19 +463,18 @@ fn claim_jobs(
         .filter(|(id, _)| !carried.contains(&id.0))
         .map(|(id, pos)| (id.0, *pos))
         .collect();
-    let mut astar_nodes_remaining = MAX_ASTAR_NODES;
+    // One budget per dwarf, indexed like the sorted `dwarves`.
+    let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];
     // Walkable components that a COMPLETED failed search has already flooded this call (#132).
     // Per call only: terrain can change between ticks, so nothing is cached across them.
-    // NOTE: assumes the idle dwarves' distinct components SUM to at most `MAX_ASTAR_NODES`. Past
-    // that, the last flood exhausts the budget every tick, so the job it was attempting is never
-    // stamped and starves the jobs behind it (#159). One ~16k component today.
+    // NOTE: the per-tick bound is (idle dwarves) x `MAX_ASTAR_NODES`. A dwarf whose search runs
+    // out of his budget sits out the rest of the tick. Still open on #159: one walkable area over
+    // the budget with more than `RETRY_COOLDOWN` unreachable jobs ahead of a reachable one, since
+    // that dwarf exhausts on one job per tick and never reaches it.
     let mut components: Vec<BTreeSet<Pos>> = Vec::new();
 
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
-    'jobs: for job in jobs_in_order {
-        if astar_nodes_remaining == 0 {
-            break;
-        }
+    for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
@@ -496,7 +495,11 @@ fn claim_jobs(
         };
         let mut attempted = false;
         let mut assigned = false;
-        for (entity, id, pos, current, carrying, profession) in &mut dwarves {
+        // Some eligible dwarf had no budget left, so this job was not really tried by him.
+        let mut sat_out = false;
+        for (slot, (entity, id, pos, current, carrying, profession)) in
+            dwarves.iter_mut().enumerate()
+        {
             if trade(job.kind) != **profession {
                 // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
                 continue;
@@ -511,6 +514,10 @@ fn claim_jobs(
                         .created_tick
                         .saturating_add(reaction_delay(seed.0, **id, job.id))
             {
+                if budgets[slot] == 0 {
+                    sat_out = true;
+                    continue;
+                }
                 attempted = true;
                 // A component belongs to its start: it proves nothing for a dwarf outside it.
                 if components.iter().any(|component| {
@@ -521,19 +528,14 @@ fn claim_jobs(
                     continue;
                 }
                 if let Some(delivery) = &delivery {
-                    match astar_with_budget(
-                        &terrain,
-                        &blocked,
-                        **pos,
-                        delivery,
-                        &mut astar_nodes_remaining,
-                    ) {
+                    match astar_with_budget(&terrain, &blocked, **pos, delivery, &mut budgets[slot])
+                    {
                         (Some(_), false, _) => {}
                         (None, false, explored) => {
                             components.push(explored);
                             continue;
                         }
-                        (None, true, _) => break 'jobs,
+                        (None, true, _) => continue,
                         (Some(_), true, _) => {
                             unreachable!("a completed search cannot exhaust its budget")
                         }
@@ -544,14 +546,14 @@ fn claim_jobs(
                     &blocked,
                     **pos,
                     &goals,
-                    &mut astar_nodes_remaining,
+                    &mut budgets[slot],
                 ) {
                     (Some(path), false, _) => path,
                     (None, false, explored) => {
                         components.push(explored);
                         continue;
                     }
-                    (None, true, _) => break 'jobs,
+                    (None, true, _) => continue,
                     (Some(_), true, _) => {
                         unreachable!("a completed search cannot exhaust its budget")
                     }
@@ -565,7 +567,7 @@ fn claim_jobs(
                 break;
             }
         }
-        if attempted && !assigned {
+        if attempted && !assigned && !sat_out {
             jobs.get_mut(job.id)
                 .expect("iterated job still exists")
                 .retry_after = tick.0.saturating_add(RETRY_COOLDOWN);
@@ -3406,16 +3408,41 @@ mod tests {
         assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
     }
 
-    // 12.3 amendment: the old fixture (one shared floor, five dwarves) now has each failed flood
-    // reused as a known component, so jobs 5..9 are stamped for free and the "jobs 5..9 never
-    // attempted" shape this test used to pin is gone. Each dwarf now stands on its own 11,000-cell
-    // plate (a separate component), so five floods would cost 55,000 > MAX_ASTAR_NODES.
-    #[test]
-    fn claim_jobs_bounds_aggregate_astar_expansions_per_tick() {
-        let mut world = World::generate(42, Dims::DEFAULT);
-        for id in 0..5 {
-            set_profession(&mut world, id, super::Profession::Miner);
+    /// All five dwarves are miners, one per entry of `spots`, in ascending id order.
+    fn stand_miners_at(world: &mut World, spots: [Pos; 5]) {
+        for (id, spot) in spots.into_iter().enumerate() {
+            set_profession(world, id as u32, super::Profession::Miner);
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| {
+                    entity.contains::<super::Dwarf>()
+                        && entity.get::<super::Id>().is_some_and(|i| i.0 == id as u32)
+                })
+                .unwrap()
+                .id();
+            *world.ecs.get_mut::<Pos>(entity).unwrap() = spot;
         }
+    }
+
+    fn insert_dig(world: &mut World, id: u32, target: Pos) {
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(id),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+    }
+
+    // #159 (12.4, AC11). Each dwarf stands on his own 11,000-cell plate (a separate component), so
+    // five floods cost 55,000 > MAX_ASTAR_NODES in sum while each is under it. 25 unreachable digs
+    // (more than RETRY_COOLDOWN, so stamp-and-stop cannot pass) are queued ahead of one reachable
+    // dig on plate 4. Replaces `claim_jobs_bounds_aggregate_astar_expansions_per_tick`, whose first
+    // assert pinned this very starvation.
+    #[test]
+    fn a_reachable_job_behind_unreachable_ones_is_claimed_when_areas_sum_past_the_budget() {
+        let mut world = World::generate(42, Dims::DEFAULT);
         let dims = world.dims();
         let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
         // Plate k is the floor at z = 1 + 2k, stone above and below, so no plate touches another.
@@ -3426,7 +3453,7 @@ mod tests {
                 }
             }
         }
-        for job in 0..10_u32 {
+        for job in 0..25_u32 {
             let work = Pos {
                 x: 3 + 2 * job as i32,
                 y: 2,
@@ -3435,59 +3462,128 @@ mod tests {
             tiles[super::worldgen::index(dims, work.x as u32, work.y as u32, work.z as u32)] =
                 Tile::Empty;
         }
+        let reachable = Pos { x: 50, y: 50, z: 9 };
+        tiles[super::worldgen::index(dims, 50, 50, 9)] = Tile::Solid(Material::Stone);
         world.ecs.resource_mut::<Terrain>().tiles = tiles;
-
-        let mut dwarves: Vec<_> = world
-            .ecs
-            .iter_entities()
-            .filter(|entity| entity.contains::<super::Dwarf>())
-            .filter_map(|entity| Some((*entity.get::<super::Id>()?, entity.id())))
-            .collect();
-        dwarves.sort();
-        assert_eq!(dwarves.len(), 5);
-        for (plate, (_, entity)) in dwarves.into_iter().enumerate() {
-            *world.ecs.get_mut::<Pos>(entity).unwrap() = Pos {
+        stand_miners_at(
+            &mut world,
+            std::array::from_fn(|plate| Pos {
                 x: 0,
                 y: 0,
                 z: 1 + 2 * plate as i32,
-            };
-        }
-        for job in 0..10_u32 {
-            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
-                id: JobId(job),
-                kind: JobKind::Dig,
-                target: Pos {
+            }),
+        );
+        for job in 0..25_u32 {
+            insert_dig(
+                &mut world,
+                job,
+                Pos {
                     x: 2 + 2 * job as i32,
                     y: 2,
                     z: 20,
                 },
-                created_tick: 0,
-                retry_after: 0,
-            }));
+            );
         }
+        insert_dig(&mut world, 25, reachable);
         world.ecs.resource_mut::<super::Tick>().0 = 100;
         let mut schedule = bevy_ecs::schedule::Schedule::default();
         schedule.add_systems(super::claim_jobs);
 
-        // Four floods (44,000) fit; the fifth hits the budget, so job 0 is cut short and unstamped,
-        // and nothing behind it is attempted.
         schedule.run(&mut world.ecs);
-        assert!(
-            world.jobs().iter().all(|job| job.retry_after == 0),
-            "one tick may expand at most MAX_ASTAR_NODES across all failed claim searches"
-        );
 
-        // Control, so the assertion above is not an inert system: shrink the fifth plate and all
-        // five floods (about 44,000 + 2) fit, so every job is stamped.
-        for y in 1..100 {
-            for x in 0..110 {
-                world.ecs.resource_mut::<Terrain>().tiles[super::worldgen::index(dims, x, y, 9)] =
-                    Tile::Solid(Material::Stone);
+        assert_eq!(
+            world.claims()[4],
+            (super::Id(4), Some(JobId(25))),
+            "the plate-4 miner must claim the reachable dig on the first claim tick"
+        );
+    }
+
+    // #159 (12.4, AC12). One miner in a 55,003-cell area (five plates joined by ramp staircases),
+    // four in sealed one-cell pockets, 10 unreachable digs, then one reachable dig in his area.
+    // He exhausts his own budget on one dig per tick, so he reaches the reachable one at tick 110;
+    // a job is stamped only when no dwarf of its trade sat it out for budget.
+    #[test]
+    fn a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let idx =
+            |x: i32, y: i32, z: i32| super::worldgen::index(dims, x as u32, y as u32, z as u32);
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        for plate in 0..5_i32 {
+            for y in 0..100 {
+                for x in 0..110 {
+                    tiles[idx(x, y, 1 + 2 * plate)] = Tile::Empty;
+                }
             }
         }
-        world.ecs.resource_mut::<super::Tick>().0 = 200;
+        // A ramp staircase at row y = 99 joins plate z to plate z + 2. A move up needs a Ramp under
+        // the LOWER cell.
+        for k in 0..4_i32 {
+            let z = 1 + 2 * k;
+            tiles[idx(108, 99, z - 1)] = Tile::Ramp(Material::Stone);
+            tiles[idx(109, 99, z + 1)] = Tile::Empty;
+            tiles[idx(109, 99, z)] = Tile::Ramp(Material::Stone);
+            tiles[idx(110, 99, z + 2)] = Tile::Empty;
+        }
+        let pockets = [120, 122, 124, 126].map(|x| Pos { x, y: 120, z: 20 });
+        for pocket in pockets {
+            tiles[idx(pocket.x, pocket.y, pocket.z)] = Tile::Empty;
+        }
+        for job in 0..10_i32 {
+            tiles[idx(3 + 2 * job, 2, 20)] = Tile::Empty;
+        }
+        tiles[idx(5, 5, 1)] = Tile::Solid(Material::Stone);
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(
+            &mut world,
+            [
+                Pos { x: 0, y: 0, z: 1 },
+                pockets[0],
+                pockets[1],
+                pockets[2],
+                pockets[3],
+            ],
+        );
+        for job in 0..10_u32 {
+            insert_dig(
+                &mut world,
+                job,
+                Pos {
+                    x: 2 + 2 * job as i32,
+                    y: 2,
+                    z: 20,
+                },
+            );
+        }
+        insert_dig(&mut world, 10, Pos { x: 5, y: 5, z: 1 });
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
         schedule.run(&mut world.ecs);
-        assert!(world.jobs().iter().all(|job| job.retry_after == 220));
+        let stamps: Vec<u64> = world.jobs().iter().map(|job| job.retry_after).collect();
+        let mut expected = vec![0; 11];
+        expected[0] = 120;
+        assert_eq!(
+            stamps, expected,
+            "only the job he exhausted on is stamped; the jobs he sat out stay unstamped"
+        );
+        assert!(world.claims()[0].1.is_none());
+
+        for tick in 101..=110_u64 {
+            world.ecs.resource_mut::<super::Tick>().0 = tick;
+            schedule.run(&mut world.ecs);
+            let claimed = world.claims()[0].1;
+            if tick < 110 {
+                assert_eq!(claimed, None, "tick {tick}: one exhausted dig per tick");
+            } else {
+                assert_eq!(
+                    claimed,
+                    Some(JobId(10)),
+                    "tick 110 reaches the reachable dig"
+                );
+            }
+        }
     }
 
     #[test]

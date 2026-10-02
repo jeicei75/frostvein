@@ -777,19 +777,20 @@ PY
 mutation "unreachable lower id starves a reachable dwarf" sim-core an_unreachable_lower_id_does_not_starve_a_reachable_dwarf <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-02 (12.4): the search now spends `budgets[slot]` and exhaustion `continue`s.
 old = '''                let path = match astar_with_budget(
                     &terrain,
                     &blocked,
                     **pos,
                     &goals,
-                    &mut astar_nodes_remaining,
+                    &mut budgets[slot],
                 ) {
                     (Some(path), false, _) => path,
                     (None, false, explored) => {
                         components.push(explored);
                         continue;
                     }
-                    (None, true, _) => break 'jobs,
+                    (None, true, _) => continue,
                     (Some(_), true, _) => {
                         unreachable!("a completed search cannot exhaust its budget")
                     }
@@ -936,21 +937,24 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        if yields_stone {\n'))
 PY
 
-mutation "each claim search gets a fresh node budget" sim-core claim_jobs_bounds_aggregate_astar_expansions_per_tick <<'PY'
+mutation "each claim search gets a fresh node budget" sim-core a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-02 (12.4 Task 2b): the old test pinned #159's broken shape and is replaced;
+# the goals search gets a fresh counter instead of the dwarf's `budgets[slot]`, so the dwarf
+# claims the reachable dig at tick 100 instead of tick 110.
 old = '''                let path = match astar_with_budget(
                     &terrain,
                     &blocked,
                     **pos,
                     &goals,
-                    &mut astar_nodes_remaining,
+                    &mut budgets[slot],
                 ) {
 '''
 new = '''                let mut per_search_nodes = MAX_ASTAR_NODES;
                 let path = match astar_with_budget(&terrain, &blocked, **pos, &goals, &mut per_search_nodes) {
 '''
-assert old in s
+assert s.count(old) == 1
 p.write_text(s.replace(old, new))
 PY
 
