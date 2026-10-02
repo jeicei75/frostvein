@@ -14,3 +14,4 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | create | claude | claude-opus-5-5 | 96 | 192 | 208,470 | 25,959,871 | 161,468 | 26,330,001 | $9.46 | `d3bef786-8494-4158-bbf0-e326fad50e61.jsonl` | 2026-10-02 05:45 UTC · rates 2026-08-31 | 64 | — |
 | dev | claude | claude-opus-5-5, claude-sonnet-5-5 | 312 | 656 | 806,563 | 39,771,453 | 108,814 | 40,687,486 | $14.93 | `b79e9a17-e552-47a3-bd1c-117940761591.jsonl` | 2026-10-02 07:53 UTC · rates 2026-08-31 | 109 | — |
 | review | claude | claude-opus-5-5, claude-sonnet-5-5 | 232 | 484 | 1,206,976 | 21,477,850 | 88,209 | 22,773,519 | $11.85 | `ff6a0bec-3411-4d22-a51a-893f4a1b43ca.jsonl` | 2026-10-02 10:03 UTC · rates 2026-08-31 | 60 | — |
+| review-patch | claude | claude-opus-5-5 | 62 | 128 | 157,236 | 5,379,126 | 44,796 | 5,581,286 | $2.76 | `0e0112e1-fa1e-44d3-93aa-4188b49c3fef.jsonl` | 2026-10-02 11:33 UTC · rates 2026-08-31 | 88 | — |

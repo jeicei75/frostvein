@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.3's creation
 
 # Story 12.4: Every Dwarf Has a Trade
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -370,7 +370,7 @@ The gui was not built by any layer, so AC10 rests on Wolf's seat ("1 ok").
   - The story measured only "marks left at the first delivery" (AC4/AC9) and never the time to clear
     the backlog, so nothing records the cost. It follows directly from Wolf's Task 0 pool ruling. 12.6
     (reassigning trades) and 12.7 (woodcutter work) are where it eases.
-- [ ] [Review][Patch] AC12's "the other dwarves go on claiming" is untested [crates/sim-core/src/lib.rs:538,556; test at :3506].
+- [x] [Review][Patch] AC12's "the other dwarves go on claiming" is untested [crates/sim-core/src/lib.rs:538,556; test at :3506].
   - The AC12 fixture's four other miners are sealed in one-cell pockets and can claim nothing.
   - AC11's plates never exhaust, so no test shows a second dwarf claiming in the same tick after another exhausted.
   - Two sabotages survive the whole sim-core suite, run by the auditor in a scratch copy:
@@ -378,18 +378,18 @@ The gui was not built by any layer, so AC10 rests on Wolf's seat ("1 ok").
     - **mutB:** both arms become `break`, which leaves the dwarf loop.
   - Fix: add a fixture in which a higher-id miner can reach the very job a lower-id miner exhausted on,
     and assert that the higher-id miner holds it on the same tick. One assertion kills both mutations.
-- [ ] [Review][Patch] "Trade filter before the budget check" ordering is unpinned [crates/sim-core/src/lib.rs:503,517].
+- [x] [Review][Patch] "Trade filter before the budget check" ordering is unpinned [crates/sim-core/src/lib.rs:503,517].
   - **mutC** (the auditor's) moves the `budgets[slot] == 0` sat-out check above the trade filter. The whole sim-core suite stays green.
   - Under it, an exhausted miner marks an unreachable haul as sat-out, so the haul is never stamped and is re-searched every tick.
   - Fix, in the same test as above: after a miner exhausts, an unreachable haul with a free hauler must still be stamped `tick + 20`.
-- [ ] [Review][Patch] Mutation row 11 duplicates row 10 [_bmad-output/implementation-artifacts/mutations/12-4.sh:95-97].
+- [x] [Review][Patch] Mutation row 11 duplicates row 10 [_bmad-output/implementation-artifacts/mutations/12-4.sh:95-97].
   - Row 11 restores the SHARED budget, which is row 10's exact sabotage, then adds stamp-and-stop. It
     dies at the same AC11 tick-100 assert that the shared budget alone already fails.
   - The record still says it covers "the issue's candidate". Stamp-and-stop on per-dwarf budgets is
     mutA, and mutA survives.
   - Fix: re-point row 11 to mutA against the new assertion, and add rows for mutB and mutC. Run all
     three and record the killing assertion.
-- [ ] [Review][Patch] Board and Change Log are stale after the seat
+- [x] [Review][Patch] Board and Change Log are stale after the seat
   [_bmad-output/implementation-artifacts/sprint-status.yaml:2514; Change Log above].
   - Both still say "AC10 awaits Wolf's seat". `40b6535` recorded the pass only in the Completion Notes and `vehicle-card.md`.
 - [x] [Review][Defer] Determinism test named in the spec does not compare `professions()`
@@ -413,6 +413,22 @@ The gui was not built by any layer, so AC10 rests on Wolf's seat ("1 ok").
   - `attempted` stays false, so nothing is stamped or logged.
   - It is unreachable today (always 2/2/1, saves only from `to_save`).
   - It becomes reachable when 12.6 lets the player reassign the last hauler or miner, so 12.6 should decide what the player sees.
+
+**Patch pass 1 (2026-10-02, fresh session).** Landed in `6232659` (review records), `6938841` (test), `ef7f523`
+(mutation rows) and `0b38aca` (records). The FULL gate (`RUST_TEST_THREADS=1`) was GREEN, 3093 s, exit 0, on `0b38aca`.
+`12-4.sh` gave 14/14 KILLED. The new test is
+`a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp`, beside AC12's test. Its terrain
+comes from the new `joined_plates` helper, which AC12's test now shares.
+
+| Item | Side the fix was written for | Side tested | Pre-existing-state fixture | Rework? |
+| --- | --- | --- | --- | --- |
+| 2: same-tick handoff after exhaustion | correct code: a higher-id miner claims the dig a lower-id miner exhausted on | the old shapes the review named: mutA (row 11) and mutB (row 13) both fail `"miner 1 claims the dig miner 0 exhausted on, on the same tick"` | `joined_plates` (AC12's 55,003-cell area, miner 0 at (0,0,1)) + miner 1's pocket (120,120,20), the only work position of dig 0 at (121,120,20) | no |
+| 3: trade filter before the budget check | correct order: an exhausted miner does not mark a haul sat out | the reordered code: mutC (row 14) fails `stamps == [0, 120]` (the haul is left at 0) | same fixture, with miner 0 at budget 0 when haul 1 comes up. Hauler 2 is sealed at (124,120,20); the stone (124,124,20) and the pile (126,124,20) are in other pockets | no |
+| 4: row 11 duplicated row 10 | the record: row 11 now names mutA on a budget per dwarf | the run: rows 11, 13 and 14 each died at the assertion named above, not at row 10's AC11 tick-100 assert | the committed `12-4.sh` against `ef7f523` | no |
+| 5: stale board / Change Log | the board comment and a new Change Log row | `rg "awaits"` in the board: no live claim is left. The old dev row is kept as history | `sprint-status.yaml` at `05a16a4` | no |
+
+Exclusivity: each mutation was run against its one named test, as `mutate.sh` does. Before this pass, review run 1 had
+mutA, mutB and mutC survive the WHOLE sim-core suite. So the new test is the only sim-core test that kills them.
 
 ### Scenario test skeleton (Task 3; the creation probe, which ran RED on main)
 
@@ -681,6 +697,7 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
 
 | Date | Change |
 | --- | --- |
+| 2026-10-02 | Review patch pass 1 (fresh session): all 4 patches landed (`6938841`, `ef7f523`, `0b38aca`). 12-4.sh 14/14 KILLED (row 11 re-pointed to mutA; mutB/mutC added as rows 13/14). FULL GATE GREEN 3093 s on `0b38aca`. Status review, for code review run 2. Patch cost $2.76 over 62 turns. |
 | 2026-10-02 | Code review run 1 (4 layers, none timed out, 0 HIGH). Decision 1 (2/2/1 digs ~2.3x slower) accepted by Wolf, with a NOTE on 12.6. 4 patches left as action items for a fresh-session patch pass. 6 deferred to `deferred-work.md`, 13 dismissed. Status in-progress. Review cost $11.85 over 232 turns (subagents 69.6% of tokens). The review build caches were reaped from /tmp: 20.0 GB, 13.8 GB of it freed. |
 | 2026-10-02 | AC10 passed at Wolf's seat ("1 ok", `12-4-signoff/vehicle-card.md` a-c, recorded in `40b6535`). He asked for the roster and trades in the gui too; that went to 12.6 (`05a16a4`). |
 | 2026-10-02 | Dev done (Sonnet 5.5 subagents + Opus orchestrator): professions (2M/2H/1W, own stream), trade filter, #159 fix B′ (budget per dwarf + sat-out rule), wire field, tui roster trades. 12-4.sh 12/12 and 6 re-pointed rows KILLED; live recipe GREEN 17 of 25 / RED 0 of 25; #159 commented + retitled; full gate GREEN 3161 s on `3f705b3`. Status review; AC10 awaits the seat. |
