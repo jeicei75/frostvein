@@ -19,6 +19,10 @@ so that digging, hauling and felling can all go on at once instead of queueing b
 file, `12-4-signoff/` and the board edit. Epic 12's nine standing ACs (`epics.md`, "Standing acceptance
 criteria") bind this story and are not restated. The "Wire diff" section below satisfies standing AC 4.
 
+**#159 is folded in (Wolf, Task 0).** Fix B closes its summed-components half. Its single-area half
+stays open, so the PR says `Refs #159` and never `Closes`
+([[closing-keyword-closes-whole-issue]]).
+
 ## Found at creation (2026-10-02, on `f4d9ba5`)
 
 - **The symptom reproduces only with a backlog that is reachable from the start.** Claiming runs FIFO
@@ -47,6 +51,29 @@ criteria") bind this story and are not restated. The "Wire diff" section below s
 - **Boot frames are unaffected.** Professions change nothing until a job exists: wander draws are
   untouched, and the spawn and identity streams are untouched. The gui pixel guards (no designations)
   have no reason to move.
+- **#159 REPRODUCED** with an in-crate probe on `main`. Five dwarves stand on five separate
+  11,000-cell plates (the fixture of `claim_jobs_bounds_aggregate_astar_expansions_per_tick`), with N
+  unreachable digs queued ahead of one reachable dig on plate 4. **The reachable dig is never claimed
+  in 300 ticks, at N = 10, 25 and 60.** Two throwaway prototypes:
+  - **A, the issue's candidate** (stamp the exhausted job, then `break`): claimed at tick 110 for
+    N = 10, and **never** for N = 25 or 60. Each tick stamps one job, so once more than
+    `RETRY_COOLDOWN` (20) unreachable jobs are queued, the first ones come off cooldown before the
+    loop reaches the reachable job.
+  - **B, a budget per dwarf** (Wolf's choice): claimed on the first tick (tick 100) for all three N.
+    The release time of one tick on this fixture (about 55k nodes) is 25 ms, against 22 ms on main.
+    The worst-case ceiling rises from 50k nodes per tick to (idle dwarves) × 50k, about 110 ms here.
+    Of the sim-core suite, only the bug-pinning test above fails under B.
+  - **B needs one more rule, found while writing AC12 and verified.** If an over-budget dwarf's
+    sitting out still counts, the sealed dwarves' 12.3 cache hits stamp the reachable job in step with
+    the unreachable ones, and it is never claimed. So a job is stamped only when no dwarf of its trade
+    sat it out for budget. This is "B′"; the summed results above are unchanged under it.
+  - **A single area over 50k**, from five plates joined by ramp staircases (55,003 cells; skeleton
+    below), with one dwarf in it, four in sealed one-cell pockets, and 10 unreachable digs. After
+    one tick on `main`, every `retry_after` is 0 (`break 'jobs`). Under B every job is stamped 120.
+  - **What B′ leaves open (stays on #159):** a dwarf in one area over 50k nodes still exhausts on
+    each unreachable job, one per tick. With more than 20 of them ahead of a reachable job, that
+    dwarf never reaches it (prototype, N = 25: never claimed). Today's worlds cannot trigger this
+    (#159: DEFAULT_SEED's area is about 16k).
 
 ## Wire diff (standing AC 4)
 
@@ -96,24 +123,38 @@ criteria") bind this story and are not restated. The "Wire diff" section below s
    RED at creation was 0 of 25.
 10. At the seat, Wolf reads the trades in an attached tui's roster. In the gui he watches a dwarf carry
     a stone to a pile while channel marks are still being worked.
+11. #159: five idle miners stand in five separate areas, each under 50k nodes but summing past it.
+    With 25 unreachable digs queued ahead of one reachable dig, the reachable dig is claimed on the
+    first claim tick. RED on `main`: never claimed in 300 ticks. 25 is deliberately more than
+    `RETRY_COOLDOWN`, so the issue's stamp-and-stop fix fails this AC.
+12. Each dwarf has his own budget of `MAX_ASTAR_NODES` per tick. A dwarf whose search runs out of it
+    sits out the rest of that tick, and the other dwarves go on claiming. A job is put on cooldown
+    only when no dwarf of its trade sat it out. The fixture: one miner in the 55,003-cell area, four
+    in sealed pockets, 10 unreachable digs, then one reachable dig in his area.
+    - First tick (100): only dig 0, the one he exhausted on, is stamped (`120`). Every other job keeps
+      `retry_after == 0`.
+    - **He claims the reachable dig at tick 110**: one exhausted dig per tick, then the reachable one.
+    Verified on a prototype at creation. `main` never claims it (`break 'jobs`, every stamp 0).
+    Stamping the jobs he sat out never claims it (the pocket dwarves' 12.3 cache stamps it in step
+    with the unreachable ones). A fresh budget per search claims it at tick 100.
+    Mechanism, load-bearing: the per-dwarf budget is the cost bound Wolf ruled (2026-10-02).
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings (at creation).** Record his words and date here. Tasks 1-4 may run
-  before; **Task 5's roster format may not.**
-  1. The pool: fixed 2 miners / 2 haulers / 1 woodcutter, assigned by seed (recommended). The
-     alternative is one of each plus two random picks, which allows up to three idle woodcutters
-     before 12.7.
-  2. The roster format (mock, DEFAULT_SEED's real names; the trades shown are illustrative):
+- [x] **Task 0: Wolf's rulings, 2026-10-02, at creation.**
+  1. **Pool: fixed 2 miners / 2 haulers / 1 woodcutter, assigned by seed.** He chose this over one of
+     each plus two random picks.
+  2. **Roster: "Name + grey trade", approved as mocked.** The mock used DEFAULT_SEED's real names; the
+     trades in it are illustrative:
      `Nain miner  Ori hauler  Bifur woodcutter  Frar miner  Dori hauler`
-     - Name in tunic colour, as today; one space; the trade word in `STATUS_TEXT` grey; two spaces
-       between dwarves.
-     - The worst case for the 2/2/1 pool is 75 columns (6-letter names), so it fits 80.
-     - After 12.6 lets him make 3+ woodcutters it can reach 93, and the row truncates as it does
-       today.
-  3. #159 (the claim-time A* budget when components sum past 50k): left out of 12.4 (recommended).
-     Trades only reduce how many dwarves attempt a job, so they do not change the budget sum.
-  4. Old saves are refused, as ruled in 12.2 (Wolf, 2026-09-29): no migration.
+     - The name stays in tunic colour, then one space, then the trade word in full in `STATUS_TEXT`
+       grey. Two spaces separate dwarves.
+     - The 2/2/1 worst case is 75 columns. Once 12.6 allows 3+ woodcutters the row can reach 93, and
+       it truncates as it does today.
+  3. **#159: FOLD IT IN.** The fix shape, chosen from two measured prototypes, is **B: a budget per
+     dwarf** (not the issue's stamp-and-stop; not "B, and close #159"). So #159 stays open for the
+     single-area residual. B′ (the sat-out rule in "Found at creation") is the verified form of B.
+  4. **Old saves are refused, with no migration**, as ruled in 12.2.
 - [ ] **Task 1: sim-core profession (AC1, AC6).**
   - [ ] `lib.rs`, beside `Identity`:
         `#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)] pub enum Profession { Miner, Hauler, Woodcutter }`.
@@ -152,14 +193,39 @@ criteria") bind this story and are not restated. The "Wire diff" section below s
         - **Do this BEFORE `attempted = true` (`:493`) and before the component check (`:495`).**
           After it, every idle miner would stamp a 20-tick `retry_after` on each haul it skips, and
           hauls would lag a whole cooldown behind a free hauler (AC3).
-  - [ ] Rewrite the AD-12 comment (`:418-420`) to say claiming filters by trade.
+  - [ ] Rewrite the AD-12 comment (`:418-420`). It says "one shared node budget"; it must now say
+        claiming filters by trade and spends one budget per dwarf (Task 2b).
   - [ ] Amend AD-12 in `planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md:194`
         under the "Amended YYYY-MM-DD:" convention AD-10 uses (`:168`). The amendment says:
         - claiming considers a dwarf only for jobs whose trade (`trade(JobKind)`) is its profession;
         - FIFO and id order hold within a trade;
         - "Job-kind stories add variants and execution systems — never claiming logic" now reads
           "…their variant, its execution and its `trade` arm — never a second claiming system".
-- [ ] **Task 3: sim tests (AC2-AC5).** Existing first:
+- [ ] **Task 2b: #159, a budget per dwarf (AC11, AC12). RED first:** write both tests (Task 3) before
+  this change, run them, and record the failures in the Debug Log. AC11 expects `None` and AC12
+  expects every stamp at 0 (M2-27).
+  - [ ] In `claim_jobs`:
+        - replace `let mut astar_nodes_remaining = MAX_ASTAR_NODES;` (`:449`) with
+          `let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];`, indexed like the sorted `dwarves`;
+        - delete the per-job `if astar_nodes_remaining == 0 { break; }` (`:459-461`);
+        - iterate the dwarves with `enumerate()` and pass `&mut budgets[slot]` to both
+          `astar_with_budget` calls (`:503-509`, `:521-527`);
+        - change both `(None, true, _) => break 'jobs` arms (`:515`, `:533`) to `continue`.
+  - [ ] **The sat-out rule.** Add `let mut sat_out = false;` per job. Inside the eligible-dwarf branch
+        (after the trade filter and the reaction-delay check), and BEFORE `attempted = true`:
+        `if budgets[slot] == 0 { sat_out = true; continue; }`. The stamp at `:547` becomes
+        `if attempted && !assigned && !sat_out`.
+        - A dwarf that exhausts DURING a search did attempt the job, so that job IS stamped. Without
+          that, he would re-exhaust on the same job every tick.
+  - [ ] Rewrite the `// NOTE:` at `:450-454`:
+        - the bound is now (idle dwarves) × `MAX_ASTAR_NODES` per tick;
+        - the residual is one area over the budget with more than `RETRY_COOLDOWN` unreachable jobs
+          ahead of a reachable one (#159).
+  - [ ] **Replace** `claim_jobs_bounds_aggregate_astar_expansions_per_tick` (`lib.rs:3210`). It pins
+        #159's broken shape: its first assert IS the bug. Its five-plate fixture becomes AC11's test.
+        Re-point mutation row `3-2-the-dig.sh:938` ("each claim search gets a fresh node budget") to
+        AC12's test, which kills that sabotage at tick 100 vs 110.
+- [ ] **Task 3: sim tests (AC2-AC5, AC11, AC12).** Existing first:
   - [ ] Fix the three unit tests named in "Found at creation". Add a `set_profession(world, id, p)`
         helper in the `tests` mod; in-crate tests may `insert` the component directly. Give the
         expected claimant the right trade, and keep each test's assertion as it is. **No public
@@ -169,6 +235,14 @@ criteria") bind this story and are not restated. The "Wire diff" section below s
           and one free hauler. The miner holds dig 1 and the hauler holds haul 0.
         - `a_job_with_no_free_dwarf_of_its_trade_gets_no_retry_stamp`: only miners are free, past the
           reaction delay, and a haul is queued. After the step, its `retry_after` is still 0.
+        - `a_reachable_job_behind_unreachable_ones_is_claimed_when_areas_sum_past_the_budget` (AC11):
+          the five-plate fixture of the test it replaces, all five dwarves `Miner`, 25 unreachable
+          digs, then one reachable dig on plate 4 at `(50,50,9)`. Run `claim_jobs` alone from tick
+          100; the reachable dig is held at tick 100.
+        - `a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on` (AC12): the joined-plates fixture
+          (skeleton below), all five `Miner`, 10 unreachable digs, then the reachable dig at
+          `(5,5,1)`. Assert the tick-100 stamps (`[120, 0, …, 0]`, 11 jobs) and the claim at exactly
+          tick 110.
   - [ ] New scenario tests (`tests/scenario.rs`), skeleton below:
         - `hauling_starts_while_the_dig_backlog_is_still_queued` (AC4);
         - `each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders` (AC5): the same world, run
@@ -214,9 +288,21 @@ criteria") bind this story and are not restated. The "Wire diff" section below s
         5. the pool has no hauler → the 64-seed test;
         6. `from_save` ignores the saved profession → `save_load_then_tick_matches_never_saved`;
         7. the bridge sends `profession: None` → `save_then_load_rewinds_every_client`;
-        8. the roster drops the trade word → the new client test.
+        8. the roster drops the trade word → the new client test;
+        9. exhaustion `continue` → `break 'jobs` (`main`'s shape) → AC11's test (it is never claimed);
+        10. one shared budget again (`budgets[slot]` → a single counter) → AC11's test;
+        11. stamp-and-stop (the issue's candidate) → AC11's test (25 > 20);
+        12. the sat-out rule dropped (`&& !sat_out` removed) → AC12's test (never claimed).
+        A fresh budget per search is `3-2-the-dig.sh:938`'s row, re-pointed to AC12's test (claimed
+        at tick 100 instead of 110).
         Put each killing assertion where only its mutation reaches it ([[strengthened-test-needs-remutation]]).
   - [ ] Re-point any older mutation row the change breaks (12.2 re-pointed four tables), and list them.
+        `3-2-the-dig.sh:938` is known (Task 2b). Check 12-3.sh's rows too; they sabotage the
+        component cache that `sat_out` sits beside.
+  - [ ] Comment on #159: the measured cause, fix B′, the AC11/AC12 tests, and the residual that stays
+        open. Retitle it to the residual: "A dwarf in one walkable area over MAX_ASTAR_NODES starves a
+        reachable job behind more than RETRY_COOLDOWN unreachable ones". The PR body says
+        `Refs #159`, never `Closes`.
 - [ ] **Task 7: the live recipe and the seat (AC9, AC10), then the full gate.**
   - [ ] Run the Verification recipe on the branch, GREEN then the deliberate RED, and record both
         outputs in the Debug Log.
@@ -255,13 +341,33 @@ let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
 // step (tick guard 5000) until world.items() has one on `zones`; then assert designations().len() > 5
 ```
 
+### Joined-plates skeleton (Task 3, AC12; verified at creation, the area is 55,003 cells)
+
+```rust
+// In-crate (lib.rs tests mod). Five 110x100 plates at z = 1,3,5,7,9 as in the replaced test, then a
+// ramp staircase at row y=99 joins plate z to plate z+2. A move up needs a Ramp under the LOWER cell.
+let idx = |x: i32, y: i32, z: i32| super::worldgen::index(dims, x as u32, y as u32, z as u32);
+for k in 0..4_i32 {
+    let z = 1 + 2 * k;
+    tiles[idx(108, 99, z - 1)] = Tile::Ramp(Material::Stone); // under A=(108,99,z)
+    tiles[idx(109, 99, z + 1)] = Tile::Empty;                 // B=(109,99,z+1), carved
+    tiles[idx(109, 99, z)] = Tile::Ramp(Material::Stone);     // B's floor, under the lower of B->C
+    tiles[idx(110, 99, z + 2)] = Tile::Empty;                 // C=(110,99,z+2), on the next plate
+}
+// Four one-cell pockets for dwarves 1-4: (120|122|124|126, 120, 20) Empty; dwarf 0 at (0,0,1).
+// Unreachable digs as the replaced test: work cell (3+2j, 2, 20) Empty, target (2+2j, 2, 20).
+// Reachable dig: tiles[idx(5, 5, 1)] = Solid(Stone), job target (5,5,1), id = unreachable count.
+// Run `claim_jobs` alone, ticks 100.. ; read world.jobs() retry_after after tick 100.
+```
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
 
 - No set-profession command, setter or gui UI (12.6). No `Cut` job or woodcutter work (12.7).
 - No second claiming system or per-trade pass. One loop, one filter (AD-12).
-- Do not touch #159's budget logic, 12.3's component cache, `reaction_delay` or `RETRY_COOLDOWN`.
+- Do not change 12.3's component cache, `reaction_delay`, `RETRY_COOLDOWN` or `MAX_ASTAR_NODES`.
+  No cross-tick caching of searches (AD-5). The #159 residual stays open.
 - No profession glyph colour in the tui (the `☻` stays in tunic colour, 12.2 Task 9). No gui display:
   the gui only gains `profession: None` in its literals and passes the field through the mirror.
 - No load-time trade validation, and no migration of old saves.
@@ -286,6 +392,13 @@ let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
 - **A loaded dwarf may hold an off-trade job** (a hand-written save). It finishes the job, because
   `execute_jobs` never reads the trade. 12.6 owns release-on-reassign.
 - **Pick test dwarves by `professions()`, never by index.** Seeds assign trades in different orders.
+- **Each dwarf's budget is HIS, and sitting out is not attempting.** An exhaustion mid-search stamps
+  the job, so he does not re-exhaust on it every tick. Sitting out stamps nothing, so a reachable job
+  is not put on cooldown in step with the unreachable ones. Both halves have a mutation row.
+- **The per-tick cost ceiling is now (idle dwarves) × 50k nodes**, about 110 ms of A* on the devpod.
+  It is reachable only once digging opens five huge separate areas. Wolf ruled it (2026-10-02).
+- **The trade filter, then the budget check, then `attempted`.** A sat-out dwarf of the wrong trade
+  must not block a stamp, so the trade filter comes first.
 
 ### Verification
 
@@ -314,6 +427,13 @@ Roster (after Task 5): `./target/debug/tui 7530 --frames 1 --z 9 | sed 's/\x1b\[
 The first of the three rows must show five names, each followed by a trade word. RED on `f4d9ba5`:
 the row holds names only.
 
+#159 has no live instrument. Today's worlds cannot reach it: DEFAULT_SEED's walkable area is about
+16k nodes, and the trigger needs more than 50k. The fixtures are its evidence:
+`cargo test -p sim-core --lib -- a_reachable_job_behind a_dwarf_over_his_budget`.
+- RED, observed on prototypes at creation: AC11 `None` at N = 25; AC12 stamps all 0.
+- GREEN: AC11 claimed at tick 100; AC12 `[120, 0, …]`, then claimed at tick 110.
+- Mutation rows 9-12 are each fixture's deliberate RED.
+
 ### Project Structure Notes
 
 - `crates/sim-core/src/{lib.rs,save.rs}`, `tests/{worldgen,save_load,scenario}.rs`: UPDATE
@@ -324,6 +444,7 @@ the row holds names only.
 - `crates/gui/{src,tests}/*`: UPDATE (`Entity` literals only)
 - `planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md` (AD-12), `README.md`: UPDATE
 - `_bmad-output/implementation-artifacts/mutations/12-4.sh`, `12-4-signoff/vehicle-card.md`: NEW
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` (row `:938` re-pointed): UPDATE
 - `12-4-signoff/first_delivery.py`: created at story creation
 
 ### References
@@ -359,4 +480,5 @@ the row holds names only.
 
 | Date | Change |
 | --- | --- |
+| 2026-10-02 | Task 0 ruled by Wolf: 2M/2H/1W pool, the grey-trade roster, old saves refused, and #159 FOLDED IN with fix B (a budget per dwarf). #159 reproduced on `main` (never claimed at N = 10/25/60). Prototypes measured A (fails N > 20) and B. B's sat-out rule was found while writing AC12 and verified (claim at tick 110; sabotages give never / tick 100). AC11, AC12 and Task 2b added. |
 | 2026-10-02 | Story created on `f4d9ba5`. RED reproduced in the sim (seed 42: 0 marks left at the first delivery) and on the live daemon (`first_delivery.py`: 0 of 25). A throwaway prototype went GREEN (12 marks left in the sim, 19 of 25 live) and mapped the fixture fallout. |

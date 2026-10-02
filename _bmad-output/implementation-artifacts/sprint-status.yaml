@@ -2513,7 +2513,8 @@ development_status:
   #   Created 2026-10-02 on f4d9ba5. RED REPRODUCED: sim probe (seed 42, 20 reachable digs) first delivery with 0
   #     marks left; live 12-4-signoff/first_delivery.py (25 channel marks) 0 of 25 at tick 299. A wall dig block
   #     does NOT reproduce (retry cooldowns free the dwarves). Throwaway prototype GREEN: 12 left / 19 of 25.
-  #     Open for Wolf (Task 0): 2M/2H/1W pool, roster format, #159 left out, old saves refused.
+  #     Task 0 RULED 2026-10-02 (Wolf): 2M/2H/1W pool; roster `Name trade` (grey); old saves refused; #159 FOLDED IN
+  #     with fix B (budget per dwarf) + sat-out rule, both prototyped; single-area residual stays on #159 (Refs, not Closes).
   12-5-dwarves-at-work-dig-and-haul: backlog
   12-6-wolf-gives-them-their-trades: backlog
   12-7-timber: backlog
