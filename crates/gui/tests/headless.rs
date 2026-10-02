@@ -193,6 +193,7 @@ fn dwarf(id: u32, pos: [i32; 3]) -> Entity {
         state: JobState::Idle,
         light: None,
         identity: None,
+        profession: None,
     }
 }
 
@@ -204,6 +205,7 @@ fn lantern_dwarf(id: u32, pos: [i32; 3]) -> Entity {
         state: JobState::Idle,
         light: Some(protocol::LightKind::Lantern),
         identity: None,
+        profession: None,
     }
 }
 
@@ -1276,6 +1278,7 @@ fn the_floor_drop_does_not_move_the_cube_kinds() {
             state: JobState::Idle,
             light: None,
             identity: None,
+            profession: None,
         }],
     ));
     app.update();
@@ -1475,6 +1478,7 @@ fn production_drives_the_flicker_from_elapsed_time() {
         state: JobState::Idle,
         light: Some(protocol::LightKind::Torch),
         identity: None,
+        profession: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1500,6 +1504,7 @@ fn flickered_light_survives_a_later_production_reconciliation() {
         state: JobState::Idle,
         light: Some(protocol::LightKind::Torch),
         identity: None,
+        profession: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1538,6 +1543,7 @@ fn campfire_light_casts_shadows_and_is_not_rewritten_by_a_later_reconciliation()
         state: JobState::Idle,
         light: Some(protocol::LightKind::Campfire),
         identity: None,
+        profession: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![campfire]));
     app.update();
@@ -1604,6 +1610,7 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         state: JobState::Idle,
         light: None,
         identity: None,
+        profession: None,
     };
     let dwarf_one = Entity {
         id: 1,
@@ -1612,6 +1619,7 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         state: JobState::Idle,
         light: None,
         identity: None,
+        profession: None,
     };
     let mut app = headless_app(snapshot(
         vec![Tile::Solid(Material::Ice), Tile::Empty],
@@ -1799,6 +1807,7 @@ fn despawning_world_projection_then_reconciling_recreates_the_same_scene() {
         state: JobState::Idle,
         light: None,
         identity: None,
+        profession: None,
     };
     // AC11 says "marks included", so the snapshot must actually carry marks — reviewed
     // 2026-08-21, this test used an empty designation and zone list, so every assertion in it was
@@ -1900,6 +1909,7 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             state: JobState::Idle,
             light: Some(protocol::LightKind::Torch),
             identity: None,
+            profession: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -1908,6 +1918,7 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             state: JobState::Idle,
             light: Some(protocol::LightKind::Campfire),
             identity: None,
+            profession: None,
         }))
         .chain(std::iter::once(Entity {
             id: 5,
@@ -1916,6 +1927,7 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             state: JobState::Idle,
             light: None,
             identity: None,
+            profession: None,
         }))
         .collect();
     let mut app = headless_app(snapshot_with_dims(
@@ -1955,6 +1967,7 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             state: JobState::Idle,
             light: Some(protocol::LightKind::Torch),
             identity: None,
+            profession: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -1963,6 +1976,7 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             state: JobState::Idle,
             light: Some(protocol::LightKind::Campfire),
             identity: None,
+            profession: None,
         }))
         .chain((5..10).map(|id| lantern_dwarf(id, [60 + id as i32 - 5, 65, 9])))
         .collect();

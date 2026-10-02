@@ -374,6 +374,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -427,6 +428,7 @@ mod tests {
                 state: JobState::Walk,
                 light: None,
                 identity: None,
+                profession: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -481,6 +483,7 @@ mod tests {
             state: JobState::Idle,
             light: None,
             identity: None,
+            profession: None,
         });
         initial.entities.push(Entity {
             id: 3,
@@ -489,6 +492,7 @@ mod tests {
             state: JobState::Idle,
             light: None,
             identity: None,
+            profession: None,
         });
         let mut mirror = Mirror::from_snapshot(initial).unwrap();
 
@@ -504,6 +508,7 @@ mod tests {
                     state: JobState::Walk,
                     light: None,
                     identity: None,
+                    profession: None,
                 },
                 Entity {
                     id: 2,
@@ -512,6 +517,7 @@ mod tests {
                     state: JobState::Idle,
                     light: None,
                     identity: None,
+                    profession: None,
                 },
                 Entity {
                     id: 8,
@@ -520,6 +526,7 @@ mod tests {
                     state: JobState::Idle,
                     light: None,
                     identity: None,
+                    profession: None,
                 },
             ],
             designations: Vec::new(),

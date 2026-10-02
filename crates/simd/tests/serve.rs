@@ -540,6 +540,22 @@ fn dwarf_identities(snapshot: &protocol::Snapshot) -> Vec<(u32, protocol::Identi
     identities
 }
 
+fn dwarf_professions(snapshot: &protocol::Snapshot) -> Vec<(u32, protocol::Profession)> {
+    let mut professions: Vec<_> = snapshot
+        .entities
+        .iter()
+        .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        .map(|entity| {
+            (
+                entity.id,
+                entity.profession.expect("every dwarf carries a profession"),
+            )
+        })
+        .collect();
+    professions.sort_by_key(|(id, _)| *id);
+    professions
+}
+
 #[test]
 fn save_then_load_rewinds_every_client() {
     let daemon = Daemon::spawn();
@@ -569,6 +585,19 @@ fn save_then_load_rewinds_every_client() {
         5
     );
 
+    let connect_professions = dwarf_professions(&connect_snapshot);
+    assert_eq!(connect_professions.len(), 5);
+    for trade in [
+        protocol::Profession::Miner,
+        protocol::Profession::Hauler,
+        protocol::Profession::Woodcutter,
+    ] {
+        assert!(
+            connect_professions.iter().any(|(_, p)| *p == trade),
+            "no {trade:?} among {connect_professions:?}"
+        );
+    }
+
     send_literal(&mut first_writer, b"{\"type\":\"save\"}\n");
     let saved_tick = parse_saved_tick(&daemon.next_log());
 
@@ -592,6 +621,8 @@ fn save_then_load_rewinds_every_client() {
     assert_eq!(second_loaded.tick, saved_tick);
     assert_eq!(dwarf_identities(&first_loaded), connect_identities);
     assert_eq!(dwarf_identities(&second_loaded), connect_identities);
+    assert_eq!(dwarf_professions(&first_loaded), connect_professions);
+    assert_eq!(dwarf_professions(&second_loaded), connect_professions);
     assert!(first_loaded.tick < first_tick);
     assert!(second_loaded.tick < second_tick);
 }
@@ -649,6 +680,47 @@ fn undecodable_save_is_logged_and_the_daemon_keeps_ticking() {
     assert!(
         log.contains("could not decode frostvein.save"),
         "unexpected corrupt-save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
+}
+
+#[test]
+fn save_without_a_profession_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let mut value = serde_json::to_value(&state).expect("encode save fixture");
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(value.clone()).is_ok(),
+        "positive control: the save with professions must decode"
+    );
+    let dwarves = value["dwarves"].as_array_mut().expect("dwarves array");
+    assert_eq!(dwarves.len(), 5);
+    for dwarf in dwarves {
+        let removed = dwarf.as_object_mut().unwrap().remove("profession");
+        assert!(
+            removed.is_some(),
+            "the save must carry profession per dwarf"
+        );
+    }
+    assert!(serde_json::from_value::<sim_core::SaveState>(value.clone()).is_err());
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&value).expect("encode profession-less save fixture"),
+    )
+    .expect("write profession-less save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("could not decode frostvein.save"),
+        "unexpected profession-less save log: {log}"
     );
 
     let first = read_delta(&mut reader).tick;

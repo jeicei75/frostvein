@@ -2059,6 +2059,7 @@ mod tests {
                 state: JobState::Idle,
                 light: Some(LightKind::Lantern),
                 identity: None,
+                profession: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

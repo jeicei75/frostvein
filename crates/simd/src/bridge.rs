@@ -127,11 +127,13 @@ fn emitter_entity(
         state: protocol::JobState::Idle,
         light: Some(light_kind(light)),
         identity: None,
+        profession: None,
     }
 }
 
 fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Entity> {
     let identities = world.identities();
+    let professions = world.professions();
     world
         .dwarves()
         .into_iter()
@@ -148,6 +150,10 @@ fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Ent
                     name: dwarf_name(identity.name),
                     colour: dwarf_colour(identity.colour),
                 }),
+            profession: professions
+                .iter()
+                .find(|(profession_id, _)| *profession_id == id)
+                .map(|(_, profession)| profession_out(*profession)),
         })
 }
 
@@ -195,6 +201,14 @@ fn dwarf_colour(v: sim_core::DwarfColour) -> protocol::DwarfColour {
         sim_core::DwarfColour::Green => protocol::DwarfColour::Green,
         sim_core::DwarfColour::Blue => protocol::DwarfColour::Blue,
         sim_core::DwarfColour::Purple => protocol::DwarfColour::Purple,
+    }
+}
+
+fn profession_out(v: sim_core::Profession) -> protocol::Profession {
+    match v {
+        sim_core::Profession::Miner => protocol::Profession::Miner,
+        sim_core::Profession::Hauler => protocol::Profession::Hauler,
+        sim_core::Profession::Woodcutter => protocol::Profession::Woodcutter,
     }
 }
 
@@ -524,6 +538,7 @@ mod tests {
                     sim_core::LightKind::Lantern => unreachable!("lanterns are not spawned"),
                 }),
                 identity: None,
+                profession: None,
             })
             .collect();
 
