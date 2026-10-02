@@ -136,3 +136,17 @@ filt = '            if trade(job.kind) != **profession {\n'
 assert s.count(filt) == 1
 p.write_text(s.replace(filt, budget + filt))
 PY
+
+# Row 15 (mutD, 12.4 review run 2): a dwarf with no budget left leaves the dwarf loop, so a later
+# miner never tries a miner job the exhausted lowest-id miner sits out.
+mutation "sat out leaves the dwarf loop" sim-core a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = """                if budgets[slot] == 0 {
+                    sat_out = true;
+                    continue;
+                }
+"""
+assert s.count(old) == 1
+p.write_text(s.replace(old, old.replace('continue;', 'break;')))
+PY

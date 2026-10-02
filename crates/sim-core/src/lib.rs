@@ -3600,6 +3600,8 @@ mod tests {
     // miner 1's sealed pocket: miner 1 must claim it on the same tick (no stamp-and-stop, no leaving
     // the dwarf loop). Haul 1 follows, unreachable for hauler 2 in his own pocket: miner 0's empty
     // budget must not mark it sat out, because the trade filter comes before the budget check.
+    // Dig 2 comes after both, beside miner 3's pocket: miner 0 sits it out with no budget left, and
+    // miner 3 must still claim it.
     #[test]
     fn a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp() {
         let mut world = World::generate(42, Dims::DEFAULT);
@@ -3632,6 +3634,8 @@ mod tests {
             created_tick: 0,
             retry_after: 0,
         }));
+        // Dig 2's only work position is miner 3's pocket.
+        insert_dig(&mut world, 2, pocket(127, 120));
         world.ecs.resource_mut::<super::Tick>().0 = 100;
         let mut schedule = bevy_ecs::schedule::Schedule::default();
         schedule.add_systems(super::claim_jobs);
@@ -3644,10 +3648,15 @@ mod tests {
             "miner 1 claims the dig miner 0 exhausted on, on the same tick"
         );
         assert!(world.claims()[0].1.is_none());
+        assert_eq!(
+            world.claims()[3],
+            (super::Id(3), Some(JobId(2))),
+            "miner 3 claims the dig miner 0 sat out with no budget left, on the same tick"
+        );
         let stamps: Vec<u64> = world.jobs().iter().map(|job| job.retry_after).collect();
         assert_eq!(
             stamps,
-            [0, 120],
+            [0, 120, 0],
             "the claimed dig is unstamped; the unreachable haul is stamped despite miner 0's empty budget"
         );
     }
