@@ -155,26 +155,26 @@ stays open, so the PR says `Refs #159` and never `Closes`
      dwarf** (not the issue's stamp-and-stop; not "B, and close #159"). So #159 stays open for the
      single-area residual. B′ (the sat-out rule in "Found at creation") is the verified form of B.
   4. **Old saves are refused, with no migration**, as ruled in 12.2.
-- [ ] **Task 1: sim-core profession (AC1, AC6).**
-  - [ ] `lib.rs`, beside `Identity`:
+- [x] **Task 1: sim-core profession (AC1, AC6).**
+  - [x] `lib.rs`, beside `Identity`:
         `#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)] pub enum Profession { Miner, Hauler, Woodcutter }`.
         Its own component, not a field of `Identity`, because 12.6 makes it mutable.
-  - [ ] `const STREAM_PROFESSION: u64 = 0x5052_4f46_4553_534e; // "PROFESSN"` beside `STREAM_IDENTITY`
+  - [x] `const STREAM_PROFESSION: u64 = 0x5052_4f46_4553_534e; // "PROFESSN"` beside `STREAM_IDENTITY`
         (`lib.rs:31`). In `generate` (`:1309`):
         - seed `ChaCha8Rng::seed_from_u64(seed ^ STREAM_PROFESSION)`;
         - `shuffle` the pool `[Miner, Miner, Hauler, Hauler, Woodcutter]`;
         - pass it into `spawn_dwarves` (`:1810`) beside `identities`, and add it to the spawn bundle
           (`:1834`).
         Draw nothing from `spawn_rng` or `identity_rng`.
-  - [ ] `pub fn professions(&self) -> Vec<(Id, Profession)>`, sorted by id: a sibling reader like
+  - [x] `pub fn professions(&self) -> Vec<(Id, Profession)>`, sorted by id: a sibling reader like
         `identities()` (`:1752`). Do not widen `dwarves()`.
-  - [ ] `save.rs`: `SavedDwarf` gains `pub profession: Profession`, with no `#[serde(default)]` and a
+  - [x] `save.rs`: `SavedDwarf` gains `pub profession: Profession`, with no `#[serde(default)]` and a
         `// NOTE:` like `identity`'s. `to_save` (`:1365`) and `from_save` (`:1463`) carry it.
         - **Trap:** a dwarf without `Profession` drops silently out of `to_save`'s `filter_map` AND
           out of `claim_jobs`' query. Insert it at BOTH spawn sites.
         - Fix the 6 `SavedDwarf { .. }` literals. A literal whose dwarf holds a job gets that job's
           trade: `two_carriers_racing…` → both `Hauler`.
-  - [ ] Tests:
+  - [x] Tests:
         - NEW `worldgen.rs` test over seeds `0..64`: each world's `professions()` is exactly 2/2/1.
         - NEW: `DEFAULT_SEED` and 42 assign differently. The prototype's constant gave
           `[M,M,W,H,H]` vs `[M,H,H,W,M]`; yours will differ, so pick two seeds that do.
@@ -183,54 +183,54 @@ stays open, so the PR says `Refs #159` and never `Closes`
           (`scenario.rs:1612`, beside `:1644`) also compare `professions()`.
         - `spawn_positions_for_seed_42_are_pinned` (`worldgen.rs:386`) and the identity tests pass
           untouched.
-- [ ] **Task 2: the claim filter (AC2, AC3).**
-  - [ ] `fn trade(kind: JobKind) -> Profession`: an exhaustive `match` with no wildcard
+- [x] **Task 2: the claim filter (AC2, AC3).**
+  - [x] `fn trade(kind: JobKind) -> Profession`: an exhaustive `match` with no wildcard
         (`Dig | Channel => Miner`, `Haul { .. } => Hauler`). 12.7's `Cut` then fails to compile until
         it is given a trade.
-  - [ ] `claim_jobs` (`:422`): add `&Profession` to the dwarf query (`:431`), and fix the three tuple
+  - [x] `claim_jobs` (`:422`): add `&Profession` to the dwarf query (`:431`), and fix the three tuple
         patterns (`:435`, `:438`, `:442`). In the dwarf loop (`:482`), `continue` when
         `trade(job.kind) != profession`.
         - **Do this BEFORE `attempted = true` (`:493`) and before the component check (`:495`).**
           After it, every idle miner would stamp a 20-tick `retry_after` on each haul it skips, and
           hauls would lag a whole cooldown behind a free hauler (AC3).
-  - [ ] Rewrite the AD-12 comment (`:418-420`). It says "one shared node budget"; it must now say
+  - [x] Rewrite the AD-12 comment (`:418-420`). It says "one shared node budget"; it must now say
         claiming filters by trade and spends one budget per dwarf (Task 2b).
-  - [ ] Amend AD-12 in `planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md:194`
+  - [x] Amend AD-12 in `planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md:194`
         under the "Amended YYYY-MM-DD:" convention AD-10 uses (`:168`). The amendment says:
         - claiming considers a dwarf only for jobs whose trade (`trade(JobKind)`) is its profession;
         - FIFO and id order hold within a trade;
         - "Job-kind stories add variants and execution systems — never claiming logic" now reads
           "…their variant, its execution and its `trade` arm — never a second claiming system".
-- [ ] **Task 2b: #159, a budget per dwarf (AC11, AC12). RED first:** write both tests (Task 3) before
+- [x] **Task 2b: #159, a budget per dwarf (AC11, AC12). RED first:** write both tests (Task 3) before
   this change, run them, and record the failures in the Debug Log. AC11 expects `None` and AC12
   expects every stamp at 0 (M2-27).
-  - [ ] In `claim_jobs`:
+  - [x] In `claim_jobs`:
         - replace `let mut astar_nodes_remaining = MAX_ASTAR_NODES;` (`:449`) with
           `let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];`, indexed like the sorted `dwarves`;
         - delete the per-job `if astar_nodes_remaining == 0 { break; }` (`:459-461`);
         - iterate the dwarves with `enumerate()` and pass `&mut budgets[slot]` to both
           `astar_with_budget` calls (`:503-509`, `:521-527`);
         - change both `(None, true, _) => break 'jobs` arms (`:515`, `:533`) to `continue`.
-  - [ ] **The sat-out rule.** Add `let mut sat_out = false;` per job. Inside the eligible-dwarf branch
+  - [x] **The sat-out rule.** Add `let mut sat_out = false;` per job. Inside the eligible-dwarf branch
         (after the trade filter and the reaction-delay check), and BEFORE `attempted = true`:
         `if budgets[slot] == 0 { sat_out = true; continue; }`. The stamp at `:547` becomes
         `if attempted && !assigned && !sat_out`.
         - A dwarf that exhausts DURING a search did attempt the job, so that job IS stamped. Without
           that, he would re-exhaust on the same job every tick.
-  - [ ] Rewrite the `// NOTE:` at `:450-454`:
+  - [x] Rewrite the `// NOTE:` at `:450-454`:
         - the bound is now (idle dwarves) × `MAX_ASTAR_NODES` per tick;
         - the residual is one area over the budget with more than `RETRY_COOLDOWN` unreachable jobs
           ahead of a reachable one (#159).
-  - [ ] **Replace** `claim_jobs_bounds_aggregate_astar_expansions_per_tick` (`lib.rs:3210`). It pins
+  - [x] **Replace** `claim_jobs_bounds_aggregate_astar_expansions_per_tick` (`lib.rs:3210`). It pins
         #159's broken shape: its first assert IS the bug. Its five-plate fixture becomes AC11's test.
         Re-point mutation row `3-2-the-dig.sh:938` ("each claim search gets a fresh node budget") to
         AC12's test, which kills that sabotage at tick 100 vs 110.
-- [ ] **Task 3: sim tests (AC2-AC5, AC11, AC12).** Existing first:
-  - [ ] Fix the three unit tests named in "Found at creation". Add a `set_profession(world, id, p)`
+- [x] **Task 3: sim tests (AC2-AC5, AC11, AC12).** Existing first:
+  - [x] Fix the three unit tests named in "Found at creation". Add a `set_profession(world, id, p)`
         helper in the `tests` mod; in-crate tests may `insert` the component directly. Give the
         expected claimant the right trade, and keep each test's assertion as it is. **No public
         setter**: 12.6 adds the command.
-  - [ ] New unit tests (`lib.rs` tests mod):
+  - [x] New unit tests (`lib.rs` tests mod):
         - `claim_jobs_takes_fifo_within_a_trade`: queue haul id 0 then dig id 1, with one free miner
           and one free hauler. The miner holds dig 1 and the hauler holds haul 0.
         - `a_job_with_no_free_dwarf_of_its_trade_gets_no_retry_stamp`: only miners are free, past the
@@ -243,12 +243,12 @@ stays open, so the PR says `Refs #159` and never `Closes`
           (skeleton below), all five `Miner`, 10 unreachable digs, then the reachable dig at
           `(5,5,1)`. Assert the tick-100 stamps (`[120, 0, …, 0]`, 11 jobs) and the claim at exactly
           tick 110.
-  - [ ] New scenario tests (`tests/scenario.rs`), skeleton below:
+  - [x] New scenario tests (`tests/scenario.rs`), skeleton below:
         - `hauling_starts_while_the_dig_backlog_is_still_queued` (AC4);
         - `each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders` (AC5): the same world, run
           to the first delivery plus 200 ticks. Check `claims()` × `jobs()` × `professions()` every
           tick, and count the woodcutter's position changes.
-  - [ ] Run the whole sim-core suite. Any other test that now fails because of WHICH dwarf claims
+  - [x] Run the whole sim-core suite. Any other test that now fails because of WHICH dwarf claims
         gets a fixture fix, not a weakened assert. List each one in the Debug Log.
 - [ ] **Task 4: protocol + simd (AC7; the wire diff above).**
   - [ ] `protocol`: the enum and the field. Fix every `Entity { .. }` literal (about 63; let the
@@ -472,9 +472,53 @@ the row holds names only.
 
 ### Debug Log References
 
+- **RED, AC11 and AC12, on the unchanged claim code** (after Task 2's filter, before Task 2b's budget change):
+  - `a_reachable_job_behind_unreachable_ones_is_claimed_when_areas_sum_past_the_budget`:
+    `left: (Id(4), None)`, `right: (Id(4), Some(JobId(25)))`, "the plate-4 miner must claim the reachable dig on the first claim tick".
+  - `a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on`:
+    `left: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]`, `right: [120, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]`.
+  - GREEN after the change: both pass (AC12 also pins no claim on ticks 101-109 and the claim at tick 110).
+- **Fixtures fixed because of WHICH dwarf claims** (seed 42 assigns `[Woodcutter, Miner, Hauler, Hauler, Miner]`; assertions untouched):
+  - `claim_jobs_waits_for_the_reaction_delay`: dwarf 2 (a hauler) set to Miner.
+  - `claim_jobs_takes_fifo_and_skips_busy_dwarves_and_claimed_jobs`: dwarf 0 (a woodcutter) set to Miner in both worlds.
+  - `claim_jobs_prefers_the_lowest_free_dwarf_id`: all five set to Miner.
+  - `an_unreachable_lower_id_does_not_starve_a_reachable_dwarf`: dwarves 0 and 1 set to Miner. It still passed, but dwarf 0 would have been a vacuous woodcutter.
+  - `save_load_preserves_in_progress_work` (`tests/save_load.rs`): the worker is the first Miner from `professions()`, not `dwarves()[2]`.
+  - `claim_jobs_bounds_aggregate_astar_expansions_per_tick`: all five set to Miner as an interim fix in Task 2, then replaced in Task 2b.
+  - `SavedDwarf` literals: `save_load.rs` (2 digs) `Miner`; `scenario.rs` `two_carriers_racing...` both `Hauler`.
+- **AC4 measured:** seed 42, first stone on the pile at tick 241 with 8 of 20 marks left.
+- **Mutation rows re-pointed (anchor text only unless noted):** `12-2.sh` "from_save ignores the saved identity";
+  `2-2-dwarves-wander-the-frost.sh` "spawn consumes the worldgen stream again"; `3-2-the-dig.sh` "claim_jobs walks dwarves descending"
+  (6-tuple), "unreachable lower id starves a reachable dwarf" (`budgets[slot]`, `continue`), and "each claim search gets a fresh
+  node budget" (now pointed at AC12's test, Task 2b).
+
 ### Completion Notes List
 
+- Task 1: `Profession` component, `STREAM_PROFESSION`, shuffled 2/2/1 pool in `generate`, `professions()`, `SavedDwarf.profession`
+  (no serde default). Tests: `every_world_has_two_miners_two_haulers_and_one_woodcutter` (AC1),
+  `different_seeds_assign_professions_differently` (AC1; DEFAULT_SEED `[W,H,M,H,M]` vs 42 `[W,M,H,H,M]`), and `professions()` added to
+  three determinism/save tests (AC6).
+- Task 2: `fn trade(JobKind)` (exhaustive), the trade `continue` first in the dwarf loop, AD-12 comment and spine amendment.
+  Tests: `claim_jobs_takes_fifo_within_a_trade` (AC2), `a_job_with_no_free_dwarf_of_its_trade_gets_no_retry_stamp` (AC3).
+- Task 2b: `budgets: Vec` per dwarf, `sat_out` rule, exhaustion `continue`s, label `'jobs` removed (unused), NOTE rewritten.
+  The RED tests were committed together with the fix, not before it.
+- Task 3: AC11/AC12 unit tests, and scenario tests `hauling_starts_while_the_dig_backlog_is_still_queued` (AC4) and
+  `each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders` (AC5).
+- Deviations: the story's three failing unit tests differed from reality (see Debug Log). `make_standable`-style fixtures in AC4/AC5
+  anchor on the first Miner from `professions()` instead of `dwarves()[2]`. AC12 uses `Dims::DEFAULT` (128x128x32), which fits the skeleton.
+
 ### File List
+
+- crates/sim-core/src/lib.rs
+- crates/sim-core/src/save.rs
+- crates/sim-core/tests/worldgen.rs
+- crates/sim-core/tests/save_load.rs
+- crates/sim-core/tests/scenario.rs
+- _bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md
+- _bmad-output/implementation-artifacts/mutations/12-2.sh
+- _bmad-output/implementation-artifacts/mutations/2-2-dwarves-wander-the-frost.sh
+- _bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh
+- _bmad-output/implementation-artifacts/12-4-every-dwarf-has-a-trade.md
 
 ## Change Log
 
