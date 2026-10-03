@@ -18,7 +18,9 @@
 //! of `APPROVED_PEAK` and `APPROVED_DOWNWARD_FLOOR`. Each names the measurement it was set from and
 //! the states it must separate.
 
-use std::io::{BufRead, BufReader};
+use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{Receiver, channel};
@@ -983,6 +985,170 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
     assert_ne!(
         above, below,
         "the line must change with the state it claims to report"
+    );
+}
+
+/// AC8: a miner logs `clip dig` and a hauler logs `clip carry`, each followed by `clip walk`, from
+/// the REAL daemon through the REAL gui binary. The deliberate RED is the bridge sending `job: None`.
+///
+/// The test's own client sends the three designation commands of `first_delivery.py` (a 4x7 channel
+/// block east of the fire, a 3x3 stockpile near it) at Normal speed -- the speed a player has, and
+/// the one where the dwarves still reach the work well inside the run -- and keeps its socket open
+/// and drained for the whole gui run, because the daemon stops simulating for nobody.
+///
+/// Who is a miner and who a hauler comes off the wire snapshot, never a hardcoded id.
+///
+/// THE EXIT STATUS IS NOT THE RESULT HERE. The capture's own range checks may make the gui exit
+/// non-zero (the exit was 0 in the measured run, but nothing here depends on it); the stderr lines
+/// are what is read.
+///
+/// N = 100, measured on this devpod (lavapipe, 2026-10-03, debug build, Normal speed): the client
+/// ran ~0.6 s/frame and a 100-frame run took ~60 s. Every required line (dig/walk for both miners,
+/// carry/walk for both haulers) was already present with `--frames 20` and even `--frames 1`: the
+/// run is bound by the capture waiting for its delivered-tick floor, not by the frame count, so the
+/// lines arrive early and N=100 is a wide margin. N is wall-clock-coupled to the daemon (ticks are
+/// delivered in real time), so a heavily loaded machine delivers fewer ticks per frame; the margin
+/// is what absorbs that, and the failure message prints every clip line seen so a miss is legible.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
+    const WORK_FRAMES: &str = "100";
+    let daemon = Daemon::spawn();
+    let stream = TcpStream::connect(("127.0.0.1", daemon.port)).expect("test client must connect");
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line).expect("a snapshot line");
+    let snapshot: protocol::Snapshot = serde_json::from_str(&line).expect("snapshot must parse");
+    let professions: BTreeMap<u32, protocol::Profession> = snapshot
+        .entities
+        .iter()
+        .filter(|e| e.kind == protocol::EntityKind::Dwarf)
+        .map(|e| (e.id, e.profession.expect("every dwarf has a profession")))
+        .collect();
+    let ids_of = |wanted| {
+        professions
+            .iter()
+            .filter(|(_, p)| **p == wanted)
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>()
+    };
+    let (miners, haulers) = (
+        ids_of(protocol::Profession::Miner),
+        ids_of(protocol::Profession::Hauler),
+    );
+    assert!(
+        !miners.is_empty() && !haulers.is_empty(),
+        "the crew needs a miner and a hauler: {professions:?}"
+    );
+
+    let camp = snapshot
+        .entities
+        .iter()
+        .find(|e| e.kind == protocol::EntityKind::Campfire)
+        .expect("the camp has a campfire")
+        .pos;
+    assert_eq!(
+        camp,
+        [64, 64, 9],
+        "the recipe is pinned to DEFAULT_SEED's camp"
+    );
+    let mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+    let [cx, cy, cz] = camp;
+    // The first fully standable 3x3 a few cells from the fire (first_delivery.py's search).
+    let (px, py) = (3..12)
+        .flat_map(|r| {
+            [
+                (cx + r, cy),
+                (cx - r - 2, cy),
+                (cx, cy + r),
+                (cx, cy - r - 2),
+            ]
+        })
+        .find(|&(px, py)| {
+            (px..px + 3)
+                .all(|x| (py..py + 3).all(|y| client_core::is_standable(&mirror, [x, y, cz])))
+        })
+        .expect("a 3x3 standable pile near the camp");
+    for command in [
+        r#"{"type":"designate","kind":"channel","rect":{"min":[65,61,9],"max":[68,67,9]}}"#
+            .to_string(),
+        format!(
+            r#"{{"type":"place_stockpile","rects":[{{"min":[{px},{py},{cz}],"max":[{},{},{cz}]}}]}}"#,
+            px + 2,
+            py + 2
+        ),
+        r#"{"type":"set_speed","speed":"normal"}"#.to_string(),
+    ] {
+        writeln!(writer, "{command}").expect("command must write");
+    }
+    writer.flush().expect("commands must flush");
+    // Drain the deltas so the daemon never blocks on a full socket while the gui runs.
+    let drain = std::thread::spawn(move || for _ in reader.lines().map_while(Result::ok) {});
+
+    let out = std::env::temp_dir().join(format!(
+        "frostvein-pixel-guard-{}-work-clips.png",
+        std::process::id()
+    ));
+    let result = Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg(daemon.port.to_string())
+        .args(["--headless", "--frames", WORK_FRAMES])
+        .args(["--capture", out.to_str().expect("a utf-8 scratch path")])
+        .stdout(Stdio::null())
+        .output()
+        .expect("the client must run");
+    let _ = std::fs::remove_file(&out);
+    drop(writer);
+    drop(daemon);
+    let _ = drain.join();
+
+    // `gui dwarf {id} clip {walk|dig|carry}`, in print order.
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    let clips: Vec<(u32, &str)> = stderr
+        .lines()
+        .filter_map(|l| {
+            let rest = l.strip_prefix("gui dwarf ")?;
+            let (id, clip) = rest.split_once(" clip ")?;
+            Some((id.parse().ok()?, clip.trim()))
+        })
+        .collect();
+    let lines_for = |id: u32| {
+        clips
+            .iter()
+            .filter(|(i, _)| *i == id)
+            .map(|(_, c)| *c)
+            .collect::<Vec<_>>()
+    };
+    // True when `first` is logged and a `walk` is logged after it.
+    let returns_to_walk = |id: u32, first: &str| {
+        let seen = lines_for(id);
+        seen.iter()
+            .position(|c| *c == first)
+            .is_some_and(|at| seen[at..].contains(&"walk"))
+    };
+    let counts = |ids: &[u32], clip: &str| {
+        ids.iter()
+            .map(|id| (*id, lines_for(*id).iter().filter(|c| **c == clip).count()))
+            .collect::<Vec<_>>()
+    };
+    println!(
+        "AC8 clip lines (gui exit {:?}): miners dig {:?} walk {:?}; haulers carry {:?} walk {:?}",
+        result.status.code(),
+        counts(&miners, "dig"),
+        counts(&miners, "walk"),
+        counts(&haulers, "carry"),
+        counts(&haulers, "walk"),
+    );
+    let miner = miners.iter().find(|id| returns_to_walk(**id, "dig"));
+    assert!(
+        miner.is_some(),
+        "no miner {miners:?} logged `clip dig` followed by `clip walk`; clip lines seen: {clips:?}"
+    );
+    let hauler = haulers.iter().find(|id| returns_to_walk(**id, "carry"));
+    assert!(
+        hauler.is_some(),
+        "no hauler {haulers:?} logged `clip carry` followed by `clip walk`; clip lines seen: {clips:?}"
     );
 }
 
