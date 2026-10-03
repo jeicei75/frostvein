@@ -82,3 +82,20 @@ old = '    let index = names.iter().position(|name| name == wanted)?;\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    let index = names.iter().position(|name| name == wanted).map(|_| 0)?;\n'))
 PY
+
+# Wolf at the seat, 2026-10-03: a dig is ten swings, DIG_WORK_TICKS 50; hauls keep WORK_TICKS 5.
+mutation "a dig takes a haul's WORK_TICKS again" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            JobKind::Dig | JobKind::Channel => DIG_WORK_TICKS,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            JobKind::Dig | JobKind::Channel => WORK_TICKS,\n'))
+PY
+
+mutation "a save taken mid-dig is refused again" simd a_save_taken_mid_dig_loads <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                if dwarf.work_progress > sim_core::DIG_WORK_TICKS {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                if dwarf.work_progress > sim_core::WORK_TICKS {\n'))
+PY

@@ -495,6 +495,35 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   2994 s). The new GLB moved no pixel guard, which is what Dev Notes predicted: boot frames hold
   no work, so they show no clip but Walk.
 
+- **Wolf at the seat, 2026-10-03 (Task 0.2 revisited):** "maybe it could dig longer one cell.. now it's
+  just one hit", then **"10 swings"**. Built as NEW `sim_core::DIG_WORK_TICKS = 50` (5 s at Normal)
+  for dig and channel only, selected by an exhaustive `match job.kind`. Hauler pick-up and drop keep
+  `WORK_TICKS = 5`; that is my reading of a dig-only ruling, stated to Wolf. The gui's
+  `WORK_SWING_TICKS` stays 5 and its phase wraps, so one run plays ten swings with no client change.
+  The daemon's save-load bound moved to `DIG_WORK_TICKS`; otherwise every save taken mid-dig is
+  refused.
+  - RED first: a new dig/channel run-length test failed `left: 5 right: 50`. It was then dropped as
+    a duplicate of the existing pins. `execute_jobs_walks_then_digs_for_exactly_five_work_ticks` was
+    renamed `…_dig_work_ticks`, along with its 9 rows in `3-2-the-dig.sh`. The channel-ramp test and
+    two pre-loaded-progress tests now use `DIG_WORK_TICKS`. The save_load fixture dwarf one tick
+    from finishing a dig now carries `DIG_WORK_TICKS`.
+  - The overflow serve test's expectation `exceeds 5` had kept passing only as a substring of
+    `exceeds 50`. It now says `exceeds 50`.
+  - NEW `simd` unit test `a_save_taken_mid_dig_loads`: a real DEFAULT_SEED world, a channel
+    designation, stepped until a miner is more than 5 ticks into a dig, then saved and loaded.
+  - **Mutations:** row 8 "a dig takes a haul's WORK_TICKS again" KILLED (`lib.rs:4022`). Row 9 "a
+    save taken mid-dig is refused again" KILLED (`main.rs:898`). The re-pointed 3.2 rows: "work
+    completes after only four visible ticks" KILLED; "load accepts overflowing work progress"
+    KILLED (`serve.rs:253`); **"DIG_WORK_TICKS is one more" SURVIVED** at first. The test's loop
+    was `0..DIG_WORK_TICKS`, so it followed the constant (self-referential). It is pinned at a
+    literal `0..50` now (Wolf's ten swings × 5), and the row is KILLED (`lib.rs:4029`).
+  - **Re-measured:** live wire (fast4x, 900 ticks): miner work runs 19 × **50** ticks, hauler work
+    runs 18 × 5; `dig_ticks 1000 carry_ticks 721 mismatches 0`, `WORK WIRE OK`. Before the change,
+    the same window had 25 miner runs, so throughput fell ~25%, not 10×: miners spend most of their
+    time walking (time split at creation: work 0.07). AC8 real-binary test GREEN 61.6 s: dig 7/6,
+    carry 3/3.
+  - All sim-core (67 + 10 + 39 + 19), simd (20 + 69), gui lib (221) and headless (100) tests pass.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
@@ -569,7 +598,9 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 ### File List
 
 - `crates/protocol/src/lib.rs`
-- `crates/simd/src/bridge.rs`
+- `crates/simd/src/bridge.rs`, `crates/simd/src/main.rs` (save bound, mid-dig load test)
+- `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/save_load.rs` (DIG_WORK_TICKS, Wolf's ruling)
+- `_bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh` (re-pointed to DIG_WORK_TICKS)
 - `crates/simd/tests/serve.rs`
 - `crates/client-core/src/lib.rs` (literal fixes only)
 - `crates/gui/src/capture.rs`, `crates/gui/tests/capture.rs` (literal fixes only)
@@ -591,3 +622,4 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 | Date | Change |
 | --- | --- |
 | 2026-10-03 | Story created on `f3b7cb3`. RED observed on the live wire (`work_wire.py`: no `job` or `carrying`, 125 miner work ticks unlabelled). The GLB carries `Walk` only. Task 0 ruled by Wolf the same day: `job` + `carrying`, keep 5 work ticks, live BlenderMCP seat from round 1. |
+| 2026-10-03 | Dev: wire `job`/`carrying`, gui Walk/Dig/Carry by name, dig facing, held stone, AC8 instrument; round 19 (Wolf's live seat, $11.10) promoted, 20 joints; Wolf ruled a dig is 10 swings: `DIG_WORK_TICKS` 50. 12-5.sh 9/9 KILLED. |
