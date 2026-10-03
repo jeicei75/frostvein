@@ -455,6 +455,15 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
     followed by \`clip walk\``, with miners dig `[(2, 0), (4, 0)]`. The haulers still logged carry,
     because `carrying` was untouched.
 
+- **Clips recipe** (Verification, pre-promotion), release `simd 7494` + `work_wire.py 7494 normal 400`
+  + `gui 7494 --headless --subdiv 4 --frames 1500 --capture …`, on `b1d0966`. gui exit 0 in 951 s.
+  - The wire said `dig_ticks 90 carry_ticks 310 mismatches 0`, `WORK WIRE OK`.
+  - Clip lines: `gui dwarf 2 clip dig` ×11 and `clip walk` ×11; dwarf 4 the same, 11/11. `gui dwarf 1
+    clip carry` ×5 and `clip walk` ×5; dwarf 3 the same, 5/5. No miner logged carry, and no hauler
+    logged dig.
+  - The startup line said `clip Dig ABSENT …; clip Carry ABSENT …`, which is correct on the Walk-only
+    GLB. The recipe's "startup line names `Walk, Dig, Carry`" waits on 2c's promotion.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
