@@ -5158,10 +5158,17 @@ fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
         vec![Tile::Empty; 16],
         vec![dwarf(7, [1, 1, 0])],
     ));
+    // Each step is given time to be WALKED: the dig facing waits until he is drawn at his cell
+    // (see `a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell`).
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
     app.update();
     let step = |app: &mut App, tick: u64, entity: Entity, expected: Quat, what: &str| {
         apply_delta(app, delta_at(tick, Vec::new(), vec![entity]));
-        app.update();
+        for _ in 0..20 {
+            app.update();
+        }
         let drawn = drawn_rotation(app, 7);
         assert!(
             drawn.dot(expected).abs() > 1.0 - 1e-5,
@@ -5191,6 +5198,66 @@ fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
         dwarf(7, [0, 2, 0]),
         north,
         "his next step resumes walking facing",
+    );
+}
+
+/// Wolf at the 12.5 seat: "digging starts now when dwarf is still moving to place.. should
+/// probably stop first and then start digging". The wire says `work` on the tick he reaches the
+/// cell, but the client walks him there at `DWARF_WALK_CELLS_PER_SECOND`, so his drawn body
+/// arrives about a second later. Until it does he keeps walking -- `Walk` and his walking heading
+/// -- and only then turns to the rock and swings.
+#[test]
+fn a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell() {
+    use bevy::prelude::Quat;
+    use gui::project::DwarfClip::{Dig, Walk};
+    use std::f32::consts::FRAC_PI_2;
+    let west = Quat::from_rotation_y(FRAC_PI_2);
+    let north = Quat::IDENTITY;
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+
+    // He steps west into [0,1,0] and the same delta says he is already digging the tile north.
+    let dig_north = protocol::DwarfJob::Dig { target: [0, 2, 0] };
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![working(7, [0, 1, 0], JobState::Work, Some(dig_north), None)],
+        ),
+    );
+    app.update();
+    assert_eq!(
+        dwarf_clip_of(&mut app, 7),
+        Walk,
+        "still walking in: no swing yet"
+    );
+    let drawn = drawn_rotation(&mut app, 7);
+    assert!(
+        drawn.dot(west).abs() > 1.0 - 1e-5,
+        "still walking in: he faces the way he walks, drew {drawn:?}"
+    );
+
+    // One cell at 0.9 cells/s is about 1.1 s; 20 frames of 100 ms is well past it.
+    for _ in 0..20 {
+        app.update();
+    }
+    assert_eq!(
+        dwarf_clip_of(&mut app, 7),
+        Dig,
+        "drawn at his cell: he swings"
+    );
+    let drawn = drawn_rotation(&mut app, 7);
+    assert!(
+        drawn.dot(north).abs() > 1.0 - 1e-5,
+        "drawn at his cell: he faces the rock, drew {drawn:?}"
     );
 }
 

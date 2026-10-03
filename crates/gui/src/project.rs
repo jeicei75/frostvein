@@ -464,20 +464,38 @@ pub fn sync_dwarf_work(
     headings: Res<DwarfHeadings>,
     clock: Res<TickClock>,
     mut commands: Commands,
-    mut dwarves: Query<(BevyEntity, &WorldProjected, &mut DwarfClip, &mut DigPhase)>,
+    mut dwarves: Query<(
+        BevyEntity,
+        &WorldProjected,
+        &Transform,
+        &mut DwarfClip,
+        &mut DigPhase,
+    )>,
     items: Query<(BevyEntity, &WorldProjected, Option<&ChildOf>), With<ProjectedItem>>,
 ) {
     let mut carried = BTreeMap::new();
     for entity in mirror.0.entities() {
-        let Some((bevy_entity, _, mut clip, mut dig)) =
-            dwarves.iter_mut().find(|(_, id, _, _)| id.0 == entity.id)
+        let Some((bevy_entity, _, transform, mut clip, mut dig)) = dwarves
+            .iter_mut()
+            .find(|(_, id, _, _, _)| id.0 == entity.id)
         else {
             continue;
         };
         if let Some(item) = entity.carrying {
             carried.insert(item, bevy_entity);
         }
-        let chosen = dwarf_clip(entity);
+        // Wolf at the seat: stop first, then dig. Until his drawn body reaches the cell he is
+        // still walking in, so he keeps the clip he would have without the dig.
+        let chosen = match dwarf_clip(entity) {
+            DwarfClip::Dig if !drawn_at_cell(entity, transform.translation) => {
+                if entity.carrying.is_some() {
+                    DwarfClip::Carry
+                } else {
+                    DwarfClip::Walk
+                }
+            }
+            chosen => chosen,
+        };
         if chosen == DwarfClip::Dig {
             let tick = mirror.0.tick();
             let was_digging = *clip == DwarfClip::Dig;
@@ -2415,31 +2433,56 @@ pub struct DwarfHeadings(
     // can only be known at the delta that changes it, and a snapshot must reset it with the
     // headings. `.0` stays the headings so the 10.5 mutation row that names it still applies.
     std::collections::BTreeMap<u32, u64>,
+    // Field `.2`: the yaw toward his target while he works a DIG (12.5 AC6). Kept apart from `.0`
+    // because the blend applies it only once he is DRAWN at his cell (Wolf at the seat: stop
+    // first, then dig) -- until then he is still walking in and keeps his walking heading.
+    std::collections::BTreeMap<u32, bevy::prelude::Quat>,
 );
+/// The yaw toward the tile a dwarf is digging, while he works a DIG. `None` for a channel (dug
+/// under his own feet) and for anything that is not digging.
+fn dig_yaw(entity: &protocol::Entity) -> Option<bevy::prelude::Quat> {
+    if entity.state != protocol::JobState::Work {
+        return None;
+    }
+    let Some(protocol::DwarfJob::Dig { target }) = entity.job else {
+        return None;
+    };
+    // The yaw from his cell to the target is the yaw of a step between them.
+    entity_draw_rotation(entity.kind, Some(entity.pos), target)
+}
+
+/// Whether a dwarf's DRAWN body has reached the cell the wire puts him in. The client walks him
+/// there at `DWARF_WALK_CELLS_PER_SECOND`, about a second behind the wire. One rule for both the
+/// dig facing (the blend) and the dig clip (`sync_dwarf_work`), so the two cannot disagree.
+pub fn drawn_at_cell(entity: &protocol::Entity, translation: Vec3) -> bool {
+    translation.distance(world_to_render(entity.pos) + entity_draw_offset(entity.kind)) <= 1e-4
+}
+
 impl DwarfHeadings {
     /// Call after EVERY `apply_delta`, before the next one overwrites the previous generation.
     pub fn record(&mut self, mirror: &Mirror) {
         for id in &mirror.changes().despawned {
             self.0.remove(id);
             self.1.remove(id);
+            self.2.remove(id);
         }
         for &id in &mirror.changes().changed {
             let Some(entity) = mirror.entities().find(|entity| entity.id == id) else {
                 continue;
             };
             let previous = mirror.previous_entity(id).map(|previous| previous.pos);
-            if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {
+            let stepped = entity_draw_rotation(entity.kind, previous, entity.pos);
+            if let Some(rotation) = stepped {
                 self.0.insert(id, rotation);
             }
-            // 12.5 AC6: a dwarf swinging at a dig faces the tile he is digging. This is the one
-            // heading writer, so it lands AFTER the position-derived facing above (he may have
-            // arrived on this very delta) and the next step simply overwrites it again. A channel
-            // is dug under his own feet, so it has nothing to face and keeps his heading.
-            if entity.state == protocol::JobState::Work
-                && let Some(protocol::DwarfJob::Dig { target }) = entity.job
-                // The yaw from his cell to the target is the yaw of a step between them.
-                && let Some(rotation) = entity_draw_rotation(entity.kind, Some(entity.pos), target)
+            // 12.5 AC6: a dwarf swinging at a dig faces the tile he is digging. A channel is dug
+            // under his own feet, so it has nothing to face and keeps his heading.
+            if let Some(rotation) = dig_yaw(entity) {
+                self.2.insert(id, rotation);
+            } else if let Some(rotation) = self.2.remove(&id)
+                && stepped.is_none()
             {
+                // The dig ended where he stood: hold the rock-facing until his next step.
                 self.0.insert(id, rotation);
             }
             if dwarf_clip(entity) == DwarfClip::Dig {
@@ -2460,6 +2503,10 @@ impl DwarfHeadings {
     /// A snapshot restarts every facing, and every swing at the snapshot's own tick.
     pub fn clear(&mut self, mirror: &Mirror) {
         self.0.clear();
+        self.2 = mirror
+            .entities()
+            .filter_map(|entity| dig_yaw(entity).map(|rotation| (entity.id, rotation)))
+            .collect();
         self.1 = mirror
             .entities()
             .filter(|entity| dwarf_clip(entity) == DwarfClip::Dig)
@@ -2526,6 +2573,13 @@ pub fn blend_entities(
             // this is the sole writer after the spawn frame, so a facing set only at the spawn
             // would be correct for exactly one frame. No heading means hold what is already there.
             if let Some(rotation) = headings.0.get(&marker.0) {
+                transform.rotation = *rotation;
+            }
+            if let Some(rotation) = headings
+                .2
+                .get(&marker.0)
+                .filter(|_| drawn_at_cell(entity, transform.translation))
+            {
                 transform.rotation = *rotation;
             }
         } else if let Some(position) = items.get(&marker.0).filter(|_| parent.is_none()) {
