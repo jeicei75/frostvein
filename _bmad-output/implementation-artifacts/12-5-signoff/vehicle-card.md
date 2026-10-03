@@ -26,11 +26,11 @@ right, under the clock.
 
 1. Press `2`, then drag a block of channel marks on the camp floor east of the fire, about 4×7.
 2. Press `3`, then drag a 3×3 stockpile west of the fire.
-3. Watch Bifur walk to a mark and swing. One swing is one dig (0.5 s), and the strike lands just
-   before the tile changes. The pick is one-handed and swings on his RIGHT side, so the blade
+3. Watch Bifur walk to a mark and swing. A dig is now **ten swings, 5 s** (your ruling at the first
+   sitting), and the tile changes as the tenth strike lands. The pick is one-handed and swings on his RIGHT side, so the blade
    lands about 0.7 m ahead and to his right. A channel is dug under his own feet, so he keeps the
    heading he arrived with rather than turning to a rock face.
-4. The console prints `gui dwarf 2 clip dig` at each swing and `gui dwarf 2 clip walk` after it.
+4. The console prints `gui dwarf 2 clip dig` at the start of each dig and `gui dwarf 2 clip walk` after it.
 
 **Question 1:** does the swing read as a dwarf digging?
 
