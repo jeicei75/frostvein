@@ -524,6 +524,30 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
     carry 3/3.
   - All sim-core (67 + 10 + 39 + 19), simd (20 + 69), gui lib (221) and headless (100) tests pass.
 
+- **Wolf at the seat, 2026-10-03 (second remark):** "digging starts now when dwarf is still moving to
+  place.. should probably stop first and then start digging". The wire says `work` on the tick he
+  reaches the cell, but the client walks him there at 0.9 cells/s, so his drawn body arrives about
+  1.1 s later. NEW `project::drawn_at_cell(entity, translation)` is one rule for two consumers:
+  - `sync_dwarf_work` shows `Dig` only once he is drawn at his cell; until then Walk, or Carry if
+    carrying;
+  - the dig yaw moved into `DwarfHeadings.2`, and the blend applies it only once he is drawn at his
+    cell. A dig that ends with no step hands its yaw to `.0`, so he keeps facing the rock.
+  The 10.5 block `if let Some(rotation) = headings.0.get(&marker.0)` stays byte-identical, and its
+  row still KILLS. The swing PHASE is still tick-timed (AC4), so the tenth strike lands on the tile
+  change; he only skips the swing he would have started while walking in. This **amends AC3**
+  ("no other input chooses a clip") and **AC6** on Wolf's ruling.
+  - RED first: `a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell` failed
+    `still walking in: no swing yet left: Dig right: Walk`. Green after the change.
+  - The AC6 test now lets each step be walked (100 ms manual frames × 20) before it reads the
+    facing.
+  - **Mutations:** row 5 re-pointed into `dig_yaw`, KILLED (`headless.rs:5173`). NEW row "the dig
+    clip starts while he is still walking in" KILLED at the clip assert (`:5237`). NEW row "the dig
+    facing turns him while he is still walking in" KILLED at the facing assert (`:5243`), with the
+    clip assert passing first. 10.5's "the blend arm never updates facing" still KILLED
+    (`:1230`). 12-5.sh is 11 rows, all KILLED.
+  - The AC8 real-binary test is GREEN in 81 s: dig 4/5, carry 4/4, each followed by walk. Headless
+    101/101, gui lib 221, clippy clean.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`

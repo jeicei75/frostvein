@@ -62,9 +62,9 @@ PY
 mutation "a digging dwarf no longer faces his target" gui a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                && let Some(protocol::DwarfJob::Dig { target }) = entity.job\n'
+old = '    let Some(protocol::DwarfJob::Dig { target }) = entity.job else {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                && let Some(protocol::DwarfJob::Dig { target }) = entity.job.filter(|_| false)\n'))
+p.write_text(s.replace(old, '    let Some(protocol::DwarfJob::Dig { target }) = entity.job.filter(|_| false) else {\n'))
 PY
 
 mutation "the blend writer moves a carried stone" gui a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go <<'PY'
@@ -98,4 +98,22 @@ p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '                if dwarf.work_progress > sim_core::DIG_WORK_TICKS {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                if dwarf.work_progress > sim_core::WORK_TICKS {\n'))
+PY
+
+# Wolf at the seat, 2026-10-03: "should probably stop first and then start digging" -- the dig clip
+# and the dig facing both wait until his drawn body reaches the cell.
+mutation "the dig clip starts while he is still walking in" gui a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            DwarfClip::Dig if !drawn_at_cell(entity, transform.translation) => {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            DwarfClip::Dig if false && !drawn_at_cell(entity, transform.translation) => {\n'))
+PY
+
+mutation "the dig facing turns him while he is still walking in" gui a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                .filter(|_| drawn_at_cell(entity, transform.translation))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                .filter(|_| true || drawn_at_cell(entity, transform.translation))\n'))
 PY
