@@ -2532,7 +2532,8 @@ development_status:
   #   Created 2026-10-03 on f3b7cb3. RED on the live wire (12-5-signoff/work_wire.py): no `job`/`carrying` field,
   #     125 miner work ticks unlabelled (every work run 5 ticks; a hauler's pick-up/drop are 5-tick work runs too).
   #     GLB carries Walk only, bound by index. Plan: wire `job` + `carrying`, plain Dig/Carry clips, seat + art ledger.
-  #     Task 0 (wire shape, dig timing, who makes the clips) awaits Wolf.
+  #     Task 0 RULED 2026-10-03 (Wolf): wire job + carrying; keep WORK_TICKS 5 (judge at seat); clips from a LIVE
+  #     BlenderMCP seat from round 1 (brief round 19), art ledger + hard stop after 2 unconverged rounds.
   12-6-wolf-gives-them-their-trades: backlog
   12-7-timber: backlog
   12-8-dwarves-at-work-the-cut: backlog

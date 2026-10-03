@@ -120,19 +120,18 @@ to the seat under the hard stop.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings at creation.** The recommended options below are what the story is written
-  against. If Wolf picks otherwise, amend the ACs before dev starts.
-  1. **Wire shape.** Recommended: `job` + `carrying`, as in "Wire diff". The alternative is `carrying`
-     only, with Dig inferred from `profession == miner && state == work`. That puts a trade rule in the
-     client (AD-4) and gives no target to face, so AC6 goes.
-  2. **Dig timing.** Recommended: keep `WORK_TICKS` = 5, one swing per dig (0.5 s at Normal), and judge
-     it at the seat. Lengthening it is a one-constant sim change. Its test fallout is known (the
-     `Walk, Work×5` pins, `first_delivery.py` figures, the 12.4 backlog numbers), and it is Wolf's call
-     if the seat says the swing is too quick.
-  3. **Who makes the clips.** Recommended: round 1 is PLAIN clips, keyed by a committed script run in the
-     devpod's headless Blender 5.2.1. Wolf judges them in the game at the seat, where timing is what
-     broke the walk. A live BlenderMCP seat (round-18 form, Wolf watching) is round 2, only if he asks
-     for it. The alternative is a live seat from round 1.
+- [x] **Task 0: Wolf's rulings, 2026-10-03, at creation.**
+  1. **Wire shape: `job` + `carrying`**, as in "Wire diff". He chose it over `carrying` only, which would
+     have inferred Dig from `profession == miner && state == work` (a trade rule in the client, AD-4) and
+     left no target to face.
+  2. **Dig timing: keep `WORK_TICKS` = 5**, one swing per dig (0.5 s at Normal), judged at the seat.
+     Lengthening it is a one-constant sim change. Its fallout is known: the `Walk, Work×5` pins, the
+     `first_delivery.py` figures and the 12.4 backlog numbers all move. It is his call at the seat, not
+     the dev's.
+  3. **Clips: a live BlenderMCP seat from round 1**, in round 18's form. He chose this over plain clips
+     scripted in the devpod's headless Blender. A Claude Code session drives his **running** Blender
+     through BlenderMCP while he watches ([[live-modelling-must-be-watchable]]). He then judges the
+     promoted clips in the game.
 - [ ] **Task 1: protocol + simd (AC1; the wire diff).**
   - [ ] `protocol/src/lib.rs`:
     - add `DwarfJob` beside `Profession` (`:97`);
@@ -154,25 +153,50 @@ to the seat under the hard stop.
     - a `carrying` id present in `items` at the carrier's cell.
     This also closes 12.4's deferral that "deltas carry a profession" had no automated test: assert
     `profession` on those deltas too.
-- [ ] **Task 2: the plain clips and their gate (AC2). Form per Task 0 ruling 3.**
-  - [ ] NEW `src-assets/blender/work_r19.py`, following `walk_r18.py`'s conventions:
-    - LINEAR keys at 24 fps, frames **0..24** with frame 24 == frame 0 (Trap 2);
-    - in place, with no horizontal `root` motion;
-    - each action saved unassigned (`detach()`/`attach()`);
-    - slotted fcurves through `fcurves()` (Blender 5);
-    - `checks()` measures the evaluated mesh.
-    It writes two actions:
-    - **`Dig`**: one overhead pick swing on `shoulder.R/elbow.R/hand.R`, legs braced. The pick
-      (`r17_pickaxe` on `hand.R`) strikes at about frame 18, which is phase ≈ 0.75 and lands just before
-      the sim's tile change. Clearance-check the pick at every frame: it is 1.04 H and overshoots
-      (round-18 brief, lines 68-72).
-    - **`Carry`**: `Walk`'s leg and root keys copied verbatim, so the stride stays 0.4926 m, with
-      the arms held forward and bent at `CARRY_OFFSET`'s height. The lantern stays on `hand.L` and swings
-      in front of him.
-  - [ ] Run it headless on `SM_VoxelDwarf_Miner01.blend`, then export with `export_dwarf.py`
-    (`export_animations=True` already exports every action). Run `check_asset.py` and confirm
-    `anims=` lists Carry, Dig and Walk. Promote to `assets/gltf/SM_VoxelDwarf_Miner01.glb` in its own
-    commit, as previous rounds did. `include_bytes!` means rebuild before any gui run.
+- [ ] **Task 2: the clips, from a live BlenderMCP seat (AC2; Task 0 ruling 3).** Tasks 1 and 3's headless
+  parts do not need the clips, so run them while the seat is pending. Task 4 and the seat need the
+  promoted GLB.
+  - [ ] **2a — write the brief** `src-assets/prompts/dwarf-miner-round-19.md`. Copy round 18's shape
+    (`dwarf-miner-round-18.md`: the "For:" header, the pipeline table, the in-place rule).
+    - **For:** a Claude Code session with the Blender MCP server attached, Blender 5.2.1, driving Wolf's
+      **running** Blender instance. It writes only inside `src-assets/`.
+      - It must not spawn `blender --background` for authoring. A background run is allowed only as the
+        final cold-run regeneration proof.
+      - One tool call per pose stage, with a committed screenshot each.
+      - The generator `src-assets/blender/work_r19.py` is written as the clip is built.
+    - **Produces** two actions on the r17 armature in `SM_VoxelDwarf_Miner01.blend`, named exactly `Dig`
+      and `Carry`. `Walk` is left untouched.
+      - Both follow `walk_r18.py`: LINEAR keys at 24 fps, frames **0..24** with frame 24 == frame 0
+        (Trap 2), in place with no horizontal `root` motion, each action saved unassigned
+        (`detach()`/`attach()`), slotted fcurves through `fcurves()`, and `checks()` measuring the
+        bound, evaluated mesh (Trap 1).
+    - **`Dig`**: one pick swing per cycle. The client plays one cycle per 5-tick work run (0.5 s at
+      Normal), so the brief states that duration.
+      - The pick (`r17_pickaxe`, on `hand.R`) strikes at about frame 18 (phase ≈ 0.75), just before the
+        sim's tile change.
+      - The swing goes along the direction `Walk` walks (the client yaws him toward the target), and
+        the strike lands
+        about one cell (1.6 m) in front of him at foot-to-knee height. A Channel uses the same clip.
+      - Clearance-check the pick at every frame: it is 1.04 H and overshoots (round-18 brief, lines
+        68-72).
+    - **`Carry`**: `Walk`'s leg and root keys copied verbatim, so the stride stays 0.4926 m and the
+      client's phase lock holds. The arms hold a stone in front of the chest. The seat measures where
+      the hands meet and reports it as `CARRY_OFFSET` (metres, rig space). The lantern stays on
+      `hand.L`.
+    - **Report** `dwarf-miner-round-19-report.md`: frames, strike frame, the hand-meeting point, foot
+      slide in mm on `Carry` (must match Walk's 0.000), the pick clearance, and the session's cost and
+      turns for the ledger.
+  - [ ] **2b — the seat (Wolf).** Wolf runs the round-19 session. Add a ledger row for the round, with its
+    exact model id and cost. **Hard stop:** after two rounds his eye has not judged converging, stop and
+    ask him whether it ships plain or is parked.
+  - [ ] **2c — export, gate, promote.** Export with
+    `blender --background … --python src-assets/blender/export_dwarf.py`
+    (`export_animations=True` already exports every action, so check nothing stray is in the file).
+    - Run `check_asset.py` on the export and confirm `anims=` lists Carry, Dig and Walk, each passing
+      loop closure.
+    - Promote to `assets/gltf/SM_VoxelDwarf_Miner01.glb` in its own commit, as previous rounds did, and
+      re-run `check_asset.py` on the PROMOTED file.
+    - Set `CARRY_OFFSET` from the report. `include_bytes!` means rebuild before any gui run.
   - [ ] `ingest.rs`:
     - `dwarf_clip_summary()` returns the clip NAMES parsed from the GLB's JSON chunk;
     - the startup line says `clips Walk, Dig, Carry`, or `clip <Name> ABSENT -- …` for each one missing;
@@ -255,7 +279,7 @@ to the seat under the hard stop.
 - No Bevy animation blending, masks or transitions. One node plays at a time.
 - No pick-up or drop clip for a hauler's 5-tick `work` runs: he holds `Walk`, or `Carry` at a drop.
   Park ideas as issues ([[story-scope-move-forward]]).
-- No model change: the rig, mesh, atlas and props stay r17.
+- No model change: the rig, mesh, atlas and props stay r17. The seat adds actions only.
 
 ### What already exists (build on it)
 
@@ -296,7 +320,8 @@ to the seat under the hard stop.
 - UPDATE `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs`, `crates/simd/tests/serve.rs`
 - UPDATE `crates/gui/src/{project.rs, ingest.rs, appearance.rs}`, `crates/gui/tests/{headless.rs, pixel_guard.rs}`
 - UPDATE `crates/tui/tests/client.rs` (the test only), plus every `Entity` literal the compiler names
-- NEW `src-assets/blender/work_r19.py`; UPDATE `src-assets/blender/SM_VoxelDwarf_Miner01.blend`,
+- NEW `src-assets/prompts/dwarf-miner-round-19.md` (dev), and from the seat `src-assets/blender/work_r19.py`,
+  `dwarf-miner-round-19-report.md` and screenshots; UPDATE `src-assets/blender/SM_VoxelDwarf_Miner01.blend`,
   `assets/gltf/SM_VoxelDwarf_Miner01.glb`
 - NEW `_bmad-output/implementation-artifacts/mutations/12-5.sh`, `12-5-signoff/vehicle-card.md`
 - UPDATE `README.md`
@@ -376,4 +401,4 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 
 | Date | Change |
 | --- | --- |
-| 2026-10-03 | Story created on `f3b7cb3`. RED observed on the live wire (`work_wire.py`: no `job` or `carrying`, 125 miner work ticks unlabelled). The GLB carries `Walk` only. Task 0 recommendations await Wolf. |
+| 2026-10-03 | Story created on `f3b7cb3`. RED observed on the live wire (`work_wire.py`: no `job` or `carrying`, 125 miner work ticks unlabelled). The GLB carries `Walk` only. Task 0 ruled by Wolf the same day: `job` + `carrying`, keep 5 work ticks, live BlenderMCP seat from round 1. |
