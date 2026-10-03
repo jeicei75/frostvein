@@ -576,6 +576,13 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   nothing deeper (verified in source, not re-run); it needs a ruling (`route:undecided`). Not in
   12.5.
 
+- **Full gate NOT run on the final code.** The last green full gate was `084e1f8`. Since then the
+  ten-swing dig, stop-then-dig and stop-then-drop changed code; each passed the fast gate, targeted
+  suites and its mutation rows. The full gate on `9e347da` was started at EOD and stopped after
+  2.5 min when Wolf had to shut the machine down, by its process group, with nothing left running.
+  **Status stays `in-progress` until a full gate is green.** Dev cost recorded: $41.98 (Opus
+  orchestrator $35.10 + 3 Sonnet subagents $6.88, 568 turns), plus round 19's $11.10 in the ledger.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
