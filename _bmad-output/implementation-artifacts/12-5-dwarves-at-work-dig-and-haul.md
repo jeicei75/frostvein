@@ -268,7 +268,7 @@ to the seat under the hard stop.
 
 | Round | Date | Clips | Made by (exact model / venue) | Cost | Wolf's verdict | Converging? |
 | --- | --- | --- | --- | --- | --- | --- |
-| 19 | 2026-10-03 | `Dig`, `Carry` (+ joint `pick`; `Walk` gains `pick` rest keys only) | `claude-opus-5-5`, Claude Code CLI + BlenderMCP, live in Wolf's running Blender 5.2.1 | pending: Wolf to read `/cost` of that session (the seat could not see it) | Steered live: 0.25 m stone REJECTED (shoulders and wrists knotted) → **0.64 m** after comparing with 0.45 m; pickaxe slung on the back during Carry (20th joint); caught `Walk` inheriting the slung pick. Wolf: "agent finished animations". In-game verdict pending (seat card) | pending the in-game seat |
+| 19 | 2026-10-03 | `Dig`, `Carry` (+ joint `pick`; `Walk` gains `pick` rest keys only) | `claude-opus-5-5`, Claude Code CLI + BlenderMCP, live in Wolf's running Blender 5.2.1 | **$11.10** (Wolf's `/cost`: opus-5-5 $11.10 + haiku-4-5 $0.001; 125 requests, 27m API / 3h08m wall) | Steered live: 0.25 m stone REJECTED (shoulders and wrists knotted) → **0.64 m** after comparing with 0.45 m; pickaxe slung on the back during Carry (20th joint); caught `Walk` inheriting the slung pick. Wolf: "agent finished animations". In-game verdict pending (seat card) | pending the in-game seat |
 
 ## Dev Notes
 
