@@ -5193,3 +5193,92 @@ fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
         "his next step resumes walking facing",
     );
 }
+
+/// 12.5 AC7: while a dwarf carries a stone, it is his child at `CARRY_OFFSET`, whatever the blend
+/// does each frame; the delta that clears it puts it back on its cell.
+#[test]
+fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
+    use bevy::prelude::ChildOf;
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [0, 0, 0],
+    }];
+    let mut app = headless_app(start);
+    app.update();
+
+    let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
+        items: vec![Item { id: 70, pos: at }],
+        ..delta_at(tick, Vec::new(), vec![entity])
+    };
+    let stone = |app: &mut App| {
+        let mut query = app
+            .world_mut()
+            .query::<(BevyEntity, &ProjectedItem, &Transform, Option<&ChildOf>)>();
+        let (_, _, transform, parent) = query
+            .iter(app.world())
+            .find(|(_, item, _, _)| item.0 == 70)
+            .expect("the stone must be projected");
+        (*transform, parent.map(|parent| parent.0))
+    };
+    let dwarf_entity = |app: &mut App| {
+        app.world_mut()
+            .query::<(BevyEntity, &WorldProjected, &gui::project::WalkPhase)>()
+            .iter(app.world())
+            .find(|(_, marker, _)| marker.0 == 7)
+            .map(|(entity, _, _)| entity)
+            .expect("the dwarf is projected")
+    };
+
+    // He picks it up and walks: several frames, so the blend has written over the spawn and a
+    // blend that forgets to skip a carried stone would have moved it to a cell by now.
+    apply_delta(
+        &mut app,
+        with_item(
+            1,
+            working(
+                7,
+                [1, 0, 0],
+                JobState::Walk,
+                Some(protocol::DwarfJob::Haul),
+                Some(70),
+            ),
+            [1, 0, 0],
+        ),
+    );
+    for _ in 0..4 {
+        app.update();
+    }
+    let (held, parent) = stone(&mut app);
+    let dwarf_entity = dwarf_entity(&mut app);
+    assert_eq!(parent, Some(dwarf_entity), "a carried stone is his child");
+    assert_eq!(held.translation, gui::appearance::CARRY_OFFSET);
+    // The dwarf is drawn at 0.625 cells per metre and a child inherits that, so the stone's own
+    // scale is divided by it to keep the DRAWN size at the rubble scale.
+    let dwarf_scale = app.world().get::<Transform>(dwarf_entity).unwrap().scale;
+    assert!(
+        ((held.scale * dwarf_scale).x - gui::appearance::STONE_ITEM_SCALE).abs() < 1e-6,
+        "the carried stone must still be drawn at the rubble size, not {:?} of his",
+        held.scale
+    );
+
+    // He drops it two cells on.
+    apply_delta(&mut app, with_item(2, dwarf(7, [2, 0, 0]), [2, 0, 0]));
+    app.update();
+    let (dropped, parent) = stone(&mut app);
+    assert_eq!(parent, None, "a released stone is nobody's child");
+    assert_eq!(
+        dropped.translation,
+        world_to_render([2, 0, 0]) + Vec3::new(0.0, gui::appearance::STONE_ITEM_DROP, 0.0)
+    );
+    assert_eq!(
+        dropped.scale,
+        Vec3::splat(gui::appearance::STONE_ITEM_SCALE)
+    );
+    app.update();
+    assert_eq!(stone(&mut app).0.translation, dropped.translation);
+}

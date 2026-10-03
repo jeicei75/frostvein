@@ -2713,14 +2713,7 @@ fn blend_projection(
     mut clock: ResMut<TickClock>,
     headings: Res<crate::project::DwarfHeadings>,
     time: Res<Time>,
-    mut projected: Query<
-        (
-            &WorldProjected,
-            &mut Transform,
-            Option<&mut crate::project::WalkPhase>,
-        ),
-        Without<TerrainTile>,
-    >,
+    mut projected: crate::project::BlendQuery,
 ) {
     blend_entities(
         &mirror.0,

@@ -1,4 +1,4 @@
-use bevy::prelude::Color;
+use bevy::prelude::{Color, Vec3};
 use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
 #[derive(Debug, Clone, Copy)]
@@ -231,6 +231,19 @@ pub fn hover_highlight_color() -> Color {
 /// the item's own +/-0.5 volume, so AC8's chips could never be seen where an item stood. The
 /// capture self-test passed throughout, because the pixels DID change.
 pub const STONE_ITEM_SCALE: f32 = 0.4;
+
+/// Where a carried stone sits on the dwarf that carries it: his own local space, which is the
+/// dwarf rig's space in METRES (origin at his feet, +Y up, facing -Z).
+///
+/// The dwarf entity is scaled by `METRES_TO_CELLS`, so a child's local translation in metres IS
+/// the right local translation -- the parent's scale turns it into cells. The report of the
+/// round-19 seat (story 12.5, Task 2b) measures where the carrying hands meet in rig-space metres
+/// and gives the value to put here; no conversion is needed beyond reading it as this space.
+///
+/// NOTE: PROVISIONAL until that report lands. This is a point in front of the chest of a 1.2 m
+/// dwarf (0.7 m up, 0.3 m forward), chosen only so a carried stone is visibly held and not at
+/// his feet.
+pub const CARRY_OFFSET: Vec3 = Vec3::new(0.0, 0.7, -0.3);
 
 /// Rests the shrunken item on the tile floor rather than leaving it floating mid-voxel, which is
 /// where a centred sub-unit cube would otherwise sit. The chips are already low for this reason.

@@ -21,10 +21,10 @@ use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
 
 use crate::{
     appearance::{
-        RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color, designation_color,
-        entity_appearance, flicker_scale, foliage_snow_color, hover_highlight_color,
-        light_properties, material_color, rim_dissolved_color, rim_dissolved_color_at,
-        snow_cap_color, zone_color,
+        CARRY_OFFSET, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color,
+        designation_color, entity_appearance, flicker_scale, foliage_snow_color,
+        hover_highlight_color, light_properties, material_color, rim_dissolved_color,
+        rim_dissolved_color_at, snow_cap_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
@@ -96,6 +96,20 @@ pub type TerrainQuery<'w, 's> = Query<
         With<TerrainChunkCells>,
         With<SnowCap>,
     )>,
+>;
+
+/// What `blend_entities` writes: every projected thing's transform, the dwarf's stride phase, and
+/// the parent that marks an item as carried.
+pub type BlendQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static WorldProjected,
+        &'static mut Transform,
+        Option<&'static mut WalkPhase>,
+        Option<&'static ChildOf>,
+    ),
+    Without<TerrainTile>,
 >;
 
 pub type TreeMeshQuery<'w, 's> = Query<'w, 's, (BevyEntity, &'static TreeMesh)>;
@@ -447,13 +461,20 @@ pub fn sync_dwarf_work(
     mirror: Res<crate::ingest::MirrorResource>,
     headings: Res<DwarfHeadings>,
     clock: Res<TickClock>,
-    mut dwarves: Query<(&WorldProjected, &mut DwarfClip, &mut DigPhase)>,
+    mut commands: Commands,
+    mut dwarves: Query<(BevyEntity, &WorldProjected, &mut DwarfClip, &mut DigPhase)>,
+    items: Query<(BevyEntity, &WorldProjected, Option<&ChildOf>), With<ProjectedItem>>,
 ) {
+    let mut carried = BTreeMap::new();
     for entity in mirror.0.entities() {
-        let Some((_, mut clip, mut dig)) = dwarves.iter_mut().find(|(id, _, _)| id.0 == entity.id)
+        let Some((bevy_entity, _, mut clip, mut dig)) =
+            dwarves.iter_mut().find(|(_, id, _, _)| id.0 == entity.id)
         else {
             continue;
         };
+        if let Some(item) = entity.carrying {
+            carried.insert(item, bevy_entity);
+        }
         let chosen = dwarf_clip(entity);
         if chosen == DwarfClip::Dig {
             let tick = mirror.0.tick();
@@ -473,6 +494,32 @@ pub fn sync_dwarf_work(
             // real-binary instrument for 12.5 AC8: nothing below the asset can prove a clip was
             // ever chosen, because the headless tests have no animation plugin.
             eprintln!("gui dwarf {} clip {}", entity.id, chosen.label());
+        }
+    }
+    // 12.5 AC7: a carried stone is drawn held, as a child of the dwarf. Both of its translation
+    // writers skip it -- the spawn in `reconcile` only runs once, and `blend_entities` skips any
+    // item that has a parent -- so this system is the only thing that places it while it is held.
+    for (item, marker, parent) in &items {
+        match (carried.get(&marker.0), parent) {
+            (Some(&dwarf), parent) if parent.map(ChildOf::parent) != Some(dwarf) => {
+                commands.entity(item).insert((
+                    ChildOf(dwarf),
+                    // The dwarf entity is scaled by `METRES_TO_CELLS` and a child inherits it, so
+                    // the stone's own scale is divided by it to stay `STONE_ITEM_SCALE` DRAWN.
+                    Transform::from_translation(CARRY_OFFSET)
+                        .with_scale(Vec3::splat(STONE_ITEM_SCALE / METRES_TO_CELLS)),
+                ));
+            }
+            (None, Some(_)) => {
+                // Let go: unparent and snap back to the cell the wire now says it is on.
+                if let Some(at) = mirror.0.items().find(|at| at.id == marker.0) {
+                    commands.entity(item).remove::<ChildOf>().insert(
+                        Transform::from_translation(item_translation(at.pos))
+                            .with_scale(Vec3::splat(STONE_ITEM_SCALE)),
+                    );
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -2424,10 +2471,7 @@ pub fn blend_entities(
     headings: &DwarfHeadings,
     clock: &mut TickClock,
     elapsed_seconds: f32,
-    projected: &mut Query<
-        (&WorldProjected, &mut Transform, Option<&mut WalkPhase>),
-        Without<TerrainTile>,
-    >,
+    projected: &mut BlendQuery,
 ) {
     clock.advance(elapsed_seconds);
     let entities = mirror
@@ -2438,7 +2482,7 @@ pub fn blend_entities(
         .items()
         .map(|item| (item.id, item.pos))
         .collect::<std::collections::BTreeMap<_, _>>();
-    for (marker, mut transform, walk_phase) in projected.iter_mut() {
+    for (marker, mut transform, walk_phase, parent) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
             let previous = mirror
                 .previous_entity(marker.0)
@@ -2482,7 +2526,9 @@ pub fn blend_entities(
             if let Some(rotation) = headings.0.get(&marker.0) {
                 transform.rotation = *rotation;
             }
-        } else if let Some(position) = items.get(&marker.0) {
+        } else if let Some(position) = items.get(&marker.0).filter(|_| parent.is_none()) {
+            // A carried item has a parent and is placed by `sync_dwarf_work`, not here.
+            //
             // Items have no previous wire state; snapping is the only wire-true presentation.
             // Must go through `item_translation` for the same reason the spawn does: this is the
             // sole writer of translation after spawn, so a bare `world_to_render` here would lift
