@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.4's creation
 
 # Story 12.5: Dwarves at Work — Dig and Haul
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 

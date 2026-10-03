@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-02
+last_updated: 2026-10-03
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2528,7 +2528,7 @@ development_status:
   #     does NOT reproduce (retry cooldowns free the dwarves). Throwaway prototype GREEN: 12 left / 19 of 25.
   #     Task 0 RULED 2026-10-02 (Wolf): 2M/2H/1W pool; roster `Name trade` (grey); old saves refused; #159 FOLDED IN
   #     with fix B (budget per dwarf) + sat-out rule, both prototyped; single-area residual stays on #159 (Refs, not Closes).
-  12-5-dwarves-at-work-dig-and-haul: ready-for-dev
+  12-5-dwarves-at-work-dig-and-haul: in-progress
   #   Created 2026-10-03 on f3b7cb3. RED on the live wire (12-5-signoff/work_wire.py): no `job`/`carrying` field,
   #     125 miner work ticks unlabelled (every work run 5 ticks; a hauler's pick-up/drop are 5-tick work runs too).
   #     GLB carries Walk only, bound by index. Plan: wire `job` + `carrying`, plain Dig/Carry clips, seat + art ledger.
