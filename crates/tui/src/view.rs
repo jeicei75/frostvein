@@ -1120,6 +1120,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
             Entity {
                 id: 2,
@@ -1129,6 +1131,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
         ];
         let state = normal_state((2, 1), 1);
@@ -1176,6 +1180,8 @@ mod tests {
                 colour: protocol::DwarfColour::Blue,
             }),
             profession,
+            job: None,
+            carrying: None,
         };
         snapshot.entities = vec![
             named(1, protocol::DwarfName::Ori, None),
@@ -1219,6 +1225,8 @@ mod tests {
                 colour,
             }),
             profession: None,
+            job: None,
+            carrying: None,
         };
         snapshot.entities = vec![
             named(1, 1, protocol::DwarfColour::Blue),
@@ -1231,6 +1239,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
         ];
 
@@ -1280,6 +1290,8 @@ mod tests {
             light: None,
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }];
 
         let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
@@ -1353,6 +1365,8 @@ mod tests {
             light: None,
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }];
 
         let framebuffer = render(&mirror(&snapshot), &normal_state((127, 127), 0), 5, 5);
@@ -1384,6 +1398,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
             Entity {
                 id: 2,
@@ -1393,6 +1409,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
         ];
 
@@ -1473,6 +1491,8 @@ mod tests {
                 light: Some(protocol::LightKind::Torch),
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
             Entity {
                 id: 9,
@@ -1482,6 +1502,8 @@ mod tests {
                 light: Some(protocol::LightKind::Campfire),
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
             Entity {
                 id: 1,
@@ -1491,6 +1513,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
             Entity {
                 id: 2,
@@ -1500,6 +1524,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
         ];
         let state = ViewState {
@@ -1537,6 +1563,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
             Entity {
                 id: 2,
@@ -1546,6 +1574,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             },
         ];
         let state = normal_state((1, 0), 0);
@@ -1600,6 +1630,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             })
             .collect();
         snapshot.entities.push(Entity {
@@ -1610,6 +1642,8 @@ mod tests {
             light: Some(protocol::LightKind::Campfire),
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         });
         let state = normal_state((12, 34), 19);
 
@@ -1720,6 +1754,8 @@ mod tests {
                     light: None,
                     identity: None,
                     profession: None,
+                    job: None,
+                    carrying: None,
                 })
                 .collect();
             // Worst case with the compass appended is 46 of 80 columns, so the budget this
@@ -2178,6 +2214,8 @@ mod tests {
             light: None,
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         });
         assert_eq!(initial(&mirror(&snapshot), None), before);
 

@@ -928,6 +928,8 @@ fn capture_growing_world(with_features: bool) -> String {
             light: None,
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }];
         if with_features {
             entities.extend([
@@ -939,6 +941,8 @@ fn capture_growing_world(with_features: bool) -> String {
                     light: Some(protocol::LightKind::Torch),
                     identity: None,
                     profession: None,
+                    job: None,
+                    carrying: None,
                 },
                 protocol::Entity {
                     id: 6,
@@ -948,6 +952,8 @@ fn capture_growing_world(with_features: bool) -> String {
                     light: Some(protocol::LightKind::Campfire),
                     identity: None,
                     profession: None,
+                    job: None,
+                    carrying: None,
                 },
             ]);
         }
@@ -1112,6 +1118,8 @@ fn capture_haul_replay(changes: bool) -> String {
                     light: None,
                     identity: None,
                     profession: None,
+                    job: None,
+                    carrying: None,
                 }],
                 designations: Vec::new(),
                 zones: vec![protocol::Zone { pos: PILE }],
@@ -1226,6 +1234,8 @@ fn dwarf_at(x: i32) -> protocol::Entity {
         light: None,
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     }
 }
 
@@ -1404,6 +1414,8 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

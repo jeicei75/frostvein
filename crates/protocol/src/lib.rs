@@ -100,6 +100,16 @@ pub enum Profession {
     Woodcutter,
 }
 
+/// The job a dwarf holds, in `walk` and `work` alike. Haul carries no target: the sim's haul
+/// target is the stone's position at creation and goes stale at pick-up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DwarfJob {
+    Dig { target: [i32; 3] },
+    Channel { target: [i32; 3] },
+    Haul,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobState {
@@ -198,6 +208,10 @@ pub struct Entity {
     pub identity: Option<Identity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profession: Option<Profession>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job: Option<DwarfJob>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub carrying: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -350,6 +364,35 @@ mod tests {
     }
 
     #[test]
+    fn a_working_dwarf_round_trips_each_job_and_the_stone_he_carries() {
+        let head = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"work","light":null,"identity":{"name":"durin","colour":"red"},"profession":"miner""#;
+        for (tail, job, carrying) in [
+            (
+                r#","job":{"dig":{"target":[5,5,6]}}}"#,
+                Some(DwarfJob::Dig { target: [5, 5, 6] }),
+                None,
+            ),
+            (
+                r#","job":{"channel":{"target":[4,5,6]}}}"#,
+                Some(DwarfJob::Channel { target: [4, 5, 6] }),
+                None,
+            ),
+            (
+                r#","job":"haul","carrying":12}"#,
+                Some(DwarfJob::Haul),
+                Some(12),
+            ),
+            (r#","carrying":12}"#, None, Some(12)),
+        ] {
+            let wire = format!("{head}{tail}");
+            let entity: Entity = serde_json::from_str(&wire).unwrap();
+            assert_eq!(entity.job, job);
+            assert_eq!(entity.carrying, carrying);
+            assert_eq!(serde_json::to_string(&entity).unwrap(), wire);
+        }
+    }
+
+    #[test]
     fn decodes_the_documented_wire_format() {
         let snapshot = decoded();
 
@@ -369,6 +412,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             }]
         );
         assert_eq!(
@@ -429,6 +474,8 @@ mod tests {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             }]
         );
         assert_eq!(
@@ -575,6 +622,20 @@ mod tests {
             (Profession::Woodcutter, "\"woodcutter\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (
+                DwarfJob::Dig { target: [1, -2, 3] },
+                r#"{"dig":{"target":[1,-2,3]}}"#,
+            ),
+            (
+                DwarfJob::Channel { target: [4, 5, 6] },
+                r#"{"channel":{"target":[4,5,6]}}"#,
+            ),
+            (DwarfJob::Haul, "\"haul\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+            assert_eq!(serde_json::from_str::<DwarfJob>(wire).unwrap(), value);
         }
         for (value, wire) in [
             (DwarfName::Durin, "\"durin\""),
