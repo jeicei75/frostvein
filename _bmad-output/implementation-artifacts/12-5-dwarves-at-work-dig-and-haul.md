@@ -262,7 +262,7 @@ to the seat under the hard stop.
     - Say where on screen to look: the selected dwarf is centred, and his name is top-right under the
       clock.
   - [ ] Add a row to "Art ledger" for every seat round, with Wolf's words.
-  - [ ] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~50-75 min, [[gate-ooms-at-default-parallelism]]).
+  - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~50-75 min, [[gate-ooms-at-default-parallelism]]).
 
 ## Art ledger (FR45, M2-24)
 
@@ -490,6 +490,10 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   `dig_ticks 90 carry_ticks 310 mismatches 0`, `WORK WIRE OK`. Counts differ from the
   pre-promotion run (11/11) because the designation lands at a wall-clock-dependent tick.
   Deliberate RED: row 1 on the wire (above) and on AC8 (`pixel_guard.rs:1144`).
+
+- **FULL GATE GREEN 3247 s on `084e1f8`** (post-promotion, `RUST_TEST_THREADS=1`, exit 0; pixel-guard tier
+  2994 s). The new GLB moved no pixel guard, which is what Dev Notes predicted: boot frames hold
+  no work, so they show no clip but Walk.
 
 ### Completion Notes List
 
