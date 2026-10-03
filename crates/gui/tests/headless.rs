@@ -5261,6 +5261,87 @@ fn a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell
     );
 }
 
+/// Wolf at the 12.5 seat: "hauler when dropping cargo walks into it ..so also it should stop
+/// before dropping". The sim drops the stone on the tick it is delivered, while the client is
+/// still walking him onto that cell; so he keeps holding it, and keeps `Carry`, until his drawn
+/// body is there, and only then puts it down.
+#[test]
+fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
+    use bevy::prelude::ChildOf;
+    use gui::project::DwarfClip::{Carry, Walk};
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [0, 0, 0],
+    }];
+    let mut app = headless_app(start);
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
+        items: vec![Item { id: 70, pos: at }],
+        ..delta_at(tick, Vec::new(), vec![entity])
+    };
+    let parent_of_stone = |app: &mut App| {
+        app.world_mut()
+            .query::<(&ProjectedItem, Option<&ChildOf>)>()
+            .iter(app.world())
+            .find(|(item, _)| item.0 == 70)
+            .map(|(_, parent)| parent.is_some())
+            .expect("the stone must be projected")
+    };
+    let stone_translation = |app: &mut App| {
+        app.world_mut()
+            .query::<(&ProjectedItem, &Transform)>()
+            .iter(app.world())
+            .find(|(item, _)| item.0 == 70)
+            .map(|(_, transform)| transform.translation)
+            .expect("the stone must be projected")
+    };
+
+    // He picks it up where he stands.
+    let hauling = working(
+        7,
+        [0, 0, 0],
+        JobState::Walk,
+        Some(protocol::DwarfJob::Haul),
+        Some(70),
+    );
+    apply_delta(&mut app, with_item(1, hauling, [0, 0, 0]));
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(parent_of_stone(&mut app), "he holds it");
+
+    // One step east, and the same delta says it is delivered on that cell.
+    apply_delta(&mut app, with_item(2, dwarf(7, [1, 0, 0]), [1, 0, 0]));
+    app.update();
+    assert!(
+        parent_of_stone(&mut app),
+        "still walking onto the cell: he still holds it"
+    );
+    assert_eq!(dwarf_clip_of(&mut app, 7), Carry, "and still carries it");
+
+    // One cell at 0.9 cells/s is about 1.1 s; 20 frames of 100 ms is well past it.
+    for _ in 0..20 {
+        app.update();
+    }
+    assert!(
+        !parent_of_stone(&mut app),
+        "drawn at the cell: he has put it down"
+    );
+    assert_eq!(
+        stone_translation(&mut app),
+        world_to_render([1, 0, 0]) + Vec3::new(0.0, gui::appearance::STONE_ITEM_DROP, 0.0)
+    );
+    assert_eq!(dwarf_clip_of(&mut app, 7), Walk, "and walks empty-handed");
+}
+
 /// 12.5 AC7: while a dwarf carries a stone, it is his child at `CARRY_OFFSET`, whatever the blend
 /// does each frame; the delta that clears it puts it back on its cell.
 #[test]
@@ -5276,6 +5357,11 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
         pos: [0, 0, 0],
     }];
     let mut app = headless_app(start);
+    // Real frame time, so the drop below can be WALKED: a delivered stone stays in his hands
+    // until he is drawn on its cell (`a_hauler_keeps_his_stone_until_...`).
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
     app.update();
 
     let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
@@ -5335,7 +5421,10 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
 
     // He drops it two cells on.
     apply_delta(&mut app, with_item(2, dwarf(7, [2, 0, 0]), [2, 0, 0]));
-    app.update();
+    // Two cells at 0.9 cells/s is about 2.2 s; 30 frames of 100 ms is past it.
+    for _ in 0..30 {
+        app.update();
+    }
     let (dropped, parent) = stone(&mut app);
     assert_eq!(parent, None, "a released stone is nobody's child");
     assert_eq!(

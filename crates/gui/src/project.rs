@@ -474,6 +474,13 @@ pub fn sync_dwarf_work(
     items: Query<(BevyEntity, &WorldProjected, Option<&ChildOf>), With<ProjectedItem>>,
 ) {
     let mut carried = BTreeMap::new();
+    // Who is holding a stone right now, as drawn -- which can outlast the wire's `carrying` by
+    // the second it takes his body to reach the cell he drops it on.
+    let holders = items
+        .iter()
+        .filter_map(|(_, _, parent)| parent.map(ChildOf::parent))
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut walking_in = std::collections::BTreeSet::new();
     for entity in mirror.0.entities() {
         let Some((bevy_entity, _, transform, mut clip, mut dig)) = dwarves
             .iter_mut()
@@ -484,16 +491,23 @@ pub fn sync_dwarf_work(
         if let Some(item) = entity.carrying {
             carried.insert(item, bevy_entity);
         }
-        // Wolf at the seat: stop first, then dig. Until his drawn body reaches the cell he is
-        // still walking in, so he keeps the clip he would have without the dig.
+        // Wolf at the seat: stop first, then dig -- and stop first, then drop. Until his drawn body
+        // reaches the cell he is still walking in: he does not swing yet, and a stone the wire has
+        // already put down is still in his hands.
+        let arrived = drawn_at_cell(entity, transform.translation);
+        if !arrived {
+            walking_in.insert(bevy_entity);
+        }
+        let still_holding = !arrived && holders.contains(&bevy_entity);
         let chosen = match dwarf_clip(entity) {
-            DwarfClip::Dig if !drawn_at_cell(entity, transform.translation) => {
-                if entity.carrying.is_some() {
+            DwarfClip::Dig if !arrived => {
+                if entity.carrying.is_some() || still_holding {
                     DwarfClip::Carry
                 } else {
                     DwarfClip::Walk
                 }
             }
+            DwarfClip::Walk if still_holding => DwarfClip::Carry,
             chosen => chosen,
         };
         if chosen == DwarfClip::Dig {
@@ -530,8 +544,9 @@ pub fn sync_dwarf_work(
                         .with_scale(Vec3::splat(STONE_ITEM_SCALE / METRES_TO_CELLS)),
                 ));
             }
-            (None, Some(_)) => {
-                // Let go: unparent and snap back to the cell the wire now says it is on.
+            (None, Some(parent)) if !walking_in.contains(&parent.parent()) => {
+                // Let go, once he is drawn on the cell: unparent and snap back to the cell the
+                // wire now says it is on.
                 if let Some(at) = mirror.0.items().find(|at| at.id == marker.0) {
                     commands.entity(item).remove::<ChildOf>().insert(
                         Transform::from_translation(item_translation(at.pos))
