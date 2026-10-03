@@ -232,15 +232,15 @@ to the seat under the hard stop.
     - AC6: a dig to his east turns him east, and a channel leaves his heading as it was.
     - AC7: the carried item's parent is the dwarf and its local translation is `CARRY_OFFSET`. After
       release it is unparented, at `item_translation(pos)`.
-- [ ] **Task 4: the instrument (AC8).**
-  - [ ] `gui/tests/pixel_guard.rs` (it already spawns `simd`, `:150-190`): NEW
+- [x] **Task 4: the instrument (AC8).**
+  - [x] `gui/tests/pixel_guard.rs` (it already spawns `simd`, `:150-190`): NEW
     `a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon`.
     - The test opens its own TCP client and sends `first_delivery.py`'s three commands.
     - It runs `gui <port> --headless --frames N --capture <tmp>` and scrapes stderr.
     - It asserts, by id, a miner's `clip dig`, a hauler's `clip carry`, and a later `clip walk` for each.
     - Set N from a measured run, not a guess ([[frame-counts-are-venue-calibrated]]). The capture's own
       range checks may fire; the test reads stderr either way.
-  - [ ] Show its RED: bridge `job: None` makes it fail by name. Record that in the Debug Log.
+  - [x] Show its RED: bridge `job: None` makes it fail by name. Record that in the Debug Log.
 - [x] **Task 5: tui (AC9).** The tui decodes the new fields and renders as today. Give one dwarf in the
   existing `capture_roster` stub (`tui/tests/client.rs:1563`) a `job` and a `carrying`, and assert its
   frame is unchanged.
@@ -254,10 +254,10 @@ to the seat under the hard stop.
     6. the item blend writer not skipping a carried item → the AC7 test;
     7. clips bound by index (`#Animation0`) again → the AC2 names test, or the AC8 real-binary test
        (record which one killed it).
-  - [ ] README gui section: the work clips, and the `gui dwarf N clip …` line.
+  - [x] README gui section: the work clips, and the `gui dwarf N clip …` line.
 - [ ] **Task 7: the live recipe, the seat (AC10), then the full gate.**
   - [ ] Run the Verification recipe on the branch: GREEN, then the deliberate RED. Record both outputs.
-  - [ ] Write `12-5-signoff/vehicle-card.md` in the seat's launch form (see Verification).
+  - [x] Write `12-5-signoff/vehicle-card.md` in the seat's launch form (see Verification).
     - Restart `simd 7451` before each part.
     - Say where on screen to look: the selected dwarf is centred, and his name is top-right under the
       clock.
@@ -441,7 +441,20 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   `ingest::dwarf_clip_label(names, wanted)` and pinned it on the exporter's real order
   `[Carry, Dig, Walk]`, where Walk is `Animation2`.
 
-### Completion Notes List
+- **Task 4 (AC8), `81f5482`, Agent C:** `a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon`
+  (`#[ignore]`d with the other pixel guards, so the full gate's tier runs it).
+  - **GREEN**, re-run independently by the orchestrator with identical counts. The crew was derived
+    from the wire: 0 woodcutter, 1 and 3 haulers, 2 and 4 miners. `clip dig` miner 2 ×12 and
+    miner 4 ×7, each followed by `clip walk` (12, 7). `clip carry` hauler 1 ×4 and hauler 3 ×3,
+    followed by `clip walk` (3, 3). gui exit 0, test 60.68 s.
+  - **Frame count:** `--frames 100`. Every required line was already present at `--frames 1`. The
+    run length (~60 s) is set by the capture's 100-delivered-tick floor, which runs on wall-clock
+    ticks, so a loaded machine is the flake risk. The failure message prints every clip line seen.
+  - **Deliberate RED** (bridge `job: None`, applied after the commit, restored, `git diff` empty):
+    `panicked at crates/gui/tests/pixel_guard.rs:1144:5: no miner [2, 4] logged \`clip dig\`
+    followed by \`clip walk\``, with miners dig `[(2, 0), (4, 0)]`. The haulers still logged carry,
+    because `carrying` was untouched.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
@@ -493,7 +506,13 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   - **2c split:** `the_embedded_dwarf_carries_its_walk_clip` now asserts `Walk` BY NAME. The
     all-three upgrade lands with the promoted GLB in 2c; before then it would turn the gate red.
 
-### File List
+- **Task 6 README:** a "Work clips" paragraph in the gui section, covering the clip rule, the
+  by-name binding and startup clause, the `gui dwarf <id> clip …` line, and judging at Normal.
+- **Task 7 card:** `12-5-signoff/vehicle-card.md` is written in the seat's launch form. It starts
+  with the startup-line check that the promoted GLB is in the build, and has two parts, Bifur
+  `--select 2` and Ori `--select 1`, each on a restarted `simd 7451`. Each part says where to look
+  and asks one question.
+
 ### File List
 
 - `crates/protocol/src/lib.rs`
@@ -506,6 +525,9 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 - `crates/tui/src/view.rs` (literal fixes only)
 - `crates/tui/tests/client.rs`
 - `src-assets/prompts/dwarf-miner-round-19.md` (new)
+- `crates/gui/tests/pixel_guard.rs`
+- `README.md`
+- `_bmad-output/implementation-artifacts/12-5-signoff/vehicle-card.md` (new)
 - `_bmad-output/implementation-artifacts/mutations/12-5.sh` (new)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
