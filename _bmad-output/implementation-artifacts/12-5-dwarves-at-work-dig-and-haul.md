@@ -132,21 +132,21 @@ to the seat under the hard stop.
      scripted in the devpod's headless Blender. A Claude Code session drives his **running** Blender
      through BlenderMCP while he watches ([[live-modelling-must-be-watchable]]). He then judges the
      promoted clips in the game.
-- [ ] **Task 1: protocol + simd (AC1; the wire diff).**
-  - [ ] `protocol/src/lib.rs`:
+- [x] **Task 1: protocol + simd (AC1; the wire diff).**
+  - [x] `protocol/src/lib.rs`:
     - add `DwarfJob` beside `Profession` (`:97`);
     - add the two fields after `profession` (`:200`);
     - fix every `Entity { .. }` literal with `job: None, carrying: None` (let the compiler list them).
-  - [ ] Pin tests in `protocol`:
+  - [x] Pin tests in `protocol`:
     - the existing entity and delta literals stay byte-identical;
     - one literal per `DwarfJob` variant, plus `carrying`, round-trips;
     - `every_material_and_tile_variant_has_a_pinned_wire_name` (`:524`) gains a `DwarfJob` block.
-  - [ ] `simd/src/bridge.rs`:
+  - [x] `simd/src/bridge.rs`:
     - `fn dwarf_job(job: sim_core::Job) -> protocol::DwarfJob`: an exhaustive `match` on `job.kind`, no
       wildcard, so 12.7's `Cut` fails to compile until it is given a wire arm;
     - `dwarf_entities` (`:134`) sets `job` from `world.claims()` joined to `world.jobs()` by `JobId`, and
       sets `carrying` from `world.carrying()`, looked up by id the way `identities` is.
-  - [ ] `simd/tests/serve.rs`: a serve test drives a real daemon. It designates a channel block and a
+  - [x] `simd/tests/serve.rs`: a serve test drives a real daemon. It designates a channel block and a
     pile and steps at fast4x. On deltas it asserts:
     - a miner in `work` with `job` dig or channel;
     - a hauler with `"job":"haul"`;
@@ -156,7 +156,7 @@ to the seat under the hard stop.
 - [ ] **Task 2: the clips, from a live BlenderMCP seat (AC2; Task 0 ruling 3).** Tasks 1 and 3's headless
   parts do not need the clips, so run them while the seat is pending. Task 4 and the seat need the
   promoted GLB.
-  - [ ] **2a — write the brief** `src-assets/prompts/dwarf-miner-round-19.md`. Copy round 18's shape
+  - [x] **2a — write the brief** `src-assets/prompts/dwarf-miner-round-19.md`. Copy round 18's shape
     (`dwarf-miner-round-18.md`: the "For:" header, the pipeline table, the in-place rule).
     - **For:** a Claude Code session with the Blender MCP server attached, Blender 5.2.1, driving Wolf's
       **running** Blender instance. It writes only inside `src-assets/`.
@@ -202,29 +202,29 @@ to the seat under the hard stop.
     - the startup line says `clips Walk, Dig, Carry`, or `clip <Name> ABSENT -- …` for each one missing;
     - `the_embedded_dwarf_carries_its_walk_clip` becomes a test that the embedded dwarf carries all
       three by name.
-- [ ] **Task 3: gui clip choice and drive (AC3-AC7).**
-  - [ ] Bind the clips **by name**: through `Assets<Gltf>` `named_animations`
+- [x] **Task 3: gui clip choice and drive (AC3-AC7).**
+  - [x] Bind the clips **by name**: through `Assets<Gltf>` `named_animations`
     (`bevy_gltf-0.19.0/src/assets.rs:46`), or through `GltfAssetLabel::Animation(i)` with `i` resolved
     from the names Task 2 parses. `AnimationGraph::from_clips` gives one node per clip.
     `DwarfWalk` (`project.rs:305`) becomes the three nodes plus clips.
-  - [ ] A pure fn `fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip` (`Walk | Dig | Carry`) holds
+  - [x] A pure fn `fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip` (`Walk | Dig | Carry`) holds
     AC3's rule. Store it in a component per dwarf, set in `reconcile_projection` from the mirror.
     Print the AC8 line when it changes.
-  - [ ] Generalise `start_dwarf_walk`/`drive_dwarf_walk` (`:2057`, `:2095`):
+  - [x] Generalise `start_dwarf_walk`/`drive_dwarf_walk` (`:2057`, `:2095`):
     - play the chosen node paused and `seek_to(phase × duration)`;
     - `Walk`/`Carry` read `WalkPhase`, and `Dig` reads a new `DigPhase { entered: u64 }` per AC4;
     - stop the other nodes;
     - keep every existing STALLED line, and add a `Dig` and `Carry` "clip never loaded" line.
-  - [ ] AC6 facing: when the mirror has a dwarf in `work` with `job: dig`, his heading is the yaw toward
+  - [x] AC6 facing: when the mirror has a dwarf in `work` with `job: dig`, his heading is the yaw toward
     the target. Compute it where `DwarfHeadings::record` (`:2181`) decides headings, so there is one
     writer ([[spawn-is-not-the-only-writer]]).
-  - [ ] AC7 carried item: `pub const CARRY_OFFSET: Vec3` in `appearance.rs` beside `STONE_ITEM_SCALE`
+  - [x] AC7 carried item: `pub const CARRY_OFFSET: Vec3` in `appearance.rs` beside `STONE_ITEM_SCALE`
     (`:233`).
     - While carried, the item's entity is parented to the dwarf at that offset.
     - Both item translation writers must skip a carried item: `reconcile_projection` (`:1955`) and the
       blend (`:2264-2269`).
     - On release, unparent the item and snap it to its cell.
-  - [ ] Headless tests in `gui/tests/headless.rs` (`headless_app`, no AnimationPlugin), each feeding
+  - [x] Headless tests in `gui/tests/headless.rs` (`headless_app`, no AnimationPlugin), each feeding
     deltas through the mirror:
     - AC3: a dwarf goes walk → dig → walk and walk → carry → walk; the component follows each delta.
     - AC4: deltas at ticks n..n+5 move `Dig`'s phase 0 → 1. Six frames that repeat one tick hold it
@@ -241,11 +241,11 @@ to the seat under the hard stop.
     - Set N from a measured run, not a guess ([[frame-counts-are-venue-calibrated]]). The capture's own
       range checks may fire; the test reads stderr either way.
   - [ ] Show its RED: bridge `job: None` makes it fail by name. Record that in the Debug Log.
-- [ ] **Task 5: tui (AC9).** The tui decodes the new fields and renders as today. Give one dwarf in the
+- [x] **Task 5: tui (AC9).** The tui decodes the new fields and renders as today. Give one dwarf in the
   existing `capture_roster` stub (`tui/tests/client.rs:1563`) a `job` and a `carrying`, and assert its
   frame is unchanged.
 - [ ] **Task 6: the record.**
-  - [ ] `_bmad-output/implementation-artifacts/mutations/12-5.sh`. Every row is KILLED by the test named:
+  - [x] `_bmad-output/implementation-artifacts/mutations/12-5.sh`. Every row is KILLED by the test named:
     1. bridge `job: None` → the Task 1 serve test;
     2. bridge `carrying: None` → the Task 1 serve test;
     3. `dwarf_clip` prefers `Carry` over `Dig` (order swapped) → the AC3 headless test;
@@ -391,11 +391,123 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 
 ### Agent Model Used
 
+- Orchestrator + verifier: Claude Opus 5.5 (`claude-opus-5-5[1m]`). Wolf picked Sonnet 5.5 subagents
+  for the implementation (2026-10-03), as in 12.2-12.4.
+- Agent A (Sonnet 5.5): Tasks 1 and 5. Agent B (Sonnet 5.5): Task 3 and the `ingest.rs` part of 2c.
+- The orchestrator wrote the Task 2a brief, ran every mutation and ran the live recipe.
+
 ### Debug Log References
 
+- **Task 1 RED:** with the bridge still sending `job: None`, the serve test
+  `deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries` failed `tick 61: miner 4 works
+  with job None` (`serve.rs:635`). It went green with the bridge.
+- **Task 5:** passes first run, as expected. The tui already decoded `Entity` and draws neither
+  field, so there is no RED to show. The test pins that it stays so.
+- **Mutation rows 1-2** (`mutations/12-5.sh`, run alone through `scripts/mutate.sh`, 2026-10-03):
+  - row 1 "the bridge sends no job" KILLED at the named assert, `serve.rs:635` (`miner … works with
+    job None`);
+  - row 2 "the bridge sends no carried stone" KILLED at `serve.rs:677`, the closing
+    `need all three` panic (no `carrying` was ever seen in 1500 deltas).
+- **Live wire recipe GREEN** on `d448069` (fresh release `simd 7493`, `work_wire.py`): keys
+  `carrying id identity job kind light pos profession state`; miner work runs 25 × 5 ticks, hauler
+  work runs 19 × 5 ticks; `dig_ticks 125 carry_ticks 791 mismatches 0`, `WORK WIRE OK`, exit 0.
+- **Live wire recipe deliberate RED** (row 1, built in a throwaway scratch worktree with its own
+  target dir so the sabotage could not reach the shared tree, then removed): keys lack `job`;
+  `dig_ticks 0 carry_ticks 791 mismatches 125`, `NO JOB FIELD ON THE WIRE`, exit 1.
+
+- **Task 3 REDs** (Agent B): AC3 and AC4 compile-RED first (`DwarfClip` and `DigPhase` did not
+  exist), then green. AC6 behavioural RED at the east dig: `drew Quat(0,0.707,0,0.707), wanted
+  Quat(0,-0.707,0,0.707)`. AC7: `a carried stone is his child left: None right: Some(35v0)`.
+- **Mutation rows 3-7** (run alone through `mutate.sh`, 2026-10-03, on `70fe281`). Each was killed at the
+  assertion that targets it:
+  - row 3 "Carry is preferred over Dig": KILLED, `digging_outranks_carrying_in_the_clip_choice`,
+    `headless.rs:5019`;
+  - row 4 "the dig phase runs on wall time": KILLED in
+    `the_dig_phase_runs_on_delivered_ticks_and_holds_when_the_ticks_repeat`, first at the tick-formula
+    assert (`headless.rs:5087`), not at the "repeat one tick" assert the story names. **Trap 1**,
+    so I re-ran it with that test's five earlier asserts disarmed. The hold assert then kills it
+    alone at `headless.rs:5116`, "a repeated tick must not move the swing". The test advances virtual
+    time 100 ms per frame (`TimeUpdateStrategy::ManualDuration`), so the hold is not vacuous;
+  - row 5 "a digging dwarf no longer faces his target": KILLED, the AC6 rotation assert in
+    `a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading` (`headless.rs:5166`);
+  - row 6 "the blend writer moves a carried stone": KILLED at `held.translation == CARRY_OFFSET`
+    (`headless.rs:5259`), asserted after four frames of `blend_entities`;
+  - row 7 "clips are bound by index again": KILLED by the NEW unit test
+    `ingest::tests::each_clip_binds_the_label_of_its_own_name_in_export_order` (`ingest.rs:5557`).
+- **Row 7 deviation:** the story offered the AC2 names test or the AC8 real-binary test as the
+  killer, and **neither can kill it**. The names test checks which names the GLB carries, not
+  which index is loaded. AC8's `clip …` lines come from the wire choice, not the bound clip. Agent
+  B's version also had no killer even after promotion. So I extracted the lookup into
+  `ingest::dwarf_clip_label(names, wanted)` and pinned it on the exporter's real order
+  `[Carry, Dig, Walk]`, where Walk is `Animation2`.
+
+### Completion Notes List
 ### Completion Notes List
 
+- **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
+  as the last two fields, both skipped when `None`. Emitter and idle-dwarf lines stay
+  byte-identical; the existing pins are unchanged. Bridge: `dwarf_job` is an exhaustive match with no
+  wildcard; `dwarf_entities` joins `claims()` to `jobs()` by `JobId` and reads `carrying()`. No
+  sim-core or save change. The serve test also asserts `profession` on every dwarf delta, which
+  closes 12.4's deferral. On every sample, a channel's target equalled the miner's own cell, and no
+  claim named a job missing from `jobs()`.
+- **Task 5:** `capture_roster` became `capture_roster_with(no_color, at_work)`. With `at_work`,
+  dwarf 1 gets `job: Haul` and `carrying: Some(77)` in every message, and stdout is byte-identical
+  to the control.
+- **Task 2a:** brief `src-assets/prompts/dwarf-miner-round-19.md`. It corrects one creation figure:
+  the strike does not land "one cell (1.6 m) in front of him". A Dig's rock face is the near face
+  of the next cell, **0.8 m** ahead of his origin, and a Channel's floor is under his own feet, so
+  the brief asks for a floor-to-knee strike 0.5–0.8 m ahead. It also tells the seat that the drawn
+  stone is a **0.64 m cube** (`STONE_ITEM_SCALE` 0.4 × 1.6 m cells), more than half the dwarf's
+  1.2 m. If that cannot read as held, scaling the carried stone is Wolf's call.
+
+- **Task 3** (Agent B, five commits `6bc748a`..`44b88cb`, then my `70fe281`):
+  - **Clip names:** read from the embedded GLB's JSON chunk in array order (`glb_clip_names`).
+    `dwarf_clip_summary()` returns them, and the startup line says `clips Walk, Dig, Carry` or
+    `clip <Name> ABSENT -- …`. Each clip loads `#Animation{i}` for its own name's index through
+    `dwarf_clip_label`. NOTE: the names come from the EMBEDDED bytes, so `--assets <dir>` with a
+    differently ordered GLB would bind wrongly.
+  - **Missing clip:** a chosen clip that has not loaded plays as `Walk`, and Dig/Carry each get a
+    "clip never loaded" STALLED line at frame 180. Agent B's real-binary smoke run on today's
+    Walk-only GLB printed both ABSENT clauses and both STALLED lines; Walk played, with no panic.
+  - **`sync_dwarf_work`:** a new system that runs after the blend, because it needs the clock
+    factor. It sets `DwarfClip` and `DigPhase`, prints `gui dwarf {id} clip {walk|dig|carry}` on
+    each change (none for the initial Walk), and parents or unparents carried stones.
+  - **Dig phase:** `entered` lives in `DwarfHeadings.1`, beside the headings; `.0` stays the
+    headings because the 10.5 mutation row quotes `headings.0.get`. A snapshot resets `entered` to
+    the snapshot tick. `DigPhase.phase` is stored only so the headless test can read the computed
+    value.
+  - **AC6 facing:** in `DwarfHeadings::record`, after the position-derived facing. It reuses
+    `entity_draw_rotation` from his cell to the target.
+  - **AC7:** the carried stone is a `ChildOf` the dwarf at `CARRY_OFFSET`, with local scale
+    `STONE_ITEM_SCALE / METRES_TO_CELLS`, because the dwarf entity is scaled 0.625 and the drawn
+    size must stay 0.4. The blend writer skips any item with a parent; the spawn writer runs only
+    once. Release resets it to `item_translation(pos)`.
+  - **Despawn:** Bevy despawns children recursively, so a stone would go with its dwarf. That is
+    unreachable today: the sim never despawns dwarves, and a slice hides dwarf and stone together.
+    Reconcile would respawn the stone a frame later anyway, so it is left unhandled.
+  - **`CARRY_OFFSET` is PROVISIONAL**, `(0, 0.7, -0.3)` in the dwarf's glTF/Bevy local metres. I
+    corrected its doc: the seat reports BLENDER rig space, and glTF maps Blender `(x, y, z)` to
+    `(x, z, -y)`. So a reported `(bx, by, bz)` goes in as `Vec3::new(bx, bz, -by)`. Agent B's doc
+    said "no conversion", which would have put the stone at the wrong height and depth.
+  - **2c split:** `the_embedded_dwarf_carries_its_walk_clip` now asserts `Walk` BY NAME. The
+    all-three upgrade lands with the promoted GLB in 2c; before then it would turn the gate red.
+
 ### File List
+### File List
+
+- `crates/protocol/src/lib.rs`
+- `crates/simd/src/bridge.rs`
+- `crates/simd/tests/serve.rs`
+- `crates/client-core/src/lib.rs` (literal fixes only)
+- `crates/gui/src/capture.rs`, `crates/gui/tests/capture.rs` (literal fixes only)
+- `crates/gui/src/ingest.rs`, `crates/gui/src/project.rs`, `crates/gui/src/appearance.rs`
+- `crates/gui/tests/headless.rs`
+- `crates/tui/src/view.rs` (literal fixes only)
+- `crates/tui/tests/client.rs`
+- `src-assets/prompts/dwarf-miner-round-19.md` (new)
+- `_bmad-output/implementation-artifacts/mutations/12-5.sh` (new)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 

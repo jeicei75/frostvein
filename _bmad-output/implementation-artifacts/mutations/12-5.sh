@@ -1,0 +1,84 @@
+# Story 12.5: dwarves at work -- dig and haul. The wire carries a dwarf's job and carried stone;
+# the gui picks Walk/Dig/Carry from it. Run alone after commit:
+#   RUST_TEST_THREADS=1 scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/12-5.sh
+
+mutation "the bridge sends no job" simd deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
+old = '                .map(|job| dwarf_job(*job)),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                .map(|job| dwarf_job(*job))\n                .filter(|_| false),\n'))
+PY
+
+mutation "the bridge sends no carried stone" simd deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
+old = '                .and_then(|(_, stone)| *stone),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                .and_then(|(_, stone)| *stone)\n                .filter(|_| false),\n'))
+PY
+
+mutation "Carry is preferred over Dig" gui digging_outranks_carrying_in_the_clip_choice <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '''    if entity.state == protocol::JobState::Work
+        && matches!(
+            entity.job,
+            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
+        )
+    {
+        DwarfClip::Dig
+    } else if entity.carrying.is_some() {
+        DwarfClip::Carry
+    } else {
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''    if entity.carrying.is_some() {
+        DwarfClip::Carry
+    } else if entity.state == protocol::JobState::Work
+        && matches!(
+            entity.job,
+            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
+        )
+    {
+        DwarfClip::Dig
+    } else {
+'''))
+PY
+
+mutation "the dig phase runs on wall time" gui the_dig_phase_runs_on_delivered_ticks_and_holds_when_the_ticks_repeat <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    clock: Res<TickClock>,\n    mut commands: Commands,\n'
+assert s.count(old) == 1
+s = s.replace(old, '    clock: Res<TickClock>,\n    time: Res<bevy::time::Time>,\n    mut commands: Commands,\n')
+old = '''            dig.phase = ((tick.saturating_sub(dig.entered) as f32 + clock.factor())
+                / WORK_SWING_TICKS as f32)
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let _ = &clock;\n            dig.phase = (time.elapsed_secs() * 2.0)\n'))
+PY
+
+mutation "a digging dwarf no longer faces his target" gui a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                && let Some(protocol::DwarfJob::Dig { target }) = entity.job\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                && let Some(protocol::DwarfJob::Dig { target }) = entity.job.filter(|_| false)\n'))
+PY
+
+mutation "the blend writer moves a carried stone" gui a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        } else if let Some(position) = items.get(&marker.0).filter(|_| parent.is_none()) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        } else if let Some(position) = items.get(&marker.0).filter(|_| parent.is_none() || true) {\n'))
+PY
+
+mutation "clips are bound by index again" gui each_clip_binds_the_label_of_its_own_name_in_export_order <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
+old = '    let index = names.iter().position(|name| name == wanted)?;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let index = names.iter().position(|name| name == wanted).map(|_| 0)?;\n'))
+PY
