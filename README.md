@@ -283,6 +283,19 @@ freezing nothing at all for three stories (issue #105); the sentence above is wh
 `--version` is worth using before trusting any frame. The stamp is recomputed on every build, so a
 binary that predates your change says so.
 
+**Work clips.** A dwarf plays one of three clips, chosen from his wire state alone:
+
+- `Dig` while he is in `work` on a dig or channel job, one swing per 5-tick work run, timed in
+  delivered ticks;
+- otherwise `Carry` while he carries a stone, which is drawn in his hands;
+- otherwise `Walk`.
+
+`Walk` and `Carry` are phase-locked to the ground he covers. While digging a dig (not a channel) he
+faces his target. Clips are bound by NAME from the embedded GLB, and the startup line says
+`clips Walk, Dig, Carry`, or `clip <Name> ABSENT` for each one missing. Every switch prints
+`gui dwarf <id> clip <walk|dig|carry>` to stderr, one line per dwarf per switch, by design. At
+fast-forward a dig run is 25 ms, so judge the swing at Normal.
+
 ## Test
 
 ```bash
