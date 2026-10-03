@@ -437,10 +437,12 @@ pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
     }
 }
 
-/// How many ticks one swing of the pick takes: one work run.
+/// How many ticks one swing of the pick takes. A dig's work run is sim-core's `DIG_WORK_TICKS`
+/// (50, Wolf's ten swings at the 12.5 seat), and the phase wraps, so one run plays ten swings.
 ///
-/// NOTE: mirrors sim-core's `WORK_TICKS` (5), which this crate cannot import. If the sim lengthens
-/// a work run, this must follow, or the swing stops fitting the run.
+/// NOTE: this crate cannot import sim-core. 50 is a whole number of 5-tick swings, so the last
+/// swing ends as the tile changes; a `DIG_WORK_TICKS` that is not a multiple of this would cut
+/// the last swing short.
 const WORK_SWING_TICKS: u64 = 5;
 
 /// Where in its swing a digging dwarf is, timed in DELIVERED sim ticks (12.5 AC4).

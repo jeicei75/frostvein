@@ -533,12 +533,14 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 if !claimed_job_ids.insert(job_id) {
                     bail!("save job {} has multiple claimants", job_id.0);
                 }
-                if dwarf.work_progress > sim_core::WORK_TICKS {
+                // NOTE: bounded by the LONGEST run (a dig), not by this dwarf's job kind. A hauler
+                // loaded with progress past his 5 ticks just finishes on the next tick.
+                if dwarf.work_progress > sim_core::DIG_WORK_TICKS {
                     bail!(
                         "save dwarf {} work progress {} exceeds {}",
                         dwarf.id,
                         dwarf.work_progress,
-                        sim_core::WORK_TICKS
+                        sim_core::DIG_WORK_TICKS
                     );
                 }
             }
@@ -856,6 +858,44 @@ mod tests {
         assert_eq!(period(protocol::Speed::Fast), Duration::from_millis(20));
         assert_eq!(period(protocol::Speed::Fast2x), Duration::from_millis(10));
         assert_eq!(period(protocol::Speed::Fast4x), Duration::from_millis(5));
+    }
+
+    /// 12.5: a dig is `DIG_WORK_TICKS` (50) of work, so a save taken mid-dig carries progress far
+    /// past a haul's `WORK_TICKS` (5). Bounding the load by `WORK_TICKS` refused every such save.
+    #[test]
+    fn a_save_taken_mid_dig_loads() {
+        // DEFAULT_SEED, whose camp floor is z 9: the channel block east of the fire that
+        // `12-5-signoff/work_wire.py` designates.
+        let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
+        world.apply_command(sim_core::SimCommand::Designate {
+            kind: sim_core::DesignationKind::Channel,
+            rect: sim_core::Rect {
+                min: sim_core::Pos { x: 65, y: 61, z: 9 },
+                max: sim_core::Pos { x: 68, y: 67, z: 9 },
+            },
+        });
+        let mut save = None;
+        for _ in 0..3000 {
+            world.step();
+            let state = world.to_save();
+            if state
+                .dwarves
+                .iter()
+                .any(|dwarf| dwarf.work_progress > sim_core::WORK_TICKS)
+            {
+                save = Some(state);
+                break;
+            }
+        }
+        let save = save.expect("a miner gets more than WORK_TICKS into a dig within 3000 ticks");
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-5-mid-dig-save-{}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, serde_json::to_vec(&save).unwrap()).unwrap();
+        let loaded = load_world_from(path.to_str().unwrap());
+        let _ = std::fs::remove_file(&path);
+        assert!(loaded.is_some(), "a save taken mid-dig must load");
     }
 
     #[test]

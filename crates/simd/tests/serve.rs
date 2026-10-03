@@ -1493,7 +1493,7 @@ fn overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking() {
 
     assert_save_is_rejected_without_stopping_ticks(
         state,
-        "save dwarf 0 work progress 4294967295 exceeds 5",
+        "save dwarf 0 work progress 4294967295 exceeds 50",
     );
 }
 
