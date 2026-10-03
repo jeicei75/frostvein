@@ -437,7 +437,7 @@ pub fn dwarf_asset_summary() -> (bool, usize) {
     (DWARF_ASSET.1.starts_with(b"glTF"), DWARF_ASSET.1.len())
 }
 
-/// Does the embedded dwarf actually carry an animation clip?
+/// Which animation clips does the embedded dwarf carry, BY NAME, in the glTF's array order?
 ///
 /// Read out of the BYTES this binary ships, not off a handle, because the failure it exists to
 /// catch is a stale runtime slot: round 18's walk cycle went into the .blend and the GLB in
@@ -446,19 +446,55 @@ pub fn dwarf_asset_summary() -> (bool, usize) {
 /// `Animation0` label, buried in a frame log. A dwarf that cannot walk should say so at startup,
 /// for the same reason the byte count says WHICH dwarf this is.
 ///
-/// Scans the JSON chunk for the `animations` array rather than parsing glTF: this is a
-/// present/absent signal to a human reading the startup lines, and `check_asset.py`'s animation
-/// clauses are what actually judge a clip.
-pub fn dwarf_clip_summary() -> bool {
-    let data = DWARF_ASSET.1;
+/// NAMES, and in array order, because the clips are bound by name: the exporter writes actions in
+/// NAME order (`Carry, Dig, Walk`), so `#Animation0` stops being `Walk` the day a second clip is
+/// promoted. `project.rs` loads `Animation(i)` for the index this list gives each name.
+/// `check_asset.py`'s animation clauses are what actually judge a clip.
+pub fn dwarf_clip_summary() -> Vec<String> {
+    glb_clip_names(DWARF_ASSET.1)
+}
+
+/// The clip names in a binary glTF's JSON chunk. Empty for anything that is not a readable GLB.
+fn glb_clip_names(data: &[u8]) -> Vec<String> {
     if data.len() < 20 || !data.starts_with(b"glTF") {
-        return false;
+        return Vec::new();
     }
     let length = u32::from_le_bytes([data[12], data[13], data[14], data[15]]) as usize;
     let Some(json) = data.get(20..20 + length) else {
-        return false;
+        return Vec::new();
     };
-    json.windows(13).any(|window| window == br#""animations":"#)
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    json["animations"]
+        .as_array()
+        .map(|clips| {
+            clips
+                .iter()
+                .map(|clip| clip["name"].as_str().unwrap_or_default().to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The clips the gui plays, in the order the startup line names them.
+pub const DWARF_CLIP_NAMES: [&str; 3] = ["Walk", "Dig", "Carry"];
+
+/// The startup line's clip clause: `clips Walk, Dig, Carry`, or `clip <Name> ABSENT -- ...` for
+/// each missing one.
+fn dwarf_clip_report(names: &[String]) -> String {
+    let missing = DWARF_CLIP_NAMES
+        .iter()
+        .filter(|wanted| !names.iter().any(|name| name == *wanted))
+        .map(|name| {
+            format!("clip {name} ABSENT -- this dwarf cannot play it; the runtime GLB is behind the .blend")
+        })
+        .collect::<Vec<_>>();
+    if missing.is_empty() {
+        format!("clips {}", DWARF_CLIP_NAMES.join(", "))
+    } else {
+        missing.join("; ")
+    }
 }
 
 /// Publish the embedded pines into the `embedded://` source before anything loads them.
@@ -494,17 +530,13 @@ pub fn run() -> anyhow::Result<()> {
     );
     let (dwarf_present, dwarf_bytes) = dwarf_asset_summary();
     eprintln!(
-        "gui dwarf asset: {} in this binary, {dwarf_bytes} bytes, walk clip {}",
+        "gui dwarf asset: {} in this binary, {dwarf_bytes} bytes, {}",
         if dwarf_present {
             "embedded"
         } else {
             "MISSING OR TRUNCATED"
         },
-        if dwarf_clip_summary() {
-            "present"
-        } else {
-            "ABSENT -- this dwarf cannot walk; the runtime GLB is behind the .blend"
-        }
+        dwarf_clip_report(&dwarf_clip_summary())
     );
     let (mirror, receiver, writer) = connect_to_daemon(args.port)?;
     let mut app = App::new();
@@ -5478,10 +5510,53 @@ mod tests {
     /// exported before its clip turns this red instead of shipping a figure that cannot walk.
     #[test]
     fn the_embedded_dwarf_carries_its_walk_clip() {
+        // NOTE: Walk only, on purpose. Dig and Carry arrive with the round-19 promotion (story
+        // 12.5 Task 2c), and that commit upgrades this to all of `DWARF_CLIP_NAMES` by name.
         assert!(
-            super::dwarf_clip_summary(),
-            "the promoted dwarf must carry an animation clip; re-export the blend and promote it"
+            super::dwarf_clip_summary()
+                .iter()
+                .any(|name| name == "Walk"),
+            "the promoted dwarf must carry a clip named Walk; re-export the blend and promote it"
         );
+    }
+
+    /// A GLB with this JSON chunk and no binary chunk, which is all the parser reads.
+    fn glb_with_json(json: &str) -> Vec<u8> {
+        let mut bytes = b"glTF".to_vec();
+        bytes.extend(2_u32.to_le_bytes());
+        bytes.extend((20 + json.len() as u32).to_le_bytes());
+        bytes.extend((json.len() as u32).to_le_bytes());
+        bytes.extend(0x4E4F_534A_u32.to_le_bytes());
+        bytes.extend(json.as_bytes());
+        bytes
+    }
+
+    #[test]
+    fn clip_names_are_read_in_array_order_from_the_json_chunk() {
+        let glb = glb_with_json(
+            r#"{"asset":{"version":"2.0"},"animations":[{"name":"Carry"},{"name":"Dig"},{"name":"Walk"}]}"#,
+        );
+        assert_eq!(super::glb_clip_names(&glb), ["Carry", "Dig", "Walk"]);
+        assert_eq!(
+            super::dwarf_clip_report(&super::glb_clip_names(&glb)),
+            "clips Walk, Dig, Carry"
+        );
+    }
+
+    #[test]
+    fn a_missing_clip_is_named_absent_and_a_clipless_glb_names_all_three() {
+        let walk_only = glb_with_json(r#"{"animations":[{"name":"Walk"}]}"#);
+        let report = super::dwarf_clip_report(&super::glb_clip_names(&walk_only));
+        assert!(report.contains("clip Dig ABSENT"), "{report}");
+        assert!(report.contains("clip Carry ABSENT"), "{report}");
+        assert!(!report.contains("clip Walk"), "{report}");
+
+        let none = glb_with_json(r#"{"asset":{"version":"2.0"}}"#);
+        let report = super::dwarf_clip_report(&super::glb_clip_names(&none));
+        for name in ["Walk", "Dig", "Carry"] {
+            assert!(report.contains(&format!("clip {name} ABSENT")), "{report}");
+        }
+        assert!(super::glb_clip_names(b"not a glb at all, but long enough").is_empty());
     }
 
     #[test]
