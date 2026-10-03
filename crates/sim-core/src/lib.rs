@@ -4017,7 +4017,9 @@ mod tests {
         super::execute_jobs(&mut world.ecs);
         assert_eq!(world.dwarves()[0].1, work);
         assert_eq!(world.dwarves()[0].2, JobState::Walk);
-        for _ in 0..super::DIG_WORK_TICKS {
+        // A literal, not `DIG_WORK_TICKS`: Wolf ruled ten swings at the client's five ticks each
+        // (12.5 seat), and a loop bound by the constant would follow any change to it.
+        for _ in 0..50 {
             super::execute_jobs(&mut world.ecs);
             assert_eq!(world.dwarves()[0].2, JobState::Work);
             assert_eq!(world.claims()[0].1, Some(JobId(0)));
