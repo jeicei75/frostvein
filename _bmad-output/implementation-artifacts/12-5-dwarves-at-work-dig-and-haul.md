@@ -563,6 +563,12 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
     Row 10 re-pointed to `DwarfClip::Dig if !arrived`, KILLED (`:5237`). 12-5.sh is 13 rows, all
     KILLED. Headless 102/102, gui lib 221, clippy clean.
 
+- **Wolf at the seat (fourth remark):** "stones don't have collision detection so dwarves can walk
+  through them". Items never block in the sim, by design: haulers stand on pile cells to drop, and
+  on a stone's cell to pick it up. Wolf picked "file an issue, decide later" -> **#162** (`bug`,
+  `route:story`, `route:undecided`), with the repro and three options: visual rubble, sim blocking,
+  or fold into 12.9. Not in 12.5.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
