@@ -5511,14 +5511,16 @@ mod tests {
     /// `include_bytes!` means the promoted file IS this test's subject, so promoting a dwarf
     /// exported before its clip turns this red instead of shipping a figure that cannot walk.
     #[test]
-    fn the_embedded_dwarf_carries_its_walk_clip() {
-        // NOTE: Walk only, on purpose. Dig and Carry arrive with the round-19 promotion (story
-        // 12.5 Task 2c), and that commit upgrades this to all of `DWARF_CLIP_NAMES` by name.
+    fn the_embedded_dwarf_carries_walk_dig_and_carry_by_name() {
+        let names = super::dwarf_clip_summary();
+        let missing = super::DWARF_CLIP_NAMES
+            .iter()
+            .filter(|wanted| !names.iter().any(|name| name == *wanted))
+            .collect::<Vec<_>>();
         assert!(
-            super::dwarf_clip_summary()
-                .iter()
-                .any(|name| name == "Walk"),
-            "the promoted dwarf must carry a clip named Walk; re-export the blend and promote it"
+            missing.is_empty(),
+            "the promoted dwarf is missing clip(s) {missing:?} (it carries {names:?}); re-export \
+             the blend and promote it"
         );
     }
 
