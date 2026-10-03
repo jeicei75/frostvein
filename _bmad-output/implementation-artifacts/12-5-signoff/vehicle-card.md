@@ -27,8 +27,9 @@ right, under the clock.
 1. Press `2`, then drag a block of channel marks on the camp floor east of the fire, about 4×7.
 2. Press `3`, then drag a 3×3 stockpile west of the fire.
 3. Watch Bifur walk to a mark and swing. One swing is one dig (0.5 s), and the strike lands just
-   before the tile changes. He digs a channel under his own feet, so he keeps the heading he
-   arrived with.
+   before the tile changes. The pick is one-handed and swings on his RIGHT side, so the blade
+   lands about 0.7 m ahead and to his right. A channel is dug under his own feet, so he keeps the
+   heading he arrived with rather than turning to a rock face.
 4. The console prints `gui dwarf 2 clip dig` at each swing and `gui dwarf 2 clip walk` after it.
 
 **Question 1:** does the swing read as a dwarf digging?
@@ -45,8 +46,10 @@ This follows **Ori, the hauler in green**.
 
 1. Make the same designation as in (a): `2` for channel marks east of the fire, `3` for a 3×3
    stockpile west of it.
-2. Wait for the dug stones. Ori walks to one, picks it up, and carries it to the pile, holding it
-   in both hands in front of his chest. The stone moves with him, not cell by cell.
+2. Wait for the dug stones. Ori walks to one, picks it up, and carries it to the pile. He holds it
+   out in front by its back edges, arms straight, with the pickaxe slung on his pack. The stone
+   moves with him, not cell by cell. It is the 0.64 m stone you picked at the seat, so from the
+   front it hides him except his hair and boots. Look from the side or three-quarter.
 3. On delivery the stone is put down on the pile cell, and he goes back to walking empty-handed.
 4. The console prints `gui dwarf 1 clip carry` at pick-up and `gui dwarf 1 clip walk` at the drop.
 

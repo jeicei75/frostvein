@@ -153,7 +153,7 @@ to the seat under the hard stop.
     - a `carrying` id present in `items` at the carrier's cell.
     This also closes 12.4's deferral that "deltas carry a profession" had no automated test: assert
     `profession` on those deltas too.
-- [ ] **Task 2: the clips, from a live BlenderMCP seat (AC2; Task 0 ruling 3).** Tasks 1 and 3's headless
+- [x] **Task 2: the clips, from a live BlenderMCP seat (AC2; Task 0 ruling 3).** Tasks 1 and 3's headless
   parts do not need the clips, so run them while the seat is pending. Task 4 and the seat need the
   promoted GLB.
   - [x] **2a — write the brief** `src-assets/prompts/dwarf-miner-round-19.md`. Copy round 18's shape
@@ -186,10 +186,10 @@ to the seat under the hard stop.
     - **Report** `dwarf-miner-round-19-report.md`: frames, strike frame, the hand-meeting point, foot
       slide in mm on `Carry` (must match Walk's 0.000), the pick clearance, and the session's cost and
       turns for the ledger.
-  - [ ] **2b — the seat (Wolf).** Wolf runs the round-19 session. Add a ledger row for the round, with its
+  - [x] **2b — the seat (Wolf).** Wolf runs the round-19 session. Add a ledger row for the round, with its
     exact model id and cost. **Hard stop:** after two rounds his eye has not judged converging, stop and
     ask him whether it ships plain or is parked.
-  - [ ] **2c — export, gate, promote.** Export with
+  - [x] **2c — export, gate, promote.** Export with
     `blender --background … --python src-assets/blender/export_dwarf.py`
     (`export_animations=True` already exports every action, so check nothing stray is in the file).
     - Run `check_asset.py` on the export and confirm `anims=` lists Carry, Dig and Walk, each passing
@@ -197,7 +197,7 @@ to the seat under the hard stop.
     - Promote to `assets/gltf/SM_VoxelDwarf_Miner01.glb` in its own commit, as previous rounds did, and
       re-run `check_asset.py` on the PROMOTED file.
     - Set `CARRY_OFFSET` from the report. `include_bytes!` means rebuild before any gui run.
-  - [ ] `ingest.rs`:
+  - [x] `ingest.rs`:
     - `dwarf_clip_summary()` returns the clip NAMES parsed from the GLB's JSON chunk;
     - the startup line says `clips Walk, Dig, Carry`, or `clip <Name> ABSENT -- …` for each one missing;
     - `the_embedded_dwarf_carries_its_walk_clip` becomes a test that the embedded dwarf carries all
@@ -244,7 +244,7 @@ to the seat under the hard stop.
 - [x] **Task 5: tui (AC9).** The tui decodes the new fields and renders as today. Give one dwarf in the
   existing `capture_roster` stub (`tui/tests/client.rs:1563`) a `job` and a `carrying`, and assert its
   frame is unchanged.
-- [ ] **Task 6: the record.**
+- [x] **Task 6: the record.**
   - [x] `_bmad-output/implementation-artifacts/mutations/12-5.sh`. Every row is KILLED by the test named:
     1. bridge `job: None` → the Task 1 serve test;
     2. bridge `carrying: None` → the Task 1 serve test;
@@ -256,7 +256,7 @@ to the seat under the hard stop.
        (record which one killed it).
   - [x] README gui section: the work clips, and the `gui dwarf N clip …` line.
 - [ ] **Task 7: the live recipe, the seat (AC10), then the full gate.**
-  - [ ] Run the Verification recipe on the branch: GREEN, then the deliberate RED. Record both outputs.
+  - [x] Run the Verification recipe on the branch: GREEN, then the deliberate RED. Record both outputs.
   - [x] Write `12-5-signoff/vehicle-card.md` in the seat's launch form (see Verification).
     - Restart `simd 7451` before each part.
     - Say where on screen to look: the selected dwarf is centred, and his name is top-right under the
@@ -268,6 +268,7 @@ to the seat under the hard stop.
 
 | Round | Date | Clips | Made by (exact model / venue) | Cost | Wolf's verdict | Converging? |
 | --- | --- | --- | --- | --- | --- | --- |
+| 19 | 2026-10-03 | `Dig`, `Carry` (+ joint `pick`; `Walk` gains `pick` rest keys only) | `claude-opus-5-5`, Claude Code CLI + BlenderMCP, live in Wolf's running Blender 5.2.1 | pending: Wolf to read `/cost` of that session (the seat could not see it) | Steered live: 0.25 m stone REJECTED (shoulders and wrists knotted) → **0.64 m** after comparing with 0.45 m; pickaxe slung on the back during Carry (20th joint); caught `Walk` inheriting the slung pick. Wolf: "agent finished animations". In-game verdict pending (seat card) | pending the in-game seat |
 
 ## Dev Notes
 
@@ -468,6 +469,28 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   tier 2941 s, which includes the new AC8 test). This is PRE-PROMOTION: 2c's GLB and the all-three
   names test will need the full gate again before the PR.
 
+- **2c export + promotion** (orchestrator, devpod `blender` 5.2.1 headless, on Wolf's seat commit
+  `1ab96b4`). `export_dwarf.py` gave: 3360 tris; rig `joints 20`, with 0 missing, 0 unexpected and
+  0 unweighted; clips `Carry (60 channels), Dig (60 channels), Walk (60 channels)`; 388,320 bytes.
+  `check_asset.py` on the export exited 0 with `joints=20
+  anims=Carry:60ch@1.00s,Dig:60ch@1.00s,Walk:60ch@1.00s`, loop closure passing on all three. The
+  promoted `assets/gltf/` file is `cmp`-identical, and `check_asset.py` on it prints the same
+  clause. Promoted alone in `197d17c`.
+- **AC2 RED:** `the_embedded_dwarf_carries_walk_dig_and_carry_by_name` against the round-18 Walk-only
+  GLB (`f3b7cb3`'s bytes) panicked at `ingest.rs:5520` (missing `["Dig", "Carry"]`). This is a
+  one-off, not a table row. **`mutate.sh` did NOT restore the GLB**: its backup covers only
+  `crates/`, `scripts/` and `_bmad/scripts/` (`mutate.sh:71`, documented at `:68`). The fix was
+  committed first, so `git checkout --` restored it safely, and `check_asset.py` re-confirmed
+  three clips.
+
+- **Clips recipe, POST-promotion** (release, `gui build 82121d7`, same recipe on port 7497): gui exit 0
+  in 890 s. Startup: `gui dwarf asset: embedded in this binary, 388320 bytes, clips Walk, Dig, Carry`,
+  with no STALLED line, so all three clips loaded. Dwarf 2 logged `clip dig` ×12 / `clip walk` ×12,
+  dwarf 4 ×10/×10, dwarf 1 `clip carry` ×5 / `clip walk` ×5, dwarf 3 ×5/×5. The wire said
+  `dig_ticks 90 carry_ticks 310 mismatches 0`, `WORK WIRE OK`. Counts differ from the
+  pre-promotion run (11/11) because the designation lands at a wall-clock-dependent tick.
+  Deliberate RED: row 1 on the wire (above) and on AC8 (`pixel_guard.rs:1144`).
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
@@ -526,6 +549,19 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   `--select 2` and Ori `--select 1`, each on a restarted `simd 7451`. Each part says where to look
   and asks one question.
 
+- **Round 19 (2b):** Wolf ran the seat and committed it himself (`1ab96b4`, his own authorship). The
+  seat departed from the brief on Wolf's calls:
+  - a 20th joint, `pick` (child of `hand.R`), so the pickaxe can be slung on the back during
+    Carry; `export_dwarf.JOINTS` gained it. Nothing under `crates/` counts joints;
+  - `Walk` got `pick` rest keys only, and its 79 round-18 curves still hash `628961a8…`;
+  - the stone stays at 0.64 m, after 0.25 m was rejected live.
+  `Dig`'s blade lands 0.69 m ahead, 7 mm above the floor, at frame 18, on his right side (the
+  pick swings in his right-hand plane). Clearance is 257 mm at worst.
+- **2c:** `CARRY_OFFSET` = `Vec3::new(0.0, 0.705, -0.580)`, the measured stone CENTRE, not the
+  palm midpoint the brief asked for. The palms hold the stone's rear edge (arm reach 0.302 m),
+  so a cube centred on the palms would sit through his chest. The report gives the centre,
+  Blender `(0, 0.580, 0.705)`, mapped `(x, z, -y)`. The clip test now requires all three by name.
+
 ### File List
 
 - `crates/protocol/src/lib.rs`
@@ -539,6 +575,8 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 - `crates/tui/tests/client.rs`
 - `src-assets/prompts/dwarf-miner-round-19.md` (new)
 - `crates/gui/tests/pixel_guard.rs`
+- `assets/gltf/SM_VoxelDwarf_Miner01.glb` (promoted round 19)
+- `src-assets/blender/SM_VoxelDwarf_Miner01.blend`, `src-assets/blender/work_r19.py`, `src-assets/blender/export_dwarf.py`, `src-assets/prompts/dwarf-miner-round-19-report.md`, `src-assets/renders/r19/` (Wolf's seat commit `1ab96b4`)
 - `README.md`
 - `_bmad-output/implementation-artifacts/12-5-signoff/vehicle-card.md` (new)
 - `_bmad-output/implementation-artifacts/mutations/12-5.sh` (new)
