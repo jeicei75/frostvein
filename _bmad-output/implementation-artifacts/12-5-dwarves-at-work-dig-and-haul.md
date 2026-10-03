@@ -261,14 +261,14 @@ to the seat under the hard stop.
     - Restart `simd 7451` before each part.
     - Say where on screen to look: the selected dwarf is centred, and his name is top-right under the
       clock.
-  - [ ] Add a row to "Art ledger" for every seat round, with Wolf's words.
+  - [x] Add a row to "Art ledger" for every seat round, with Wolf's words.
   - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~50-75 min, [[gate-ooms-at-default-parallelism]]).
 
 ## Art ledger (FR45, M2-24)
 
 | Round | Date | Clips | Made by (exact model / venue) | Cost | Wolf's verdict | Converging? |
 | --- | --- | --- | --- | --- | --- | --- |
-| 19 | 2026-10-03 | `Dig`, `Carry` (+ joint `pick`; `Walk` gains `pick` rest keys only) | `claude-opus-5-5`, Claude Code CLI + BlenderMCP, live in Wolf's running Blender 5.2.1 | **$11.10** (Wolf's `/cost`: opus-5-5 $11.10 + haiku-4-5 $0.001; 125 requests, 27m API / 3h08m wall) | Steered live: 0.25 m stone REJECTED (shoulders and wrists knotted) → **0.64 m** after comparing with 0.45 m; pickaxe slung on the back during Carry (20th joint); caught `Walk` inheriting the slung pick. Wolf: "agent finished animations". In-game verdict pending (seat card) | pending the in-game seat |
+| 19 | 2026-10-03 | `Dig`, `Carry` (+ joint `pick`; `Walk` gains `pick` rest keys only) | `claude-opus-5-5`, Claude Code CLI + BlenderMCP, live in Wolf's running Blender 5.2.1 | **$11.10** (Wolf's `/cost`: opus-5-5 $11.10 + haiku-4-5 $0.001; 125 requests, 27m API / 3h08m wall) | Steered live: 0.25 m stone REJECTED (shoulders and wrists knotted) → **0.64 m** after comparing with 0.45 m; pickaxe slung on the back during Carry (20th joint); caught `Walk` inheriting the slung pick. Wolf: "agent finished animations". **In game (seat card, same day):** dig "maybe it could dig longer one cell.. now it's just one hit" -> ruled 10 swings; "digging starts now when dwarf is still moving" -> stop first; "hauler when dropping cargo walks into it" -> stop first; then **"ok.. well need to fine tune it later on"** | **Yes: judged OK, ships with tuning later** (FR45: done on Wolf's judgement, round 1 of 2) |
 
 ## Dev Notes
 
@@ -568,6 +568,13 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   on a stone's cell to pick it up. Wolf picked "file an issue, decide later" -> **#162** (`bug`,
   `route:story`, `route:undecided`), with the repro and three options: visual rubble, sim blocking,
   or fold into 12.9. Not in 12.5.
+
+- **AC10 seat CLOSED (Wolf, 2026-10-03):** "ok.. well need to fine tune it later on". The clips read
+  and ship, with tuning later. The art ledger row 19 carries his words; one round, so the hard stop
+  never came into play. In the same sitting: **#163** filed, "channelling does not dig to the level
+  under, only the same level". The sim's Channel turns the solid tile at z − 1 into a ramp and
+  nothing deeper (verified in source, not re-run); it needs a ruling (`route:undecided`). Not in
+  12.5.
 
 ### Completion Notes List
 
