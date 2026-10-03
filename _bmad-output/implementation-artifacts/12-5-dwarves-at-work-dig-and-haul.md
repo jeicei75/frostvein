@@ -464,6 +464,10 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   - The startup line said `clip Dig ABSENT …; clip Carry ABSENT …`, which is correct on the Walk-only
     GLB. The recipe's "startup line names `Walk, Dig, Carry`" waits on 2c's promotion.
 
+- **FULL GATE GREEN 3193 s on `045c020`** (`RUST_TEST_THREADS=1 scripts/gate.sh`, exit 0; pixel-guard
+  tier 2941 s, which includes the new AC8 test). This is PRE-PROMOTION: 2c's GLB and the all-three
+  names test will need the full gate again before the PR.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`
