@@ -5037,3 +5037,99 @@ fn digging_outranks_carrying_in_the_clip_choice() {
     );
     assert_eq!(dwarf_clip(&stooping), DwarfClip::Walk);
 }
+
+fn dig_phase_of(app: &mut App, id: u32) -> gui::project::DigPhase {
+    app.world_mut()
+        .query::<(&WorldProjected, &gui::project::DigPhase)>()
+        .iter(app.world())
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, phase)| *phase)
+        .expect("the dwarf must carry a DigPhase")
+}
+
+fn tick_factor(app: &App) -> f32 {
+    app.world().resource::<gui::blend::TickClock>().factor()
+}
+
+fn virtual_seconds(app: &App) -> f32 {
+    app.world().resource::<bevy::time::Time>().elapsed_secs()
+}
+
+fn digging(id: u32) -> Entity {
+    working(id, [0, 0, 0], JobState::Work, Some(DIG_AT_EAST), None)
+}
+
+/// 12.5 AC4: the swing is timed in delivered ticks. One work run (five ticks) sweeps the phase
+/// from 0 to 1; a world that stops delivering ticks holds it; a snapshot restarts it.
+#[test]
+fn the_dig_phase_runs_on_delivered_ticks_and_holds_when_the_ticks_repeat() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    // Wall/virtual time ADVANCES every frame, so an implementation that reads it cannot hold
+    // still across the repeated-tick frames below.
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+
+    // Ticks n..n+4 of one work run, entered at n = 10. Each is followed by enough frames to
+    // saturate the blend, so the phase is exactly (tick - n + 1) / 5.
+    let n = 10;
+    let mut seen = Vec::new();
+    for offset in 0..5_u64 {
+        apply_delta(&mut app, delta_at(n + offset, Vec::new(), vec![digging(7)]));
+        app.update();
+        let fresh = dig_phase_of(&mut app, 7);
+        assert_eq!(fresh.entered, n, "he entered work at tick {n}");
+        let expected_fresh = (offset as f32 + tick_factor(&app)) / 5.0;
+        assert!(
+            (fresh.phase - expected_fresh).abs() < 1e-5,
+            "tick +{offset}: phase {} but ticks and factor give {expected_fresh}",
+            fresh.phase
+        );
+        for _ in 0..8 {
+            app.update();
+        }
+        let settled = dig_phase_of(&mut app, 7);
+        let expected_settled = ((offset as f32 + 1.0) / 5.0).rem_euclid(1.0);
+        assert!(
+            (settled.phase - expected_settled).abs() < 1e-5,
+            "tick +{offset} settled at {} not {expected_settled}",
+            settled.phase
+        );
+        seen.push(fresh.phase);
+    }
+    assert!(
+        seen[0] < 0.2,
+        "the swing starts at the bottom of the cycle: {seen:?}"
+    );
+    assert!(seen[4] >= 0.8, "and ends at the top of it: {seen:?}");
+
+    // Pause: the same tick delivered again and again while the clock keeps running.
+    let held = dig_phase_of(&mut app, 7).phase;
+    let before = virtual_seconds(&app);
+    for _ in 0..6 {
+        apply_delta(&mut app, delta_at(n + 4, Vec::new(), vec![digging(7)]));
+        app.update();
+        assert_eq!(
+            dig_phase_of(&mut app, 7).phase,
+            held,
+            "a repeated tick must not move the swing"
+        );
+    }
+    assert!(
+        virtual_seconds(&app) - before > 0.5,
+        "time must have advanced across the held frames, or this proved nothing"
+    );
+
+    // A snapshot restarts the swing at the snapshot's own tick.
+    let mut restart = snapshot(vec![Tile::Empty, Tile::Empty], vec![digging(7)]);
+    restart.tick = 40;
+    apply_snapshot(&mut app, restart);
+    app.update();
+    let after = dig_phase_of(&mut app, 7);
+    assert_eq!(after.entered, 40, "a snapshot resets every entered tick");
+    assert!((after.phase - tick_factor(&app) / 5.0).abs() < 1e-5);
+}

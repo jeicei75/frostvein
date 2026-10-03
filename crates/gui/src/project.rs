@@ -266,7 +266,7 @@ pub struct ProjectionAssets {
     trees: [Handle<WorldAsset>; 4],
     dwarf_scene: Handle<WorldAsset>,
     /// `None` wherever the animation plugin is absent -- every `MinimalPlugins` test.
-    dwarf_walk: Option<DwarfWalk>,
+    dwarf_walk: Option<DwarfClips>,
 }
 
 #[derive(Resource)]
@@ -301,13 +301,62 @@ pub fn update_rim_for_sky(
     last.0 = clear.0;
 }
 
-/// The `Walk` clip, wrapped in the one-node graph Bevy needs to play anything.
+/// One clip's node in the dwarf graph, and the clip itself.
 #[derive(Clone)]
-struct DwarfWalk {
-    graph: Handle<AnimationGraph>,
+struct ClipNode {
     node: AnimationNodeIndex,
     /// Kept so the cycle's DURATION can be read off the clip instead of restated as a constant.
     clip: Handle<AnimationClip>,
+}
+
+/// The dwarf's clips, wrapped in the one graph Bevy needs to play anything. One node plays at a
+/// time (no blending), so the graph is just a place to hang each clip.
+///
+/// `Walk` is required; a GLB without it builds no graph at all. `dig` and `carry` are `None` while
+/// the promoted GLB does not carry them yet, and a dwarf whose chosen clip is absent simply holds
+/// `Walk` (see `DwarfClips::resolve`).
+#[derive(Clone)]
+struct DwarfClips {
+    graph: Handle<AnimationGraph>,
+    walk: ClipNode,
+    dig: Option<ClipNode>,
+    carry: Option<ClipNode>,
+}
+
+impl DwarfClips {
+    fn node(&self, clip: DwarfClip) -> Option<&ClipNode> {
+        match clip {
+            DwarfClip::Walk => Some(&self.walk),
+            DwarfClip::Dig => self.dig.as_ref(),
+            DwarfClip::Carry => self.carry.as_ref(),
+        }
+    }
+
+    /// The clip to actually play for a chosen one: the chosen clip once its asset has loaded,
+    /// otherwise `Walk`. NOTE: the fallback holds `Walk`'s pose rather than animating nothing --
+    /// the simplest thing that keeps a half-promoted GLB from drawing a T-pose dwarf.
+    fn resolve(
+        &self,
+        chosen: DwarfClip,
+        clips: &Assets<AnimationClip>,
+    ) -> (DwarfClip, &ClipNode, f32) {
+        if let Some(node) = self.node(chosen)
+            && let Some(clip) = clips.get(&node.clip)
+        {
+            return (chosen, node, clip.duration());
+        }
+        let duration = clips
+            .get(&self.walk.clip)
+            .map_or(0.0, AnimationClip::duration);
+        (DwarfClip::Walk, &self.walk, duration)
+    }
+
+    fn nodes(&self) -> impl Iterator<Item = AnimationNodeIndex> {
+        [Some(&self.walk), self.dig.as_ref(), self.carry.as_ref()]
+            .into_iter()
+            .flatten()
+            .map(|clip| clip.node)
+    }
 }
 
 /// How far this dwarf has walked, and where he was last drawn.
@@ -374,18 +423,50 @@ pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
     }
 }
 
-/// Sets each dwarf's clip from the mirror. Runs after `reconcile_projection`, so a dwarf spawned
-/// this frame is already there, and before `drive_dwarf_walk`, so a delta's clip plays the frame
-/// it lands.
+/// How many ticks one swing of the pick takes: one work run.
+///
+/// NOTE: mirrors sim-core's `WORK_TICKS` (5), which this crate cannot import. If the sim lengthens
+/// a work run, this must follow, or the swing stops fitting the run.
+const WORK_SWING_TICKS: u64 = 5;
+
+/// Where in its swing a digging dwarf is, timed in DELIVERED sim ticks (12.5 AC4).
+///
+/// `entered` is the mirror tick of the delta on which he began this work run. `phase` is
+/// `(mirror tick - entered + TickClock::factor()) / WORK_SWING_TICKS`, wrapped to `[0, 1)`: delivered
+/// ticks plus AD-15's blend factor. Never wall time and never a predicted tick, so a paused world
+/// (the same tick delivered again) holds the swing, and a fast one swings fast.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
+pub struct DigPhase {
+    pub entered: u64,
+    pub phase: f32,
+}
+
+/// Sets each dwarf's clip and swing phase from the mirror. Runs after the blend (it reads the
+/// blend's clock factor) and before `drive_dwarf_walk`, so a delta's clip plays the frame it lands.
 pub fn sync_dwarf_work(
     mirror: Res<crate::ingest::MirrorResource>,
-    mut dwarves: Query<(&WorldProjected, &mut DwarfClip)>,
+    headings: Res<DwarfHeadings>,
+    clock: Res<TickClock>,
+    mut dwarves: Query<(&WorldProjected, &mut DwarfClip, &mut DigPhase)>,
 ) {
     for entity in mirror.0.entities() {
-        let Some((_, mut clip)) = dwarves.iter_mut().find(|(id, _)| id.0 == entity.id) else {
+        let Some((_, mut clip, mut dig)) = dwarves.iter_mut().find(|(id, _, _)| id.0 == entity.id)
+        else {
             continue;
         };
         let chosen = dwarf_clip(entity);
+        if chosen == DwarfClip::Dig {
+            let tick = mirror.0.tick();
+            let was_digging = *clip == DwarfClip::Dig;
+            dig.entered = headings
+                .1
+                .get(&entity.id)
+                .copied()
+                .unwrap_or(if was_digging { dig.entered } else { tick });
+            dig.phase = ((tick.saturating_sub(dig.entered) as f32 + clock.factor())
+                / WORK_SWING_TICKS as f32)
+                .rem_euclid(1.0);
+        }
         if *clip != chosen {
             *clip = chosen;
             // NOTE: chatty by design -- 5 dwarves, one line per clip switch. This line is the
@@ -569,18 +650,38 @@ pub fn setup_projection_assets(
             .map_or_else(Handle::default, |asset_server| {
                 asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Scene0"))
             }),
-        // `#Animation0` is the `Walk` clip. The GLB carries exactly one, and
-        // `check_asset.py`'s animation clauses reject a clip that is inert or that does not
-        // close its loop, so a silently empty animation cannot reach here.
+        // Clips are bound BY NAME. The exporter writes actions in name order (`Carry, Dig,
+        // Walk`), so `#Animation0` is only `Walk` while Walk is the sole clip. The names come
+        // from the embedded GLB's JSON chunk, in array order, and each one loads the
+        // `Animation(i)` of its own index. NOTE: the names are read from the EMBEDDED bytes, so
+        // `--assets <dir>` pointing at a GLB with a different clip order would bind wrongly.
         dwarf_walk: match (asset_server.as_ref(), animation_graphs) {
             (Some(asset_server), Some(mut graphs)) => {
-                let clip: Handle<AnimationClip> =
-                    asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Animation0"));
-                let (graph, node) = AnimationGraph::from_clip(clip.clone());
-                Some(DwarfWalk {
+                let names = crate::ingest::dwarf_clip_summary();
+                let load = |wanted: &str| -> Option<Handle<AnimationClip>> {
+                    let index = names.iter().position(|name| name == wanted)?;
+                    Some(asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Animation{index}")))
+                };
+                let (walk, dig, carry) = (load("Walk"), load("Dig"), load("Carry"));
+                let present = [walk.clone(), dig.clone(), carry.clone()]
+                    .into_iter()
+                    .flatten()
+                    .collect::<Vec<_>>();
+                let (graph, nodes) = AnimationGraph::from_clips(present);
+                let mut nodes = nodes.into_iter();
+                let mut take = |clip: Option<Handle<AnimationClip>>| {
+                    clip.map(|clip| ClipNode {
+                        node: nodes.next().expect("one graph node per loaded clip"),
+                        clip,
+                    })
+                };
+                // `present` is in Walk, Dig, Carry order, so the nodes come out in that order too.
+                let (walk, dig, carry) = (take(walk), take(dig), take(carry));
+                walk.map(|walk| DwarfClips {
                     graph: graphs.add(graph),
-                    node,
-                    clip,
+                    walk,
+                    dig,
+                    carry,
                 })
             }
             _ => None,
@@ -1874,6 +1975,7 @@ pub fn reconcile(
                             // Starts at rest. `blend_entities` is the only writer after this.
                             WalkPhase::default(),
                             DwarfClip::default(),
+                            DigPhase::default(),
                             Transform::from_translation(
                                 world_to_render(position) + entity_draw_offset(mirror_entity.kind),
                             )
@@ -2127,7 +2229,7 @@ pub fn start_dwarf_walk(
         return;
     };
     for (entity, mut player) in players.iter_mut() {
-        player.play(walk.node).repeat().pause();
+        player.play(walk.walk.node).repeat().pause();
         commands
             .entity(entity)
             .insert(AnimationGraphHandle(walk.graph.clone()));
@@ -2158,7 +2260,7 @@ pub fn start_dwarf_walk(
 pub fn drive_dwarf_walk(
     mut players: Query<(BevyEntity, &mut AnimationPlayer)>,
     parents: Query<&ChildOf>,
-    phases: Query<&WalkPhase>,
+    phases: Query<(&WalkPhase, &DwarfClip, &DigPhase)>,
     assets: Option<Res<ProjectionAssets>>,
     clips: Option<Res<Assets<AnimationClip>>>,
     mut announced: bevy::prelude::Local<bool>,
@@ -2181,18 +2283,25 @@ pub fn drive_dwarf_walk(
     // Read the duration off the clip rather than restating 1.0 s here: a re-authored cycle of a
     // different length must keep working, and a constant beside the asset is how the reported
     // triangle figures came to lie about the artifact they described.
-    let Some(duration) = clips.get(&walk.clip).map(AnimationClip::duration) else {
+    if !clips.contains(&walk.walk.clip) {
         if stalled {
             eprintln!("gui dwarf walk: STALLED -- the Walk clip never loaded");
         }
         return;
-    };
+    }
+    if stalled {
+        for (name, clip) in [("Dig", &walk.dig), ("Carry", &walk.carry)] {
+            if !clip.as_ref().is_some_and(|clip| clips.contains(&clip.clip)) {
+                eprintln!("gui dwarf walk: STALLED -- the {name} clip never loaded");
+            }
+        }
+    }
     for (entity, mut player) in players.iter_mut() {
         let mut current = entity;
-        let mut phase = None;
+        let mut found = None;
         for _ in 0..8 {
-            if let Ok(found) = phases.get(current) {
-                phase = Some(found.phase());
+            if let Ok(state) = phases.get(current) {
+                found = Some(state);
                 break;
             }
             match parents.get(current) {
@@ -2200,15 +2309,28 @@ pub fn drive_dwarf_walk(
                 Err(_) => break,
             }
         }
-        let Some(phase) = phase else {
+        let Some((walk_phase, chosen, dig_phase)) = found else {
             if stalled {
                 eprintln!("gui dwarf walk: STALLED -- no WalkPhase above an animation player");
             }
             continue;
         };
-        for (_, active) in player.playing_animations_mut() {
-            active.seek_to(phase * duration);
+        // Only the resolved clip plays: stop the others, play it paused, and seek it. Seeking
+        // EVERY active animation was right with one node and would drag the rest to this phase.
+        let (clip, node, duration) = walk.resolve(*chosen, &clips);
+        for other in walk.nodes().filter(|other| *other != node.node) {
+            player.stop(other);
         }
+        // `Walk` and `Carry` are locked to ground covered; `Dig` runs on delivered ticks.
+        let phase = match clip {
+            DwarfClip::Dig => dig_phase.phase,
+            DwarfClip::Walk | DwarfClip::Carry => walk_phase.phase(),
+        };
+        player
+            .play(node.node)
+            .repeat()
+            .pause()
+            .seek_to(phase * duration);
         // Said once, and said at all because this is the step the gate cannot reach: the headless
         // tests have no animation plugin, so nothing below `WalkPhase` can prove a clip was ever
         // driven. A dwarf that draws but never animates should name the link that failed rather
@@ -2221,7 +2343,7 @@ pub fn drive_dwarf_walk(
     // The last link, and the only one that can fail with every piece of wiring above it present:
     // the clip is locked to ground covered, so a world where no dwarf has covered any ground
     // draws a figure standing at bind and looks exactly like a client with no clip at all.
-    if stalled && !phases.is_empty() && phases.iter().all(|phase| phase.distance == 0.0) {
+    if stalled && !phases.is_empty() && phases.iter().all(|(phase, _, _)| phase.distance == 0.0) {
         eprintln!(
             "gui dwarf walk: STALLED -- no dwarf has covered any ground, so every phase is still at bind"
         );
@@ -2237,13 +2359,20 @@ pub fn drive_dwarf_walk(
 /// Two captures of one frozen world disagreed on three of five dwarves, and the campfire threw
 /// the difference across the camp window of the distance-40 depth-of-field guard.
 #[derive(Resource, Default)]
-pub struct DwarfHeadings(std::collections::BTreeMap<u32, bevy::prelude::Quat>);
-
+pub struct DwarfHeadings(
+    std::collections::BTreeMap<u32, bevy::prelude::Quat>,
+    // Field `.1`: the mirror tick each digging dwarf's current work run began on (12.5 AC4).
+    // Recorded here because this is already the one place every delta passes through, `entered`
+    // can only be known at the delta that changes it, and a snapshot must reset it with the
+    // headings. `.0` stays the headings so the 10.5 mutation row that names it still applies.
+    std::collections::BTreeMap<u32, u64>,
+);
 impl DwarfHeadings {
     /// Call after EVERY `apply_delta`, before the next one overwrites the previous generation.
     pub fn record(&mut self, mirror: &Mirror) {
         for id in &mirror.changes().despawned {
             self.0.remove(id);
+            self.1.remove(id);
         }
         for &id in &mirror.changes().changed {
             let Some(entity) = mirror.entities().find(|entity| entity.id == id) else {
@@ -2253,11 +2382,29 @@ impl DwarfHeadings {
             if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {
                 self.0.insert(id, rotation);
             }
+            if dwarf_clip(entity) == DwarfClip::Dig {
+                // The same run continues only if he was already digging THIS job; a new job, or a
+                // run after a walk, starts a new swing at this delta's tick.
+                let continues = mirror.previous_entity(id).is_some_and(|previous| {
+                    dwarf_clip(previous) == DwarfClip::Dig && previous.job == entity.job
+                });
+                if !(continues && self.1.contains_key(&id)) {
+                    self.1.insert(id, mirror.tick());
+                }
+            } else {
+                self.1.remove(&id);
+            }
         }
     }
 
-    pub fn clear(&mut self) {
+    /// A snapshot restarts every facing, and every swing at the snapshot's own tick.
+    pub fn clear(&mut self, mirror: &Mirror) {
         self.0.clear();
+        self.1 = mirror
+            .entities()
+            .filter(|entity| dwarf_clip(entity) == DwarfClip::Dig)
+            .map(|entity| (entity.id, mirror.tick()))
+            .collect();
     }
 }
 

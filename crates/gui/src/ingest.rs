@@ -2649,7 +2649,7 @@ pub fn apply_wire_snapshot(
     mirror.apply_snapshot(snapshot)?;
     work.snapshot = true;
     work.dirty_tiles.clear();
-    headings.clear();
+    headings.clear(mirror);
     clock.reset(mirror.tick());
     Ok(())
 }
