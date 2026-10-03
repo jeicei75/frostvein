@@ -233,12 +233,13 @@ pub fn hover_highlight_color() -> Color {
 pub const STONE_ITEM_SCALE: f32 = 0.4;
 
 /// Where a carried stone sits on the dwarf that carries it: his own local space, which is the
-/// dwarf rig's space in METRES (origin at his feet, +Y up, facing -Z).
+/// dwarf's glTF/Bevy local space in METRES (origin at his feet, +Y up, facing -Z).
 ///
 /// The dwarf entity is scaled by `METRES_TO_CELLS`, so a child's local translation in metres IS
-/// the right local translation -- the parent's scale turns it into cells. The report of the
-/// round-19 seat (story 12.5, Task 2b) measures where the carrying hands meet in rig-space metres
-/// and gives the value to put here; no conversion is needed beyond reading it as this space.
+/// the right local translation -- the parent's scale turns it into cells. The round-19 seat
+/// (story 12.5, Task 2b) reports where the carrying hands meet in BLENDER rig space (x, y
+/// forward, z up). The glTF export turns Blender `(x, y, z)` into `(x, z, -y)`, so a reported
+/// `(bx, by, bz)` goes in here as `Vec3::new(bx, bz, -by)`.
 ///
 /// NOTE: PROVISIONAL until that report lands. This is a point in front of the chest of a 1.2 m
 /// dwarf (0.7 m up, 0.3 m forward), chosen only so a carried stone is visibly held and not at

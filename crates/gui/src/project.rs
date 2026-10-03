@@ -706,8 +706,8 @@ pub fn setup_projection_assets(
             (Some(asset_server), Some(mut graphs)) => {
                 let names = crate::ingest::dwarf_clip_summary();
                 let load = |wanted: &str| -> Option<Handle<AnimationClip>> {
-                    let index = names.iter().position(|name| name == wanted)?;
-                    Some(asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#Animation{index}")))
+                    let label = crate::ingest::dwarf_clip_label(&names, wanted)?;
+                    Some(asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#{label}")))
                 };
                 let (walk, dig, carry) = (load("Walk"), load("Dig"), load("Carry"));
                 let present = [walk.clone(), dig.clone(), carry.clone()]

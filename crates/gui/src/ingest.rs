@@ -477,6 +477,14 @@ fn glb_clip_names(data: &[u8]) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The glTF label of clip `wanted` among `names` (array order): `Animation{i}` for its own index.
+/// A pure function so the by-name binding is tested against the exporter's real order -- `Carry,
+/// Dig, Walk` puts `Walk` at index 2, and an index-0 binding draws every dwarf in the carry pose.
+pub fn dwarf_clip_label(names: &[String], wanted: &str) -> Option<String> {
+    let index = names.iter().position(|name| name == wanted)?;
+    Some(format!("Animation{index}"))
+}
+
 /// The clips the gui plays, in the order the startup line names them.
 pub const DWARF_CLIP_NAMES: [&str; 3] = ["Walk", "Dig", "Carry"];
 
@@ -5535,6 +5543,32 @@ mod tests {
             super::dwarf_clip_report(&super::glb_clip_names(&glb)),
             "clips Walk, Dig, Carry"
         );
+    }
+
+    #[test]
+    fn each_clip_binds_the_label_of_its_own_name_in_export_order() {
+        let names = super::glb_clip_names(&glb_with_json(
+            r#"{"animations":[{"name":"Carry"},{"name":"Dig"},{"name":"Walk"}]}"#,
+        ));
+        assert_eq!(
+            super::dwarf_clip_label(&names, "Carry").as_deref(),
+            Some("Animation0")
+        );
+        assert_eq!(
+            super::dwarf_clip_label(&names, "Dig").as_deref(),
+            Some("Animation1")
+        );
+        assert_eq!(
+            super::dwarf_clip_label(&names, "Walk").as_deref(),
+            Some("Animation2")
+        );
+        let walk_only =
+            super::glb_clip_names(&glb_with_json(r#"{"animations":[{"name":"Walk"}]}"#));
+        assert_eq!(
+            super::dwarf_clip_label(&walk_only, "Walk").as_deref(),
+            Some("Animation0")
+        );
+        assert_eq!(super::dwarf_clip_label(&walk_only, "Dig"), None);
     }
 
     #[test]
