@@ -548,6 +548,21 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   - The AC8 real-binary test is GREEN in 81 s: dig 4/5, carry 4/4, each followed by walk. Headless
     101/101, gui lib 221, clippy clean.
 
+- **Wolf at the seat, 2026-10-03 (third remark):** stop-then-dig "works now"; then "hauler when dropping
+  cargo walks into it ..so also it should stop before dropping". The sim releases the stone on the
+  delivery tick, while the client is still walking him onto the cell, so the stone snapped to the
+  pile cell ahead of him. `sync_dwarf_work` now treats a stone as HELD while it is parented to a
+  dwarf who is not yet drawn at his cell (`holders`, `walking_in`). The stone stays in his hands
+  and he keeps `Carry` until he arrives; then it is unparented to `item_translation(pos)`, using the
+  same `drawn_at_cell` rule as the dig. Pick-up is NOT gated, because he asked only about the drop.
+  - RED first: `a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on` failed `still
+    walking onto the cell: he still holds it`. Green after the change. The AC7 test now walks its
+    drop (100 ms manual frames × 30) before reading the release.
+  - **Mutations:** NEW "the stone is put down while he is still walking in" KILLED (`headless.rs:5324`).
+    NEW "he drops the carry pose while still holding the stone" KILLED at the clip assert (`:5328`).
+    Row 10 re-pointed to `DwarfClip::Dig if !arrived`, KILLED (`:5237`). 12-5.sh is 13 rows, all
+    KILLED. Headless 102/102, gui lib 221, clippy clean.
+
 ### Completion Notes List
 
 - **Task 1:** `protocol::DwarfJob` (externally tagged, snake_case) and `Entity.job` / `Entity.carrying`

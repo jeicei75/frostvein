@@ -105,9 +105,9 @@ PY
 mutation "the dig clip starts while he is still walking in" gui a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            DwarfClip::Dig if !drawn_at_cell(entity, transform.translation) => {\n'
+old = '            DwarfClip::Dig if !arrived => {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            DwarfClip::Dig if false && !drawn_at_cell(entity, transform.translation) => {\n'))
+p.write_text(s.replace(old, '            DwarfClip::Dig if false && !arrived => {\n'))
 PY
 
 mutation "the dig facing turns him while he is still walking in" gui a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell <<'PY'
@@ -116,4 +116,22 @@ p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '                .filter(|_| drawn_at_cell(entity, transform.translation))\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                .filter(|_| true || drawn_at_cell(entity, transform.translation))\n'))
+PY
+
+# Wolf at the seat, 2026-10-03: "hauler when dropping cargo walks into it ..so also it should stop
+# before dropping" -- a delivered stone stays in his hands until his drawn body reaches the cell.
+mutation "the stone is put down while he is still walking in" gui a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            (None, Some(parent)) if !walking_in.contains(&parent.parent()) => {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            (None, Some(parent)) if true || !walking_in.contains(&parent.parent()) => {\n'))
+PY
+
+mutation "he drops the carry pose while still holding the stone" gui a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            DwarfClip::Walk if still_holding => DwarfClip::Carry,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
 PY
