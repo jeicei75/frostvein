@@ -2382,6 +2382,17 @@ impl DwarfHeadings {
             if let Some(rotation) = entity_draw_rotation(entity.kind, previous, entity.pos) {
                 self.0.insert(id, rotation);
             }
+            // 12.5 AC6: a dwarf swinging at a dig faces the tile he is digging. This is the one
+            // heading writer, so it lands AFTER the position-derived facing above (he may have
+            // arrived on this very delta) and the next step simply overwrites it again. A channel
+            // is dug under his own feet, so it has nothing to face and keeps his heading.
+            if entity.state == protocol::JobState::Work
+                && let Some(protocol::DwarfJob::Dig { target }) = entity.job
+                // The yaw from his cell to the target is the yaw of a step between them.
+                && let Some(rotation) = entity_draw_rotation(entity.kind, Some(entity.pos), target)
+            {
+                self.0.insert(id, rotation);
+            }
             if dwarf_clip(entity) == DwarfClip::Dig {
                 // The same run continues only if he was already digging THIS job; a new job, or a
                 // run after a walk, starts a new swing at this delta's tick.

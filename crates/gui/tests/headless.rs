@@ -5133,3 +5133,63 @@ fn the_dig_phase_runs_on_delivered_ticks_and_holds_when_the_ticks_repeat() {
     assert_eq!(after.entered, 40, "a snapshot resets every entered tick");
     assert!((after.phase - tick_factor(&app) / 5.0).abs() < 1e-5);
 }
+
+fn drawn_rotation(app: &mut App, id: u32) -> bevy::prelude::Quat {
+    app.world_mut()
+        .query::<(&WorldProjected, &Transform)>()
+        .iter(app.world())
+        .find_map(|(marker, transform)| (marker.0 == id).then_some(transform.rotation))
+        .expect("the dwarf must have a projection")
+}
+
+/// 12.5 AC6: a dwarf working a dig faces his target, a channel leaves his heading alone, and his
+/// next step goes back to facing the way he walks.
+#[test]
+fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
+    use bevy::prelude::Quat;
+    use std::f32::consts::FRAC_PI_2;
+    // Wire +x is render +x, and the model faces render -Z: so west is +90 degrees of yaw, east
+    // -90, and wire +y (render -Z) is the rest orientation. Written as plain angles on purpose.
+    let west = Quat::from_rotation_y(FRAC_PI_2);
+    let east = Quat::from_rotation_y(-FRAC_PI_2);
+    let north = Quat::IDENTITY;
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    app.update();
+    let step = |app: &mut App, tick: u64, entity: Entity, expected: Quat, what: &str| {
+        apply_delta(app, delta_at(tick, Vec::new(), vec![entity]));
+        app.update();
+        let drawn = drawn_rotation(app, 7);
+        assert!(
+            drawn.dot(expected).abs() > 1.0 - 1e-5,
+            "{what}: drew {drawn:?}, wanted {expected:?}"
+        );
+    };
+    step(&mut app, 1, dwarf(7, [0, 1, 0]), west, "walking west");
+    let channel = protocol::DwarfJob::Channel { target: [0, 1, 0] };
+    step(
+        &mut app,
+        2,
+        working(7, [0, 1, 0], JobState::Work, Some(channel), None),
+        west,
+        "a channel keeps his heading",
+    );
+    let dig_east = protocol::DwarfJob::Dig { target: [1, 1, 0] };
+    step(
+        &mut app,
+        3,
+        working(7, [0, 1, 0], JobState::Work, Some(dig_east), None),
+        east,
+        "a dig to his east faces east",
+    );
+    step(
+        &mut app,
+        4,
+        dwarf(7, [0, 2, 0]),
+        north,
+        "his next step resumes walking facing",
+    );
+}
