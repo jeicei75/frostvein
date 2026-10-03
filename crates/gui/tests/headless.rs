@@ -4936,3 +4936,104 @@ fn a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it() {
     );
     assert_eq!(handle_of(&mut app, 2), red, "id 2 must take the red tunic");
 }
+
+/// A dwarf with the wire state 12.5's clip choice reads.
+fn working(
+    id: u32,
+    pos: [i32; 3],
+    state: JobState,
+    job: Option<protocol::DwarfJob>,
+    carrying: Option<u32>,
+) -> Entity {
+    Entity {
+        state,
+        job,
+        carrying,
+        ..dwarf(id, pos)
+    }
+}
+
+fn dwarf_clip_of(app: &mut App, id: u32) -> gui::project::DwarfClip {
+    app.world_mut()
+        .query::<(&WorldProjected, &gui::project::DwarfClip)>()
+        .iter(app.world())
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, clip)| *clip)
+        .expect("the dwarf must carry a DwarfClip")
+}
+
+const DIG_AT_EAST: protocol::DwarfJob = protocol::DwarfJob::Dig { target: [2, 0, 0] };
+
+/// 12.5 AC3: the clip follows the wire state alone, within the frame that ingests the delta.
+#[test]
+fn a_dwarfs_clip_follows_his_wire_state_walk_to_dig_to_walk_and_walk_to_carry_to_walk() {
+    use gui::project::DwarfClip::{Carry, Dig, Walk};
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    app.update();
+    assert_eq!(dwarf_clip_of(&mut app, 7), Walk);
+
+    let steps = [
+        (JobState::Work, Some(DIG_AT_EAST), None, Dig),
+        (JobState::Walk, Some(DIG_AT_EAST), None, Walk),
+        (
+            JobState::Walk,
+            Some(protocol::DwarfJob::Haul),
+            Some(70),
+            Carry,
+        ),
+        (
+            JobState::Work,
+            Some(protocol::DwarfJob::Haul),
+            Some(70),
+            Carry,
+        ),
+        (JobState::Idle, None, None, Walk),
+    ];
+    for (tick, (state, job, carrying, expected)) in steps.into_iter().enumerate() {
+        apply_delta(
+            &mut app,
+            delta_at(
+                tick as u64 + 1,
+                Vec::new(),
+                vec![working(7, [0, 0, 0], state, job, carrying)],
+            ),
+        );
+        app.update();
+        assert_eq!(
+            dwarf_clip_of(&mut app, 7),
+            expected,
+            "{state:?} with job {job:?} carrying {carrying:?}"
+        );
+    }
+}
+
+/// The precedence AC3 states: a dwarf who is digging while the wire also says he carries a stone
+/// swings. This is the case that tells `Dig`-first from `Carry`-first.
+#[test]
+fn digging_outranks_carrying_in_the_clip_choice() {
+    use gui::project::{DwarfClip, dwarf_clip};
+    let both = working(1, [0, 0, 0], JobState::Work, Some(DIG_AT_EAST), Some(9));
+    assert_eq!(dwarf_clip(&both), DwarfClip::Dig);
+    let channel = working(
+        1,
+        [0, 0, 0],
+        JobState::Work,
+        Some(protocol::DwarfJob::Channel { target: [0, 0, 0] }),
+        Some(9),
+    );
+    assert_eq!(dwarf_clip(&channel), DwarfClip::Dig);
+    // A dig job that is still being walked to, and a haul's pick-up `work`, are not swings.
+    let walking = working(1, [0, 0, 0], JobState::Walk, Some(DIG_AT_EAST), None);
+    assert_eq!(dwarf_clip(&walking), DwarfClip::Walk);
+    let stooping = working(
+        1,
+        [0, 0, 0],
+        JobState::Work,
+        Some(protocol::DwarfJob::Haul),
+        None,
+    );
+    assert_eq!(dwarf_clip(&stooping), DwarfClip::Walk);
+}

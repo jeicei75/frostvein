@@ -783,6 +783,7 @@ pub fn projection_systems(app: &mut App) {
                 blend_projection,
                 flicker_projection,
                 crate::project::hold_walk_phase_in_static_world,
+                crate::project::sync_dwarf_work,
                 // Chained after `blend_projection` deliberately: that is the sole writer of
                 // `WalkPhase`, so reading it earlier in the same frame would drive every dwarf
                 // from the previous tick's movement.

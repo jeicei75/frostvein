@@ -334,6 +334,68 @@ impl WalkPhase {
     }
 }
 
+/// Which of the dwarf's clips plays.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DwarfClip {
+    #[default]
+    Walk,
+    Dig,
+    Carry,
+}
+
+impl DwarfClip {
+    /// The word the `gui dwarf {id} clip {..}` line prints.
+    fn label(self) -> &'static str {
+        match self {
+            DwarfClip::Walk => "walk",
+            DwarfClip::Dig => "dig",
+            DwarfClip::Carry => "carry",
+        }
+    }
+}
+
+/// The clip a dwarf's wire state chooses, and nothing else chooses it (12.5 AC3).
+///
+/// Dig is tested FIRST on purpose: a dwarf can be in `work` on a dig while the wire still says he
+/// carries a stone, and he swings. `work` alone is not a dig, because a hauler's pick-up and drop
+/// are `work` runs too -- only a dig or channel job makes it a swing.
+pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
+    if entity.state == protocol::JobState::Work
+        && matches!(
+            entity.job,
+            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
+        )
+    {
+        DwarfClip::Dig
+    } else if entity.carrying.is_some() {
+        DwarfClip::Carry
+    } else {
+        DwarfClip::Walk
+    }
+}
+
+/// Sets each dwarf's clip from the mirror. Runs after `reconcile_projection`, so a dwarf spawned
+/// this frame is already there, and before `drive_dwarf_walk`, so a delta's clip plays the frame
+/// it lands.
+pub fn sync_dwarf_work(
+    mirror: Res<crate::ingest::MirrorResource>,
+    mut dwarves: Query<(&WorldProjected, &mut DwarfClip)>,
+) {
+    for entity in mirror.0.entities() {
+        let Some((_, mut clip)) = dwarves.iter_mut().find(|(id, _)| id.0 == entity.id) else {
+            continue;
+        };
+        let chosen = dwarf_clip(entity);
+        if *clip != chosen {
+            *clip = chosen;
+            // NOTE: chatty by design -- 5 dwarves, one line per clip switch. This line is the
+            // real-binary instrument for 12.5 AC8: nothing below the asset can prove a clip was
+            // ever chosen, because the headless tests have no animation plugin.
+            eprintln!("gui dwarf {} clip {}", entity.id, chosen.label());
+        }
+    }
+}
+
 /// Where every dwarf's stride is held once a `--static-world` pause has landed, as a fraction of
 /// one stride.
 ///
@@ -1811,6 +1873,7 @@ pub fn reconcile(
                             WorldAssetRoot(assets.dwarf_scene.clone()),
                             // Starts at rest. `blend_entities` is the only writer after this.
                             WalkPhase::default(),
+                            DwarfClip::default(),
                             Transform::from_translation(
                                 world_to_render(position) + entity_draw_offset(mirror_entity.kind),
                             )
