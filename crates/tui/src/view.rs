@@ -429,14 +429,28 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
     let roster_y = h - 3;
     let roster = mirror
         .entities()
-        .filter_map(|entity| entity.identity)
-        .map(|identity| (client_core::dwarf_name_text(identity.name), identity.colour))
-        .flat_map(|(name, colour)| {
-            let fg = dwarf_colour(colour);
-            // Two blank cells between names.
-            name.chars()
-                .map(move |glyph| Cell { glyph, fg })
-                .chain([BLANK, BLANK])
+        .filter_map(|entity| {
+            entity
+                .identity
+                .map(|identity| (identity, entity.profession))
+        })
+        .flat_map(|(identity, profession)| {
+            let fg = dwarf_colour(identity.colour);
+            let name = client_core::dwarf_name_text(identity.name)
+                .chars()
+                .map(move |glyph| Cell { glyph, fg });
+            // One blank, then the trade in status grey; a dwarf with no trade shows his name only.
+            let trade = profession
+                .map(|profession| format!(" {}", client_core::profession_text(profession)))
+                .unwrap_or_default()
+                .chars()
+                .map(|glyph| Cell {
+                    glyph,
+                    fg: STATUS_TEXT,
+                })
+                .collect::<Vec<_>>();
+            // Two blank cells between dwarves.
+            name.chain(trade).chain([BLANK, BLANK])
         });
     for (x, cell) in (0..w).zip(roster) {
         framebuffer.cells[usize::from(x) + usize::from(roster_y) * usize::from(w)] = cell;
@@ -1105,6 +1119,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             },
             Entity {
                 id: 2,
@@ -1113,6 +1128,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             },
         ];
         let state = normal_state((2, 1), 1);
@@ -1143,6 +1159,45 @@ mod tests {
         );
     }
 
+    /// 12.4: a dwarf with a trade shows it after his name in status grey; one without shows only his
+    /// name, and the next dwarf still follows after two blanks.
+    #[test]
+    fn the_roster_shows_a_trade_after_the_name_and_a_dwarf_without_one_shows_his_name_only() {
+        let dims = Dims { x: 5, y: 3, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        let named = |id, name, profession| Entity {
+            id,
+            kind: EntityKind::Dwarf,
+            pos: [1, 1, 1],
+            state: JobState::Idle,
+            light: None,
+            identity: Some(protocol::Identity {
+                name,
+                colour: protocol::DwarfColour::Blue,
+            }),
+            profession,
+        };
+        snapshot.entities = vec![
+            named(1, protocol::DwarfName::Ori, None),
+            named(
+                2,
+                protocol::DwarfName::Nori,
+                Some(protocol::Profession::Hauler),
+            ),
+        ];
+
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 30, 6);
+
+        let row: String = (0..30).map(|x| framebuffer.cell(x, 3).glyph).collect();
+        assert!(row.starts_with("Ori  Nori hauler  "), "{row:?}");
+        assert_eq!(framebuffer.cell(10, 3).glyph, 'h');
+        assert_eq!(framebuffer.cell(9, 3).fg, STATUS_TEXT);
+        assert_eq!(
+            framebuffer.cell(5, 3).fg,
+            dwarf_colour(protocol::DwarfColour::Blue)
+        );
+    }
+
     /// 12.2 (Wolf at the seat): a named dwarf is `☻` in his tunic colour, carrying or not, so the
     /// map tells the five apart. Job and carry state no longer show on a named dwarf's glyph.
     #[test]
@@ -1163,6 +1218,7 @@ mod tests {
                 name: protocol::DwarfName::Ori,
                 colour,
             }),
+            profession: None,
         };
         snapshot.entities = vec![
             named(1, 1, protocol::DwarfColour::Blue),
@@ -1174,6 +1230,7 @@ mod tests {
                 state: JobState::Walk,
                 light: None,
                 identity: None,
+                profession: None,
             },
         ];
 
@@ -1222,6 +1279,7 @@ mod tests {
             state: JobState::Idle,
             light: None,
             identity: None,
+            profession: None,
         }];
 
         let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
@@ -1294,6 +1352,7 @@ mod tests {
             state: JobState::Idle,
             light: None,
             identity: None,
+            profession: None,
         }];
 
         let framebuffer = render(&mirror(&snapshot), &normal_state((127, 127), 0), 5, 5);
@@ -1324,6 +1383,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             },
             Entity {
                 id: 2,
@@ -1332,6 +1392,7 @@ mod tests {
                 state: JobState::Walk,
                 light: None,
                 identity: None,
+                profession: None,
             },
         ];
 
@@ -1411,6 +1472,7 @@ mod tests {
                 state: JobState::Idle,
                 light: Some(protocol::LightKind::Torch),
                 identity: None,
+                profession: None,
             },
             Entity {
                 id: 9,
@@ -1419,6 +1481,7 @@ mod tests {
                 state: JobState::Idle,
                 light: Some(protocol::LightKind::Campfire),
                 identity: None,
+                profession: None,
             },
             Entity {
                 id: 1,
@@ -1427,6 +1490,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             },
             Entity {
                 id: 2,
@@ -1435,6 +1499,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             },
         ];
         let state = ViewState {
@@ -1471,6 +1536,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             },
             Entity {
                 id: 2,
@@ -1479,6 +1545,7 @@ mod tests {
                 state: JobState::Walk,
                 light: None,
                 identity: None,
+                profession: None,
             },
         ];
         let state = normal_state((1, 0), 0);
@@ -1532,6 +1599,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             })
             .collect();
         snapshot.entities.push(Entity {
@@ -1541,6 +1609,7 @@ mod tests {
             state: JobState::Idle,
             light: Some(protocol::LightKind::Campfire),
             identity: None,
+            profession: None,
         });
         let state = normal_state((12, 34), 19);
 
@@ -1650,6 +1719,7 @@ mod tests {
                     state: JobState::Idle,
                     light: None,
                     identity: None,
+                    profession: None,
                 })
                 .collect();
             // Worst case with the compass appended is 46 of 80 columns, so the budget this
@@ -2107,6 +2177,7 @@ mod tests {
             state: JobState::Idle,
             light: None,
             identity: None,
+            profession: None,
         });
         assert_eq!(initial(&mirror(&snapshot), None), before);
 

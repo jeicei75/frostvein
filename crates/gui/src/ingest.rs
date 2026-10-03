@@ -3476,6 +3476,7 @@ mod tests {
             state: protocol::JobState::Idle,
             light: None,
             identity: Some(Identity { name, colour }),
+            profession: None,
         };
         let mut snapshot = snapshot_at_tick(0, Speed::Normal);
         snapshot.entities = vec![
@@ -4009,6 +4010,7 @@ mod tests {
                 state: protocol::JobState::Idle,
                 light: Some(protocol::LightKind::Campfire),
                 identity: None,
+                profession: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -4913,6 +4915,7 @@ mod tests {
                 state: protocol::JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -4991,6 +4994,7 @@ mod tests {
                     state: protocol::JobState::Idle,
                     light: None,
                     identity: None,
+                    profession: None,
                 },
                 protocol::Entity {
                     id: 5,
@@ -4999,6 +5003,7 @@ mod tests {
                     state: protocol::JobState::Idle,
                     light: Some(protocol::LightKind::Campfire),
                     identity: None,
+                    profession: None,
                 },
             ],
             designations: Vec::new(),
@@ -5051,6 +5056,7 @@ mod tests {
                 state: protocol::JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -5162,6 +5168,7 @@ mod tests {
                     state: protocol::JobState::Idle,
                     light: Some(protocol::LightKind::Campfire),
                     identity: None,
+                    profession: None,
                 },
                 protocol::Entity {
                     id: 2,
@@ -5170,6 +5177,7 @@ mod tests {
                     state: protocol::JobState::Idle,
                     light: Some(protocol::LightKind::Lantern),
                     identity: None,
+                    profession: None,
                 },
             ],
             designations: Vec::new(),

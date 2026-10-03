@@ -66,9 +66,10 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # `camp_origin`. Intent unchanged -- reuse the worldgen stream (`rng`, still in scope) instead of
 # the dedicated spawn stream, which is exactly what the seed pin exists to catch.
 # Re-pointed 2026-09-29 (12.2): the call gained an `identities` argument.
-old = "        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities);\n"
+# Re-pointed 2026-10-02 (12.4): and a `professions` argument.
+old = "        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions);\n"
 assert s.count(old) == 1
-p.write_text(s.replace(old, "        world.spawn_dwarves(camp_origin, &mut rng, identities);\n"))
+p.write_text(s.replace(old, "        world.spawn_dwarves(camp_origin, &mut rng, identities, professions);\n"))
 PY
 
 # --- Added by code review (2026-08-03). One per review patch: a patch whose test

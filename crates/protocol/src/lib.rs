@@ -94,6 +94,14 @@ pub struct Identity {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum Profession {
+    Miner,
+    Hauler,
+    Woodcutter,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum JobState {
     Idle,
     Walk,
@@ -188,6 +196,8 @@ pub struct Entity {
     pub light: Option<LightKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<Identity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profession: Option<Profession>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -317,8 +327,9 @@ mod tests {
 
     #[test]
     fn an_identified_dwarf_round_trips_and_other_entities_stay_byte_identical() {
-        let wire = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null,"identity":{"name":"durin","colour":"red"}}"#;
+        let wire = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null,"identity":{"name":"durin","colour":"red"},"profession":"miner"}"#;
         let entity: Entity = serde_json::from_str(wire).unwrap();
+        assert_eq!(entity.profession, Some(Profession::Miner));
         assert_eq!(
             entity.identity,
             Some(Identity {
@@ -329,6 +340,7 @@ mod tests {
         assert_eq!(serde_json::to_string(&entity).unwrap(), wire);
         let bare = Entity {
             identity: None,
+            profession: None,
             ..entity
         };
         assert_eq!(
@@ -356,6 +368,7 @@ mod tests {
                 state: JobState::Idle,
                 light: None,
                 identity: None,
+                profession: None,
             }]
         );
         assert_eq!(
@@ -415,6 +428,7 @@ mod tests {
                 state: JobState::Walk,
                 light: None,
                 identity: None,
+                profession: None,
             }]
         );
         assert_eq!(
@@ -552,6 +566,13 @@ mod tests {
             (LightKind::Torch, "\"torch\""),
             (LightKind::Campfire, "\"campfire\""),
             (LightKind::Lantern, "\"lantern\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (Profession::Miner, "\"miner\""),
+            (Profession::Hauler, "\"hauler\""),
+            (Profession::Woodcutter, "\"woodcutter\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }

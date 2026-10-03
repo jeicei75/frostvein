@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use sim_core::{DEFAULT_SEED, Dims, Id, Material, Pos, Tile, World};
+use sim_core::{DEFAULT_SEED, Dims, Id, Material, Pos, Profession, Tile, World};
 
 fn surface_height(world: &World, x: i32, y: i32) -> i32 {
     (0..world.dims().z as i32)
@@ -58,6 +58,36 @@ fn same_seed_produces_identical_worlds() {
     assert_eq!(first.tiles(), second.tiles());
     assert_eq!(first.dwarves(), second.dwarves());
     assert_eq!(first.identities(), second.identities());
+    assert_eq!(first.professions(), second.professions());
+}
+
+#[test]
+fn every_world_has_two_miners_two_haulers_and_one_woodcutter() {
+    for seed in 0..64 {
+        let professions = World::generate(seed, Dims::DEFAULT).professions();
+        let count = |wanted| professions.iter().filter(|(_, p)| *p == wanted).count();
+        assert_eq!(professions.len(), 5, "seed {seed}");
+        assert_eq!(count(Profession::Miner), 2, "seed {seed}");
+        assert_eq!(count(Profession::Hauler), 2, "seed {seed}");
+        assert_eq!(count(Profession::Woodcutter), 1, "seed {seed}");
+    }
+}
+
+#[test]
+fn different_seeds_assign_professions_differently() {
+    let assignment = |seed| {
+        World::generate(seed, Dims::DEFAULT)
+            .professions()
+            .into_iter()
+            .map(|(_, p)| p)
+            .collect::<Vec<_>>()
+    };
+    use Profession::{Hauler, Miner, Woodcutter};
+    assert_eq!(
+        assignment(DEFAULT_SEED),
+        [Woodcutter, Hauler, Miner, Hauler, Miner]
+    );
+    assert_eq!(assignment(42), [Woodcutter, Miner, Hauler, Hauler, Miner]);
 }
 
 #[test]

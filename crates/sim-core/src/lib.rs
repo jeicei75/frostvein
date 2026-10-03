@@ -29,6 +29,7 @@ const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
 const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
 const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"
+const STREAM_PROFESSION: u64 = 0x5052_4f46_4553_534e; // "PROFESSN"
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 /// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
@@ -187,6 +188,14 @@ impl DwarfColour {
 pub struct Identity {
     pub name: DwarfName,
     pub colour: DwarfColour,
+}
+
+/// A dwarf's trade. Its own component, not part of `Identity`, because 12.6 makes it mutable.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Profession {
+    Miner,
+    Hauler,
+    Woodcutter,
 }
 
 /// Every dwarf carries the same permanent lantern.
@@ -415,9 +424,17 @@ fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
     5 + hash % 26
 }
 
-// AD-12: claiming LOGIC is unchanged — FIFO by `JobId`, ascending dwarf `Id`, reaction delay,
-// `retry_after` and one shared node budget. Only the goal set it asks for learned `Haul`, which
-// is why the stockpile and the stones have to reach this system.
+/// The trade a job needs. Exhaustive on purpose: a new `JobKind` must name its trade.
+fn trade(kind: JobKind) -> Profession {
+    match kind {
+        JobKind::Dig | JobKind::Channel => Profession::Miner,
+        JobKind::Haul { .. } => Profession::Hauler,
+    }
+}
+
+// AD-12: one claiming system. It filters by trade (a dwarf is considered only for jobs whose
+// `trade` is his profession), then FIFO by `JobId`, ascending dwarf `Id`, reaction delay and
+// `retry_after`, and spends one node budget per dwarf (#159).
 #[allow(clippy::too_many_arguments)]
 fn claim_jobs(
     mut commands: Commands,
@@ -428,37 +445,36 @@ fn claim_jobs(
     mut jobs: ResMut<Jobs>,
     stones: Query<(&Id, &Pos), With<Item>>,
     emitters: Query<&Pos, With<Emitter>>,
-    mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying)>,
+    mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying, &Profession)>,
 ) {
     let blocked = blocked_cells(emitters.iter());
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
-    dwarves.sort_by_key(|(_, id, _, _, _)| **id);
+    dwarves.sort_by_key(|(_, id, _, _, _, _)| **id);
     let mut claimed: BTreeSet<_> = dwarves
         .iter()
-        .filter_map(|(_, _, _, current, _)| current.0)
+        .filter_map(|(_, _, _, current, _, _)| current.0)
         .collect();
     let carried: BTreeSet<u32> = dwarves
         .iter()
-        .filter_map(|(_, _, _, _, carrying)| carrying.0)
+        .filter_map(|(_, _, _, _, carrying, _)| carrying.0)
         .collect();
     let items: BTreeMap<u32, Pos> = stones
         .iter()
         .filter(|(id, _)| !carried.contains(&id.0))
         .map(|(id, pos)| (id.0, *pos))
         .collect();
-    let mut astar_nodes_remaining = MAX_ASTAR_NODES;
+    // One budget per dwarf, indexed like the sorted `dwarves`.
+    let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];
     // Walkable components that a COMPLETED failed search has already flooded this call (#132).
     // Per call only: terrain can change between ticks, so nothing is cached across them.
-    // NOTE: assumes the idle dwarves' distinct components SUM to at most `MAX_ASTAR_NODES`. Past
-    // that, the last flood exhausts the budget every tick, so the job it was attempting is never
-    // stamped and starves the jobs behind it (#159). One ~16k component today.
+    // NOTE: the per-tick bound is (idle dwarves) x `MAX_ASTAR_NODES`. A dwarf whose search runs
+    // out of his budget sits out the rest of the tick. Still open on #159: one walkable area over
+    // the budget with more than `RETRY_COOLDOWN` unreachable jobs ahead of a reachable one, since
+    // that dwarf exhausts on one job per tick and never reaches it.
     let mut components: Vec<BTreeSet<Pos>> = Vec::new();
 
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
-    'jobs: for job in jobs_in_order {
-        if astar_nodes_remaining == 0 {
-            break;
-        }
+    for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
@@ -479,7 +495,15 @@ fn claim_jobs(
         };
         let mut attempted = false;
         let mut assigned = false;
-        for (entity, id, pos, current, carrying) in &mut dwarves {
+        // Some eligible dwarf had no budget left, so this job was not really tried by him.
+        let mut sat_out = false;
+        for (slot, (entity, id, pos, current, carrying, profession)) in
+            dwarves.iter_mut().enumerate()
+        {
+            if trade(job.kind) != **profession {
+                // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
+                continue;
+            }
             debug_assert!(
                 current.0.is_some() || carrying.0.is_none(),
                 "a dwarf holding no job must be carrying nothing"
@@ -490,6 +514,10 @@ fn claim_jobs(
                         .created_tick
                         .saturating_add(reaction_delay(seed.0, **id, job.id))
             {
+                if budgets[slot] == 0 {
+                    sat_out = true;
+                    continue;
+                }
                 attempted = true;
                 // A component belongs to its start: it proves nothing for a dwarf outside it.
                 if components.iter().any(|component| {
@@ -500,19 +528,14 @@ fn claim_jobs(
                     continue;
                 }
                 if let Some(delivery) = &delivery {
-                    match astar_with_budget(
-                        &terrain,
-                        &blocked,
-                        **pos,
-                        delivery,
-                        &mut astar_nodes_remaining,
-                    ) {
+                    match astar_with_budget(&terrain, &blocked, **pos, delivery, &mut budgets[slot])
+                    {
                         (Some(_), false, _) => {}
                         (None, false, explored) => {
                             components.push(explored);
                             continue;
                         }
-                        (None, true, _) => break 'jobs,
+                        (None, true, _) => continue,
                         (Some(_), true, _) => {
                             unreachable!("a completed search cannot exhaust its budget")
                         }
@@ -523,14 +546,14 @@ fn claim_jobs(
                     &blocked,
                     **pos,
                     &goals,
-                    &mut astar_nodes_remaining,
+                    &mut budgets[slot],
                 ) {
                     (Some(path), false, _) => path,
                     (None, false, explored) => {
                         components.push(explored);
                         continue;
                     }
-                    (None, true, _) => break 'jobs,
+                    (None, true, _) => continue,
                     (Some(_), true, _) => {
                         unreachable!("a completed search cannot exhaust its budget")
                     }
@@ -544,7 +567,7 @@ fn claim_jobs(
                 break;
             }
         }
-        if attempted && !assigned {
+        if attempted && !assigned && !sat_out {
             jobs.get_mut(job.id)
                 .expect("iterated job still exists")
                 .retry_after = tick.0.saturating_add(RETRY_COOLDOWN);
@@ -1347,7 +1370,17 @@ impl World {
             name: names[i],
             colour: colours[i],
         });
-        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities);
+        // Professions have their own stream too, so they never shift a spawn or an identity.
+        let mut profession_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_PROFESSION);
+        let mut professions = [
+            Profession::Miner,
+            Profession::Miner,
+            Profession::Hauler,
+            Profession::Hauler,
+            Profession::Woodcutter,
+        ];
+        professions.shuffle(&mut profession_rng);
+        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions);
         world.spawn_emitters(camp_origin);
         world
     }
@@ -1379,6 +1412,7 @@ impl World {
                         .unwrap_or(0),
                     carrying: carrying.0,
                     identity: *entity.get::<Identity>()?,
+                    profession: *entity.get::<Profession>()?,
                 })
             })
             .collect();
@@ -1472,6 +1506,7 @@ impl World {
                     CurrentJob(current_job),
                     Carrying(dwarf.carrying),
                     dwarf.identity,
+                    dwarf.profession,
                 ))
                 .id();
             if current_job.is_some() {
@@ -1760,6 +1795,18 @@ impl World {
         identities
     }
 
+    /// Sorted ascending by dwarf `Id`. A sibling reader like `identities()`.
+    pub fn professions(&self) -> Vec<(Id, Profession)> {
+        let mut professions: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, *entity.get::<Profession>()?)))
+            .collect();
+        professions.sort_by_key(|(id, _)| *id);
+        professions
+    }
+
     /// Sorted ascending by `Id`.
     pub fn items(&self) -> Vec<(Id, Pos)> {
         let mut items: Vec<_> = self
@@ -1807,7 +1854,13 @@ impl World {
         dwarves
     }
 
-    fn spawn_dwarves(&mut self, camp: Pos, rng: &mut ChaCha8Rng, identities: [Identity; 5]) {
+    fn spawn_dwarves(
+        &mut self,
+        camp: Pos,
+        rng: &mut ChaCha8Rng,
+        identities: [Identity; 5],
+        professions: [Profession; 5],
+    ) {
         let emitter_positions: BTreeSet<_> = camp_emitters(camp)
             .into_iter()
             .map(|(pos, _)| pos)
@@ -1827,7 +1880,7 @@ impl World {
             candidates
         };
 
-        for identity in identities {
+        for (identity, profession) in identities.into_iter().zip(professions) {
             let candidate = rng.random_range(0..candidates.len());
             let pos = candidates.swap_remove(candidate);
             let id = self.ecs.resource_mut::<IdAllocator>().allocate();
@@ -1846,6 +1899,7 @@ impl World {
                 CurrentJob(None),
                 Carrying(None),
                 identity,
+                profession,
             ));
         }
     }
@@ -1916,6 +1970,20 @@ mod tests {
         DesignationKind, Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, SimCommand,
         Terrain, Tile, World,
     };
+
+    /// Tests insert the trade directly: there is no public setter until 12.6 adds the command.
+    fn set_profession(world: &mut World, id: u32, profession: super::Profession) {
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| {
+                entity.contains::<super::Dwarf>()
+                    && entity.get::<super::Id>().is_some_and(|i| i.0 == id)
+            })
+            .expect("dwarf exists")
+            .id();
+        world.ecs.entity_mut(entity).insert(profession);
+    }
 
     fn flat_terrain(x: u32, y: u32) -> Terrain {
         let dims = Dims { x, y, z: 2 };
@@ -2972,6 +3040,7 @@ mod tests {
     #[test]
     fn claim_jobs_waits_for_the_reaction_delay() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut world, 2, super::Profession::Miner);
         let worker = world.dwarves()[2].1;
         let target = Pos {
             x: if worker.x + 1 < world.dims().x as i32 {
@@ -3015,6 +3084,7 @@ mod tests {
     #[test]
     fn claim_jobs_takes_fifo_and_skips_busy_dwarves_and_claimed_jobs() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut world, 0, super::Profession::Miner);
         let worker = world.dwarves()[0].1;
         let first_target = Pos {
             x: worker.x + 1,
@@ -3056,6 +3126,7 @@ mod tests {
         assert_eq!(world.claims()[0], (super::Id(0), Some(JobId(0))));
 
         let mut claimed = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut claimed, 0, super::Profession::Miner);
         let claimed_worker = claimed.dwarves()[0].1;
         let claimed_first_target = Pos {
             x: claimed_worker.x + 1,
@@ -3104,6 +3175,9 @@ mod tests {
     #[test]
     fn claim_jobs_prefers_the_lowest_free_dwarf_id() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        for id in 0..5 {
+            set_profession(&mut world, id, super::Profession::Miner);
+        }
         world.ecs.resource_mut::<super::Tick>().0 = 100;
         let worker = world.dwarves()[0].1;
         let target = Pos {
@@ -3134,6 +3208,8 @@ mod tests {
     #[test]
     fn an_unreachable_lower_id_does_not_starve_a_reachable_dwarf() {
         let mut world = World::generate(42, Dims::DEFAULT);
+        set_profession(&mut world, 0, super::Profession::Miner);
+        set_profession(&mut world, 1, super::Profession::Miner);
         let unreachable = Pos { x: 10, y: 10, z: 1 };
         let reachable = Pos { x: 20, y: 20, z: 1 };
         let target = Pos { x: 21, y: 20, z: 1 };
@@ -3202,12 +3278,170 @@ mod tests {
         assert!(world.jobs().is_empty());
     }
 
-    // 12.3 amendment: the old fixture (one shared floor, five dwarves) now has each failed flood
-    // reused as a known component, so jobs 5..9 are stamped for free and the "jobs 5..9 never
-    // attempted" shape this test used to pin is gone. Each dwarf now stands on its own 11,000-cell
-    // plate (a separate component), so five floods would cost 55,000 > MAX_ASTAR_NODES.
+    /// A standable cell next to a dwarf's spawn cell, off every emitter and every listed cell.
+    fn free_cell_beside(world: &World, near: Pos, taken: &[Pos]) -> Pos {
+        let emitters: Vec<Pos> = world
+            .emitters()
+            .into_iter()
+            .map(|(_, pos, _)| pos)
+            .collect();
+        let terrain = world.ecs.resource::<Terrain>();
+        [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (2, 0),
+            (-2, 0),
+            (0, 2),
+            (0, -2),
+        ]
+        .into_iter()
+        .map(|(dx, dy)| Pos {
+            x: near.x + dx,
+            y: near.y + dy,
+            ..near
+        })
+        .find(|cell| {
+            terrain.is_standable(*cell) && !emitters.contains(cell) && !taken.contains(cell)
+        })
+        .expect("the camp has a free standable cell beside every dwarf")
+    }
+
+    fn dwarf_of(world: &World, profession: super::Profession, nth: usize) -> (super::Id, Pos) {
+        let id = world
+            .professions()
+            .into_iter()
+            .filter(|(_, p)| *p == profession)
+            .nth(nth)
+            .expect("seed 42 has this many of the trade")
+            .0;
+        let pos = world
+            .dwarves()
+            .into_iter()
+            .find(|(i, ..)| *i == id)
+            .unwrap()
+            .1;
+        (id, pos)
+    }
+
     #[test]
-    fn claim_jobs_bounds_aggregate_astar_expansions_per_tick() {
+    fn claim_jobs_takes_fifo_within_a_trade() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (miner, miner_pos) = dwarf_of(&world, super::Profession::Miner, 0);
+        let (hauler, hauler_pos) = dwarf_of(&world, super::Profession::Hauler, 0);
+        let dig_target = Pos {
+            x: miner_pos.x + 1,
+            ..miner_pos
+        };
+        let stone = free_cell_beside(&world, hauler_pos, &[dig_target, miner_pos]);
+        let pile = free_cell_beside(&world, stone, &[dig_target, miner_pos, stone]);
+        assert!(world.set_tile(dig_target, Tile::Solid(Material::Stone)));
+        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        {
+            let mut jobs = world.ecs.resource_mut::<Jobs>();
+            // The haul is queued FIRST, so a trade-blind FIFO would hand it to the lowest free id.
+            assert!(jobs.insert(Job {
+                id: JobId(0),
+                kind: JobKind::Haul { item: 50 },
+                target: stone,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+            assert!(jobs.insert(Job {
+                id: JobId(1),
+                kind: JobKind::Dig,
+                target: dig_target,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        for (id, job) in world.claims() {
+            let expected = if id == miner {
+                Some(JobId(1))
+            } else if id == hauler {
+                Some(JobId(0))
+            } else {
+                None
+            };
+            assert_eq!(job, expected, "dwarf {id:?}");
+        }
+    }
+
+    #[test]
+    fn a_job_with_no_free_dwarf_of_its_trade_gets_no_retry_stamp() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        for id in 0..5 {
+            set_profession(&mut world, id, super::Profession::Miner);
+        }
+        let (_, near) = dwarf_of(&world, super::Profession::Miner, 0);
+        let stone = free_cell_beside(&world, near, &[]);
+        let pile = free_cell_beside(&world, stone, &[stone]);
+        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 50 },
+            target: stone,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        assert_eq!(world.jobs()[0].retry_after, 0, "no miner may stamp a haul");
+        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
+
+        // Control: with one hauler free, the same job is claimed rather than ignored.
+        set_profession(&mut world, 3, super::Profession::Hauler);
+        schedule.run(&mut world.ecs);
+        assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
+    }
+
+    /// All five dwarves are miners, one per entry of `spots`, in ascending id order.
+    fn stand_miners_at(world: &mut World, spots: [Pos; 5]) {
+        for (id, spot) in spots.into_iter().enumerate() {
+            set_profession(world, id as u32, super::Profession::Miner);
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| {
+                    entity.contains::<super::Dwarf>()
+                        && entity.get::<super::Id>().is_some_and(|i| i.0 == id as u32)
+                })
+                .unwrap()
+                .id();
+            *world.ecs.get_mut::<Pos>(entity).unwrap() = spot;
+        }
+    }
+
+    fn insert_dig(world: &mut World, id: u32, target: Pos) {
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(id),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+    }
+
+    // #159 (12.4, AC11). Each dwarf stands on his own 11,000-cell plate (a separate component), so
+    // five floods cost 55,000 > MAX_ASTAR_NODES in sum while each is under it. 25 unreachable digs
+    // (more than RETRY_COOLDOWN, so stamp-and-stop cannot pass) are queued ahead of one reachable
+    // dig on plate 4. Replaces `claim_jobs_bounds_aggregate_astar_expansions_per_tick`, whose first
+    // assert pinned this very starvation.
+    #[test]
+    fn a_reachable_job_behind_unreachable_ones_is_claimed_when_areas_sum_past_the_budget() {
         let mut world = World::generate(42, Dims::DEFAULT);
         let dims = world.dims();
         let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
@@ -3219,7 +3453,7 @@ mod tests {
                 }
             }
         }
-        for job in 0..10_u32 {
+        for job in 0..25_u32 {
             let work = Pos {
                 x: 3 + 2 * job as i32,
                 y: 2,
@@ -3228,59 +3462,215 @@ mod tests {
             tiles[super::worldgen::index(dims, work.x as u32, work.y as u32, work.z as u32)] =
                 Tile::Empty;
         }
+        let reachable = Pos { x: 50, y: 50, z: 9 };
+        tiles[super::worldgen::index(dims, 50, 50, 9)] = Tile::Solid(Material::Stone);
         world.ecs.resource_mut::<Terrain>().tiles = tiles;
-
-        let mut dwarves: Vec<_> = world
-            .ecs
-            .iter_entities()
-            .filter(|entity| entity.contains::<super::Dwarf>())
-            .filter_map(|entity| Some((*entity.get::<super::Id>()?, entity.id())))
-            .collect();
-        dwarves.sort();
-        assert_eq!(dwarves.len(), 5);
-        for (plate, (_, entity)) in dwarves.into_iter().enumerate() {
-            *world.ecs.get_mut::<Pos>(entity).unwrap() = Pos {
+        stand_miners_at(
+            &mut world,
+            std::array::from_fn(|plate| Pos {
                 x: 0,
                 y: 0,
                 z: 1 + 2 * plate as i32,
-            };
-        }
-        for job in 0..10_u32 {
-            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
-                id: JobId(job),
-                kind: JobKind::Dig,
-                target: Pos {
+            }),
+        );
+        for job in 0..25_u32 {
+            insert_dig(
+                &mut world,
+                job,
+                Pos {
                     x: 2 + 2 * job as i32,
                     y: 2,
                     z: 20,
                 },
-                created_tick: 0,
-                retry_after: 0,
-            }));
+            );
         }
+        insert_dig(&mut world, 25, reachable);
         world.ecs.resource_mut::<super::Tick>().0 = 100;
         let mut schedule = bevy_ecs::schedule::Schedule::default();
         schedule.add_systems(super::claim_jobs);
 
-        // Four floods (44,000) fit; the fifth hits the budget, so job 0 is cut short and unstamped,
-        // and nothing behind it is attempted.
         schedule.run(&mut world.ecs);
-        assert!(
-            world.jobs().iter().all(|job| job.retry_after == 0),
-            "one tick may expand at most MAX_ASTAR_NODES across all failed claim searches"
-        );
 
-        // Control, so the assertion above is not an inert system: shrink the fifth plate and all
-        // five floods (about 44,000 + 2) fit, so every job is stamped.
-        for y in 1..100 {
-            for x in 0..110 {
-                world.ecs.resource_mut::<Terrain>().tiles[super::worldgen::index(dims, x, y, 9)] =
-                    Tile::Solid(Material::Stone);
+        assert_eq!(
+            world.claims()[4],
+            (super::Id(4), Some(JobId(25))),
+            "the plate-4 miner must claim the reachable dig on the first claim tick"
+        );
+    }
+
+    /// Solid stone except one 55,003-cell walkable area (five plates joined by ramp staircases),
+    /// from (0, 0, 1). It floods past `MAX_ASTAR_NODES`, so a search for a goal outside it exhausts.
+    fn joined_plates(world: &World) -> Vec<Tile> {
+        let dims = world.dims();
+        let idx =
+            |x: i32, y: i32, z: i32| super::worldgen::index(dims, x as u32, y as u32, z as u32);
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        for plate in 0..5_i32 {
+            for y in 0..100 {
+                for x in 0..110 {
+                    tiles[idx(x, y, 1 + 2 * plate)] = Tile::Empty;
+                }
             }
         }
-        world.ecs.resource_mut::<super::Tick>().0 = 200;
+        // A ramp staircase at row y = 99 joins plate z to plate z + 2. A move up needs a Ramp under
+        // the LOWER cell.
+        for k in 0..4_i32 {
+            let z = 1 + 2 * k;
+            tiles[idx(108, 99, z - 1)] = Tile::Ramp(Material::Stone);
+            tiles[idx(109, 99, z + 1)] = Tile::Empty;
+            tiles[idx(109, 99, z)] = Tile::Ramp(Material::Stone);
+            tiles[idx(110, 99, z + 2)] = Tile::Empty;
+        }
+        tiles
+    }
+
+    // #159 (12.4, AC12). One miner in a 55,003-cell area (five plates joined by ramp staircases),
+    // four in sealed one-cell pockets, 10 unreachable digs, then one reachable dig in his area.
+    // He exhausts his own budget on one dig per tick, so he reaches the reachable one at tick 110;
+    // a job is stamped only when no dwarf of its trade sat it out for budget.
+    #[test]
+    fn a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let idx =
+            |x: i32, y: i32, z: i32| super::worldgen::index(dims, x as u32, y as u32, z as u32);
+        let mut tiles = joined_plates(&world);
+        let pockets = [120, 122, 124, 126].map(|x| Pos { x, y: 120, z: 20 });
+        for pocket in pockets {
+            tiles[idx(pocket.x, pocket.y, pocket.z)] = Tile::Empty;
+        }
+        for job in 0..10_i32 {
+            tiles[idx(3 + 2 * job, 2, 20)] = Tile::Empty;
+        }
+        tiles[idx(5, 5, 1)] = Tile::Solid(Material::Stone);
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(
+            &mut world,
+            [
+                Pos { x: 0, y: 0, z: 1 },
+                pockets[0],
+                pockets[1],
+                pockets[2],
+                pockets[3],
+            ],
+        );
+        for job in 0..10_u32 {
+            insert_dig(
+                &mut world,
+                job,
+                Pos {
+                    x: 2 + 2 * job as i32,
+                    y: 2,
+                    z: 20,
+                },
+            );
+        }
+        insert_dig(&mut world, 10, Pos { x: 5, y: 5, z: 1 });
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
         schedule.run(&mut world.ecs);
-        assert!(world.jobs().iter().all(|job| job.retry_after == 220));
+        let stamps: Vec<u64> = world.jobs().iter().map(|job| job.retry_after).collect();
+        let mut expected = vec![0; 11];
+        expected[0] = 120;
+        assert_eq!(
+            stamps, expected,
+            "only the job he exhausted on is stamped; the jobs he sat out stay unstamped"
+        );
+        assert!(world.claims()[0].1.is_none());
+
+        for tick in 101..=110_u64 {
+            world.ecs.resource_mut::<super::Tick>().0 = tick;
+            schedule.run(&mut world.ecs);
+            let claimed = world.claims()[0].1;
+            if tick < 110 {
+                assert_eq!(claimed, None, "tick {tick}: one exhausted dig per tick");
+            } else {
+                assert_eq!(
+                    claimed,
+                    Some(JobId(10)),
+                    "tick 110 reaches the reachable dig"
+                );
+            }
+        }
+    }
+
+    // #159 (12.4, AC12 review). Miner 0 in the joined plates exhausts on dig 0, which sits beside
+    // miner 1's sealed pocket: miner 1 must claim it on the same tick (no stamp-and-stop, no leaving
+    // the dwarf loop). Haul 1 follows, unreachable for hauler 2 in his own pocket: miner 0's empty
+    // budget must not mark it sat out, because the trade filter comes before the budget check.
+    // Dig 2 comes after both, beside miner 3's pocket: miner 0 sits it out with no budget left, and
+    // miner 3 must still claim it.
+    #[test]
+    fn a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+        let mut tiles = joined_plates(&world);
+        let pocket = |x, y| Pos { x, y, z: 20 };
+        let (stone, pile) = (pocket(124, 124), pocket(126, 124));
+        let spots = [
+            Pos { x: 0, y: 0, z: 1 },
+            pocket(120, 120),
+            pocket(124, 120),
+            pocket(126, 120),
+            pocket(120, 124),
+        ];
+        for cell in spots[1..].iter().chain([&stone, &pile]) {
+            tiles[idx(*cell)] = Tile::Empty;
+        }
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(&mut world, spots);
+        set_profession(&mut world, 2, super::Profession::Hauler);
+        // Dig 0's only work position is miner 1's pocket.
+        insert_dig(&mut world, 0, pocket(121, 120));
+        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(1),
+            kind: JobKind::Haul { item: 50 },
+            target: stone,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        // Dig 2's only work position is miner 3's pocket.
+        insert_dig(&mut world, 2, pocket(127, 120));
+        // Precondition: miner 0's search for dig 0 exhausts a fresh budget. Without it no dwarf
+        // exhausts, and every assertion below passes vacuously.
+        let blocked = super::blocked_cells(world.emitters().iter().map(|(_, pos, _)| pos));
+        let mut budget = super::MAX_ASTAR_NODES;
+        let (_, exhausted, _) = super::astar_with_budget(
+            world.ecs.resource::<Terrain>(),
+            &blocked,
+            spots[0],
+            &BTreeSet::from([spots[1]]),
+            &mut budget,
+        );
+        assert!(exhausted, "miner 0 must exhaust his budget on dig 0");
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.add_systems(super::claim_jobs);
+
+        schedule.run(&mut world.ecs);
+
+        assert_eq!(
+            world.claims()[1],
+            (super::Id(1), Some(JobId(0))),
+            "miner 1 claims the dig miner 0 exhausted on, on the same tick"
+        );
+        assert!(world.claims()[0].1.is_none());
+        assert_eq!(
+            world.claims()[3],
+            (super::Id(3), Some(JobId(2))),
+            "miner 3 claims the dig miner 0 sat out with no budget left, on the same tick"
+        );
+        let stamps: Vec<u64> = world.jobs().iter().map(|job| job.retry_after).collect();
+        assert_eq!(
+            stamps,
+            [0, 120, 0],
+            "the claimed dig is unstamped; the unreachable haul is stamped despite miner 0's empty budget"
+        );
     }
 
     #[test]

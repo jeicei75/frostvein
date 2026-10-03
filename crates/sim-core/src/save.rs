@@ -1,7 +1,7 @@
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::{DesignationKind, Dims, Identity, Job, JobState, LightKind, Pos, Tile};
+use crate::{DesignationKind, Dims, Identity, Job, JobState, LightKind, Pos, Profession, Tile};
 
 /// `sim-core`'s complete deterministic state. File I/O belongs to `simd`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,4 +35,7 @@ pub struct SavedDwarf {
     // NOTE: deliberately no `#[serde(default)]`: a save from before identities existed fails to
     // decode, and simd logs and refuses the load. There is no migration.
     pub identity: Identity,
+    // NOTE: deliberately no `#[serde(default)]`, like `identity`: a save from before professions
+    // existed fails to decode, and simd logs and refuses the load. There is no migration.
+    pub profession: Profession,
 }

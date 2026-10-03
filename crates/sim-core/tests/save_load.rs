@@ -1,6 +1,6 @@
 use sim_core::{
     DesignationKind, Dims, DwarfColour, DwarfName, Identity, Job, JobId, JobKind, JobState,
-    LightKind, Material, Pos, Rect, SavedDwarf, SimCommand, Tile, WORK_TICKS, World,
+    LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile, WORK_TICKS, World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -171,6 +171,7 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.claims(), control.claims());
         assert_eq!(loaded.carrying(), control.carrying());
         assert_eq!(loaded.identities(), control.identities());
+        assert_eq!(loaded.professions(), control.professions());
         assert_eq!(loaded.items(), control.items());
         assert_eq!(loaded.emitters(), control.emitters());
         assert_eq!(loaded.designations(), control.designations());
@@ -284,7 +285,19 @@ fn save_round_trip_preserves_items_and_current_job() {
 #[test]
 fn save_load_preserves_in_progress_work() {
     let mut control = World::generate(42, Dims::DEFAULT);
-    let worker = control.dwarves()[2].1;
+    // A dig is claimed by a miner only; seeds assign trades in different orders.
+    let miner = control
+        .professions()
+        .into_iter()
+        .find(|(_, profession)| *profession == Profession::Miner)
+        .unwrap()
+        .0;
+    let worker = control
+        .dwarves()
+        .into_iter()
+        .find(|(id, ..)| *id == miner)
+        .unwrap()
+        .1;
     let target = Pos {
         x: worker.x + 1,
         ..worker
@@ -357,6 +370,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
                 name: DwarfName::Durin,
                 colour: DwarfColour::Red,
             },
+            profession: Profession::Miner,
         },
         SavedDwarf {
             id: 1,
@@ -371,6 +385,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
                 name: DwarfName::Nori,
                 colour: DwarfColour::Blue,
             },
+            profession: Profession::Miner,
         },
     ];
     save.designations = vec![
