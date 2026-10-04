@@ -295,22 +295,22 @@ Tally: 2 decision-needed, 4 patch, 5 defer, 3 dismissed. Layer and severity are 
 - [ ] [Review][Decision] **Standing AC 9 (NFR6 on the vehicle) has no evidence** (acceptance, MED). The
   story adds rendering: three animation graph nodes and stones parented to dwarves. No frame-rate figure
   is recorded in the story or in `12-5-signoff/`. A seat reading or Wolf's ruling closes it.
-- [ ] [Review][Patch] **The record describes superseded behaviour** (acceptance + feature, MED).
+- [x] [Review][Patch] **The record describes superseded behaviour** (acceptance + feature, MED).
   AC3, AC4 and AC7 were never annotated for the 10-swing, stop-first and stop-then-drop rulings. The Wire
   diff and the Completion Notes say "No sim-core change and no save change", but `DIG_WORK_TICKS` and the
   save-load bound of 50 changed. Task 0.2 says "keep WORK_TICKS = 5". The scope guardrail says the rig
   "stays r17", but it gained `pick`. The Change Log says "9/9 KILLED" (it is 13). The `sprint-status.yaml`
   comment also says "keep WORK_TICKS 5". [README.md:288,297; 12-5-signoff/vehicle-card.md (25 ms, "Seat result: _(pending)_")]
-- [ ] [Review][Patch] **AC8's real-binary test is green even if Dig and Carry never bind** (feature +
+- [x] [Review][Patch] **AC8's real-binary test is green even if Dig and Carry never bind** (feature +
   acceptance, MED, latent silent failure). The test asserts only the `clip` lines, which are printed by
   the clip CHOICE above the asset. It runs `--frames 100`, so the frame-180 `STALLED -- the {name} clip
   never loaded` check cannot fire, and it never reads the startup `clips Walk, Dig, Carry` clause. Fix:
   assert the startup clause and the absence of `STALLED`. [crates/gui/tests/pixel_guard.rs:1094-1152]
-- [ ] [Review][Patch] **The AC8 deliberate RED is not a re-runnable mutation row** (acceptance, LOW,
+- [x] [Review][Patch] **The AC8 deliberate RED is not a re-runnable mutation row** (acceptance, LOW,
   latent silent failure). It was shown once, on `81f5482`, before the 10-swing, stop-first and stop-then-drop
   changes. Fix: a `12-5.sh` row "the bridge sends no job", using `mutate.sh`'s `ignored` argument against
   `a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon`. [_bmad-output/implementation-artifacts/mutations/12-5.sh]
-- [ ] [Review][Patch] **A `dig` job never crosses the real wire** (edge + acceptance, LOW, latent silent
+- [x] [Review][Patch] **A `dig` job never crosses the real wire** (edge + acceptance, LOW, latent silent
   failure). The serve test, AC8 and `work_wire.py` designate only `channel`; live there were 984 work
   ticks and 0 `dig`. A bridge that maps `JobKind::Dig` to `Channel` or drops its target survives, and dig
   facing (AC6) then never sees a wire-sourced Dig. Fix: designate a dig in the serve test and assert
@@ -330,6 +330,18 @@ Tally: 2 decision-needed, 4 patch, 5 defer, 3 dismissed. Layer and severity are 
 - [x] [Review][Defer] **AC5's Carry phase-lock has no automated test or mutation row** (acceptance, LOW).
   The evidence is the round-19 artifact: Carry's legs equal Walk's on all 875 keys, with a slide of
   0.000 mm. [crates/gui/src/project.rs drive_dwarf_walk] — deferred, artifact-verified
+- **Patch pass (same session, Wolf: "Apply every patch", 2026-10-04): closure table.**
+
+  | Item | Fix written for | Side then tested | Named fixture / sabotage |
+  |---|---|---|---|
+  | Stale record (`13e9cb0`) | a reader of AC3/4/7, the Wire diff, README, seat card | the old text, by `rg`: no `25 ms`, `_(pending)_` or unannotated one-swing claim remains in README or the card | n/a (record only); each amendment cites its seat ruling |
+  | AC8 sees an unbound clip (`8bb49b8`) | a clip the gui chooses but never binds | the sabotage side: new row "the Dig clip is never bound" (`load("Dug")`) | KILLED at `pixel_guard.rs:1162`, the new `STALLED` assert; the clip-line asserts above it PASSED with the mutant, so the new assertion is the killer, not an earlier one |
+  | AC8 RED re-shown | the AC8 test's own RED, stale since `81f5482` | the bridge sending `job: None`, on `13e9cb0`, in a scratch worktree with its own target dir (removed after) | FAILED by name at `pixel_guard.rs:1148`: `no miner [2, 4] logged clip dig followed by clip walk`; miners dig 0/0, haulers carry 5/5. Not a `mutate.sh` row: `cargo test -p gui` does not rebuild `simd` (NOTE in `12-5.sh`) |
+  | Dig crosses the wire as `dig` (`8bb49b8`) | the bridge's `JobKind::Dig` arm | row "the bridge sends a dig as a channel" | KILLED at `bridge.rs:735` (`a_dig_job_goes_on_the_wire_as_dig_with_its_target`). Deviation from the finding's text: a unit test with a hand-written wire oracle, not a dig designated in the 1500-delta serve test -- the Dig arm is the only Dig-specific code; the claim-to-job lookup is shared with Channel, which the serve test judges live |
+
+- **One verification pass: FULL GATE GREEN 3233 s on `13e9cb0`** (`RUST_TEST_THREADS=1 scripts/gate.sh`,
+  exit 0; `cargo test` 234 s, pixel guards 2962 s, with AC8 now at 200 frames). The commit that adds
+  this table touches only this file.
 - Dismissed (3): the bridge's linear job scan (edge; at most 5 dwarves, negligible); a theoretical
   restart in the `DwarfHeadings::record` continuation (blind, no trigger found); the startup line naming
   ABSENT clips when one is missing (acceptance; that is Task 2c's specified format).
