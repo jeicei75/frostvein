@@ -2534,6 +2534,7 @@ development_status:
   #     GLB carries Walk only, bound by index. Plan: wire `job` + `carrying`, plain Dig/Carry clips, seat + art ledger.
   #     Task 0 RULED 2026-10-03 (Wolf): wire job + carrying; keep WORK_TICKS 5 (judge at seat); clips from a LIVE
   #     BlenderMCP seat from round 1 (brief round 19), art ledger + hard stop after 2 unconverged rounds.
+  #     Seat ruled 2026-10-03: a dig is 10 swings (DIG_WORK_TICKS 50; hauls keep WORK_TICKS 5), stop first, stop-then-drop.
   #     AC10 PASSED at Wolf's seat 2026-10-03 ("ok.. well need to fine tune it later on", 9e347da); #162/#163 filed.
   #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
   12-6-wolf-gives-them-their-trades: backlog

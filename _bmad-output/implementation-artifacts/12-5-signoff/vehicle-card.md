@@ -8,8 +8,8 @@ HEAD, and the clips are embedded with `include_bytes!`, so a stale binary would 
 The launcher's console shows the startup line, `gui dwarf asset: … clips Walk, Dig, Carry`. If it
 says `clip Dig ABSENT` or `clip Carry ABSENT`, stop: the promoted GLB is not in this build.
 
-Judge at **Normal** speed. Do not press `+`. At fast-forward a dig run is 25 ms and the swing is
-invisible; that is expected, not a defect.
+Judge at **Normal** speed. Do not press `+`. A dig is ten swings, 5 s at Normal; at fast-forward
+the drawn dwarf can trail the wire long enough to miss it (#164).
 
 ## (a) The miner swings
 
@@ -62,4 +62,4 @@ Each round gets a row in the story's "Art ledger", with Wolf's words. **Hard sto
 rounds that your eye has not judged converging, the story asks whether the clips ship plain or are
 parked.
 
-Seat result: _(pending)_
+Seat result (2026-10-03): judged OK, "ok.. well need to fine tune it later on" (Art ledger row 19).

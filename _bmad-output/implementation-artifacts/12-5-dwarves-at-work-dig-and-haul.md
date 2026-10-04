@@ -70,6 +70,9 @@ to the seat under the hard stop.
 - Emitter lines are byte-identical, and so is an idle dwarf's line. `Entity` stays `Copy`.
 - **No sim-core change and no save change.** `CurrentJob` and `Carrying` are already saved. `simd`
   composes the fields from `World::claims()`, `jobs()` and `carrying()`.
+  - **Amended by Wolf's "10 swings" seat ruling (2026-10-03):** sim-core gained `DIG_WORK_TICKS` = 50
+    for Dig and Channel (hauls keep `WORK_TICKS` 5). The save FORMAT is unchanged; `simd`'s load
+    bound on `work_progress` is now `DIG_WORK_TICKS`, so a save taken mid-dig loads.
 
 ## Acceptance Criteria
 
@@ -88,9 +91,15 @@ to the seat under the hard stop.
    - otherwise `Walk`.
    When the state that chose `Dig` or `Carry` ends, the dwarf is back on `Walk` within the frame that
    ingests that delta. No other input chooses a clip.
+   - **Amended by Wolf's "stop first" seat ruling (2026-10-03):** `Dig` waits until his drawn body
+     reaches the cell (`drawn_at_cell`); until then he plays `Walk`, or `Carry` while a stone is
+     held. A stone still held after the wire drops it keeps him on `Carry`. The trailing-walker
+     fallout is #164.
 4. The dig swing is timed in sim ticks. A dwarf's `Dig` phase is
    `(mirror tick − the tick he entered work + TickClock::factor()) / WORK_SWING_TICKS`, wrapped to
    `[0, 1)`, with `WORK_SWING_TICKS = 5`. So one work run is one swing.
+   - **Amended by Wolf's "10 swings" seat ruling (2026-10-03):** a dig run is `DIG_WORK_TICKS` = 50,
+     so one run plays ten 5-tick swings. The mechanism is unchanged.
    - Mechanism, load-bearing: the phase comes from delivered ticks plus AD-15's blend factor. It is
      never wall time and never a predicted tick.
    - Deltas that repeat one tick (pause) leave the phase constant across frames. Faster ticks advance
@@ -105,6 +114,9 @@ to the seat under the hard stop.
    - it is a child of the dwarf at `CARRY_OFFSET`, so it moves with his blended position;
    - it is not drawn at its own cell.
    On the delta that clears `carrying`, it is drawn at its cell again.
+   - **Amended by Wolf's "stop before dropping" seat ruling (2026-10-03):** it is drawn at its cell
+     again once his drawn body reaches his wire cell, not on the delta. A stone can ride past the
+     drop when he steps on first: #164.
 8. The instrument is the real `gui` binary.
    - Every clip switch prints `gui dwarf {id} clip {walk|dig|carry}` to stderr.
    - A real-binary test against a real `simd` has a test client designate a channel block and a pile.
@@ -125,6 +137,7 @@ to the seat under the hard stop.
      have inferred Dig from `profession == miner && state == work` (a trade rule in the client, AD-4) and
      left no target to face.
   2. **Dig timing: keep `WORK_TICKS` = 5**, one swing per dig (0.5 s at Normal), judged at the seat.
+     **Superseded at the seat (2026-10-03): "10 swings", `DIG_WORK_TICKS` = 50.**
      Lengthening it is a one-constant sim change. Its fallout is known: the `Walk, Work×5` pins, the
      `first_delivery.py` figures and the 12.4 backlog numbers all move. It is his call at the seat, not
      the dev's.
@@ -264,6 +277,63 @@ to the seat under the hard stop.
   - [x] Add a row to "Art ledger" for every seat round, with Wolf's words.
   - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~50-75 min, [[gate-ooms-at-default-parallelism]]).
 
+### Review Findings
+
+Code review run 1, 2026-10-04, on `2b50037` (diff `f3b7cb3..HEAD`). All four layers ran the binaries
+and none timed out: Blind Hunter and Edge Case Hunter on Sonnet, the Acceptance and Feature Auditors on
+Opus. Scope left out the Blender authoring script `work_r19.py`, the round-19 prompts and the binary renders.
+Tally: 2 decision-needed, 4 patch, 5 defer, 3 dismissed. Layer and severity are in brackets.
+
+- [x] [Review][Defer] **Work visuals trail the drawn walker** (blind + feature + acceptance, MED; issue #164).
+  `sync_dwarf_work` gates on `drawn_at_cell` against the dwarf's CURRENT wire cell, and the drawn body
+  trails the wire at 0.9 cells/s. (a) Pick-up is ungated (`project.rs:491`): the stone pops ~0.5 cells
+  into his hands and Carry starts before he arrives, on 10 of 10 pick-ups in a Normal replay.
+  (b) The release (`project.rs:547`) keys on his current cell, not the drop cell. 1 of 10 drops at Normal
+  rides away with him; at Fast the real binary held one stone 18 s. (c) At Fast the dig clip played in
+  5 of 25 runs in the real headless binary (2 of 25 in a 60 fps replay; another run logged 3 and 5).
+  — deferred: Wolf parked it on #164 (2026-10-04); his seat verdict was "need to fine tune it later on".
+- [ ] [Review][Decision] **Standing AC 9 (NFR6 on the vehicle) has no evidence** (acceptance, MED). The
+  story adds rendering: three animation graph nodes and stones parented to dwarves. No frame-rate figure
+  is recorded in the story or in `12-5-signoff/`. A seat reading or Wolf's ruling closes it.
+- [ ] [Review][Patch] **The record describes superseded behaviour** (acceptance + feature, MED).
+  AC3, AC4 and AC7 were never annotated for the 10-swing, stop-first and stop-then-drop rulings. The Wire
+  diff and the Completion Notes say "No sim-core change and no save change", but `DIG_WORK_TICKS` and the
+  save-load bound of 50 changed. Task 0.2 says "keep WORK_TICKS = 5". The scope guardrail says the rig
+  "stays r17", but it gained `pick`. The Change Log says "9/9 KILLED" (it is 13). The `sprint-status.yaml`
+  comment also says "keep WORK_TICKS 5". [README.md:288,297; 12-5-signoff/vehicle-card.md (25 ms, "Seat result: _(pending)_")]
+- [ ] [Review][Patch] **AC8's real-binary test is green even if Dig and Carry never bind** (feature +
+  acceptance, MED, latent silent failure). The test asserts only the `clip` lines, which are printed by
+  the clip CHOICE above the asset. It runs `--frames 100`, so the frame-180 `STALLED -- the {name} clip
+  never loaded` check cannot fire, and it never reads the startup `clips Walk, Dig, Carry` clause. Fix:
+  assert the startup clause and the absence of `STALLED`. [crates/gui/tests/pixel_guard.rs:1094-1152]
+- [ ] [Review][Patch] **The AC8 deliberate RED is not a re-runnable mutation row** (acceptance, LOW,
+  latent silent failure). It was shown once, on `81f5482`, before the 10-swing, stop-first and stop-then-drop
+  changes. Fix: a `12-5.sh` row "the bridge sends no job", using `mutate.sh`'s `ignored` argument against
+  `a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon`. [_bmad-output/implementation-artifacts/mutations/12-5.sh]
+- [ ] [Review][Patch] **A `dig` job never crosses the real wire** (edge + acceptance, LOW, latent silent
+  failure). The serve test, AC8 and `work_wire.py` designate only `channel`; live there were 984 work
+  ticks and 0 `dig`. A bridge that maps `JobKind::Dig` to `Channel` or drops its target survives, and dig
+  facing (AC6) then never sees a wire-sourced Dig. Fix: designate a dig in the serve test and assert
+  `dig` with its target, plus a mutation row Dig→Channel. [crates/simd/tests/serve.rs; crates/simd/src/bridge.rs:175]
+- [x] [Review][Defer] **The dig swing is anchored to the wire's work-entry tick, not to arrival** (blind
+  + feature, LOW). The first drawn swing starts mid-cycle, and ~2 of the 10 swings are spent walking in.
+  [crates/gui/src/project.rs:516-523,2500-2508] — deferred, cosmetic; tune with #164
+- [x] [Review][Defer] **A stone first seen already carried is drawn at its cell for one frame**
+  (acceptance, LOW). This happens after a snapshot or slice change, because `ChildOf` is inserted through
+  deferred commands. [crates/gui/src/project.rs:536-546] — deferred, one frame
+- [x] [Review][Defer] **`apply_dwarf_tunics` walks every descendant on `Changed<ProjectedTunic>`**
+  (feature, LOW, not observed). A stone held at that moment would take the tunic material.
+  [crates/gui/src/project.rs:3465-3475] — deferred, needs an identity change mid-carry
+- [x] [Review][Defer] **`work_wire.py` passes on `dig_ticks > 0` and `carry_ticks > 0` alone** (edge,
+  LOW). It never requires `job: haul` on a hauler, and never checks that an idle dwarf holds no job. Both
+  are clean live today. [_bmad-output/implementation-artifacts/12-5-signoff/work_wire.py] — deferred, signoff instrument
+- [x] [Review][Defer] **AC5's Carry phase-lock has no automated test or mutation row** (acceptance, LOW).
+  The evidence is the round-19 artifact: Carry's legs equal Walk's on all 875 keys, with a slide of
+  0.000 mm. [crates/gui/src/project.rs drive_dwarf_walk] — deferred, artifact-verified
+- Dismissed (3): the bridge's linear job scan (edge; at most 5 dwarves, negligible); a theoretical
+  restart in the `DwarfHeadings::record` continuation (blind, no trigger found); the startup line naming
+  ABSENT clips when one is missing (acceptance; that is Task 2c's specified format).
+
 ## Art ledger (FR45, M2-24)
 
 | Round | Date | Clips | Made by (exact model / venue) | Cost | Wolf's verdict | Converging? |
@@ -274,13 +344,15 @@ to the seat under the hard stop.
 
 ### Scope guardrails (do NOT)
 
-- No sim-core change. No `WORK_TICKS` change unless Wolf rules it in Task 0.2.
+- No sim-core change. No `WORK_TICKS` change unless Wolf rules it in Task 0.2. (Wolf ruled it at
+  the seat: `DIG_WORK_TICKS` = 50.)
 - No new tui input or display.
 - No cut clip: that is 12.8. No roster or profession UI in the gui: that is 12.6.
 - No Bevy animation blending, masks or transitions. One node plays at a time.
 - No pick-up or drop clip for a hauler's 5-tick `work` runs: he holds `Walk`, or `Carry` at a drop.
   Park ideas as issues ([[story-scope-move-forward]]).
-- No model change: the rig, mesh, atlas and props stay r17. The seat adds actions only.
+- No model change: the rig, mesh, atlas and props stay r17. The seat adds actions only. (Wolf took
+  a 20th joint, `pick`, so the pick can be slung on the back during Carry; see Completion Notes.)
 
 ### What already exists (build on it)
 
@@ -593,7 +665,7 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   as the last two fields, both skipped when `None`. Emitter and idle-dwarf lines stay
   byte-identical; the existing pins are unchanged. Bridge: `dwarf_job` is an exhaustive match with no
   wildcard; `dwarf_entities` joins `claims()` to `jobs()` by `JobId` and reads `carrying()`. No
-  sim-core or save change. The serve test also asserts `profession` on every dwarf delta, which
+  sim-core or save change at Task 1 (the later "10 swings" ruling added `DIG_WORK_TICKS`). The serve test also asserts `profession` on every dwarf delta, which
   closes 12.4's deferral. On every sample, a channel's target equalled the miner's own cell, and no
   claim named a job missing from `jobs()`.
 - **Task 5:** `capture_roster` became `capture_roster_with(no_color, at_work)`. With `at_work`,
@@ -685,5 +757,5 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 | Date | Change |
 | --- | --- |
 | 2026-10-03 | Story created on `f3b7cb3`. RED observed on the live wire (`work_wire.py`: no `job` or `carrying`, 125 miner work ticks unlabelled). The GLB carries `Walk` only. Task 0 ruled by Wolf the same day: `job` + `carrying`, keep 5 work ticks, live BlenderMCP seat from round 1. |
-| 2026-10-03 | Dev: wire `job`/`carrying`, gui Walk/Dig/Carry by name, dig facing, held stone, AC8 instrument; round 19 (Wolf's live seat, $11.10) promoted, 20 joints; Wolf ruled a dig is 10 swings: `DIG_WORK_TICKS` 50. 12-5.sh 9/9 KILLED. |
+| 2026-10-03 | Dev: wire `job`/`carrying`, gui Walk/Dig/Carry by name, dig facing, held stone, AC8 instrument; round 19 (Wolf's live seat, $11.10) promoted, 20 joints; Wolf ruled a dig is 10 swings: `DIG_WORK_TICKS` 50. 12-5.sh 13/13 KILLED (the 2026-10-03 rows run to 13 by the seat rulings). |
 | 2026-10-04 | Full gate GREEN on `9561ab7` (3269 s), covering the final code from `9e347da`. Status -> review. |

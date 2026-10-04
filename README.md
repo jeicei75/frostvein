@@ -285,16 +285,18 @@ binary that predates your change says so.
 
 **Work clips.** A dwarf plays one of three clips, chosen from his wire state alone:
 
-- `Dig` while he is in `work` on a dig or channel job, one swing per 5-tick work run, timed in
-  delivered ticks;
-- otherwise `Carry` while he carries a stone, which is drawn in his hands;
+- `Dig` while he is in `work` on a dig or channel job, once he is drawn at his cell: ten 5-tick
+  swings per 50-tick dig, timed in delivered ticks;
+- otherwise `Carry` while he carries a stone, which is drawn in his hands until he is drawn at the
+  cell he drops it on;
 - otherwise `Walk`.
 
 `Walk` and `Carry` are phase-locked to the ground he covers. While digging a dig (not a channel) he
 faces his target. Clips are bound by NAME from the embedded GLB, and the startup line says
 `clips Walk, Dig, Carry`, or `clip <Name> ABSENT` for each one missing. Every switch prints
-`gui dwarf <id> clip <walk|dig|carry>` to stderr, one line per dwarf per switch, by design. At
-fast-forward a dig run is 25 ms, so judge the swing at Normal.
+`gui dwarf <id> clip <walk|dig|carry>` to stderr, one line per dwarf per switch, by design. A dig
+is 5 s at Normal and 1 s at Fast; at Fast the drawn dwarf can trail the wire long enough to miss it
+(#164), so judge the swing at Normal.
 
 ## Test
 
