@@ -135,3 +135,28 @@ old = '            DwarfClip::Walk if still_holding => DwarfClip::Carry,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
+
+# 12.5 review, 2026-10-04. The live tests designate only channels, so the bridge's `Dig` arm is
+# judged by one unit test alone.
+mutation "the bridge sends a dig as a channel" simd a_dig_job_goes_on_the_wire_as_dig_with_its_target <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
+old = '        sim_core::JobKind::Dig => protocol::DwarfJob::Dig { target },\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        sim_core::JobKind::Dig => protocol::DwarfJob::Channel { target },\n'))
+PY
+
+# 12.5 review: AC8's `clip` lines come from the clip CHOICE, above the asset, so they stay green
+# when a clip never binds. Only the test's STALLED assertion can kill this.
+mutation "the Dig clip is never bound" gui a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon ignored <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                let (walk, dig, carry) = (load("Walk"), load("Dig"), load("Carry"));\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let (walk, dig, carry) = (load("Walk"), load("Dug"), load("Carry"));\n'))
+PY
+
+# NOTE: AC8's deliberate RED (the bridge sends no job, judged by the real-binary AC8 test) cannot be
+# a row here. `cargo test -p gui` does not rebuild `simd`, so the test would drive the STALE daemon
+# and report SURVIVED. It is run by hand in a scratch worktree with its own target dir; see the
+# story's Debug Log.

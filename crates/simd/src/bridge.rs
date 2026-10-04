@@ -716,4 +716,29 @@ mod tests {
         assert_eq!(update.designations, expected_designations);
         assert_eq!(update.zones, expected_zones);
     }
+
+    /// 12.5 AC1: a dig job goes on the wire as `dig`, with its target. The live tests designate
+    /// only channels, so this is the one place the `Dig` arm is judged -- sent as a channel, or
+    /// with its target lost, it would pass all of them. The oracle is the hand-written wire line.
+    #[test]
+    fn a_dig_job_goes_on_the_wire_as_dig_with_its_target() {
+        let job = |kind| sim_core::Job {
+            id: sim_core::JobId(7),
+            kind,
+            target: sim_core::Pos { x: 3, y: 41, z: 9 },
+            created_tick: 0,
+            retry_after: 0,
+        };
+        let wire = |line: &str| -> protocol::DwarfJob {
+            serde_json::from_str(line).expect("hand-written wire job must decode")
+        };
+        assert_eq!(
+            super::dwarf_job(job(sim_core::JobKind::Dig)),
+            wire(r#"{"dig":{"target":[3,41,9]}}"#)
+        );
+        assert_eq!(
+            super::dwarf_job(job(sim_core::JobKind::Channel)),
+            wire(r#"{"channel":{"target":[3,41,9]}}"#)
+        );
+    }
 }

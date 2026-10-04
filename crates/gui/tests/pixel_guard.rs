@@ -1009,10 +1009,14 @@ fn the_dwarf_startup_line_reports_what_was_actually_drawn() {
 /// lines arrive early and N=100 is a wide margin. N is wall-clock-coupled to the daemon (ticks are
 /// delivered in real time), so a heavily loaded machine delivers fewer ticks per frame; the margin
 /// is what absorbs that, and the failure message prints every clip line seen so a miss is legible.
+///
+/// N = 200 since the 12.5 review: a `clip` line is printed by the clip CHOICE, above the asset, so
+/// those lines alone stay green when Dig or Carry never binds. `drive_dwarf_walk` reports a clip
+/// that never loaded with `STALLED` at frame 180, so the run must outlast that check to read it.
 #[test]
 #[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
 fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
-    const WORK_FRAMES: &str = "100";
+    const WORK_FRAMES: &str = "200";
     let daemon = Daemon::spawn();
     let stream = TcpStream::connect(("127.0.0.1", daemon.port)).expect("test client must connect");
     let mut writer = stream.try_clone().expect("write half must clone");
@@ -1149,6 +1153,15 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
     assert!(
         hauler.is_some(),
         "no hauler {haulers:?} logged `clip carry` followed by `clip walk`; clip lines seen: {clips:?}"
+    );
+    assert!(
+        stderr.contains("clips Walk, Dig, Carry"),
+        "the startup line must name all three clips:\n{stderr}"
+    );
+    let stalled: Vec<&str> = stderr.lines().filter(|l| l.contains("STALLED")).collect();
+    assert!(
+        stalled.is_empty(),
+        "the dwarf animation stalled -- a clip was chosen that never played: {stalled:?}"
     );
 }
 
