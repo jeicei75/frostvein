@@ -211,7 +211,7 @@ assert old in s
 p.write_text(s.replace(old, 'const MAX_DESIGNATIONS: usize = 4097;\n'))
 PY
 
-mutation "stone uses a second per-kind id counter" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "stone uses a second per-kind id counter" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        let item_id = ecs.resource_mut::<IdAllocator>().allocate();\n'
@@ -415,7 +415,7 @@ s = s.replace(old_open, new_open).replace(old_pop, new_pop).replace(old_push, ne
 p.write_text(s)
 PY
 
-mutation "dig sets the wrong tile" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "dig sets the wrong tile" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
@@ -431,7 +431,7 @@ p.write_text(s.replace(old, '''                JobKind::Dig => match terrain.til
 '''))
 PY
 
-mutation "dig writes terrain without set_tile" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "dig writes terrain without set_tile" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        let changed = ecs.resource_mut::<Terrain>().set_tile(changed_pos, tile);\n'
@@ -483,7 +483,7 @@ p.write_text(s.replace(old, '''                        Some(Tile::Solid(material
 '''))
 PY
 
-mutation "stone is not spawned" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "stone is not spawned" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
@@ -497,7 +497,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        let _ = yields_stone;\n'))
 PY
 
-mutation "stone reuses an existing id" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "stone reuses an existing id" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        let item_id = ecs.resource_mut::<IdAllocator>().allocate();\n'
@@ -505,7 +505,7 @@ assert old in s
 p.write_text(s.replace(old, '        let item_id = Id(0);\n'))
 PY
 
-mutation "completed job is not removed" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "completed job is not removed" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        ecs.resource_mut::<Jobs>().remove(job.id);\n'
@@ -513,7 +513,7 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "completed designation is not removed" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "completed designation is not removed" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        ecs.resource_mut::<Designations>().0.remove(&job.target);\n'
@@ -521,12 +521,13 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "WORK_TICKS is six" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+# 12.5: a dig's run is DIG_WORK_TICKS (Wolf's 10 swings); WORK_TICKS is now the haul's alone.
+mutation "DIG_WORK_TICKS is one more" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = 'const WORK_TICKS: u32 = 5;\n'
-assert old in s
-p.write_text(s.replace(old, 'const WORK_TICKS: u32 = 6;\n'))
+old = 'pub const DIG_WORK_TICKS: u32 = 50;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'pub const DIG_WORK_TICKS: u32 = 51;\n'))
 PY
 
 mutation "settle moves up instead of down" sim-core settle_moves_one_level_down_and_discards_the_path <<'PY'
@@ -808,27 +809,27 @@ assert old in s
 p.write_text(s.replace(old, '            !terrain.is_standable(pos) && terrain.is_standable(below)\n'))
 PY
 
-mutation "work completes after only four visible ticks" sim-core execute_jobs_walks_then_digs_for_exactly_five_work_ticks <<'PY'
+mutation "work completes after only four visible ticks" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if progress < WORK_TICKS {\n'
-assert old in s
-p.write_text(s.replace(old, '        if progress + 1 < WORK_TICKS {\n', 1))
+old = '        if progress < needed {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if progress + 1 < needed {\n', 1))
 PY
 
 mutation "load accepts overflowing work progress" simd overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''                if dwarf.work_progress > sim_core::WORK_TICKS {
+old = '''                if dwarf.work_progress > sim_core::DIG_WORK_TICKS {
                     bail!(
                         "save dwarf {} work progress {} exceeds {}",
                         dwarf.id,
                         dwarf.work_progress,
-                        sim_core::WORK_TICKS
+                        sim_core::DIG_WORK_TICKS
                     );
                 }
 '''
-assert old in s
+assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 

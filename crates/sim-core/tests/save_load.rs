@@ -1,6 +1,6 @@
 use sim_core::{
-    DesignationKind, Dims, DwarfColour, DwarfName, Identity, Job, JobId, JobKind, JobState,
-    LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile, WORK_TICKS, World,
+    DIG_WORK_TICKS, DesignationKind, Dims, DwarfColour, DwarfName, Identity, Job, JobId, JobKind,
+    JobState, LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile, World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -379,7 +379,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             home: digging_start,
             cooldown: 10,
             current_job: Some(1),
-            work_progress: WORK_TICKS,
+            work_progress: DIG_WORK_TICKS,
             carrying: None,
             identity: Identity {
                 name: DwarfName::Nori,

@@ -2060,6 +2060,8 @@ mod tests {
                 light: Some(LightKind::Lantern),
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

@@ -42,7 +42,12 @@ const WANDER_REST_TICKS: u32 = 10;
 const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
 pub const MAX_DESIGNATIONS: usize = 4096;
 const MAX_ASTAR_NODES: usize = 50_000;
+/// Ticks of work a hauler spends picking a stone up, and again putting it down.
 pub const WORK_TICKS: u32 = 5;
+/// Ticks of work one dig or channel takes: 10 swings of the pick at the client's 5 ticks per swing
+/// (Wolf at the 12.5 seat, 2026-10-03: "maybe it could dig longer one cell.. now it's just one
+/// hit", then "10 swings"). 5 s at Normal. Hauls keep `WORK_TICKS`.
+pub const DIG_WORK_TICKS: u32 = 50;
 const RETRY_COOLDOWN: u64 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1062,7 +1067,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             .get::<WorkProgress>(entity)
             .map(|progress| progress.0)
             .unwrap_or(0);
-        if progress < WORK_TICKS {
+        let needed = match job.kind {
+            JobKind::Dig | JobKind::Channel => DIG_WORK_TICKS,
+            JobKind::Haul { .. } => WORK_TICKS,
+        };
+        if progress < needed {
             *ecs.get_mut::<JobState>(entity)
                 .expect("every dwarf has a job state") = JobState::Work;
             ecs.entity_mut(entity).insert(WorkProgress(progress + 1));
@@ -3954,7 +3963,7 @@ mod tests {
     }
 
     #[test]
-    fn execute_jobs_walks_then_digs_for_exactly_five_work_ticks() {
+    fn execute_jobs_walks_then_digs_for_exactly_dig_work_ticks() {
         let mut world = World::generate(42, Dims::DEFAULT);
         let start = world.dwarves()[0].1;
         let dx = if start.x + 2 < world.dims().x as i32 {
@@ -4008,7 +4017,9 @@ mod tests {
         super::execute_jobs(&mut world.ecs);
         assert_eq!(world.dwarves()[0].1, work);
         assert_eq!(world.dwarves()[0].2, JobState::Walk);
-        for _ in 0..5 {
+        // A literal, not `DIG_WORK_TICKS`: Wolf ruled ten swings at the client's five ticks each
+        // (12.5 seat), and a loop bound by the constant would follow any change to it.
+        for _ in 0..50 {
             super::execute_jobs(&mut world.ecs);
             assert_eq!(world.dwarves()[0].2, JobState::Work);
             assert_eq!(world.claims()[0].1, Some(JobId(0)));
@@ -4054,7 +4065,7 @@ mod tests {
             world
                 .ecs
                 .entity_mut(entity)
-                .insert(super::WorkProgress(super::WORK_TICKS));
+                .insert(super::WorkProgress(super::DIG_WORK_TICKS));
 
             super::execute_jobs(&mut world.ecs);
 
@@ -4095,7 +4106,7 @@ mod tests {
             world
                 .ecs
                 .entity_mut(entity)
-                .insert(super::WorkProgress(super::WORK_TICKS));
+                .insert(super::WorkProgress(super::DIG_WORK_TICKS));
 
             super::execute_jobs(&mut world.ecs);
 
@@ -4136,7 +4147,7 @@ mod tests {
             .entity_mut(entity)
             .insert((super::Path(Vec::new()), super::WorkProgress(0)));
 
-        for _ in 0..5 {
+        for _ in 0..super::DIG_WORK_TICKS {
             super::execute_jobs(&mut world.ecs);
             assert_eq!(world.dwarves()[0].2, JobState::Work);
             assert_eq!(world.claims()[0].1, Some(JobId(0)));
@@ -4182,10 +4193,10 @@ mod tests {
             .expect("dwarf zero exists")
             .id();
         world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
-        world
-            .ecs
-            .entity_mut(entity)
-            .insert((super::Path(Vec::new()), super::WorkProgress(5)));
+        world.ecs.entity_mut(entity).insert((
+            super::Path(Vec::new()),
+            super::WorkProgress(super::DIG_WORK_TICKS),
+        ));
 
         super::execute_jobs(&mut world.ecs);
 
@@ -4320,10 +4331,10 @@ mod tests {
             .get_mut::<super::CurrentJob>(victim_entity)
             .unwrap()
             .0 = Some(second_job.id);
-        world
-            .ecs
-            .entity_mut(worker_entity)
-            .insert((super::Path(Vec::new()), super::WorkProgress(5)));
+        world.ecs.entity_mut(worker_entity).insert((
+            super::Path(Vec::new()),
+            super::WorkProgress(super::DIG_WORK_TICKS),
+        ));
         world
             .ecs
             .entity_mut(victim_entity)

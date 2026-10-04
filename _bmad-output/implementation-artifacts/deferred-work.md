@@ -2428,3 +2428,23 @@ the story, and one of them is also issue #125.
 - **A trade with zero dwarves leaves its jobs unclaimed SILENTLY** (feature LOW; `lib.rs:503,570`). It is unreachable
   today (always 2/2/1). It becomes reachable when 12.6 lets the player reassign the last hauler or miner, so it is
   input for 12.6's design: what does the player see?
+
+## Deferred from: code review of 12-5-dwarves-at-work-dig-and-haul (2026-10-04)
+
+- **The dig swing is anchored to the wire's work-entry tick, not to arrival** (blind + feature, LOW;
+  `crates/gui/src/project.rs:516-523,2500-2508`). Because of stop-first, the first drawn swing starts
+  mid-cycle, and ~2 of the 10 swings are spent walking in. Tune it with #164.
+- **A stone first seen already carried is drawn at its own cell for one frame** (acceptance, LOW;
+  `project.rs:536-546`). This happens after a snapshot or slice change, because `ChildOf` goes through
+  deferred commands.
+- **`apply_dwarf_tunics` walks every descendant on `Changed<ProjectedTunic>`** (feature, LOW, not
+  observed; `project.rs:3465-3475`). A stone held at that moment would take the tunic material.
+- **`work_wire.py` passes on `dig_ticks > 0` and `carry_ticks > 0` alone** (edge, LOW;
+  `12-5-signoff/work_wire.py`). It never requires `job: haul` on a hauler, and never checks that an idle
+  dwarf holds no job. Both are clean live today.
+- **AC5's Carry phase-lock has no automated test or mutation row** (acceptance, LOW; `drive_dwarf_walk`).
+  Its evidence is the round-19 artifact only.
+- **Work visuals trail the drawn walker** (blind + feature + acceptance, MED; issue #164, which holds the state; `crates/gui/src/project.rs:491,547,2472`).
+  Three effects: the pick-up stone pops into his hands; a dropped stone can ride away with him; the dig
+  is mostly unseen at Fast. Wolf parked it on #164 at review, 2026-10-04. His seat verdict was "need to
+  fine tune it later on".

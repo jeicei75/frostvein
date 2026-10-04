@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-02
+# last_updated: 2026-10-03
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-02
+last_updated: 2026-10-04
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2509,7 +2509,8 @@ development_status:
   #     dwarves, `break 'jobs` skips its retry stamp, and every later job starves forever. Suspect 2
   #     (channel support lost) releases in 2 ticks: not a defect. Ramp-shielded empty-goal digs (task6's
   #     "floor of ~50") are FR8 by-design and left to Wolf (question 1); sealed-off pile loop is question 2.
-  12-4-every-dwarf-has-a-trade: review
+  12-4-every-dwarf-has-a-trade: done
+  #   Merged 2026-10-03 as PR #161 (f3b7cb3, Refs #159 -- issue stays open for the single-area residual).
   #   Patch pass 2 2026-10-02: 4/4 patches landed (ef5e3d1, 3e685e3, 76ab969), 12-4.sh 16/16 KILLED, FULL GATE GREEN
   #     3088 s on 3e685e3. Next: PR (Refs #159) on Wolf's yes. Run 2's stopping rule ruled out a run 3.
   #   Review run 2 2026-10-02 (4 layers, none timed out): 0 HIGH, 0 REWORK, 1 MED + 3 LOW patches LEFT AS ACTION ITEMS
@@ -2527,7 +2528,17 @@ development_status:
   #     does NOT reproduce (retry cooldowns free the dwarves). Throwaway prototype GREEN: 12 left / 19 of 25.
   #     Task 0 RULED 2026-10-02 (Wolf): 2M/2H/1W pool; roster `Name trade` (grey); old saves refused; #159 FOLDED IN
   #     with fix B (budget per dwarf) + sat-out rule, both prototyped; single-area residual stays on #159 (Refs, not Closes).
-  12-5-dwarves-at-work-dig-and-haul: backlog
+  12-5-dwarves-at-work-dig-and-haul: done
+  #   Review run 1 2026-10-04: 2 decision (#164 parked; NFR6 read at seat: haze off 130-140, work no cost), 4 patches
+  #     landed (8bb49b8, 13e9cb0), 2 new rows KILLED, AC8 RED re-shown, FULL GATE GREEN 3233 s on 13e9cb0. 5 deferred.
+  #   Created 2026-10-03 on f3b7cb3. RED on the live wire (12-5-signoff/work_wire.py): no `job`/`carrying` field,
+  #     125 miner work ticks unlabelled (every work run 5 ticks; a hauler's pick-up/drop are 5-tick work runs too).
+  #     GLB carries Walk only, bound by index. Plan: wire `job` + `carrying`, plain Dig/Carry clips, seat + art ledger.
+  #     Task 0 RULED 2026-10-03 (Wolf): wire job + carrying; keep WORK_TICKS 5 (judge at seat); clips from a LIVE
+  #     BlenderMCP seat from round 1 (brief round 19), art ledger + hard stop after 2 unconverged rounds.
+  #     Seat ruled 2026-10-03: a dig is 10 swings (DIG_WORK_TICKS 50; hauls keep WORK_TICKS 5), stop first, stop-then-drop.
+  #     AC10 PASSED at Wolf's seat 2026-10-03 ("ok.. well need to fine tune it later on", 9e347da); #162/#163 filed.
+  #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
   12-6-wolf-gives-them-their-trades: backlog
   12-7-timber: backlog
   12-8-dwarves-at-work-the-cut: backlog

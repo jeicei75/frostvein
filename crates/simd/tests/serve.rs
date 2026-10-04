@@ -556,6 +556,129 @@ fn dwarf_professions(snapshot: &protocol::Snapshot) -> Vec<(u32, protocol::Profe
     professions
 }
 
+/// 12.5 AC1 END TO END: the daemon labels what a dwarf is doing, and what he carries.
+///
+/// `state: work` alone cannot tell a pick swing from a hauler bending for a stone, so the delta
+/// carries `job`, and `carrying` names the stone he holds (which is also in `items`, at his cell).
+/// The designation is `first_delivery.py`'s known-good one, pinned to DEFAULT_SEED's camp. Every
+/// check is judged on a delta the daemon really sent, and each is positive: at least one miner at
+/// work, one hauler on a haul, one carrier, or the test fails.
+///
+/// It also closes 12.4's deferral: deltas carry a `profession`, and nothing tested it.
+#[test]
+fn deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let camp = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.kind == protocol::EntityKind::Campfire)
+        .expect("the camp has a campfire")
+        .pos;
+    assert_eq!(
+        camp,
+        [64, 64, 9],
+        "the recipe is pinned to DEFAULT_SEED's camp"
+    );
+    let mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+    let [cx, cy, cz] = camp;
+    // The first fully standable 3x3 a few cells from the fire.
+    let pile = (3..12)
+        .flat_map(|r| {
+            [
+                (cx + r, cy),
+                (cx - r - 2, cy),
+                (cx, cy + r),
+                (cx, cy - r - 2),
+            ]
+        })
+        .find(|&(px, py)| {
+            (px..px + 3)
+                .all(|x| (py..py + 3).all(|y| client_core::is_standable(&mirror, [x, y, cz])))
+        })
+        .expect("a 3x3 standable pile near the camp");
+    send_literal(
+        &mut writer,
+        br#"{"type":"designate","kind":"channel","rect":{"min":[65,61,9],"max":[68,67,9]}}
+"#,
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"place_stockpile\",\"rects\":[{{\"min\":[{},{},{cz}],\"max\":[{},{},{cz}]}}]}}\n",
+            pile.0,
+            pile.1,
+            pile.0 + 2,
+            pile.1 + 2
+        )
+        .as_bytes(),
+    );
+    send_speed(&mut writer, protocol::Speed::Fast4x);
+
+    let (mut digging, mut hauling, mut carriers) = (0, 0, 0);
+    for _ in 0..1500 {
+        let delta = read_delta(&mut reader);
+        for dwarf in delta
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        {
+            let profession = dwarf
+                .profession
+                .expect("every dwarf delta carries a profession");
+            match (profession, dwarf.state, dwarf.job) {
+                (protocol::Profession::Miner, protocol::JobState::Work, job) => {
+                    assert!(
+                        matches!(
+                            job,
+                            Some(
+                                protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. }
+                            )
+                        ),
+                        "tick {}: miner {} works with job {job:?}",
+                        delta.tick,
+                        dwarf.id
+                    );
+                    if let Some(protocol::DwarfJob::Channel { target }) = job {
+                        assert_eq!(target, dwarf.pos, "a channel is dug under his own feet");
+                    }
+                    digging += 1;
+                }
+                (protocol::Profession::Hauler, _, Some(protocol::DwarfJob::Haul)) => hauling += 1,
+                (protocol::Profession::Hauler, _, Some(job)) => {
+                    panic!("tick {}: hauler {} holds {job:?}", delta.tick, dwarf.id)
+                }
+                _ => {}
+            }
+            if let Some(stone) = dwarf.carrying {
+                let item = delta
+                    .items
+                    .iter()
+                    .find(|item| item.id == stone)
+                    .unwrap_or_else(|| {
+                        panic!("tick {}: carried item {stone} not in items", delta.tick)
+                    });
+                assert_eq!(
+                    item.pos, dwarf.pos,
+                    "tick {}: dwarf {} is not on the cell of the stone he carries",
+                    delta.tick, dwarf.id
+                );
+                carriers += 1;
+            }
+        }
+        if digging > 0 && hauling > 0 && carriers > 0 {
+            return;
+        }
+    }
+    panic!(
+        "1500 deltas: digging {digging}, hauling {hauling}, carrying {carriers}; need all three"
+    );
+}
+
 #[test]
 fn save_then_load_rewinds_every_client() {
     let daemon = Daemon::spawn();
@@ -1370,7 +1493,7 @@ fn overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking() {
 
     assert_save_is_rejected_without_stopping_ticks(
         state,
-        "save dwarf 0 work progress 4294967295 exceeds 5",
+        "save dwarf 0 work progress 4294967295 exceeds 50",
     );
 }
 

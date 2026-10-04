@@ -29,7 +29,7 @@ one object:
   * the object and mesh datablocks carry the revision, so a stale binary announces
     itself. The revision lives in the datablock names INSIDE the .blend, not in any
     filename -- there is exactly one place to bump it;
-  * from round 8 it also carries the RIG: the skin is exported, the 19 joint names
+  * from round 8 it also carries the RIG: the skin is exported, the 20 joint names
     are read back out of the written file, and weights must be rigid (one joint per
     vertex at 1.0). An unrigged figure still exports, and says so.
 
@@ -78,13 +78,15 @@ WEIGHT_EPS = 1e-4     # a weight below this is nothing; a rigid weight is 1.0
 # such. `sharp_face` in particular exists on any mesh with a hard edge, so every figure would
 # otherwise report one tag it never authored.
 BUILTIN_FACE_ATTRS = frozenset(("material_index", "sharp_face", "custom_normal"))
-# The 19 joints, fixed since round 3 and not the exporter's to negotiate. They are a SET here:
+# The joints, fixed since round 3 and not the exporter's to negotiate. They are a SET here:
 # the hierarchy is the artist's, the names are the contract, because the game binds by name.
+# Round 19 adds `pick` (child of hand.R, carries the pickaxe) on Wolf's call: Dig holds the
+# pickaxe in the hand, Carry slings it on the back, and one rigid weight cannot do both.
 JOINTS = frozenset((
     "root", "hips", "spine", "chest", "neck", "head",
     "shoulder.L", "shoulder.R", "elbow.L", "elbow.R", "hand.L", "hand.R",
     "hip.L", "hip.R", "knee.L", "knee.R", "foot.L", "foot.R",
-    "beard",
+    "beard", "pick",
 ))
 
 

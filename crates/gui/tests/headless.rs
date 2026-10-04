@@ -194,6 +194,8 @@ fn dwarf(id: u32, pos: [i32; 3]) -> Entity {
         light: None,
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     }
 }
 
@@ -206,6 +208,8 @@ fn lantern_dwarf(id: u32, pos: [i32; 3]) -> Entity {
         light: Some(protocol::LightKind::Lantern),
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     }
 }
 
@@ -1279,6 +1283,8 @@ fn the_floor_drop_does_not_move_the_cube_kinds() {
             light: None,
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }],
     ));
     app.update();
@@ -1479,6 +1485,8 @@ fn production_drives_the_flicker_from_elapsed_time() {
         light: Some(protocol::LightKind::Torch),
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1505,6 +1513,8 @@ fn flickered_light_survives_a_later_production_reconciliation() {
         light: Some(protocol::LightKind::Torch),
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1544,6 +1554,8 @@ fn campfire_light_casts_shadows_and_is_not_rewritten_by_a_later_reconciliation()
         light: Some(protocol::LightKind::Campfire),
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![campfire]));
     app.update();
@@ -1611,6 +1623,8 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         light: None,
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     };
     let dwarf_one = Entity {
         id: 1,
@@ -1620,6 +1634,8 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         light: None,
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     };
     let mut app = headless_app(snapshot(
         vec![Tile::Solid(Material::Ice), Tile::Empty],
@@ -1808,6 +1824,8 @@ fn despawning_world_projection_then_reconciling_recreates_the_same_scene() {
         light: None,
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     };
     // AC11 says "marks included", so the snapshot must actually carry marks — reviewed
     // 2026-08-21, this test used an empty designation and zone list, so every assertion in it was
@@ -1910,6 +1928,8 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             light: Some(protocol::LightKind::Torch),
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -1919,6 +1939,8 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             light: Some(protocol::LightKind::Campfire),
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }))
         .chain(std::iter::once(Entity {
             id: 5,
@@ -1928,6 +1950,8 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             light: None,
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }))
         .collect();
     let mut app = headless_app(snapshot_with_dims(
@@ -1968,6 +1992,8 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             light: Some(protocol::LightKind::Torch),
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -1977,6 +2003,8 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             light: Some(protocol::LightKind::Campfire),
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }))
         .chain((5..10).map(|id| lantern_dwarf(id, [60 + id as i32 - 5, 65, 9])))
         .collect();
@@ -4907,4 +4935,506 @@ fn a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it() {
         "id 1 must take the blue tunic"
     );
     assert_eq!(handle_of(&mut app, 2), red, "id 2 must take the red tunic");
+}
+
+/// A dwarf with the wire state 12.5's clip choice reads.
+fn working(
+    id: u32,
+    pos: [i32; 3],
+    state: JobState,
+    job: Option<protocol::DwarfJob>,
+    carrying: Option<u32>,
+) -> Entity {
+    Entity {
+        state,
+        job,
+        carrying,
+        ..dwarf(id, pos)
+    }
+}
+
+fn dwarf_clip_of(app: &mut App, id: u32) -> gui::project::DwarfClip {
+    app.world_mut()
+        .query::<(&WorldProjected, &gui::project::DwarfClip)>()
+        .iter(app.world())
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, clip)| *clip)
+        .expect("the dwarf must carry a DwarfClip")
+}
+
+const DIG_AT_EAST: protocol::DwarfJob = protocol::DwarfJob::Dig { target: [2, 0, 0] };
+
+/// 12.5 AC3: the clip follows the wire state alone, within the frame that ingests the delta.
+#[test]
+fn a_dwarfs_clip_follows_his_wire_state_walk_to_dig_to_walk_and_walk_to_carry_to_walk() {
+    use gui::project::DwarfClip::{Carry, Dig, Walk};
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    app.update();
+    assert_eq!(dwarf_clip_of(&mut app, 7), Walk);
+
+    let steps = [
+        (JobState::Work, Some(DIG_AT_EAST), None, Dig),
+        (JobState::Walk, Some(DIG_AT_EAST), None, Walk),
+        (
+            JobState::Walk,
+            Some(protocol::DwarfJob::Haul),
+            Some(70),
+            Carry,
+        ),
+        (
+            JobState::Work,
+            Some(protocol::DwarfJob::Haul),
+            Some(70),
+            Carry,
+        ),
+        (JobState::Idle, None, None, Walk),
+    ];
+    for (tick, (state, job, carrying, expected)) in steps.into_iter().enumerate() {
+        apply_delta(
+            &mut app,
+            delta_at(
+                tick as u64 + 1,
+                Vec::new(),
+                vec![working(7, [0, 0, 0], state, job, carrying)],
+            ),
+        );
+        app.update();
+        assert_eq!(
+            dwarf_clip_of(&mut app, 7),
+            expected,
+            "{state:?} with job {job:?} carrying {carrying:?}"
+        );
+    }
+}
+
+/// The precedence AC3 states: a dwarf who is digging while the wire also says he carries a stone
+/// swings. This is the case that tells `Dig`-first from `Carry`-first.
+#[test]
+fn digging_outranks_carrying_in_the_clip_choice() {
+    use gui::project::{DwarfClip, dwarf_clip};
+    let both = working(1, [0, 0, 0], JobState::Work, Some(DIG_AT_EAST), Some(9));
+    assert_eq!(dwarf_clip(&both), DwarfClip::Dig);
+    let channel = working(
+        1,
+        [0, 0, 0],
+        JobState::Work,
+        Some(protocol::DwarfJob::Channel { target: [0, 0, 0] }),
+        Some(9),
+    );
+    assert_eq!(dwarf_clip(&channel), DwarfClip::Dig);
+    // A dig job that is still being walked to, and a haul's pick-up `work`, are not swings.
+    let walking = working(1, [0, 0, 0], JobState::Walk, Some(DIG_AT_EAST), None);
+    assert_eq!(dwarf_clip(&walking), DwarfClip::Walk);
+    let stooping = working(
+        1,
+        [0, 0, 0],
+        JobState::Work,
+        Some(protocol::DwarfJob::Haul),
+        None,
+    );
+    assert_eq!(dwarf_clip(&stooping), DwarfClip::Walk);
+}
+
+fn dig_phase_of(app: &mut App, id: u32) -> gui::project::DigPhase {
+    app.world_mut()
+        .query::<(&WorldProjected, &gui::project::DigPhase)>()
+        .iter(app.world())
+        .find(|(marker, _)| marker.0 == id)
+        .map(|(_, phase)| *phase)
+        .expect("the dwarf must carry a DigPhase")
+}
+
+fn tick_factor(app: &App) -> f32 {
+    app.world().resource::<gui::blend::TickClock>().factor()
+}
+
+fn virtual_seconds(app: &App) -> f32 {
+    app.world().resource::<bevy::time::Time>().elapsed_secs()
+}
+
+fn digging(id: u32) -> Entity {
+    working(id, [0, 0, 0], JobState::Work, Some(DIG_AT_EAST), None)
+}
+
+/// 12.5 AC4: the swing is timed in delivered ticks. One work run (five ticks) sweeps the phase
+/// from 0 to 1; a world that stops delivering ticks holds it; a snapshot restarts it.
+#[test]
+fn the_dig_phase_runs_on_delivered_ticks_and_holds_when_the_ticks_repeat() {
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    // Wall/virtual time ADVANCES every frame, so an implementation that reads it cannot hold
+    // still across the repeated-tick frames below.
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+
+    // Ticks n..n+4 of one work run, entered at n = 10. Each is followed by enough frames to
+    // saturate the blend, so the phase is exactly (tick - n + 1) / 5.
+    let n = 10;
+    let mut seen = Vec::new();
+    for offset in 0..5_u64 {
+        apply_delta(&mut app, delta_at(n + offset, Vec::new(), vec![digging(7)]));
+        app.update();
+        let fresh = dig_phase_of(&mut app, 7);
+        assert_eq!(fresh.entered, n, "he entered work at tick {n}");
+        let expected_fresh = (offset as f32 + tick_factor(&app)) / 5.0;
+        assert!(
+            (fresh.phase - expected_fresh).abs() < 1e-5,
+            "tick +{offset}: phase {} but ticks and factor give {expected_fresh}",
+            fresh.phase
+        );
+        for _ in 0..8 {
+            app.update();
+        }
+        let settled = dig_phase_of(&mut app, 7);
+        let expected_settled = ((offset as f32 + 1.0) / 5.0).rem_euclid(1.0);
+        assert!(
+            (settled.phase - expected_settled).abs() < 1e-5,
+            "tick +{offset} settled at {} not {expected_settled}",
+            settled.phase
+        );
+        seen.push(fresh.phase);
+    }
+    assert!(
+        seen[0] < 0.2,
+        "the swing starts at the bottom of the cycle: {seen:?}"
+    );
+    assert!(seen[4] >= 0.8, "and ends at the top of it: {seen:?}");
+
+    // Pause: the same tick delivered again and again while the clock keeps running.
+    let held = dig_phase_of(&mut app, 7).phase;
+    let before = virtual_seconds(&app);
+    for _ in 0..6 {
+        apply_delta(&mut app, delta_at(n + 4, Vec::new(), vec![digging(7)]));
+        app.update();
+        assert_eq!(
+            dig_phase_of(&mut app, 7).phase,
+            held,
+            "a repeated tick must not move the swing"
+        );
+    }
+    assert!(
+        virtual_seconds(&app) - before > 0.5,
+        "time must have advanced across the held frames, or this proved nothing"
+    );
+
+    // A snapshot restarts the swing at the snapshot's own tick.
+    let mut restart = snapshot(vec![Tile::Empty, Tile::Empty], vec![digging(7)]);
+    restart.tick = 40;
+    apply_snapshot(&mut app, restart);
+    app.update();
+    let after = dig_phase_of(&mut app, 7);
+    assert_eq!(after.entered, 40, "a snapshot resets every entered tick");
+    assert!((after.phase - tick_factor(&app) / 5.0).abs() < 1e-5);
+}
+
+fn drawn_rotation(app: &mut App, id: u32) -> bevy::prelude::Quat {
+    app.world_mut()
+        .query::<(&WorldProjected, &Transform)>()
+        .iter(app.world())
+        .find_map(|(marker, transform)| (marker.0 == id).then_some(transform.rotation))
+        .expect("the dwarf must have a projection")
+}
+
+/// 12.5 AC6: a dwarf working a dig faces his target, a channel leaves his heading alone, and his
+/// next step goes back to facing the way he walks.
+#[test]
+fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
+    use bevy::prelude::Quat;
+    use std::f32::consts::FRAC_PI_2;
+    // Wire +x is render +x, and the model faces render -Z: so west is +90 degrees of yaw, east
+    // -90, and wire +y (render -Z) is the rest orientation. Written as plain angles on purpose.
+    let west = Quat::from_rotation_y(FRAC_PI_2);
+    let east = Quat::from_rotation_y(-FRAC_PI_2);
+    let north = Quat::IDENTITY;
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    // Each step is given time to be WALKED: the dig facing waits until he is drawn at his cell
+    // (see `a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell`).
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let step = |app: &mut App, tick: u64, entity: Entity, expected: Quat, what: &str| {
+        apply_delta(app, delta_at(tick, Vec::new(), vec![entity]));
+        for _ in 0..20 {
+            app.update();
+        }
+        let drawn = drawn_rotation(app, 7);
+        assert!(
+            drawn.dot(expected).abs() > 1.0 - 1e-5,
+            "{what}: drew {drawn:?}, wanted {expected:?}"
+        );
+    };
+    step(&mut app, 1, dwarf(7, [0, 1, 0]), west, "walking west");
+    let channel = protocol::DwarfJob::Channel { target: [0, 1, 0] };
+    step(
+        &mut app,
+        2,
+        working(7, [0, 1, 0], JobState::Work, Some(channel), None),
+        west,
+        "a channel keeps his heading",
+    );
+    let dig_east = protocol::DwarfJob::Dig { target: [1, 1, 0] };
+    step(
+        &mut app,
+        3,
+        working(7, [0, 1, 0], JobState::Work, Some(dig_east), None),
+        east,
+        "a dig to his east faces east",
+    );
+    step(
+        &mut app,
+        4,
+        dwarf(7, [0, 2, 0]),
+        north,
+        "his next step resumes walking facing",
+    );
+}
+
+/// Wolf at the 12.5 seat: "digging starts now when dwarf is still moving to place.. should
+/// probably stop first and then start digging". The wire says `work` on the tick he reaches the
+/// cell, but the client walks him there at `DWARF_WALK_CELLS_PER_SECOND`, so his drawn body
+/// arrives about a second later. Until it does he keeps walking -- `Walk` and his walking heading
+/// -- and only then turns to the rock and swings.
+#[test]
+fn a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell() {
+    use bevy::prelude::Quat;
+    use gui::project::DwarfClip::{Dig, Walk};
+    use std::f32::consts::FRAC_PI_2;
+    let west = Quat::from_rotation_y(FRAC_PI_2);
+    let north = Quat::IDENTITY;
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+
+    // He steps west into [0,1,0] and the same delta says he is already digging the tile north.
+    let dig_north = protocol::DwarfJob::Dig { target: [0, 2, 0] };
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![working(7, [0, 1, 0], JobState::Work, Some(dig_north), None)],
+        ),
+    );
+    app.update();
+    assert_eq!(
+        dwarf_clip_of(&mut app, 7),
+        Walk,
+        "still walking in: no swing yet"
+    );
+    let drawn = drawn_rotation(&mut app, 7);
+    assert!(
+        drawn.dot(west).abs() > 1.0 - 1e-5,
+        "still walking in: he faces the way he walks, drew {drawn:?}"
+    );
+
+    // One cell at 0.9 cells/s is about 1.1 s; 20 frames of 100 ms is well past it.
+    for _ in 0..20 {
+        app.update();
+    }
+    assert_eq!(
+        dwarf_clip_of(&mut app, 7),
+        Dig,
+        "drawn at his cell: he swings"
+    );
+    let drawn = drawn_rotation(&mut app, 7);
+    assert!(
+        drawn.dot(north).abs() > 1.0 - 1e-5,
+        "drawn at his cell: he faces the rock, drew {drawn:?}"
+    );
+}
+
+/// Wolf at the 12.5 seat: "hauler when dropping cargo walks into it ..so also it should stop
+/// before dropping". The sim drops the stone on the tick it is delivered, while the client is
+/// still walking him onto that cell; so he keeps holding it, and keeps `Carry`, until his drawn
+/// body is there, and only then puts it down.
+#[test]
+fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
+    use bevy::prelude::ChildOf;
+    use gui::project::DwarfClip::{Carry, Walk};
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [0, 0, 0],
+    }];
+    let mut app = headless_app(start);
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
+        items: vec![Item { id: 70, pos: at }],
+        ..delta_at(tick, Vec::new(), vec![entity])
+    };
+    let parent_of_stone = |app: &mut App| {
+        app.world_mut()
+            .query::<(&ProjectedItem, Option<&ChildOf>)>()
+            .iter(app.world())
+            .find(|(item, _)| item.0 == 70)
+            .map(|(_, parent)| parent.is_some())
+            .expect("the stone must be projected")
+    };
+    let stone_translation = |app: &mut App| {
+        app.world_mut()
+            .query::<(&ProjectedItem, &Transform)>()
+            .iter(app.world())
+            .find(|(item, _)| item.0 == 70)
+            .map(|(_, transform)| transform.translation)
+            .expect("the stone must be projected")
+    };
+
+    // He picks it up where he stands.
+    let hauling = working(
+        7,
+        [0, 0, 0],
+        JobState::Walk,
+        Some(protocol::DwarfJob::Haul),
+        Some(70),
+    );
+    apply_delta(&mut app, with_item(1, hauling, [0, 0, 0]));
+    for _ in 0..5 {
+        app.update();
+    }
+    assert!(parent_of_stone(&mut app), "he holds it");
+
+    // One step east, and the same delta says it is delivered on that cell.
+    apply_delta(&mut app, with_item(2, dwarf(7, [1, 0, 0]), [1, 0, 0]));
+    app.update();
+    assert!(
+        parent_of_stone(&mut app),
+        "still walking onto the cell: he still holds it"
+    );
+    assert_eq!(dwarf_clip_of(&mut app, 7), Carry, "and still carries it");
+
+    // One cell at 0.9 cells/s is about 1.1 s; 20 frames of 100 ms is well past it.
+    for _ in 0..20 {
+        app.update();
+    }
+    assert!(
+        !parent_of_stone(&mut app),
+        "drawn at the cell: he has put it down"
+    );
+    assert_eq!(
+        stone_translation(&mut app),
+        world_to_render([1, 0, 0]) + Vec3::new(0.0, gui::appearance::STONE_ITEM_DROP, 0.0)
+    );
+    assert_eq!(dwarf_clip_of(&mut app, 7), Walk, "and walks empty-handed");
+}
+
+/// 12.5 AC7: while a dwarf carries a stone, it is his child at `CARRY_OFFSET`, whatever the blend
+/// does each frame; the delta that clears it puts it back on its cell.
+#[test]
+fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
+    use bevy::prelude::ChildOf;
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [0, 0, 0],
+    }];
+    let mut app = headless_app(start);
+    // Real frame time, so the drop below can be WALKED: a delivered stone stays in his hands
+    // until he is drawn on its cell (`a_hauler_keeps_his_stone_until_...`).
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+
+    let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
+        items: vec![Item { id: 70, pos: at }],
+        ..delta_at(tick, Vec::new(), vec![entity])
+    };
+    let stone = |app: &mut App| {
+        let mut query = app
+            .world_mut()
+            .query::<(BevyEntity, &ProjectedItem, &Transform, Option<&ChildOf>)>();
+        let (_, _, transform, parent) = query
+            .iter(app.world())
+            .find(|(_, item, _, _)| item.0 == 70)
+            .expect("the stone must be projected");
+        (*transform, parent.map(|parent| parent.0))
+    };
+    let dwarf_entity = |app: &mut App| {
+        app.world_mut()
+            .query::<(BevyEntity, &WorldProjected, &gui::project::WalkPhase)>()
+            .iter(app.world())
+            .find(|(_, marker, _)| marker.0 == 7)
+            .map(|(entity, _, _)| entity)
+            .expect("the dwarf is projected")
+    };
+
+    // He picks it up and walks: several frames, so the blend has written over the spawn and a
+    // blend that forgets to skip a carried stone would have moved it to a cell by now.
+    apply_delta(
+        &mut app,
+        with_item(
+            1,
+            working(
+                7,
+                [1, 0, 0],
+                JobState::Walk,
+                Some(protocol::DwarfJob::Haul),
+                Some(70),
+            ),
+            [1, 0, 0],
+        ),
+    );
+    for _ in 0..4 {
+        app.update();
+    }
+    let (held, parent) = stone(&mut app);
+    let dwarf_entity = dwarf_entity(&mut app);
+    assert_eq!(parent, Some(dwarf_entity), "a carried stone is his child");
+    assert_eq!(held.translation, gui::appearance::CARRY_OFFSET);
+    // The dwarf is drawn at 0.625 cells per metre and a child inherits that, so the stone's own
+    // scale is divided by it to keep the DRAWN size at the rubble scale.
+    let dwarf_scale = app.world().get::<Transform>(dwarf_entity).unwrap().scale;
+    assert!(
+        ((held.scale * dwarf_scale).x - gui::appearance::STONE_ITEM_SCALE).abs() < 1e-6,
+        "the carried stone must still be drawn at the rubble size, not {:?} of his",
+        held.scale
+    );
+
+    // He drops it two cells on.
+    apply_delta(&mut app, with_item(2, dwarf(7, [2, 0, 0]), [2, 0, 0]));
+    // Two cells at 0.9 cells/s is about 2.2 s; 30 frames of 100 ms is past it.
+    for _ in 0..30 {
+        app.update();
+    }
+    let (dropped, parent) = stone(&mut app);
+    assert_eq!(parent, None, "a released stone is nobody's child");
+    assert_eq!(
+        dropped.translation,
+        world_to_render([2, 0, 0]) + Vec3::new(0.0, gui::appearance::STONE_ITEM_DROP, 0.0)
+    );
+    assert_eq!(
+        dropped.scale,
+        Vec3::splat(gui::appearance::STONE_ITEM_SCALE)
+    );
+    app.update();
+    assert_eq!(stone(&mut app).0.translation, dropped.translation);
 }

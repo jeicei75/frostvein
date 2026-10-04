@@ -128,12 +128,17 @@ fn emitter_entity(
         light: Some(light_kind(light)),
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     }
 }
 
 fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Entity> {
     let identities = world.identities();
     let professions = world.professions();
+    let claims = world.claims();
+    let jobs = world.jobs();
+    let carrying = world.carrying();
     world
         .dwarves()
         .into_iter()
@@ -154,7 +159,28 @@ fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Ent
                 .iter()
                 .find(|(profession_id, _)| *profession_id == id)
                 .map(|(_, profession)| profession_out(*profession)),
+            job: claims
+                .iter()
+                .find(|(claim_id, _)| *claim_id == id)
+                .and_then(|(_, claim)| *claim)
+                .and_then(|job_id| jobs.iter().find(|job| job.id == job_id))
+                .map(|job| dwarf_job(*job)),
+            carrying: carrying
+                .iter()
+                .find(|(carrier_id, _)| *carrier_id == id)
+                .and_then(|(_, stone)| *stone),
         })
+}
+
+fn dwarf_job(job: sim_core::Job) -> protocol::DwarfJob {
+    let target = [job.target.x, job.target.y, job.target.z];
+    match job.kind {
+        sim_core::JobKind::Dig => protocol::DwarfJob::Dig { target },
+        sim_core::JobKind::Channel => protocol::DwarfJob::Channel { target },
+        // NOTE: a haul's `target` is the stone's position at creation and goes stale at pick-up,
+        // so it is not on the wire.
+        sim_core::JobKind::Haul { .. } => protocol::DwarfJob::Haul,
+    }
 }
 
 fn entity_kind(light: sim_core::LightKind) -> protocol::EntityKind {
@@ -539,6 +565,8 @@ mod tests {
                 }),
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             })
             .collect();
 
@@ -687,5 +715,30 @@ mod tests {
         let update = delta(&mut world, protocol::Speed::Normal, Vec::new());
         assert_eq!(update.designations, expected_designations);
         assert_eq!(update.zones, expected_zones);
+    }
+
+    /// 12.5 AC1: a dig job goes on the wire as `dig`, with its target. The live tests designate
+    /// only channels, so this is the one place the `Dig` arm is judged -- sent as a channel, or
+    /// with its target lost, it would pass all of them. The oracle is the hand-written wire line.
+    #[test]
+    fn a_dig_job_goes_on_the_wire_as_dig_with_its_target() {
+        let job = |kind| sim_core::Job {
+            id: sim_core::JobId(7),
+            kind,
+            target: sim_core::Pos { x: 3, y: 41, z: 9 },
+            created_tick: 0,
+            retry_after: 0,
+        };
+        let wire = |line: &str| -> protocol::DwarfJob {
+            serde_json::from_str(line).expect("hand-written wire job must decode")
+        };
+        assert_eq!(
+            super::dwarf_job(job(sim_core::JobKind::Dig)),
+            wire(r#"{"dig":{"target":[3,41,9]}}"#)
+        );
+        assert_eq!(
+            super::dwarf_job(job(sim_core::JobKind::Channel)),
+            wire(r#"{"channel":{"target":[3,41,9]}}"#)
+        );
     }
 }

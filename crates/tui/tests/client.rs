@@ -928,6 +928,8 @@ fn capture_growing_world(with_features: bool) -> String {
             light: None,
             identity: None,
             profession: None,
+            job: None,
+            carrying: None,
         }];
         if with_features {
             entities.extend([
@@ -939,6 +941,8 @@ fn capture_growing_world(with_features: bool) -> String {
                     light: Some(protocol::LightKind::Torch),
                     identity: None,
                     profession: None,
+                    job: None,
+                    carrying: None,
                 },
                 protocol::Entity {
                     id: 6,
@@ -948,6 +952,8 @@ fn capture_growing_world(with_features: bool) -> String {
                     light: Some(protocol::LightKind::Campfire),
                     identity: None,
                     profession: None,
+                    job: None,
+                    carrying: None,
                 },
             ]);
         }
@@ -1112,6 +1118,8 @@ fn capture_haul_replay(changes: bool) -> String {
                     light: None,
                     identity: None,
                     profession: None,
+                    job: None,
+                    carrying: None,
                 }],
                 designations: Vec::new(),
                 zones: vec![protocol::Zone { pos: PILE }],
@@ -1226,6 +1234,8 @@ fn dwarf_at(x: i32) -> protocol::Entity {
         light: None,
         identity: None,
         profession: None,
+        job: None,
+        carrying: None,
     }
 }
 
@@ -1404,6 +1414,8 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
                 light: None,
                 identity: None,
                 profession: None,
+                job: None,
+                carrying: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -1561,6 +1573,12 @@ fn identified_dwarf(
 /// Streams a snapshot with Durin (red miner, id 0) and Nori (blue hauler, id 1), one unchanged
 /// delta, then a delta that swaps their identities and turns id 1 into a woodcutter, through the real `tui --frames 2`, and returns stdout.
 fn capture_roster(no_color: bool) -> String {
+    capture_roster_with(no_color, false)
+}
+
+/// `at_work` gives dwarf 1 a haul `job` and a `carrying` stone in every message, which the tui
+/// decodes and must not draw (12.5 AC9).
+fn capture_roster_with(no_color: bool, at_work: bool) -> String {
     use protocol::{DwarfColour::*, DwarfName::*, Profession::*};
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind stub daemon");
     let port = listener
@@ -1591,6 +1609,16 @@ fn capture_roster(no_color: bool) -> String {
             identified_dwarf(0, Nori, Blue, Miner),
             identified_dwarf(1, Durin, Red, Woodcutter),
         ];
+        let (crew, swapped) = if at_work {
+            let busy = |mut dwarves: Vec<protocol::Entity>| {
+                dwarves[1].job = Some(protocol::DwarfJob::Haul);
+                dwarves[1].carrying = Some(77);
+                dwarves
+            };
+            (busy(crew), busy(swapped))
+        } else {
+            (crew, swapped)
+        };
         let snapshot = protocol::Snapshot {
             msg_type: protocol::MessageType::Snapshot,
             dims: WIDE_DIMS,
@@ -1647,6 +1675,14 @@ fn capture_roster(no_color: bool) -> String {
     server.join().expect("stub daemon thread panicked");
     assert!(status.success(), "tui exited with {status}");
     stdout
+}
+
+#[test]
+fn a_dwarf_with_a_job_and_a_stone_renders_the_same_frames() {
+    let plain = capture_roster_with(false, false);
+    let busy = capture_roster_with(false, true);
+    assert!(plain.contains("tick 9"), "the control rendered no frames");
+    assert_eq!(busy, plain, "job and carrying must not change a tui frame");
 }
 
 /// The raw (SGR intact) row directly above each frame's `tick ` status row.
