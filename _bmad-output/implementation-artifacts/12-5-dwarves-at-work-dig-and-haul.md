@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.4's creation
 
 # Story 12.5: Dwarves at Work — Dig and Haul
 
-Status: review
+Status: done
 
 ## Story
 
@@ -292,9 +292,13 @@ Tally: 2 decision-needed, 4 patch, 5 defer, 3 dismissed. Layer and severity are 
   rides away with him; at Fast the real binary held one stone 18 s. (c) At Fast the dig clip played in
   5 of 25 runs in the real headless binary (2 of 25 in a 60 fps replay; another run logged 3 and 5).
   — deferred: Wolf parked it on #164 (2026-10-04); his seat verdict was "need to fine tune it later on".
-- [ ] [Review][Decision] **Standing AC 9 (NFR6 on the vehicle) has no evidence** (acceptance, MED). The
+- [x] [Review][Decision] **Standing AC 9 (NFR6 on the vehicle) has no evidence** (acceptance, MED). The
   story adds rendering: three animation graph nodes and stones parented to dwarves. No frame-rate figure
   is recorded in the story or in `12-5-signoff/`. A seat reading or Wolf's ruling closes it.
+  — **RESOLVED by Wolf's seat reading (2026-10-04):** "varies .. with haze on ~40-60 .. off -130 - 140 ..
+  I don't see workin affecting to FPS". Haze off holds NFR6's 60 fps bar with more than 2x headroom, and
+  the work clips have no visible cost. The haze-on cost was accepted in 11.2. NOTE: the low end, 40, is
+  under 11.3's measured noon median of ~60 with haze; this is an eye read, and it is not 12.5's cost.
 - [x] [Review][Patch] **The record describes superseded behaviour** (acceptance + feature, MED).
   AC3, AC4 and AC7 were never annotated for the 10-swing, stop-first and stop-then-drop rulings. The Wire
   diff and the Completion Notes say "No sim-core change and no save change", but `DIG_WORK_TICKS` and the
