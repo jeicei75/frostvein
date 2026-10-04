@@ -346,6 +346,8 @@ Tally: 2 decision-needed, 4 patch, 5 defer, 3 dismissed. Layer and severity are 
 - **One verification pass: FULL GATE GREEN 3233 s on `13e9cb0`** (`RUST_TEST_THREADS=1 scripts/gate.sh`,
   exit 0; `cargo test` 234 s, pixel guards 2962 s, with AC8 now at 200 frames). The commit that adds
   this table touches only this file.
+- **Reaped after triage:** `scripts/reap-build-caches.sh --tmp-only --force` removed 9 directories under
+  /tmp (92.1 GB); free space rose by 46.0 GB. Review cost: $22.89 (review) + $5.53 (review-patch).
 - Dismissed (3): the bridge's linear job scan (edge; at most 5 dwarves, negligible); a theoretical
   restart in the `DwarfHeadings::record` continuation (blind, no trigger found); the startup line naming
   ABSENT clips when one is missing (acceptance; that is Task 2c's specified format).
