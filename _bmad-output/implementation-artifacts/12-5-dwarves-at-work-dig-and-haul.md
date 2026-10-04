@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.4's creation
 
 # Story 12.5: Dwarves at Work — Dig and Haul
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -255,7 +255,7 @@ to the seat under the hard stop.
     7. clips bound by index (`#Animation0`) again → the AC2 names test, or the AC8 real-binary test
        (record which one killed it).
   - [x] README gui section: the work clips, and the `gui dwarf N clip …` line.
-- [ ] **Task 7: the live recipe, the seat (AC10), then the full gate.**
+- [x] **Task 7: the live recipe, the seat (AC10), then the full gate.**
   - [x] Run the Verification recipe on the branch: GREEN, then the deliberate RED. Record both outputs.
   - [x] Write `12-5-signoff/vehicle-card.md` in the seat's launch form (see Verification).
     - Restart `simd 7451` before each part.
@@ -580,8 +580,12 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
   ten-swing dig, stop-then-dig and stop-then-drop changed code; each passed the fast gate, targeted
   suites and its mutation rows. The full gate on `9e347da` was started at EOD and stopped after
   2.5 min when Wolf had to shut the machine down, by its process group, with nothing left running.
-  **Status stays `in-progress` until a full gate is green.** Dev cost recorded: $41.98 (Opus
-  orchestrator $35.10 + 3 Sonnet subagents $6.88, 568 turns), plus round 19's $11.10 in the ledger.
+  Dev cost recorded: $41.98 (Opus orchestrator $35.10 + 3 Sonnet subagents $6.88, 568 turns), plus
+  round 19's $11.10 in the ledger.
+
+- **FULL GATE GREEN 3269 s on `9561ab7` (2026-10-04)** (`RUST_TEST_THREADS=1 scripts/gate.sh`, exit 0;
+  `cargo test` 232 s, pixel guards 2998 s). `9561ab7` differs from `9e347da` in docs and metrics only,
+  so this covers the final code. Status -> `review`.
 
 ### Completion Notes List
 
@@ -682,3 +686,4 @@ target/release/gui 7494 --headless --subdiv 4 --frames 1500 --capture "$SCRATCH/
 | --- | --- |
 | 2026-10-03 | Story created on `f3b7cb3`. RED observed on the live wire (`work_wire.py`: no `job` or `carrying`, 125 miner work ticks unlabelled). The GLB carries `Walk` only. Task 0 ruled by Wolf the same day: `job` + `carrying`, keep 5 work ticks, live BlenderMCP seat from round 1. |
 | 2026-10-03 | Dev: wire `job`/`carrying`, gui Walk/Dig/Carry by name, dig facing, held stone, AC8 instrument; round 19 (Wolf's live seat, $11.10) promoted, 20 joints; Wolf ruled a dig is 10 swings: `DIG_WORK_TICKS` 50. 12-5.sh 9/9 KILLED. |
+| 2026-10-04 | Full gate GREEN on `9561ab7` (3269 s), covering the final code from `9e347da`. Status -> review. |

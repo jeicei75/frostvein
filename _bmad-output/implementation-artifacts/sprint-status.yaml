@@ -2528,12 +2528,14 @@ development_status:
   #     does NOT reproduce (retry cooldowns free the dwarves). Throwaway prototype GREEN: 12 left / 19 of 25.
   #     Task 0 RULED 2026-10-02 (Wolf): 2M/2H/1W pool; roster `Name trade` (grey); old saves refused; #159 FOLDED IN
   #     with fix B (budget per dwarf) + sat-out rule, both prototyped; single-area residual stays on #159 (Refs, not Closes).
-  12-5-dwarves-at-work-dig-and-haul: in-progress
+  12-5-dwarves-at-work-dig-and-haul: review
   #   Created 2026-10-03 on f3b7cb3. RED on the live wire (12-5-signoff/work_wire.py): no `job`/`carrying` field,
   #     125 miner work ticks unlabelled (every work run 5 ticks; a hauler's pick-up/drop are 5-tick work runs too).
   #     GLB carries Walk only, bound by index. Plan: wire `job` + `carrying`, plain Dig/Carry clips, seat + art ledger.
   #     Task 0 RULED 2026-10-03 (Wolf): wire job + carrying; keep WORK_TICKS 5 (judge at seat); clips from a LIVE
   #     BlenderMCP seat from round 1 (brief round 19), art ledger + hard stop after 2 unconverged rounds.
+  #     AC10 PASSED at Wolf's seat 2026-10-03 ("ok.. well need to fine tune it later on", 9e347da); #162/#163 filed.
+  #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
   12-6-wolf-gives-them-their-trades: backlog
   12-7-timber: backlog
   12-8-dwarves-at-work-the-cut: backlog
