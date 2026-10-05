@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-04
+last_updated: 2026-10-05
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2539,7 +2539,11 @@ development_status:
   #     Seat ruled 2026-10-03: a dig is 10 swings (DIG_WORK_TICKS 50; hauls keep WORK_TICKS 5), stop first, stop-then-drop.
   #     AC10 PASSED at Wolf's seat 2026-10-03 ("ok.. well need to fine tune it later on", 9e347da); #162/#163 filed.
   #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
-  12-6-wolf-gives-them-their-trades: backlog
+  12-6-wolf-gives-them-their-trades: ready-for-dev
+  #   Created 2026-10-05 on 98149e1. RED on the live wire (12-6-signoff/trade_wire.py): `set_profession` is an
+  #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
+  #     Look draft 12-6-signoff/draft.md (roster in the name slot, `T` cycles the trade). Task 0 awaits Wolf:
+  #     draft, the empty-trade rule (rec: refuse the last of any trade), fixed refusal text.
   12-7-timber: backlog
   12-8-dwarves-at-work-the-cut: backlog
   12-9-one-dwarf-per-tile: backlog
