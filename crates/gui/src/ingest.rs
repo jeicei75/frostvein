@@ -809,7 +809,8 @@ pub fn projection_systems(app: &mut App) {
         // written it, or the displayed level trails the cut by one frame.
         .add_systems(Update, update_slice_readout.after(ProjectionSet))
         .add_systems(Update, update_clock_readout.after(ProjectionSet))
-        .add_systems(Update, update_name_readout.after(ProjectionSet));
+        .add_systems(Update, update_name_readout.after(ProjectionSet))
+        .add_systems(Update, report_trade_changes.after(ingest_messages));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
     // another is the same defect this function's own doc comment describes: `crates/gui/tests/
@@ -879,6 +880,8 @@ pub fn client_systems(app: &mut App) {
     // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
     // still GUI-local, so classify the complete startup scene after all plugin setup.
     .add_systems(bevy::app::PostStartup, classify_client_local)
+    // Its own registration, not a member of the Startup tuple above: mutation rows quote that tuple.
+    .add_systems(Startup, push_startup_trade)
     .add_systems(
         Update,
         (
@@ -1019,6 +1022,8 @@ struct Args {
     distance: Option<f32>,
     /// `--select <id>`: start with this dwarf selected, as if he had been clicked.
     select: Option<u32>,
+    /// `--trade <miner|hauler|woodcutter>`: send `set_profession` for the `--select`ed dwarf once.
+    trade: Option<protocol::Profession>,
     camera: Option<CameraStart>,
     cursor: Option<Vec2>,
     at_tick: Option<u64>,
@@ -1150,6 +1155,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut slice_level = None;
     let mut distance = None;
     let mut select = None;
+    let mut trade = None;
     let mut camera = None;
     let mut cursor = None;
     let mut at_tick = None;
@@ -1263,6 +1269,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                     .parse()
                     .context("invalid --select id")?,
             );
+        } else if arg == "--trade" {
+            let value = args.next().context("--trade requires a trade name")?;
+            trade = Some(match value.to_string_lossy().as_ref() {
+                "miner" => protocol::Profession::Miner,
+                "hauler" => protocol::Profession::Hauler,
+                "woodcutter" => protocol::Profession::Woodcutter,
+                other => bail!("unknown --trade {other}: expected miner, hauler or woodcutter"),
+            });
         } else if arg == "--camera" {
             let value = args
                 .next()
@@ -1341,6 +1355,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if drag.is_some() && capture.is_none() {
         bail!("--drag requires --capture");
     }
+    if trade.is_some() && select.is_none() {
+        bail!("--trade requires --select; it names no dwarf of its own");
+    }
     if drag.is_some() && cursor.is_some() {
         // `apply_scripted_input` takes the drag branch OR the cursor branch, never both, so a
         // `--cursor` passed alongside `--drag` is parsed, validated, inserted and then never
@@ -1361,6 +1378,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         slice_level,
         distance,
         select,
+        trade,
         camera,
         cursor,
         at_tick,
@@ -1541,6 +1559,9 @@ fn insert_capture_resources(app: &mut App, args: &Args) {
     }
     if let Some(id) = args.select {
         app.insert_resource(crate::pick::SelectedDwarf(Some(id)));
+    }
+    if let Some(trade) = args.trade {
+        app.insert_resource(StartupTrade(trade));
     }
     if let Some(camera) = args.camera {
         app.insert_resource(camera);
@@ -1759,6 +1780,66 @@ fn setup_name_readout(mut commands: Commands) {
         Hud,
         ClientLocal,
     ));
+}
+
+/// `--trade`'s request, waiting for the first frame after the snapshot.
+#[derive(Resource)]
+struct StartupTrade(protocol::Profession);
+
+/// Sends `--trade` once, for the `--select`ed dwarf, then forgets it. The connect snapshot is
+/// already in the mirror at `Startup`, so this is "after the snapshot".
+fn push_startup_trade(
+    mut commands: Commands,
+    trade: Option<Res<StartupTrade>>,
+    selected: Res<crate::pick::SelectedDwarf>,
+    mut pending: ResMut<crate::command::PendingCommands>,
+) {
+    let (Some(trade), Some(dwarf)) = (trade, selected.0) else {
+        return;
+    };
+    pending.push(protocol::Command::SetProfession {
+        dwarf,
+        profession: trade.0,
+    });
+    commands.remove_resource::<StartupTrade>();
+}
+
+/// The `gui dwarf {id} trade {trade}` lines for every dwarf whose wire profession differs from the
+/// last look. `seen` is `None` until the first call, which records the snapshot and prints nothing.
+fn trade_change_lines(
+    seen: &mut Option<std::collections::BTreeMap<u32, protocol::Profession>>,
+    mirror: &Mirror,
+) -> Vec<String> {
+    let now: std::collections::BTreeMap<u32, protocol::Profession> = mirror
+        .entities()
+        .filter_map(|entity| Some((entity.id, entity.profession?)))
+        .collect();
+    let lines = match seen.as_ref() {
+        None => Vec::new(),
+        Some(before) => now
+            .iter()
+            .filter(|(id, trade)| before.get(id).is_some_and(|old| old != *trade))
+            .map(|(id, trade)| {
+                format!(
+                    "gui dwarf {id} trade {}",
+                    client_core::profession_text(*trade)
+                )
+            })
+            .collect(),
+    };
+    *seen = Some(now);
+    lines
+}
+
+/// NOTE: chatty by design, as 12.5's clip line is. Printed from the MIRROR, never at send time, so
+/// it only ever reports the daemon's word; a dead daemon arm prints nothing here.
+fn report_trade_changes(
+    mirror: Res<MirrorResource>,
+    mut seen: Local<Option<std::collections::BTreeMap<u32, protocol::Profession>>>,
+) {
+    for line in trade_change_lines(&mut seen, &mirror.0) {
+        eprintln!("{line}");
+    }
 }
 
 /// The coloured pieces of the name slot, read from the MIRROR: the trade shown is the one the
@@ -3807,6 +3888,90 @@ mod tests {
             hud(&mut app),
             "",
             "T is a world command and clears the refusal"
+        );
+    }
+
+    /// 12.6 AC9. `--trade` needs `--select` (it names no dwarf of its own) and only knows the three
+    /// trades; either mistake is a parse error rather than a flag that quietly does nothing.
+    #[test]
+    fn the_trade_flag_needs_a_selection_and_a_known_trade() {
+        let parse = |args: &[&str]| {
+            super::parse_args_from(
+                args.iter()
+                    .map(std::ffi::OsString::from)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            parse(&["--select", "2", "--trade", "hauler"])
+                .unwrap()
+                .trade,
+            Some(protocol::Profession::Hauler)
+        );
+        assert_eq!(
+            parse(&["--select", "2", "--trade", "woodcutter"])
+                .unwrap()
+                .trade,
+            Some(protocol::Profession::Woodcutter)
+        );
+        assert_eq!(
+            parse(&["--select", "2", "--trade", "miner"]).unwrap().trade,
+            Some(protocol::Profession::Miner)
+        );
+        assert!(
+            parse(&["--trade", "hauler"]).is_err(),
+            "--trade needs --select"
+        );
+        assert!(
+            parse(&["--select", "2", "--trade", "smith"]).is_err(),
+            "an unknown trade is a parse error"
+        );
+        assert!(
+            parse(&["--select", "2", "--trade"]).is_err(),
+            "--trade needs a value"
+        );
+        assert_eq!(parse(&["--select", "2"]).unwrap().trade, None);
+    }
+
+    /// 12.6 AC9. `--trade` pushes the command ONCE, after the snapshot, for the `--select`ed dwarf.
+    #[test]
+    fn the_trade_flag_sends_one_set_profession_for_the_selected_dwarf() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--select", "3", "--trade", "hauler"], crew_snapshot());
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_profession","dwarf":3,"profession":"hauler"}"#
+        );
+        app.update();
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "--trade must send once, not every frame"
+        );
+    }
+
+    /// 12.6 AC9. The `trade` line is printed from the MIRROR: nothing for the snapshot, one line per
+    /// change of a dwarf's wire profession after it, and nothing for a delta that changes none.
+    #[test]
+    fn a_trade_line_is_reported_only_for_a_change_the_wire_made() {
+        let mut seen = None;
+        let mut crew = crew_snapshot();
+        let mirror = Mirror::from_snapshot(crew.clone()).unwrap();
+        assert!(
+            super::trade_change_lines(&mut seen, &mirror).is_empty(),
+            "the snapshot itself prints nothing"
+        );
+        assert!(super::trade_change_lines(&mut seen, &mirror).is_empty());
+        crew.entities[2].profession = Some(protocol::Profession::Hauler);
+        let changed = Mirror::from_snapshot(crew).unwrap();
+        assert_eq!(
+            super::trade_change_lines(&mut seen, &changed),
+            vec!["gui dwarf 3 trade hauler".to_owned()]
+        );
+        assert!(
+            super::trade_change_lines(&mut seen, &changed).is_empty(),
+            "a change is reported once"
         );
     }
 
