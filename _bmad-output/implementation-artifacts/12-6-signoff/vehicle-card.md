@@ -48,11 +48,13 @@ The tui's roster row (third from the bottom) says the same trades.
 
 1. Press `2`, then drag a block of channel marks on the camp floor east of the fire, about 4×7.
 2. Press `3`, then drag a 3×3 stockpile west of the fire.
-3. Click **Bifur (red)** while he is digging. The slot now reads his name, then
+3. Press `Esc` to leave stockpile mode; a click in that mode starts a drag, not a selection. Then click
+   **Bifur (red)** while he is digging. The slot now reads his name, then
    `miner   T: change trade` in grey.
 4. Press `T`. His line changes to `hauler   T: change trade`, and the tui roster says `Bifur hauler`.
-5. Bifur stops digging. **Dori (blue)** takes the mark he was on. That is the same job, released back
-   to the queue and claimed by the other miner. Its dig starts from zero.
+5. Bifur stops digging. The mark he was on goes back to the queue, and **Dori (blue)** takes it later,
+   not at once: she reaches it in FIFO order, behind her earlier marks (measured: 272 ticks, about 27 s at
+   Normal). It is the same job, claimed by the other miner. Its dig starts from zero.
 6. Press `T` again for `woodcutter` (he wanders: there is no cut job until 12.7), and again for `miner`.
 7. Press `Esc`. The roster is back, with Bifur's current trade, in the gui and in the tui.
 
@@ -62,4 +64,4 @@ The tui's roster row (third from the bottom) says the same trades.
 wait silently, and the roster is the only signal. You can see it by pressing `T` on Ori and Frar until
 both read `miner`: dug stones stay where they fell.
 
-Seat result: _pending_.
+Seat result (2026-10-05): AC11 PASSED, "works" (branch at `a5eb634`).
