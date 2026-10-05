@@ -1716,10 +1716,10 @@
   "c1686eb2-fffc-438c-a30b-e5cb9bbdd4bb.jsonl": {
     "by_model": {
       "claude-opus-5-5": {
-        "cache_creation": 540975,
-        "cache_read": 51325852,
-        "input": 586,
-        "output": 192778
+        "cache_creation": 549720,
+        "cache_read": 53663046,
+        "input": 604,
+        "output": 198834
       },
       "claude-sonnet-5-5": {
         "cache_creation": 784436,
@@ -1728,16 +1728,16 @@
         "output": 4214
       }
     },
-    "cache_creation": 1325411,
-    "cache_read": 96802553,
-    "input": 1220,
-    "last_ts": "2026-10-05T16:55:36.733Z",
+    "cache_creation": 1334156,
+    "cache_read": 99139747,
+    "input": 1238,
+    "last_ts": "2026-10-05T17:01:07.487Z",
     "marked_at": null,
-    "output": 196992,
+    "output": 203048,
     "primary_only": false,
     "quota_last": null,
     "schema": 2,
-    "turns": 594
+    "turns": 603
   },
   "c3b59d82-e110-4b03-9062-d8863d69c71c.jsonl": {
     "by_model": {
