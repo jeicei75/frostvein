@@ -2554,7 +2554,7 @@ development_status:
   #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
-  12-7-timber: ready-for-dev
+  12-7-timber: in-progress
   #   Created 2026-10-05 on fd9ca98. RED on the live wire (12-7-signoff/timber_wire.py): `designate kind cut`
   #     is unrecognized; a dig mark lands on a trunk and digs it away for nothing. Trees have no identity:
   #     one tree = trunk column + foliage in its 3x3 column (trunks >= 3 apart; crowns can TOUCH, 22 of 57

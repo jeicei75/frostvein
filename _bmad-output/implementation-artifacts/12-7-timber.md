@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.6's creation
 
 # Story 12.7: Timber
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
