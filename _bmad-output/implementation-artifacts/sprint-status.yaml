@@ -2542,8 +2542,8 @@ development_status:
   12-6-wolf-gives-them-their-trades: ready-for-dev
   #   Created 2026-10-05 on 98149e1. RED on the live wire (12-6-signoff/trade_wire.py): `set_profession` is an
   #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
-  #     Look draft 12-6-signoff/draft.md (roster in the name slot, `T` cycles the trade). Task 0 awaits Wolf:
-  #     draft, the empty-trade rule (rec: refuse the last of any trade), fixed refusal text.
+  #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
+  #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
   12-7-timber: backlog
   12-8-dwarves-at-work-the-cut: backlog
   12-9-one-dwarf-per-tile: backlog

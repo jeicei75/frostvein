@@ -1,5 +1,8 @@
 # 12.6 look draft: roster, selection and changing a trade (for Wolf's approval, Task 0)
 
+**APPROVED by Wolf as drafted, 2026-10-05.** Task 0.2 ruled that an emptied trade is allowed, so the
+last-of-trade line in §4 is VOID: only `trade refused: no such dwarf` exists.
+
 A cheap text mock (standing AC 7). It shows what you will see. Nothing here is built yet. The
 positions are today's HUD slots, measured from `crates/gui/src/ingest.rs` on `98149e1`.
 

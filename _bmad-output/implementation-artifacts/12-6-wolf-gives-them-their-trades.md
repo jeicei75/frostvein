@@ -59,10 +59,9 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
 - NEW `protocol::Command::SetProfession { dwarf: u32, profession: Profession }`. The wire form is
   `{"type":"set_profession","dwarf":2,"profession":"hauler"}`. It is world-mutating and rides the AD-10
   queue. It carries no rect: `command_rects` (`simd/src/main.rs:798`) returns `None` for it.
-- NEW `protocol::TradeRefusal { NoSuchDwarf, LastOfTrade }` (snake_case), and NEW
-  `protocol::Refusal::SetProfession { dwarf: u32, reason: TradeRefusal }`. With the existing
-  `#[serde(tag = "command")]` it reads `{"command":"set_profession","dwarf":999,"reason":"no_such_dwarf"}`.
-  - **If Task 0.2 rules option 3**, `LastOfTrade` is not added.
+- NEW `protocol::Refusal::SetProfession { dwarf: u32 }`. With the existing `#[serde(tag = "command")]` it
+  reads `{"command":"set_profession","dwarf":999}`. Its only cause is an unknown dwarf id, so it carries no
+  reason field (Task 0.2: no last-of-trade refusal). A second cause adds one.
 - `Entity`, `Snapshot` and `Delta` do not change. The trade is already `Entity.profession` (12.4), and a
   change shows on the next delta. Every existing pin stays byte-identical.
 - **No save change.** `Profession` is already saved (`SavedDwarf.profession`, `lib.rs:1424`).
@@ -77,11 +76,9 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
    - A reassigned hauler carrying a stone puts it down: it is no longer carried, and his haul job still
      names that stone. Another hauler later delivers it to the pile.
    - A command that leaves his trade unchanged lets him keep his job.
-3. The sim refuses a `set_profession` it cannot apply, and the refusal reaches every attached client on
-   the next delta (12.1's shape):
-   - an unknown dwarf id gives `no_such_dwarf`;
-   - per Task 0.2's ruling (options 1 and 2), the last dwarf of a protected trade gives `last_of_trade`,
-     and his trade does not change.
+3. The sim refuses a `set_profession` for an unknown dwarf id, and the refusal reaches every attached
+   client on the next delta (12.1's shape). Any trade change for an existing dwarf is accepted, including
+   one that leaves a trade with nobody in it (Task 0.2).
 4. Determinism (standing AC 3): seed plus a command log that includes `set_profession` gives identical
    state, `professions()` included. A world saved after a reassignment loads with the new trade and steps
    identically to the never-saved world.
@@ -105,46 +102,41 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
     shows a trade refusal.
 11. At the seat, Wolf sees the roster with nothing selected. He selects a miner who is digging, presses
     `T`, and sees the trade change in the gui and in an attached tui. The mark he was digging is taken by
-    the other miner. Per Task 0.2, he also sees the refusal for the last of a trade.
+    the other miner.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings, at creation. The dev does not start Tasks 4-5 before 0.1 is ruled.**
-  1. **The look draft** `12-6-signoff/draft.md`: roster in the name slot, the selected dwarf's name and
-     trade line, `T` cycles, refusal text. Approve, or say what to change.
-  2. **What the player sees when a trade is left empty.** Recommended: **option 1**.
-     - **Option 1: refuse the last of any trade.** "The crew always has every trade": the FR43 spawn
-       guarantee becomes a rule of play. It allows 3/1/1, never 4/1/0. The woodcutter stays a woodcutter
-       and idles until 12.7. One rule, and it is loud.
-     - **Option 2: refuse the last miner or hauler only.** The woodcutter can be made a miner now (3/2/0).
-       12.7 must then decide what an empty woodcutter trade does, and extend the rule.
-     - **Option 3: allow anything.** The roster is the only signal: no name says "miner", and the digs
-       wait silently. `claim_jobs` stays silent, with a `// NOTE:`.
-  3. **The refusal text is fixed** (`"trade refused: last of his trade"`, `"trade refused: no such
-     dwarf"`), because `refusal_text` returns `&'static str`. Naming the dwarf would change that function
-     for both clients. Recommended: keep it fixed.
+- [x] **Task 0: Wolf's rulings, 2026-10-05, at creation.**
+  1. **Look draft APPROVED as drafted** (`12-6-signoff/draft.md`): the roster in the name slot, the
+     selected dwarf's name and trade line with `T: change trade`, and `T` cycling miner → hauler →
+     woodcutter. Its §4 last-of-trade line is void under ruling 2.
+  2. **An empty trade is ALLOWED.** No last-of-trade refusal: Wolf may make all five miners. The roster is
+     the only signal (no name says "hauler"), and that trade's jobs wait silently. Recommended was
+     "refuse the last of any trade"; he chose "allow anything" over it and over "protect miner and hauler
+     only". Task 2 adds a `// NOTE:` at `claim_jobs`.
+  3. **The refusal text is fixed:** `"trade refused: no such dwarf"`, a `&'static str` like 12.1's.
 - [ ] **Task 1: protocol (wire diff).**
-  - [ ] `protocol/src/lib.rs`: `TradeRefusal` beside `Refusal` (`:148`); `Refusal::SetProfession`;
+  - [ ] `protocol/src/lib.rs`: `Refusal::SetProfession { dwarf: u32 }` (`:148`);
     `Command::SetProfession` (`:154`). `Command` stays `Clone` (not `Copy` since 12.1); `Refusal` stays
     `Copy`.
   - [ ] Pins, written as hand literals like `refusal_wire_is_literal_and_empty_delta_wire_is_unchanged`
     (`:309`): the command literal and each refusal literal parse and re-serialise byte-identical. The
-    existing pins are untouched. `every_material_and_tile_variant_has_a_pinned_wire_name` gains a
-    `TradeRefusal` block.
+    existing pins are untouched.
 - [ ] **Task 2: sim-core (AC2-AC4). RED first: write the scenario tests against a `set_profession` that
   does nothing, and record the failures.**
   - [ ] `SimCommand::SetProfession { dwarf: Id, profession: Profession }` (`lib.rs:91`). `sim_core::Refusal`
-    (`:99`) gains `SetProfession { dwarf: Id, reason: TradeRefusal }`, and sim-core gains `TradeRefusal`
-    (AD-6: sim-core is the source of truth).
+    (`:99`) gains `SetProfession { dwarf: Id }` (AD-6: sim-core is the source of truth).
   - [ ] `apply_command` (`:1614`): dispatch `SetProfession` **before** the rect prelude (`:1616-1621`) to a
     private `fn set_profession(&mut self, dwarf: Id, profession: Profession) -> Option<Refusal>`.
     - Leave the four rect arms byte-identical: rows in `3-1-give-the-order.sh` and `3-2-the-dig.sh`
       quote them.
-    - Rule order: unknown id → `NoSuchDwarf`; same trade → `None`, nothing changes; last of a protected
-      trade (Task 0.2) → `LastOfTrade`; else insert the new `Profession`. If he holds a job with
+    - Rule order: unknown id → `Refusal::SetProfession`; same trade → `None`, nothing changes; else
+      insert the new `Profession`, even if it empties his old trade (Task 0.2). If he holds a job with
       `trade(job.kind) != profession`, call `release_claim` (`:883`). Do NOT use `retry_claim`: a cooldown
       would delay the right-trade claim for no reason.
     - `// NOTE:` the released job's `WorkProgress` is lost; the next miner starts the dig from 0.
+    - `// NOTE:` at `claim_jobs`' trade filter (`:508`): a trade with no dwarf leaves its jobs unclaimed
+      and silent, by Wolf's ruling (12.6 Task 0.2); the roster is the player's signal.
   - [ ] `sim-core/tests/scenario.rs`, new tests (DEFAULT_SEED or 42, as the neighbours do):
     - `a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job`: one reachable channel mark;
       step until a miner holds it AND `tick >= job.created_tick + 31` (every reaction delay is 5-30 ticks
@@ -158,9 +150,10 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
       haul job with that item is still in `jobs()`, and the stone later reaches the pile (reuse
       `stone_on_the_pile`, `:1667`).
     - `a_trade_change_to_the_same_trade_keeps_the_job`.
-    - `unknown_dwarf_and_last_of_a_trade_are_refused_and_change_nothing` (options 1/2): the returned
-      `Refusal`, and `professions()` unchanged. Under option 1 the woodcutter is refused, the first miner
-      is accepted and the second is refused.
+    - `an_unknown_dwarf_is_refused_and_an_emptied_trade_is_allowed`: id 999 returns
+      `Refusal::SetProfession` with `professions()` unchanged; making both haulers miners is accepted, and
+      with a loose stone and a pile no haul job is ever claimed over N ticks (Task 0.2's silent wait,
+      pinned so a later "fix" is a visible decision).
   - [ ] Determinism: `same_seed_and_commands_remain_deterministic` (`scenario.rs:1755`) gains a
     `SetProfession` in its command list and asserts `professions()` each step. `save_load.rs` gains a
     round trip after a reassignment, asserting `professions()` (pattern at `:150-180`).
@@ -169,14 +162,14 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
     refusal into `refusals`, like `PlaceStockpile` (`:235-237`). `command_rects` (`:798`) returns `None`
     for it.
   - [ ] `simd/src/bridge.rs`: `profession_in` (an exhaustive `match`, beside `profession_out`, `:233`) and
-    `refusal_out` (`:277`) arms for `SetProfession`, plus `trade_refusal_out`. No wildcard arms.
+    the `refusal_out` (`:277`) arm for `SetProfession`. No wildcard arms.
   - [ ] `simd/tests/serve.rs`: a real daemon. A test client designates the channel block and the pile, as
     `trade_wire.py` does. When a miner holds a channel job it sends `set_profession` to hauler and to dwarf
     999. On deltas, assert: his `profession` is `hauler`; he never again holds a `dig`/`channel` job;
-    another miner later holds that target; and a refusal `{"command":"set_profession","dwarf":999,
-    "reason":"no_such_dwarf"}` arrives.
-  - [ ] `client-core/src/lib.rs` `refusal_text` (`:10`): arms for both reasons, using the texts in Task
-    0.3. A unit test pins every variant's text, like `every_profession_has_its_one_spelling` (`:375`).
+    another miner later holds that target; and a refusal `{"command":"set_profession","dwarf":999}`
+    arrives.
+  - [ ] `client-core/src/lib.rs` `refusal_text` (`:10`): the `SetProfession` arm, `"trade refused: no such
+    dwarf"` (Task 0.3). A unit test pins every variant's text, like `every_profession_has_its_one_spelling` (`:375`).
 - [ ] **Task 4: gui roster, readout and the `T` key (AC5-AC8). Look per Task 0.1.**
   - [ ] `ingest.rs` `update_name_readout` (`:1760`):
     - nothing selected → the roster;
@@ -212,7 +205,7 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
     `a_trade_set_from_the_gui_comes_back_on_the_wire`. Run `gui <port> --headless --select 2 --trade hauler
     --frames N --capture <tmp>`, and assert stderr has `gui sent set_profession dwarf 2 hauler` followed by
     `gui dwarf 2 trade hauler`. Set N from a measured run ([[frame-counts-are-venue-calibrated]]).
-    Dwarf 2 is Bifur, a miner, and one of two, so options 1 and 2 accept the change.
+    Dwarf 2 is Bifur, a miner.
   - [ ] Its deliberate RED is the simd `SetProfession` arm doing nothing: no `trade` line, and the test fails
     by name. It cannot be a `mutate.sh` row, because `cargo test -p gui` does not rebuild `simd`; run it in
     a scratch worktree with its own target dir, as 12.5 did. Record the output in the Debug Log.
@@ -228,13 +221,12 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
     4. `retry_claim` instead of `release_claim` → the reassigned-miner test's one-step claim assert;
     5. the hauler keeps carrying when reassigned → the reassigned-hauler test;
     6. the unknown id is not refused → the refusal test, and the serve test;
-    7. the last of a trade is not refused (options 1/2) → the refusal test;
-    8. the bridge maps `hauler` to `miner` in `profession_in` → the serve test;
-    9. `T` sends the current trade, not the next → the `T` socket test;
-    10. the roster drops the trade word → the roster test;
-    11. the readout shows the requested trade before the wire says so → the `T` socket test's "old trade"
+    7. the bridge maps `hauler` to `miner` in `profession_in` → the serve test;
+    8. `T` sends the current trade, not the next → the `T` socket test;
+    9. the roster drops the trade word → the roster test;
+    10. the readout shows the requested trade before the wire says so → the `T` socket test's "old trade"
         assert;
-    12. `--trade` pushes nothing → `a_trade_set_from_the_gui_comes_back_on_the_wire`.
+    11. `--trade` pushes nothing → `a_trade_set_from_the_gui_comes_back_on_the_wire`.
   - [ ] Spine `architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md` AD-10 (`:155-156`): add
     `set_profession` to the list of world-mutating commands, with an "Amended 2026-10-xx (Story 12.6)"
     line. This is the first selection-driven command.
@@ -253,7 +245,8 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
 - No new tui input (NFR10). No tui display change beyond the refusal text.
 - No mouse UI, buttons or menus: one key, `T`.
 - No new wire field on `Entity`, `Snapshot` or `Delta`. No save format change.
-- No claiming change: `claim_jobs` stays as is (AD-12). Option 3 adds only a `// NOTE:`.
+- No claiming change: `claim_jobs` stays as is (AD-12), plus one `// NOTE:` (Task 0.2).
+- No last-of-trade refusal and no empty-trade warning (Task 0.2).
 - No cut job: woodcutters stay jobless until 12.7.
 - No fix for #164 (work visuals trailing the walker) or #162 (stones without collision).
 
@@ -272,7 +265,7 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
 
 - **The readout reads the mirror, not the key.** If it showed the requested trade, a daemon that ignored
   the command would look like it worked: the silent-filter trap ([[silent-sim-filter-trap]]). Mutation
-  row 11 holds this.
+  row 10 holds this.
 - **The `trade` stderr line must come from the mirror.** Printed at send time, it would pass with a dead
   daemon arm. That is why the `sent` line and the `trade` line are separate.
 - **`release_claim`, not `retry_claim`.** The job did not fail. A cooldown would delay the other miner by
@@ -330,8 +323,7 @@ python3 _bmad-output/implementation-artifacts/12-6-signoff/trade_wire.py 7495
   for both commands.
 - **GREEN, required of dev:** the profession reads `hauler` within a tick or two of the send; the old job
   is `no`, no longer held; the target is reclaimed by miner 4 at a tick the dev records; the refusal for
-  999 appears; `TRADES WIRE OK`, exit 0. Under option 1 or 2 the run is unchanged: dwarf 2 is one of two
-  miners.
+  999 appears; `TRADES WIRE OK`, exit 0.
 - **Deliberate RED, required of dev:** mutation row 1 (the sim ignores the command) gives `NEVER` on the
   profession line and `TRADES WIRE RED` again. Restore it before going on.
 
@@ -357,8 +349,7 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
 - Press `2` and drag channel marks east of the fire, then press `3` and drag a 3×3 stockpile west of it.
   Click Bifur (red) while he digs, press `T`, and watch his trade line and the tui roster say `hauler`.
   Watch Dori (blue) take his mark.
-- Per Task 0.2 (option 1): select Nain (purple, the only woodcutter) and press `T`. The bottom-left line
-  says `trade refused: last of his trade`.
+- Press Escape: the roster reads `Bifur hauler`, in the gui and in the tui.
 
 ## Dev Agent Record
 
@@ -374,4 +365,5 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
 
 | Date | Change |
 | --- | --- |
-| 2026-10-05 | Story created on `98149e1`. RED on the live wire (`trade_wire.py`: `set_profession` unrecognized, profession never changes, no refusal). Look draft `12-6-signoff/draft.md` written. Task 0 (draft, empty-trade rule, refusal text) awaits Wolf. |
+| 2026-10-05 | Story created on `98149e1`. RED on the live wire (`trade_wire.py`: `set_profession` unrecognized, profession never changes, no refusal). Look draft `12-6-signoff/draft.md` written. |
+| 2026-10-05 | Task 0 ruled by Wolf: draft approved as drafted; an emptied trade is allowed (no last-of-trade refusal, `TradeRefusal` dropped, refusal is `{dwarf}` only); fixed refusal text. |
