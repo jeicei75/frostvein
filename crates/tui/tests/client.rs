@@ -203,6 +203,15 @@ fn captured_ticks(status_lines: &[String]) -> Vec<u64> {
 }
 
 fn capture_refusal_frames(refused: bool) -> Vec<String> {
+    capture_frames_refusing(refused.then_some(protocol::Refusal::PlaceStockpile {
+        rect: protocol::Rect {
+            min: [64, 64, 8],
+            max: [64, 64, 8],
+        },
+    }))
+}
+
+fn capture_frames_refusing(refusal: Option<protocol::Refusal>) -> Vec<String> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind refusal stub");
     let port = listener.local_addr().unwrap().port();
     let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
@@ -228,13 +237,10 @@ fn capture_refusal_frames(refused: bool) -> Vec<String> {
                 speed: protocol::Speed::Normal,
                 refusals: Vec::new(),
             };
-            if refused && tick == 9 {
-                delta.refusals.push(protocol::Refusal::PlaceStockpile {
-                    rect: protocol::Rect {
-                        min: [64, 64, 8],
-                        max: [64, 64, 8],
-                    },
-                });
+            if let Some(refusal) = refusal
+                && tick == 9
+            {
+                delta.refusals.push(refusal);
             }
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -281,6 +287,16 @@ fn streamed_refusal_stays_on_the_status_row_across_plain_deltas() {
         plain.iter().all(|line| !line.contains("refused")),
         "{plain:?}"
     );
+}
+
+#[test]
+fn a_set_profession_refusal_shows_on_the_status_row() {
+    let frames = capture_frames_refusing(Some(protocol::Refusal::SetProfession { dwarf: 999 }));
+    assert_eq!(frames.len(), 4, "{frames:?}");
+    assert!(!frames[0].contains("refused"), "{}", frames[0]);
+    for line in &frames[1..] {
+        assert!(line.contains("trade refused: no such dwarf"), "{line}");
+    }
 }
 
 fn capture_load_frames(send_load: bool) -> Vec<String> {
