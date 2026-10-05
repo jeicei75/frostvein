@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, net::TcpStream, sync::Mutex, time::Duration};
 
 use bevy::prelude::{ButtonInput, KeyCode, Real, Res, ResMut, Resource, Time};
-use protocol::{Command, Speed};
+use protocol::{Command, Profession, Speed};
 
 /// The GUI's upstream half of the daemon connection. `TcpStream` is Send but not Sync, so the
 /// mutex is the same resource boundary used by `IngestReceiver`.
@@ -333,6 +333,47 @@ pub fn save_load_keys(
     }
 }
 
+/// The trade `T` asks for: miner -> hauler -> woodcutter -> miner.
+pub fn next_trade(current: Profession) -> Profession {
+    match current {
+        Profession::Miner => Profession::Hauler,
+        Profession::Hauler => Profession::Woodcutter,
+        Profession::Woodcutter => Profession::Miner,
+    }
+}
+
+/// `T` asks the daemon to give the selected dwarf the next trade. Nothing selected, or a dwarf the
+/// mirror does not know a trade for, sends nothing. The readout does not move until a delta says so.
+///
+/// Clears the refusal slot like `designation_input`: this is a world command too.
+pub fn trade_key(
+    keys: Res<ButtonInput<KeyCode>>,
+    selected: Res<crate::pick::SelectedDwarf>,
+    mirror: Res<crate::ingest::MirrorResource>,
+    mut pending: ResMut<PendingCommands>,
+    mut last_refusal: ResMut<crate::ingest::LastRefusal>,
+) {
+    if !keys.just_pressed(KeyCode::KeyT) {
+        return;
+    }
+    let Some(id) = selected.0 else {
+        return;
+    };
+    let Some(current) = mirror
+        .0
+        .entities()
+        .find(|entity| entity.id == id)
+        .and_then(|entity| entity.profession)
+    else {
+        return;
+    };
+    last_refusal.0 = None;
+    pending.push(Command::SetProfession {
+        dwarf: id,
+        profession: next_trade(current),
+    });
+}
+
 /// Step the daemon's reported speed with the same keys and limits as the TUI.
 pub fn step_speed(
     keys: Res<ButtonInput<KeyCode>>,
@@ -404,6 +445,14 @@ pub fn send_commands(mut pending: ResMut<PendingCommands>, sink: Option<Res<Comm
             pending.dropped += lost;
             return;
         }
+        // NOTE: chatty by design, as 12.5's clip line is: the real-binary test reads it. It says
+        // what was SENT; only the `trade` line (printed from the mirror) says what the daemon did.
+        if let Command::SetProfession { dwarf, profession } = command {
+            eprintln!(
+                "gui sent set_profession dwarf {dwarf} {}",
+                client_core::profession_text(profession)
+            );
+        }
     }
 }
 
@@ -427,6 +476,14 @@ mod tests {
         CommandSink, MAX_PENDING_COMMANDS, PendingCommands, SimPaused, StaticWorld, send_commands,
         toggle_pause,
     };
+
+    #[test]
+    fn the_next_trade_goes_miner_hauler_woodcutter_and_back() {
+        use protocol::Profession::{Hauler, Miner, Woodcutter};
+        assert_eq!(super::next_trade(Miner), Hauler);
+        assert_eq!(super::next_trade(Hauler), Woodcutter);
+        assert_eq!(super::next_trade(Woodcutter), Miner);
+    }
 
     /// Space toggles, and the SECOND press matters as much as the first: a pause that cannot be
     /// released is a hang. Asserted on the queued command rather than on the resource flag, because

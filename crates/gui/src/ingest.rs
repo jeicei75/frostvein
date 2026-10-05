@@ -946,6 +946,7 @@ pub fn client_systems(app: &mut App) {
                 .after(crate::command::toggle_pause)
                 .before(send_commands),
             crate::command::save_load_keys.before(send_commands),
+            crate::command::trade_key.before(send_commands),
             // Before `send_commands`, so the hand-back reaches the socket on the frame the
             // exit is requested rather than never.
             crate::command::restore_speed_on_exit.before(send_commands),
@@ -3710,6 +3711,105 @@ mod tests {
         );
     }
 
+    fn press_key(app: &mut App, key: KeyCode) {
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(key);
+        app.update();
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.release_all();
+        keys.clear();
+    }
+
+    /// 12.6 AC7. `T` with a dwarf selected writes exactly ONE `set_profession` with the NEXT trade
+    /// to the socket; with nothing selected it writes nothing. The readout reads the MIRROR: after
+    /// the key it still says the OLD trade, and moves only when a delta says so. If it showed the
+    /// request, a daemon that ignored the command would look like it worked.
+    #[test]
+    fn t_sends_one_set_profession_with_the_next_trade_and_the_readout_waits_for_the_wire() {
+        let (mut app, sender, server) = configured_app_with_snapshot(&[], crew_snapshot());
+        app.update();
+
+        press_key(&mut app, KeyCode::KeyT);
+        assert!(
+            read_one_command(&server).is_empty(),
+            "T with nothing selected must write nothing"
+        );
+
+        // Dwarf 3 is Bifur, a miner.
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(3)));
+        app.update();
+        press_key(&mut app, KeyCode::KeyT);
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_profession","dwarf":3,"profession":"hauler"}"#
+        );
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "one press must send exactly one command"
+        );
+        assert_eq!(
+            name_text(&mut app),
+            "Bifur\nminer   T: change trade",
+            "the readout must still say the OLD trade until the wire changes it"
+        );
+
+        let mut crew = crew_snapshot().entities;
+        crew[2].profession = Some(protocol::Profession::Hauler);
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(entity_delta(1, crew)))))
+            .unwrap();
+        app.update();
+        assert_eq!(name_text(&mut app), "Bifur\nhauler   T: change trade");
+
+        // The order wraps: a woodcutter's next trade is miner.
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(1)));
+        app.update();
+        press_key(&mut app, KeyCode::KeyT);
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_profession","dwarf":1,"profession":"miner"}"#
+        );
+    }
+
+    /// 12.6 AC8. A `set_profession` refusal in a delta shows in the refusal slot with
+    /// `refusal_text`'s words, and the next world command, `T` included, clears it.
+    #[test]
+    fn a_trade_refusal_shows_in_the_refusal_slot_and_t_clears_it() {
+        let (mut app, sender, _server) = configured_app_with_snapshot(&[], crew_snapshot());
+        app.update();
+        let hud = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&Text, With<crate::designate::RefusalHint>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+        let refusal = protocol::Refusal::SetProfession { dwarf: 999 };
+        let mut delta = entity_delta(1, crew_snapshot().entities);
+        delta.refusals = vec![refusal];
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta))))
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), "trade refused: no such dwarf");
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(3)));
+        app.update();
+        assert_eq!(hud(&mut app), "trade refused: no such dwarf");
+        press_key(&mut app, KeyCode::KeyT);
+        app.update();
+        assert_eq!(
+            hud(&mut app),
+            "",
+            "T is a world command and clears the refusal"
+        );
+    }
+
     #[test]
     fn refusal_hud_follows_wire_and_clears_on_the_next_world_command() {
         use crate::{
@@ -4536,6 +4636,10 @@ mod tests {
             (
                 KeyCode::Escape,
                 "abort designation / clear selection (designate.rs, pick.rs)",
+            ),
+            (
+                KeyCode::KeyT,
+                "change the selected dwarf's trade (command.rs)",
             ),
             (KeyCode::Digit1, "designate dig (designate.rs)"),
             (KeyCode::Digit2, "designate channel (designate.rs)"),
