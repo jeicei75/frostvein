@@ -10,6 +10,7 @@ use thiserror::Error;
 pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
     match refusal {
         protocol::Refusal::PlaceStockpile { .. } => "stockpile refused: no valid cells",
+        protocol::Refusal::SetProfession { .. } => "trade refused: no such dwarf",
     }
 }
 
@@ -368,6 +369,26 @@ mod tests {
             (Frosti, "Frosti"),
         ] {
             assert_eq!(dwarf_name_text(name), text);
+        }
+    }
+
+    #[test]
+    fn every_refusal_has_its_one_text() {
+        let rect = Rect {
+            min: [0, 0, 0],
+            max: [0, 0, 0],
+        };
+        for (refusal, text) in [
+            (
+                protocol::Refusal::PlaceStockpile { rect },
+                "stockpile refused: no valid cells",
+            ),
+            (
+                protocol::Refusal::SetProfession { dwarf: 999 },
+                "trade refused: no such dwarf",
+            ),
+        ] {
+            assert_eq!(refusal_text(&refusal), text);
         }
     }
 

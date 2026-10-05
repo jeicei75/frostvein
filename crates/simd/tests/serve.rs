@@ -679,6 +679,131 @@ fn deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries() {
     );
 }
 
+/// 12.6 AC1 and AC3 END TO END, judged on the deltas the daemon really sent: a miner who holds a
+/// channel job is reassigned to hauler. His `profession` reads `hauler`, he never again holds a
+/// dig or channel job, the other miner later holds the target he let go of, and a command for dwarf
+/// 999 comes back as a refusal. Every check is positive: each must be seen or the test fails.
+#[test]
+fn a_reassigned_miner_lets_go_on_the_wire_and_an_unknown_dwarf_is_refused() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let camp = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.kind == protocol::EntityKind::Campfire)
+        .expect("the camp has a campfire")
+        .pos;
+    assert_eq!(
+        camp,
+        [64, 64, 9],
+        "the recipe is pinned to DEFAULT_SEED's camp"
+    );
+    let miners: Vec<u32> = dwarf_professions(&snapshot)
+        .into_iter()
+        .filter(|(_, profession)| *profession == protocol::Profession::Miner)
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(miners.len(), 2, "the spawn pool has two miners");
+    let mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+    let [cx, cy, cz] = camp;
+    let pile = (3..12)
+        .flat_map(|r| {
+            [
+                (cx + r, cy),
+                (cx - r - 2, cy),
+                (cx, cy + r),
+                (cx, cy - r - 2),
+            ]
+        })
+        .find(|&(px, py)| {
+            (px..px + 3)
+                .all(|x| (py..py + 3).all(|y| client_core::is_standable(&mirror, [x, y, cz])))
+        })
+        .expect("a 3x3 standable pile near the camp");
+    send_literal(
+        &mut writer,
+        br#"{"type":"designate","kind":"channel","rect":{"min":[65,61,9],"max":[68,67,9]}}
+"#,
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"place_stockpile\",\"rects\":[{{\"min\":[{},{},{cz}],\"max\":[{},{},{cz}]}}]}}\n",
+            pile.0,
+            pile.1,
+            pile.0 + 2,
+            pile.1 + 2
+        )
+        .as_bytes(),
+    );
+    send_speed(&mut writer, protocol::Speed::Fast4x);
+
+    let reassigned = miners[0];
+    let other = miners[1];
+    let mut released = None;
+    let (mut hauler_seen, mut reclaimed, mut refused) = (false, false, false);
+    for _ in 0..1500 {
+        let delta = read_delta(&mut reader);
+        let dwarf = |id: u32| delta.entities.iter().find(|entity| entity.id == id);
+        refused |= delta
+            .refusals
+            .contains(&protocol::Refusal::SetProfession { dwarf: 999 });
+        match released {
+            None => {
+                if let Some(protocol::DwarfJob::Channel { target }) =
+                    dwarf(reassigned).and_then(|entity| entity.job)
+                {
+                    released = Some(target);
+                    send_literal(
+                        &mut writer,
+                        format!(
+                            "{{\"type\":\"set_profession\",\"dwarf\":{reassigned},\"profession\":\"hauler\"}}\n"
+                        )
+                        .as_bytes(),
+                    );
+                    send_literal(
+                        &mut writer,
+                        br#"{"type":"set_profession","dwarf":999,"profession":"miner"}
+"#,
+                    );
+                }
+            }
+            Some(target) => {
+                let me = dwarf(reassigned).expect("the reassigned dwarf is in every delta");
+                if me.profession == Some(protocol::Profession::Hauler) {
+                    hauler_seen = true;
+                }
+                if hauler_seen {
+                    assert!(
+                        !matches!(
+                            me.job,
+                            Some(
+                                protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. }
+                            )
+                        ),
+                        "tick {}: the reassigned hauler holds {:?}",
+                        delta.tick,
+                        me.job
+                    );
+                    reclaimed |= dwarf(other).and_then(|entity| entity.job)
+                        == Some(protocol::DwarfJob::Channel { target });
+                }
+            }
+        }
+        if hauler_seen && reclaimed && refused {
+            return;
+        }
+    }
+    panic!(
+        "1500 deltas: released {released:?}, profession hauler {hauler_seen}, target reclaimed \
+         {reclaimed}, refusal for 999 {refused}; need all"
+    );
+}
+
 #[test]
 fn save_then_load_rewinds_every_client() {
     let daemon = Daemon::spawn();

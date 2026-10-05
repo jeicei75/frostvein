@@ -238,6 +238,14 @@ fn profession_out(v: sim_core::Profession) -> protocol::Profession {
     }
 }
 
+pub(crate) fn profession_in(v: protocol::Profession) -> sim_core::Profession {
+    match v {
+        protocol::Profession::Miner => sim_core::Profession::Miner,
+        protocol::Profession::Hauler => sim_core::Profession::Hauler,
+        protocol::Profession::Woodcutter => sim_core::Profession::Woodcutter,
+    }
+}
+
 fn job_state(state: sim_core::JobState) -> protocol::JobState {
     match state {
         sim_core::JobState::Idle => protocol::JobState::Idle,
@@ -279,6 +287,9 @@ pub(crate) fn refusal_out(refusal: sim_core::Refusal) -> protocol::Refusal {
         sim_core::Refusal::PlaceStockpile { rect } => protocol::Refusal::PlaceStockpile {
             rect: rect_out(rect),
         },
+        sim_core::Refusal::SetProfession { dwarf } => {
+            protocol::Refusal::SetProfession { dwarf: dwarf.0 }
+        }
     }
 }
 
