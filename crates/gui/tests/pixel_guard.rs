@@ -1194,6 +1194,77 @@ fn expect_haul_fails_a_world_with_no_stone_on_a_stockpile() {
     );
 }
 
+/// 12.6 AC9, through the real binary against a real daemon: `--select 2 --trade hauler` sends the
+/// command, and the daemon's word comes back as a change in the MIRROR, which is what prints the
+/// `trade` line. The `sent` line alone proves nothing (it is printed at send), and the `trade` line
+/// alone could not be told from a stale dwarf, so the test needs both, in that order, once each.
+///
+/// Dwarf 2 is Bifur, a miner, at DEFAULT_SEED. The exit status is not the result: the lines are.
+/// Deliberate RED (a scratch worktree, because `cargo test -p gui` does not rebuild `simd`): the
+/// simd `SetProfession` arm doing nothing leaves the `sent` line and no `trade` line.
+///
+/// N = 100, measured on this devpod (lavapipe, 2026-10-05, debug build, fresh daemon per run): both
+/// lines were already present with `--frames 1`, 5, 20 and 60, and every run took ~53 s. The run is
+/// bound by the capture waiting for its delivered-tick floor, not by the frame count (as in
+/// `a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon`), so the round trip fits inside
+/// that wait at any N. 100 is margin for a machine that delivers fewer ticks per frame.
+#[test]
+#[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
+fn a_trade_set_from_the_gui_comes_back_on_the_wire() {
+    const TRADE_FRAMES: &str = "100";
+    let daemon = Daemon::spawn();
+    let out = std::env::temp_dir().join(format!(
+        "frostvein-pixel-guard-{}-trade.png",
+        std::process::id()
+    ));
+    let output = Command::new(env!("CARGO_BIN_EXE_gui"))
+        .arg(daemon.port.to_string())
+        .args([
+            "--headless",
+            "--subdiv",
+            "4",
+            "--select",
+            "2",
+            "--trade",
+            "hauler",
+        ])
+        .args(["--frames", TRADE_FRAMES])
+        .args(["--capture", out.to_str().expect("a utf-8 scratch path")])
+        .stdout(Stdio::null())
+        .output()
+        .expect("the client must run");
+    let _ = std::fs::remove_file(&out);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let lines: Vec<&str> = stderr.lines().collect();
+    let position = |wanted: &str| {
+        lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| **line == wanted)
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>()
+    };
+    let sent = position("gui sent set_profession dwarf 2 hauler");
+    let came_back = position("gui dwarf 2 trade hauler");
+    assert_eq!(
+        sent.len(),
+        1,
+        "--trade must send exactly one set_profession (exit {:?}):\n{stderr}",
+        output.status
+    );
+    assert_eq!(
+        came_back.len(),
+        1,
+        "the daemon's word must come back as exactly one `gui dwarf 2 trade hauler` line, printed \
+         from the mirror (exit {:?}):\n{stderr}",
+        output.status
+    );
+    assert!(
+        sent[0] < came_back[0],
+        "the trade line must follow the sent line:\n{stderr}"
+    );
+}
+
 /// Issue #77: a capture cut below every dwarf must not demand motion its own slice cannot draw.
 #[test]
 #[ignore = "drives the real binary; scripts/gate.sh runs it in the full tier"]
