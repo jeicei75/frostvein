@@ -153,7 +153,7 @@ graph LR
 - **Binds:** F3, F6, F7
 - **Prevents:** mid-tick mutation; I/O-order nondeterminism
 - **Rule:** only world-mutating commands (`designate`, `cancel_designation`,
-  `place_stockpile`, `remove_stockpile`) ride the queue: `simd` queues them
+  `place_stockpile`, `remove_stockpile`, `set_profession`) ride the queue: `simd` queues them
   decoded; `sim-core`
   consumes the queue at the start of the next loop iteration, in arrival
   order. Control commands (`set_speed`, `save`, `load`, `quit`) concern the
