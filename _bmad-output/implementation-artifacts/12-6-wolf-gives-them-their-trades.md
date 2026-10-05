@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.5's creation
 
 # Story 12.6: Wolf Gives Them Their Trades
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -232,7 +232,7 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
     line. This is the first selection-driven command.
   - [x] README gui section: the roster, `T`, `--trade`, and the two stderr lines. Tui section: trade
     refusals show on the status row.
-- [ ] **Task 8: the live recipe, the seat (AC11), then the full gate.**
+- [x] **Task 8: the live recipe, the seat (AC11), then the full gate.**
   - [x] Run the Verification recipe: GREEN, then the deliberate RED. Record both outputs.
   - [x] Write `12-6-signoff/vehicle-card.md` in the seat's launch form. Say where to look: the roster is
     top-right under the clock, and refusals are bottom-left.
@@ -454,7 +454,7 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
   exit code"), and they hold.
 
 - **Full gate GREEN** on `72be96c`, `RUST_TEST_THREADS=1 scripts/gate.sh`, 3413 s (cargo test 231 s, pixel
-  guards 3143 s, mutation tables still apply). AC11 (the seat) is open: `12-6-signoff/vehicle-card.md`.
+  guards 3143 s, mutation tables still apply). **AC11 PASSED at Wolf's seat 2026-10-05** ("works"), branch at `a5eb634`.
 
 ### Completion Notes List
 
@@ -496,3 +496,4 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
 | 2026-10-05 | Story created on `98149e1`. RED on the live wire (`trade_wire.py`: `set_profession` unrecognized, profession never changes, no refusal). Look draft `12-6-signoff/draft.md` written. |
 | 2026-10-05 | Task 0 ruled by Wolf: draft approved as drafted; an emptied trade is allowed (no last-of-trade refusal, `TradeRefusal` dropped, refusal is `{dwarf}` only); fixed refusal text. |
 | 2026-10-05 | Dev (Sonnet 5.5 agents A and B, Opus verifying): `set_profession` on the wire, in the sim (`release_claim` of an old-trade job), in simd, both clients' refusal text, gui roster, `T` and `--trade`. 12/12 mutations killed; live wire OK and the deliberate RED shown; `trade_wire.py`'s held-job check corrected; #166 filed (pre-existing `--select` capture ceiling). Full gate GREEN 3413 s on `72be96c`. Awaiting Wolf's seat (AC11). |
+| 2026-10-05 | AC11 PASSED at Wolf's seat ("works", `a5eb634`). Status -> review. |
