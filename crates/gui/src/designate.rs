@@ -6,7 +6,7 @@ use bevy::{
         TextColor, TextFont, px,
     },
 };
-use protocol::{Command, DesignationKind, Rect};
+use protocol::{Command, DesignationKind, Material, Rect, Tile};
 
 use client_core::Mirror;
 
@@ -27,6 +27,7 @@ pub enum DesignateMode {
     Channel,
     Stockpile,
     Clear,
+    Cut,
 }
 
 /// The cell a drag was anchored at, WITH the face its ray entered.
@@ -83,7 +84,7 @@ pub fn update_refusal_hint(
 pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
     match (mode, dragging) {
         (DesignateMode::None, _) => {
-            "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"
+            "1 dig  2 channel  3 stockpile  4 clear  5 cut   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"
         }
         (DesignateMode::Dig, false) => "dig: drag to designate  Esc leave",
         (DesignateMode::Dig, true) => "dig: release to designate  Esc abort",
@@ -93,6 +94,8 @@ pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
         (DesignateMode::Stockpile, true) => "stockpile: release to place  Esc abort",
         (DesignateMode::Clear, false) => "clear: drag to remove  Esc leave",
         (DesignateMode::Clear, true) => "clear: release to remove  Esc abort",
+        (DesignateMode::Cut, false) => "cut: drag over the foot of the trees  Esc leave",
+        (DesignateMode::Cut, true) => "cut: release to mark  Esc abort",
     }
 }
 
@@ -153,6 +156,8 @@ pub fn designation_input(
         *mode = DesignateMode::Stockpile;
     } else if keys.just_pressed(KeyCode::Digit4) {
         *mode = DesignateMode::Clear;
+    } else if keys.just_pressed(KeyCode::Digit5) {
+        *mode = DesignateMode::Cut;
     }
 
     let abort = keys.just_pressed(KeyCode::Escape) || mouse.just_pressed(MouseButton::Right);
@@ -192,7 +197,13 @@ pub fn designation_input(
                 designation_target(mirror, release_cell, mode),
             ));
             // NOTE: surface preview does not filter emitters; the sim decides whether a zone is valid.
-            for command in commands_for(mode, picked_rect, &surface) {
+            // One level for the whole cut rect, taken from the anchor, like dig's single-z rect.
+            let cut_rect = client_core::rect_on_level(
+                (anchor_cell.tile[0], anchor_cell.tile[1]),
+                (release_cell.tile[0], release_cell.tile[1]),
+                cut_target(mirror, anchor_cell)[2],
+            );
+            for command in commands_for(mode, picked_rect, &surface, cut_rect) {
                 last_refusal.0 = None;
                 pending.push(command);
             }
@@ -248,16 +259,51 @@ pub fn designation_target(mirror: &Mirror, cell: PickedCell, mode: DesignateMode
             // answer; the preview filter and the sim both drop it, visibly and consistently.
             neighbour
         }
+        DesignateMode::Cut => cut_target(mirror, cell),
         DesignateMode::Dig | DesignateMode::None => cell.tile,
     }
 }
 
+/// Which cell a cut designates, given the cell the ray hit.
+///
+/// A trunk or foliage tile is a tree already, so its own cell is the target. Anything else is the
+/// ground at a tree's foot (picking cannot return air, and the foliage is skipped), so the target
+/// is the cell above it: the trunk's base, which is where the sim keeps the cut mark.
+pub fn cut_target(mirror: &Mirror, cell: PickedCell) -> [i32; 3] {
+    if is_tree_tile(mirror, cell.tile) {
+        cell.tile
+    } else {
+        [cell.tile[0], cell.tile[1], cell.tile[2] + 1]
+    }
+}
+
+/// Whether the mirror holds a tree tile here: the only cells a cut can catch.
+pub fn is_tree_tile(mirror: &Mirror, tile: [i32; 3]) -> bool {
+    matches!(
+        mirror.tile(tile),
+        Some(Tile::Solid(Material::TreeTrunk | Material::TreeFoliage))
+    )
+}
+
+/// `cut_rect` is the cut's single-z rect at the cut-target level: cut's whole answer, and the
+/// half of clear that removes a cut mark (a clear drag at a pine's foot must reach its base).
+///
 /// `picked_rect` is AC4's single-z rect at the cells the ray hit — dig's whole answer, and the
 /// half of clear that removes digs. `surface` is the followed ground, one rect per merged run —
 /// what channel and stockpile designate, and the half of clear that removes them.
-fn commands_for(mode: DesignateMode, picked_rect: Rect, surface: &[Rect]) -> Vec<Command> {
+fn commands_for(
+    mode: DesignateMode,
+    picked_rect: Rect,
+    surface: &[Rect],
+    cut_rect: Rect,
+) -> Vec<Command> {
     match mode {
         DesignateMode::None => Vec::new(),
+        // One command per cut drag, so a drag can raise at most one refusal (12.1).
+        DesignateMode::Cut => vec![Command::Designate {
+            kind: DesignationKind::Cut,
+            rect: cut_rect,
+        }],
         DesignateMode::Dig => vec![Command::Designate {
             kind: DesignationKind::Dig,
             rect: picked_rect,
@@ -280,7 +326,7 @@ fn commands_for(mode: DesignateMode, picked_rect: Rect, surface: &[Rect]) -> Vec
         // sits one cell across the entered face. Clearing only one of them leaves the other
         // standing with no way for the boss to remove it at all.
         //
-        // NOTE: three commands per clear rather than two, which brings the 256-command bound
+        // NOTE: 12.7 adds a fourth, the cut-target rect. Three commands per clear rather than two brings the 256-command bound
         // fractionally closer. That bound's split-pair hazard is already an open deferred item
         // and is not made materially worse by one more command.
         DesignateMode::Clear => std::iter::once(Command::CancelDesignation { rect: picked_rect })
@@ -289,6 +335,9 @@ fn commands_for(mode: DesignateMode, picked_rect: Rect, surface: &[Rect]) -> Vec
                     Command::CancelDesignation { rect: *rect },
                     Command::RemoveStockpile { rect: *rect },
                 ]
+            }))
+            .chain(std::iter::once(Command::CancelDesignation {
+                rect: cut_rect,
             }))
             .collect(),
     }
@@ -304,7 +353,7 @@ mod tests {
     /// helper passes the same rect as both so a single-rect expectation stays readable, and the
     /// call sites that care about the distinction spell it out.
     fn commands_at(mode: DesignateMode, rect: Rect) -> Vec<Command> {
-        commands_for(mode, rect, &[rect])
+        commands_for(mode, rect, &[rect], rect)
     }
 
     #[test]
@@ -314,12 +363,12 @@ mod tests {
             max: [64, 64, 9],
         };
         assert_eq!(
-            commands_for(DesignateMode::Stockpile, picked, &[]),
+            commands_for(DesignateMode::Stockpile, picked, &[], picked),
             vec![Command::PlaceStockpile {
                 rects: vec![picked]
             }]
         );
-        assert!(commands_for(DesignateMode::Channel, picked, &[]).is_empty());
+        assert!(commands_for(DesignateMode::Channel, picked, &[], picked).is_empty());
     }
 
     #[test]
@@ -341,7 +390,7 @@ mod tests {
             },
         ];
         assert_eq!(
-            commands_for(DesignateMode::Stockpile, picked, &surface),
+            commands_for(DesignateMode::Stockpile, picked, &surface, picked),
             vec![Command::PlaceStockpile {
                 rects: surface.to_vec()
             }]
@@ -361,8 +410,18 @@ mod tests {
             min: [1, 2, 4],
             max: [4, 5, 4],
         };
+        // 12.7: and the foot of a marked tree, one more cancel on the cut-target rect.
+        let cut_rect = Rect {
+            min: [1, 2, 5],
+            max: [4, 5, 5],
+        };
         assert_eq!(
-            commands_for(DesignateMode::Clear, picked_rect, &[standable_rect]),
+            commands_for(
+                DesignateMode::Clear,
+                picked_rect,
+                &[standable_rect],
+                cut_rect
+            ),
             vec![
                 Command::CancelDesignation { rect: picked_rect },
                 Command::CancelDesignation {
@@ -370,8 +429,40 @@ mod tests {
                 },
                 Command::RemoveStockpile {
                     rect: standable_rect
-                }
+                },
+                Command::CancelDesignation { rect: cut_rect },
             ]
+        );
+    }
+
+    /// 12.7: a cut drag is ONE `designate cut` on the cut-target rect, so a drag can raise at most
+    /// one refusal. It must not read the picked rect (a dig's level) or the followed surface.
+    #[test]
+    fn a_cut_drag_is_one_designate_cut_on_the_cut_target_rect() {
+        let picked_rect = Rect {
+            min: [1, 2, 3],
+            max: [4, 5, 3],
+        };
+        let surface = [
+            Rect {
+                min: [1, 2, 4],
+                max: [2, 5, 4],
+            },
+            Rect {
+                min: [3, 2, 7],
+                max: [4, 5, 7],
+            },
+        ];
+        let cut_rect = Rect {
+            min: [1, 2, 6],
+            max: [4, 5, 6],
+        };
+        assert_eq!(
+            commands_for(DesignateMode::Cut, picked_rect, &surface, cut_rect),
+            vec![Command::Designate {
+                kind: DesignationKind::Cut,
+                rect: cut_rect
+            }]
         );
     }
 
@@ -409,6 +500,7 @@ mod tests {
             DesignateMode::Channel,
             DesignateMode::Stockpile,
             DesignateMode::Clear,
+            DesignateMode::Cut,
         ] {
             for dragging in [false, true] {
                 assert!(designation_hint(mode, dragging).is_ascii());

@@ -4069,7 +4069,7 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
         min: tile,
         max: tile,
     };
-    let expected: [(KeyCode, Vec<protocol::Command>); 4] = [
+    let expected: [(KeyCode, Vec<protocol::Command>); 5] = [
         (
             KeyCode::Digit1,
             vec![protocol::Command::Designate {
@@ -4103,7 +4103,19 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
                 protocol::Command::RemoveStockpile {
                     rect: at(standable),
                 },
+                // 12.7: and the cut-target rect, which over bare ground is the cell above it.
+                protocol::Command::CancelDesignation {
+                    rect: at(standable),
+                },
             ],
+        ),
+        // 12.7: cut over bare ground sends one `designate cut` one level up, like a channel.
+        (
+            KeyCode::Digit5,
+            vec![protocol::Command::Designate {
+                kind: DesignationKind::Cut,
+                rect: at(standable),
+            }],
         ),
     ];
     for (key, want) in expected {
@@ -5453,4 +5465,402 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
     );
     app.update();
     assert_eq!(stone(&mut app).0.translation, dropped.translation);
+}
+
+// ---------------------------------------------------------------------------------------------
+// 12.7 Timber: the cut mode, the cut mark, wood, and the woodcutter's clip.
+// ---------------------------------------------------------------------------------------------
+
+/// A 3x3x3 world with one tree: a stone ground cell at [1,1,1] and a trunk standing on it at
+/// [1,1,2]. The cursor is aimed at `cursor_at`, and the slice sits at `slice`, so slice 1 hides the
+/// trunk and a drag there picks the GROUND at the tree's foot.
+fn tree_app(
+    cursor_at: [i32; 3],
+    slice: i32,
+) -> (
+    App,
+    std::sync::mpsc::SyncSender<anyhow::Result<WireMessage>>,
+) {
+    let rig = CameraRig::new(cursor_at);
+    let cursor = rig
+        .project_world_point(cursor_at)
+        .expect("the cursor tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index([1, 1, 1])] = Tile::Solid(Material::Stone);
+    tiles[index([1, 1, 2])] = Tile::Solid(Material::TreeTrunk);
+    let (mut app, sender) = live_app(snapshot_with_dims(dims, tiles, vec![]));
+    install_pick_camera(&mut app, rig, cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(slice);
+    app.update();
+    (app, sender)
+}
+
+fn at_cell(tile: [i32; 3]) -> protocol::Rect {
+    protocol::Rect {
+        min: tile,
+        max: tile,
+    }
+}
+
+/// 12.7 AC8: a `5` drag over a trunk is ONE `designate cut`, at the trunk's own level.
+#[test]
+fn a_cut_drag_over_a_trunk_writes_one_designate_cut_at_the_trunks_level() {
+    let (mut app, _sender) = tree_app([1, 1, 2], 2);
+    assert_eq!(
+        app.world().resource::<PickedTile>().0.map(|cell| cell.tile),
+        Some([1, 1, 2]),
+        "this test's expectations are written for a hit on the trunk itself"
+    );
+    drag_one_tile(&mut app, KeyCode::Digit5);
+    assert_eq!(
+        queued(&app),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Cut,
+            rect: at_cell([1, 1, 2]),
+        }]
+    );
+    let wire = serde_json::to_string(&queued(&app)[0]).unwrap();
+    assert!(wire.contains(r#""kind":"cut""#), "{wire}");
+}
+
+/// 12.7 AC8: a drag that lands on the ground at a tree's foot is sent one level up, which is the
+/// trunk's base. Without it the rect sits one below every trunk and marks nothing.
+#[test]
+fn a_cut_drag_at_a_trees_foot_writes_it_one_level_up() {
+    let (mut app, _sender) = tree_app([1, 1, 1], 1);
+    assert_eq!(
+        app.world().resource::<PickedTile>().0.map(|cell| cell.tile),
+        Some([1, 1, 1]),
+        "with the trunk sliced away the ray lands on the ground"
+    );
+    drag_one_tile(&mut app, KeyCode::Digit5);
+    assert_eq!(
+        queued(&app),
+        vec![protocol::Command::Designate {
+            kind: DesignationKind::Cut,
+            rect: at_cell([1, 1, 2]),
+        }]
+    );
+}
+
+/// 12.7 AC8: `4` at a tree's foot cancels a rect that holds the trunk's base, or a clear drag
+/// aimed at the surface could never reach a cut mark.
+#[test]
+fn a_clear_drag_at_a_trees_foot_writes_a_cancel_that_holds_the_base() {
+    let (mut app, _sender) = tree_app([1, 1, 1], 1);
+    drag_one_tile(&mut app, KeyCode::Digit4);
+    let commands = queued(&app);
+    assert_eq!(
+        commands.first(),
+        Some(&protocol::Command::CancelDesignation {
+            rect: at_cell([1, 1, 1])
+        }),
+        "the dig half of clear is unchanged"
+    );
+    assert_eq!(
+        commands.last(),
+        Some(&protocol::Command::CancelDesignation {
+            rect: at_cell([1, 1, 2])
+        }),
+        "the last cancel must hold the trunk's base: {commands:?}"
+    );
+}
+
+/// 12.7 AC8: a cut mark projects at the trunk's base, flat on the ground, in the cut colour and
+/// not the dig colour.
+#[test]
+fn a_cut_mark_projects_at_the_base_with_the_cut_material() {
+    let dims = Dims { x: 2, y: 1, z: 2 };
+    let mut initial = snapshot_with_dims(
+        dims,
+        vec![
+            Tile::Solid(Material::Stone),
+            Tile::Empty,
+            Tile::Solid(Material::TreeTrunk),
+            Tile::Empty,
+        ],
+        Vec::new(),
+    );
+    initial.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Cut,
+    }];
+    let mut app = headless_app(initial);
+    app.update();
+
+    let (transform, handle) = app
+        .world_mut()
+        .query::<(
+            &ProjectedDesignation,
+            &Transform,
+            &MeshMaterial3d<StandardMaterial>,
+        )>()
+        .iter(app.world())
+        .find(|(mark, _, _)| mark.0 == [0, 0, 1])
+        .map(|(_, transform, material)| (*transform, material.0.clone()))
+        .expect("the cut mark must project");
+    // The base cell is [0,0,1]; its floor is the ground's top face at render y 0.54.
+    assert!(
+        (transform.translation.y - 0.54).abs() < 1e-6,
+        "a cut slab rests on the ground at the trunk's foot; got {}",
+        transform.translation.y
+    );
+    assert!((transform.scale.x - 0.94).abs() < 1e-6);
+    let drawn = app
+        .world()
+        .resource::<Assets<StandardMaterial>>()
+        .get(&handle)
+        .expect("the mark's material must resolve")
+        .base_color
+        .to_srgba()
+        .to_u8_array_no_alpha();
+    assert_eq!(drawn, [30, 190, 150], "the cut mark wears the cut colour");
+    assert_ne!(drawn, [56, 132, 250], "and not the dig blue it borrowed");
+}
+
+fn projected_item_pose(
+    app: &mut App,
+    id: u32,
+) -> (Transform, bevy::prelude::Handle<StandardMaterial>) {
+    app.world_mut()
+        .query::<(
+            &ProjectedItem,
+            &Transform,
+            &MeshMaterial3d<StandardMaterial>,
+        )>()
+        .iter(app.world())
+        .find(|(item, _, _)| item.0 == id)
+        .map(|(_, transform, material)| (*transform, material.0.clone()))
+        .expect("the item must be projected")
+}
+
+fn material_rgb(app: &App, handle: &bevy::prelude::Handle<StandardMaterial>) -> [u8; 3] {
+    app.world()
+        .resource::<Assets<StandardMaterial>>()
+        .get(handle)
+        .expect("the item's material must resolve")
+        .base_color
+        .to_srgba()
+        .to_u8_array_no_alpha()
+}
+
+/// 12.7 AC9: a wood item is a log (long in x, hand-written metres-of-cell literals) in a wood
+/// colour resting on the floor; a stone beside it is still the 0.4 cube in stone.
+#[test]
+fn a_wood_item_projects_as_a_log_and_a_stone_still_as_a_stone() {
+    let mut start = snapshot_with_dims(
+        Dims { x: 2, y: 1, z: 1 },
+        vec![Tile::Empty, Tile::Empty],
+        Vec::new(),
+    );
+    start.items = vec![
+        Item {
+            id: 1,
+            pos: [0, 0, 0],
+            kind: protocol::ItemKind::Stone,
+        },
+        Item {
+            id: 2,
+            pos: [1, 0, 0],
+            kind: protocol::ItemKind::Wood,
+        },
+    ];
+    let mut app = headless_app(start);
+    // Twice: the second update lets the blend write over what the spawn set.
+    app.update();
+    app.update();
+
+    let (stone, stone_material) = projected_item_pose(&mut app, 1);
+    let (log, log_material) = projected_item_pose(&mut app, 2);
+    assert_eq!(stone.scale, Vec3::splat(0.4));
+    assert_eq!(log.scale, Vec3::new(0.7, 0.28, 0.28), "a log, not a cube");
+    assert!(
+        (log.translation.y - (world_to_render([1, 0, 0]).y - 0.36)).abs() < 1e-6,
+        "the log lies on the floor: {}",
+        log.translation.y
+    );
+    assert_eq!(material_rgb(&app, &log_material), [164, 116, 66]);
+    assert_ne!(
+        material_rgb(&app, &stone_material),
+        material_rgb(&app, &log_material),
+        "wood must not be drawn in stone's material"
+    );
+}
+
+/// 12.7 Task 0.2: four logs on one cell are drawn stacked, at four DISTINCT heights, in ascending
+/// id order, one log height apart. A lone stone keeps its floor height.
+#[test]
+fn four_logs_on_one_cell_draw_at_four_distinct_heights() {
+    let mut start = snapshot_with_dims(
+        Dims { x: 2, y: 1, z: 1 },
+        vec![Tile::Empty, Tile::Empty],
+        Vec::new(),
+    );
+    // Listed out of id order on purpose: the stack is by ascending id, not by wire order.
+    start.items = [13, 11, 10, 12]
+        .map(|id| Item {
+            id,
+            pos: [1, 0, 0],
+            kind: protocol::ItemKind::Wood,
+        })
+        .to_vec();
+    start.items.push(Item {
+        id: 99,
+        pos: [0, 0, 0],
+        kind: protocol::ItemKind::Stone,
+    });
+    let mut app = headless_app(start);
+    app.update();
+    app.update();
+
+    let floor = world_to_render([1, 0, 0]).y - 0.36;
+    for (n, id) in [10, 11, 12, 13].into_iter().enumerate() {
+        let y = projected_item_pose(&mut app, id).0.translation.y;
+        assert!(
+            (y - (floor + 0.28 * n as f32)).abs() < 1e-5,
+            "log {id} is number {n} in the stack and sits at {y}, wanted {}",
+            floor + 0.28 * n as f32
+        );
+    }
+    assert!(
+        (projected_item_pose(&mut app, 99).0.translation.y - (world_to_render([0, 0, 0]).y - 0.3))
+            .abs()
+            < 1e-6,
+        "a lone stone is not lifted"
+    );
+}
+
+/// 12.7 AC9: a carried log is drawn at the carry offset at the LOG's scale, and put down it goes
+/// back to the cell at the log's scale.
+#[test]
+fn a_carried_log_is_drawn_at_the_log_scale() {
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [0, 0, 0],
+        kind: protocol::ItemKind::Wood,
+    }];
+    let mut app = headless_app(start);
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
+        items: vec![Item {
+            id: 70,
+            pos: at,
+            kind: protocol::ItemKind::Wood,
+        }],
+        ..delta_at(tick, Vec::new(), vec![entity])
+    };
+    apply_delta(
+        &mut app,
+        with_item(
+            1,
+            working(
+                7,
+                [0, 0, 0],
+                JobState::Walk,
+                Some(protocol::DwarfJob::Haul),
+                Some(70),
+            ),
+            [0, 0, 0],
+        ),
+    );
+    for _ in 0..4 {
+        app.update();
+    }
+    let dwarf_scale = {
+        let mut query = app.world_mut().query::<(&WorldProjected, &Transform)>();
+        query
+            .iter(app.world())
+            .find(|(marker, _)| marker.0 == 7)
+            .map(|(_, transform)| transform.scale)
+            .expect("the dwarf is projected")
+    };
+    let held = projected_item_pose(&mut app, 70).0;
+    assert_eq!(held.translation, gui::appearance::CARRY_OFFSET);
+    let drawn = held.scale * dwarf_scale;
+    assert!(
+        (drawn - Vec3::new(0.7, 0.28, 0.28)).abs().max_element() < 1e-6,
+        "a carried log is drawn as a log, not a stone: {drawn:?}"
+    );
+
+    apply_delta(&mut app, with_item(2, dwarf(7, [1, 0, 0]), [1, 0, 0]));
+    for _ in 0..20 {
+        app.update();
+    }
+    let dropped = projected_item_pose(&mut app, 70).0;
+    assert_eq!(dropped.scale, Vec3::new(0.7, 0.28, 0.28));
+    assert!((dropped.translation.y - (world_to_render([1, 0, 0]).y - 0.36)).abs() < 1e-6);
+}
+
+/// 12.7 Task 0.1: a woodcutter working a cut plays the Dig clip, and only while he works it.
+#[test]
+fn a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip() {
+    use gui::project::{DwarfClip, dwarf_clip};
+    let cut = protocol::DwarfJob::Cut { target: [2, 0, 0] };
+    let working_cut = working(1, [0, 0, 0], JobState::Work, Some(cut), None);
+    assert_eq!(dwarf_clip(&working_cut), DwarfClip::Dig);
+    // Still walking to the tree: not a swing.
+    let walking = working(1, [0, 0, 0], JobState::Walk, Some(cut), None);
+    assert_eq!(dwarf_clip(&walking), DwarfClip::Walk);
+
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0])],
+    ));
+    app.update();
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![working(7, [0, 0, 0], JobState::Work, Some(cut), None)],
+        ),
+    );
+    app.update();
+    assert_eq!(dwarf_clip_of(&mut app, 7), DwarfClip::Dig);
+}
+
+/// 12.7 Task 0.1: and he faces the trunk while he does it.
+#[test]
+fn a_woodcutter_working_a_cut_faces_the_trunk() {
+    use bevy::prelude::Quat;
+    use std::f32::consts::FRAC_PI_2;
+    let east = Quat::from_rotation_y(-FRAC_PI_2);
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [0, 1, 0])],
+    ));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let cut_east = protocol::DwarfJob::Cut { target: [1, 1, 0] };
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![working(7, [0, 1, 0], JobState::Work, Some(cut_east), None)],
+        ),
+    );
+    for _ in 0..20 {
+        app.update();
+    }
+    let drawn = drawn_rotation(&mut app, 7);
+    assert!(
+        drawn.dot(east).abs() > 1.0 - 1e-5,
+        "a cut to his east faces east, drew {drawn:?}"
+    );
 }

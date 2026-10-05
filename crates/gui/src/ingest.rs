@@ -1458,7 +1458,8 @@ fn parse_drag(value: OsString) -> anyhow::Result<ScriptedDragSpec> {
         "channel" => DesignateMode::Channel,
         "stockpile" => DesignateMode::Stockpile,
         "clear" => DesignateMode::Clear,
-        _ => bail!("invalid --drag mode; expected dig,channel,stockpile,clear"),
+        "cut" => DesignateMode::Cut,
+        _ => bail!("invalid --drag mode; expected dig,channel,stockpile,clear,cut"),
     };
     let parse_coordinate = |name: &str, value: &str| -> anyhow::Result<f32> {
         let value: f32 = value
@@ -1542,6 +1543,7 @@ fn mode_key(mode: DesignateMode) -> KeyCode {
         DesignateMode::Channel => KeyCode::Digit2,
         DesignateMode::Stockpile => KeyCode::Digit3,
         DesignateMode::Clear => KeyCode::Digit4,
+        DesignateMode::Cut => KeyCode::Digit5,
         DesignateMode::None => unreachable!("a scripted drag always names an active mode"),
     }
 }
@@ -4728,6 +4730,21 @@ mod tests {
         }
     }
 
+    /// 12.7: `--drag cut,...` names the cut mode and presses the key that arms it.
+    #[test]
+    fn a_scripted_drag_can_name_the_cut_mode() {
+        use super::{DesignateMode, mode_key, parse_drag};
+        let spec = parse_drag(OsString::from("cut,10,20,30,40")).expect("cut is a drag mode");
+        assert_eq!(spec.mode, DesignateMode::Cut);
+        assert_eq!((spec.start.x, spec.start.y), (10.0, 20.0));
+        assert_eq!((spec.end.x, spec.end.y), (30.0, 40.0));
+        assert_eq!(mode_key(DesignateMode::Cut), KeyCode::Digit5);
+        assert!(
+            parse_drag(OsString::from("fell,1,2,3,4")).is_err(),
+            "an unknown mode must still be refused"
+        );
+    }
+
     /// No control of ours may sit on a key something else has already claimed.
     ///
     /// This is the check that did not exist when 11.2 put dof and haze on F1 and F2 -- keys
@@ -4810,6 +4827,7 @@ mod tests {
             (KeyCode::Digit2, "designate channel (designate.rs)"),
             (KeyCode::Digit3, "designate stockpile (designate.rs)"),
             (KeyCode::Digit4, "designate clear (designate.rs)"),
+            (KeyCode::Digit5, "designate cut (designate.rs)"),
         ] {
             bound.push((key, site.to_string()));
         }
@@ -6102,7 +6120,7 @@ mod tests {
                     .resource::<crate::slice::SliceLevel>()
                     .readout(false, None)
             ),
-            "1 dig  2 channel  3 stockpile  4 clear   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
+            "1 dig  2 channel  3 stockpile  4 clear  5 cut   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
             "22:00   elapsed 0d 00:00   speed normal".to_string(),
             "".to_string(),
             // The selected dwarf's name line, empty with no selection.

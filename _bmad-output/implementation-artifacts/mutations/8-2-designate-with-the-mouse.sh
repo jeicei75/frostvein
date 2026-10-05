@@ -204,7 +204,8 @@ PY
 mutation "a scripted drag that designates nothing still passes" gui mark_counts_are_checked_against_the_mirror_not_merely_against_zero <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
-old = """            DesignateMode::Dig | DesignateMode::Channel => assert!(
+# Re-pointed 2026-10-05 (12.7): a cut drag shares dig's non-zero check, so the arm is `Dig | Channel | Cut`; the `> 0` -> `>= 0` sabotage is unchanged.
+old = """            DesignateMode::Dig | DesignateMode::Channel | DesignateMode::Cut => assert!(
                 self.expected_designations > 0,"""
 assert s.count(old) == 1
 p.write_text(s.replace(old, old.replace('> 0,', '>= 0,')))

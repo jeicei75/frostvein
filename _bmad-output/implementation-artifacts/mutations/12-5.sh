@@ -18,13 +18,18 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                .and_then(|(_, stone)| *stone)\n                .filter(|_| false),\n'))
 PY
 
+# Re-pointed 2026-10-05 (12.7): `dwarf_clip`'s match gained the `Cut` arm (a woodcutter in Work swings), so the quoted `matches!` is the three-arm form; the sabotage still moves the carry test ahead of it.
 mutation "Carry is preferred over Dig" gui digging_outranks_carrying_in_the_clip_choice <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '''    if entity.state == protocol::JobState::Work
         && matches!(
             entity.job,
-            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
+            Some(
+                protocol::DwarfJob::Dig { .. }
+                    | protocol::DwarfJob::Channel { .. }
+                    | protocol::DwarfJob::Cut { .. }
+            )
         )
     {
         DwarfClip::Dig
@@ -38,7 +43,11 @@ p.write_text(s.replace(old, '''    if entity.carrying.is_some() {
     } else if entity.state == protocol::JobState::Work
         && matches!(
             entity.job,
-            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
+            Some(
+                protocol::DwarfJob::Dig { .. }
+                    | protocol::DwarfJob::Channel { .. }
+                    | protocol::DwarfJob::Cut { .. }
+            )
         )
     {
         DwarfClip::Dig
@@ -62,17 +71,19 @@ PY
 mutation "a digging dwarf no longer faces his target" gui a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    let Some(protocol::DwarfJob::Dig { target }) = entity.job else {\n'
+# Re-pointed 2026-10-05 (12.7): `dig_yaw` also faces a `Cut` target, so the `let Some(..)` pattern is `Dig | Cut` and rustfmt wraps it; the sabotage still blinds it.
+old = '    let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job\n    else {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    let Some(protocol::DwarfJob::Dig { target }) = entity.job.filter(|_| false) else {\n'))
+p.write_text(s.replace(old, '    let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job.filter(|_| false)\n    else {\n'))
 PY
 
 mutation "the blend writer moves a carried stone" gui a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        } else if let Some(position) = items.get(&marker.0).filter(|_| parent.is_none()) {\n'
+# Re-pointed 2026-10-05 (12.7): the blend's item map now holds the whole item (kind and stack), so the binding is `item`, not `position`.
+old = '        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none()) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        } else if let Some(position) = items.get(&marker.0).filter(|_| parent.is_none() || true) {\n'))
+p.write_text(s.replace(old, '        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none() || true) {\n'))
 PY
 
 mutation "clips are bound by index again" gui each_clip_binds_the_label_of_its_own_name_in_export_order <<'PY'
