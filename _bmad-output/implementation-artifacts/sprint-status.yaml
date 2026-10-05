@@ -2539,7 +2539,7 @@ development_status:
   #     Seat ruled 2026-10-03: a dig is 10 swings (DIG_WORK_TICKS 50; hauls keep WORK_TICKS 5), stop first, stop-then-drop.
   #     AC10 PASSED at Wolf's seat 2026-10-03 ("ok.. well need to fine tune it later on", 9e347da); #162/#163 filed.
   #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
-  12-6-wolf-gives-them-their-trades: ready-for-dev
+  12-6-wolf-gives-them-their-trades: in-progress
   #   Created 2026-10-05 on 98149e1. RED on the live wire (12-6-signoff/trade_wire.py): `set_profession` is an
   #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
