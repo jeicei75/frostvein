@@ -142,6 +142,18 @@ graph LR
   data table keyed by `LightKind`, extending the parent's color-as-data
   convention (AD-4). Vocabulary lands per AD-6: `sim-core` source of truth,
   mirrored serde enums in `protocol`, exhaustive `match` bridges.
+- **Amended 2026-10-05 (Story 12.7):** the 2026-08-09 sentence "digging a
+  tree tile removes the tile and drops no item … wood items are deferred"
+  is superseded, not deleted. Dig and channel never take tree tiles: a dig
+  mark never lands on `TreeTrunk`/`TreeFoliage`, and a channel mark never
+  lands on a cell standing on one. Trees are felled by a `cut` designation
+  (one mark at the trunk's base), worked by a woodcutter. A cut removes one
+  whole tree: its trunk column plus the `TreeFoliage` in the 3×3 column
+  around it, from the base to one above the top trunk cell. It is not a
+  flood fill, because neighbouring crowns can touch. It leaves one wood
+  item per trunk cell at the base. `protocol::Item` gains `kind`
+  (`ItemKind` = `Stone | Wood`), an M3 vocabulary growth in the sense
+  above: a typed field, with the framing unchanged.
 
 ### AD-17 — The evidence ladder for a real renderer
 

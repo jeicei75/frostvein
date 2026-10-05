@@ -326,8 +326,8 @@ fn commands_for(
         // sits one cell across the entered face. Clearing only one of them leaves the other
         // standing with no way for the boss to remove it at all.
         //
-        // NOTE: 12.7 adds a fourth, the cut-target rect. Three commands per clear rather than two brings the 256-command bound
-        // fractionally closer. That bound's split-pair hazard is already an open deferred item
+        // NOTE: three commands per clear rather than two, which brings the 256-command bound
+        // fractionally closer, and 12.7 adds a fourth (the cut-target rect). That bound's split-pair hazard is already an open deferred item
         // and is not made materially worse by one more command.
         DesignateMode::Clear => std::iter::once(Command::CancelDesignation { rect: picked_rect })
             .chain(surface.iter().flat_map(|rect| {
