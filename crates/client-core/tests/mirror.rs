@@ -20,7 +20,7 @@ const FIRST_DELTA_WIRE: &str = r#"{
         {"id":2,"kind":"torch","pos":[1,0,0],"state":"idle","light":"torch"}
     ],
     "designations":[], "zones":[{"pos":[1,0,0]}],
-    "items":[{"id":9,"pos":[0,0,0]}], "speed":"fast"
+    "items":[{"id":9,"pos":[0,0,0],"kind":"stone"}], "speed":"fast"
 }"#;
 
 const SECOND_DELTA_WIRE: &str = r#"{

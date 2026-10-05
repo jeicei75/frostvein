@@ -11,6 +11,11 @@ pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
     match refusal {
         protocol::Refusal::PlaceStockpile { .. } => "stockpile refused: no valid cells",
         protocol::Refusal::SetProfession { .. } => "trade refused: no such dwarf",
+        protocol::Refusal::Designate { kind, .. } => match kind {
+            protocol::DesignationKind::Cut => "cut refused: no tree",
+            protocol::DesignationKind::Dig => "dig refused: nothing to dig",
+            protocol::DesignationKind::Channel => "channel refused: nothing to channel",
+        },
     }
 }
 
@@ -387,6 +392,27 @@ mod tests {
                 protocol::Refusal::SetProfession { dwarf: 999 },
                 "trade refused: no such dwarf",
             ),
+            (
+                protocol::Refusal::Designate {
+                    kind: protocol::DesignationKind::Cut,
+                    rect,
+                },
+                "cut refused: no tree",
+            ),
+            (
+                protocol::Refusal::Designate {
+                    kind: protocol::DesignationKind::Dig,
+                    rect,
+                },
+                "dig refused: nothing to dig",
+            ),
+            (
+                protocol::Refusal::Designate {
+                    kind: protocol::DesignationKind::Channel,
+                    rect,
+                },
+                "channel refused: nothing to channel",
+            ),
         ] {
             assert_eq!(refusal_text(&refusal), text);
         }
@@ -425,6 +451,7 @@ mod tests {
             items: vec![Item {
                 id: 9,
                 pos: [0, 0, 0],
+                kind: protocol::ItemKind::Stone,
             }],
             speed: Speed::Normal,
             tick: 9,

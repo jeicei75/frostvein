@@ -32,14 +32,7 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
             .collect(),
-        items: world
-            .items()
-            .into_iter()
-            .map(|(id, pos)| protocol::Item {
-                id: id.0,
-                pos: pos_out(pos),
-            })
-            .collect(),
+        items: items_out(world),
         speed,
         tick: world.tick(),
     }
@@ -84,17 +77,34 @@ pub fn delta(
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
             .collect(),
-        items: world
-            .items()
-            .into_iter()
-            .map(|(id, pos)| protocol::Item {
-                id: id.0,
-                pos: pos_out(pos),
-            })
-            .collect(),
+        items: items_out(world),
         speed,
 
         refusals,
+    }
+}
+
+/// `items()` and `item_kinds()` are both sorted ascending by `Id`, so they zip one to one.
+fn items_out(world: &sim_core::World) -> Vec<protocol::Item> {
+    world
+        .items()
+        .into_iter()
+        .zip(world.item_kinds())
+        .map(|((id, pos), (kind_id, kind))| {
+            debug_assert_eq!(id, kind_id);
+            protocol::Item {
+                id: id.0,
+                pos: pos_out(pos),
+                kind: item_kind_out(kind),
+            }
+        })
+        .collect()
+}
+
+fn item_kind_out(kind: sim_core::ItemKind) -> protocol::ItemKind {
+    match kind {
+        sim_core::ItemKind::Stone => protocol::ItemKind::Stone,
+        sim_core::ItemKind::Wood => protocol::ItemKind::Wood,
     }
 }
 
@@ -177,6 +187,7 @@ fn dwarf_job(job: sim_core::Job) -> protocol::DwarfJob {
     match job.kind {
         sim_core::JobKind::Dig => protocol::DwarfJob::Dig { target },
         sim_core::JobKind::Channel => protocol::DwarfJob::Channel { target },
+        sim_core::JobKind::Cut => protocol::DwarfJob::Cut { target },
         // NOTE: a haul's `target` is the stone's position at creation and goes stale at pick-up,
         // so it is not on the wire.
         sim_core::JobKind::Haul { .. } => protocol::DwarfJob::Haul,
@@ -258,6 +269,7 @@ pub(crate) fn designation_kind_in(kind: protocol::DesignationKind) -> sim_core::
     match kind {
         protocol::DesignationKind::Dig => sim_core::DesignationKind::Dig,
         protocol::DesignationKind::Channel => sim_core::DesignationKind::Channel,
+        protocol::DesignationKind::Cut => sim_core::DesignationKind::Cut,
     }
 }
 
@@ -265,6 +277,7 @@ fn designation_kind_out(kind: sim_core::DesignationKind) -> protocol::Designatio
     match kind {
         sim_core::DesignationKind::Dig => protocol::DesignationKind::Dig,
         sim_core::DesignationKind::Channel => protocol::DesignationKind::Channel,
+        sim_core::DesignationKind::Cut => protocol::DesignationKind::Cut,
     }
 }
 
@@ -290,6 +303,10 @@ pub(crate) fn refusal_out(refusal: sim_core::Refusal) -> protocol::Refusal {
         sim_core::Refusal::SetProfession { dwarf } => {
             protocol::Refusal::SetProfession { dwarf: dwarf.0 }
         }
+        sim_core::Refusal::Designate { kind, rect } => protocol::Refusal::Designate {
+            kind: designation_kind_out(kind),
+            rect: rect_out(rect),
+        },
     }
 }
 

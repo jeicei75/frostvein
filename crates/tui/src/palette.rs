@@ -113,7 +113,8 @@ pub fn dwarf_colour(colour: DwarfColour) -> Rgb {
 
 pub fn designation_cell(kind: DesignationKind) -> Cell {
     match kind {
-        DesignationKind::Dig => Cell {
+        // 12.7 Task 5: Cut is a stub that draws like Dig until its own `/` cell lands.
+        DesignationKind::Dig | DesignationKind::Cut => Cell {
             glyph: '×',
             fg: (232, 176, 72),
         },

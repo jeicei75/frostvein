@@ -250,6 +250,8 @@ fn projected_marks(app: &mut App) -> Vec<([i32; 3], Option<&'static str>, [i32; 
                 Some(match kind.0 {
                     DesignationKind::Dig => "dig",
                     DesignationKind::Channel => "channel",
+                    // 12.7 Task 4: the cut mark's own headless tests land with the gui.
+                    DesignationKind::Cut => "cut",
                 }),
                 gui::transform::render_to_world(transform.translation),
             )
@@ -940,10 +942,12 @@ fn items_above_the_cut_are_hidden_with_the_entities() {
         Item {
             id: 501,
             pos: [0, 0, 2],
+            kind: protocol::ItemKind::Stone,
         },
         Item {
             id: 502,
             pos: [0, 1, 1],
+            kind: protocol::ItemKind::Stone,
         },
     ];
     let mut app = headless_app(snapshot);
@@ -2043,6 +2047,7 @@ fn snapshot_item_receives_a_render_mesh() {
     snapshot.items = vec![Item {
         id: 42,
         pos: [1, 0, 0],
+        kind: protocol::ItemKind::Stone,
     }];
     let mut app = headless_app(snapshot);
 
@@ -2071,6 +2076,7 @@ fn a_projected_item_is_rubble_resting_on_the_tile_floor() {
     snapshot.items = vec![Item {
         id: 42,
         pos: [1, 0, 0],
+        kind: protocol::ItemKind::Stone,
     }];
     let mut app = headless_app(snapshot);
 
@@ -5277,6 +5283,7 @@ fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
     start.items = vec![Item {
         id: 70,
         pos: [0, 0, 0],
+        kind: protocol::ItemKind::Stone,
     }];
     let mut app = headless_app(start);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
@@ -5284,7 +5291,11 @@ fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
     )));
     app.update();
     let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
-        items: vec![Item { id: 70, pos: at }],
+        items: vec![Item {
+            id: 70,
+            pos: at,
+            kind: protocol::ItemKind::Stone,
+        }],
         ..delta_at(tick, Vec::new(), vec![entity])
     };
     let parent_of_stone = |app: &mut App| {
@@ -5355,6 +5366,7 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
     start.items = vec![Item {
         id: 70,
         pos: [0, 0, 0],
+        kind: protocol::ItemKind::Stone,
     }];
     let mut app = headless_app(start);
     // Real frame time, so the drop below can be WALKED: a delivered stone stays in his hands
@@ -5365,7 +5377,11 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
     app.update();
 
     let with_item = |tick: u64, entity: Entity, at: [i32; 3]| Delta {
-        items: vec![Item { id: 70, pos: at }],
+        items: vec![Item {
+            id: 70,
+            pos: at,
+            kind: protocol::ItemKind::Stone,
+        }],
         ..delta_at(tick, Vec::new(), vec![entity])
     };
     let stone = |app: &mut App| {

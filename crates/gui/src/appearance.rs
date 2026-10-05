@@ -203,6 +203,8 @@ pub fn designation_color(kind: DesignationKind) -> Color {
     match kind {
         DesignationKind::Dig => Color::srgb_u8(56, 132, 250),
         DesignationKind::Channel => Color::srgb_u8(150, 96, 230),
+        // 12.7 Task 4: a stub that borrows Dig's colour until Cut's own cold literal lands.
+        DesignationKind::Cut => Color::srgb_u8(56, 132, 250),
     }
 }
 

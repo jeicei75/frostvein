@@ -1213,6 +1213,7 @@ mod tests {
         snapshot.items = vec![Item {
             id: 9,
             pos: [3, 1, 1],
+            kind: protocol::ItemKind::Stone,
         }];
         let named = |id, x, colour| Entity {
             id,
@@ -1276,10 +1277,12 @@ mod tests {
             Item {
                 id: 5,
                 pos: [1, 1, 1],
+                kind: protocol::ItemKind::Stone,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 2],
+                kind: protocol::ItemKind::Stone,
             },
         ];
         snapshot.entities = vec![Entity {
@@ -1330,10 +1333,12 @@ mod tests {
             Item {
                 id: 5,
                 pos: [1, 1, 1],
+                kind: protocol::ItemKind::Stone,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 1],
+                kind: protocol::ItemKind::Stone,
             },
         ];
 
@@ -1356,6 +1361,7 @@ mod tests {
         snapshot.items = vec![Item {
             id: 5,
             pos: [0, 0, 0],
+            kind: protocol::ItemKind::Stone,
         }];
         snapshot.entities = vec![Entity {
             id: 1,
@@ -1388,6 +1394,7 @@ mod tests {
         snapshot.items = vec![Item {
             id: 5,
             pos: [1, 1, 0],
+            kind: protocol::ItemKind::Stone,
         }];
         snapshot.entities = vec![
             Entity {
@@ -1472,14 +1479,17 @@ mod tests {
             Item {
                 id: 5,
                 pos: [2, 1, 0],
+                kind: protocol::ItemKind::Stone,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 0],
+                kind: protocol::ItemKind::Stone,
             },
             Item {
                 id: 7,
                 pos: [4, 1, 0],
+                kind: protocol::ItemKind::Stone,
             },
         ];
         snapshot.entities = vec![

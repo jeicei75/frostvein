@@ -2234,7 +2234,8 @@ fn designation_mark_transform(
     level: i32,
 ) -> Transform {
     match kind {
-        DesignationKind::Dig => {
+        // 12.7 Task 4: Cut is a stub that draws like Dig; it belongs at the trunk's base.
+        DesignationKind::Dig | DesignationKind::Cut => {
             let [x, y, _] = position;
             slab_transform([x, y, dig_mark_level(mirror, position, level)], 0.54)
         }
@@ -2811,7 +2812,8 @@ impl ProjectionAssets {
 
     fn designation_material(&self, kind: DesignationKind) -> Handle<StandardMaterial> {
         match kind {
-            DesignationKind::Dig => self.dig_mark.clone(),
+            // 12.7 Task 4: Cut is a stub that borrows the dig material.
+            DesignationKind::Dig | DesignationKind::Cut => self.dig_mark.clone(),
             DesignationKind::Channel => self.channel_mark.clone(),
         }
     }

@@ -806,6 +806,7 @@ fn capture_dig_replay(changes: bool) -> String {
                     .then_some(protocol::Item {
                         id: 12,
                         pos: TARGET,
+                        kind: protocol::ItemKind::Stone,
                     })
                     .into_iter()
                     .collect(),
@@ -1139,7 +1140,11 @@ fn capture_haul_replay(changes: bool) -> String {
                 }],
                 designations: Vec::new(),
                 zones: vec![protocol::Zone { pos: PILE }],
-                items: vec![protocol::Item { id: 12, pos: stone }],
+                items: vec![protocol::Item {
+                    id: 12,
+                    pos: stone,
+                    kind: protocol::ItemKind::Stone,
+                }],
                 speed: protocol::Speed::Normal,
 
                 refusals: Vec::new(),
