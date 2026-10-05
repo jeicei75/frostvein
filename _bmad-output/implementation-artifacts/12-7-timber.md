@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.6's creation
 
 # Story 12.7: Timber
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -281,7 +281,7 @@ Task 0, before any gui or tui display is built. Wolf ruled Task 0 at creation.
     - The 2026-08-09 "drops no item / wood deferred" sentence is superseded, not deleted.
   - [x] README: the gui key row (`:202`) gains `5` cut. The flags table gains `--drag … cut` (`--drag`
     itself is missing there, `:266-286`). The tui legend (`:64-73`) gains `/` and `=`.
-- [ ] **Task 7: the live recipe, the seat (AC12), then the full gate.**
+- [x] **Task 7: the live recipe, the seat (AC12), then the full gate.**
   - [x] Run the Verification recipe: GREEN, then the deliberate RED (row 3). Record both outputs.
   - [x] Write `12-7-signoff/vehicle-card.md` in the seat's launch form. Say where to look: the hint bar is
     bottom-left, the marks are at the pines' feet, and the log is at the foot of the felled pine.
@@ -506,6 +506,9 @@ cell). Read the marks at their feet. Nain (purple)
   `empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_them` emptied z 0 (the
   world's floor, nothing under it), so its fixture gained a floor; its assertions are unchanged. Row 17 KILLED.
   Fixed in `aed8c5b`; gui headless 112/112, gui lib 231 pass, clippy clean.
+- **AC12 PASSED at Wolf's seat** (2026-10-05, `4be19a0`): "ok .. that works now". He also saw a log
+  leave the ground as the hauler walks into it: that is #164 effect 1 (pick-up not gated on the drawn
+  body), out of 12.7's scope by its guardrail, and recorded on #164.
 - **Full gate GREEN** on `a7b1ded` (before the #168 fix): `RUST_TEST_THREADS=1 scripts/gate.sh`, 3251 s (cargo test 237 s,
   pixel guards 2978 s), `GATE GREEN`, exit 0.
 
@@ -573,3 +576,4 @@ cell). Read the marks at their feet. Nain (purple)
 | 2026-10-05 | Task 0 ruled by Wolf: draft approved with the Dig clip as the cut placeholder; one log per trunk cell (over the recommended one per pine), stacked in the gui; zero-cell dig/channel/cut rects all refused; refusal texts as written. |
 | 2026-10-05 | Dev (Sonnet 5.5 agents A and B, Opus verifying): `designate cut`, `DwarfJob::Cut`, `ItemKind` and `Refusal::Designate` on the wire; whole-tree felling into one log per trunk cell; dig/channel never take trees; zero-cell rects refused; gui cut mode `5`, cut mark, stacked logs, Dig clip placeholder; tui `/` and `=`. Live wire OK (4 logs) and the deliberate RED shown; 20/20 + 24/24 re-pointed mutations killed; spine AD-16 amended; README; seat card. Full gate GREEN 3251 s on `a7b1ded`. Awaiting Wolf's seat (AC12). |
 | 2026-10-05 | Seat (AC12): Wolf "works .. but cut trees have some blocks in the air". #168 filed; dig-debris chips spawned over air on every emptied tree tile. Fixed (`aed8c5b`): chips only over a solid or ramp floor. Mutation row 17 added and KILLED. Back to the seat for the floating blocks only. |
+| 2026-10-05 | AC12 PASSED at Wolf's seat ("that works now", `4be19a0`). The log popping into the hauler's hands is #164 (out of scope; recorded there). Status -> review. Full gate last green on `a7b1ded`; re-run before the PR. |
