@@ -93,7 +93,11 @@ for line in f:
         if me.get("profession") == "hauler" and reassigned_seen is None:
             reassigned_seen = tick
         job = me.get("job")
-        if tick > sent_at + 2 and isinstance(job, dict) and "channel" in job:
+        # Judged from the first delta that shows the new trade, not from the send: the command
+        # lands on a later loop iteration (AD-10), and at fast4x the client's send trails the
+        # daemon by several ticks (5 measured at dev, 2026-10-05). AC2: the trade change and
+        # the release are one command, so no delta may show the new trade AND the old job.
+        if reassigned_seen is not None and isinstance(job, dict) and "channel" in job:
             still_holding = still_holding or tick
         for other in dwarves.values():
             job = other.get("job")
