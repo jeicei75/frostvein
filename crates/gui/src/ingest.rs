@@ -31,9 +31,10 @@ use bevy::{
     post_process::{bloom::Bloom, dof::DepthOfField},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
-        DirectionalLight, GlobalTransform, GlobalZIndex, Has, KeyCode, Node, PerspectiveProjection,
-        PositionType, Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time,
-        Transform, TransformSystems, Vec2, Vec3, Window, With, Without, px,
+        DirectionalLight, GlobalTransform, GlobalZIndex, Has, KeyCode, Local, Node,
+        PerspectiveProjection, PositionType, Projection, Query, Res, ResMut, Resource, Text,
+        TextColor, TextFont, TextSpan, Time, Transform, TransformSystems, Vec2, Vec3, Window, With,
+        Without, px,
     },
     render::renderer::RenderAdapterInfo,
     window::PrimaryWindow,
@@ -1734,7 +1735,9 @@ pub struct Hud;
 #[derive(Component)]
 pub struct ClockReadout;
 
-/// The selected dwarf's name, in his tunic colour. Empty with no selection.
+/// The name slot. Nothing selected: the crew roster, one `Name  trade` line per dwarf in id order.
+/// A dwarf selected: his name, then his trade and the key that changes it. The text lives in
+/// `TextSpan` children, one per colour; the root is empty.
 #[derive(Component)]
 pub struct NameReadout;
 
@@ -1757,33 +1760,76 @@ fn setup_name_readout(mut commands: Commands) {
     ));
 }
 
+/// The coloured pieces of the name slot, read from the MIRROR: the trade shown is the one the
+/// daemon last reported, never the one a key asked for.
+fn name_readout_spans(mirror: &Mirror, selected: Option<u32>) -> Vec<(String, Color)> {
+    let grey = crate::appearance::TRADE_TEXT_COLOR;
+    let trade = |entity: &protocol::Entity| entity.profession.map(client_core::profession_text);
+    if let Some(id) = selected {
+        let Some(entity) = mirror.entities().find(|entity| entity.id == id) else {
+            return Vec::new();
+        };
+        let Some(identity) = entity.identity else {
+            return Vec::new();
+        };
+        let mut spans = Vec::new();
+        let name = client_core::dwarf_name_text(identity.name);
+        let color = crate::appearance::dwarf_tunic_color(identity.colour);
+        match trade(entity) {
+            Some(trade) => {
+                spans.push((format!("{name}\n"), color));
+                spans.push((format!("{trade}   T: change trade"), grey));
+            }
+            None => spans.push((name.to_owned(), color)),
+        }
+        return spans;
+    }
+    let mut spans = Vec::new();
+    let dwarves = mirror
+        .entities()
+        .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        .filter_map(|entity| Some((entity, entity.identity?)))
+        .collect::<Vec<_>>();
+    for (index, (entity, identity)) in dwarves.iter().enumerate() {
+        // NOTE: names are padded to the longest (6) so the trade column lines up; no wrapping logic.
+        let name = format!("{:<7}", client_core::dwarf_name_text(identity.name));
+        let newline = if index + 1 < dwarves.len() { "\n" } else { "" };
+        spans.push((name, crate::appearance::dwarf_tunic_color(identity.colour)));
+        spans.push((
+            format!("{}{newline}", trade(entity).unwrap_or_default()),
+            grey,
+        ));
+    }
+    spans
+}
+
 fn update_name_readout(
+    mut commands: Commands,
     mirror: Res<MirrorResource>,
     selected: Res<crate::pick::SelectedDwarf>,
-    mut readout: Query<(&mut Text, &mut TextColor), With<NameReadout>>,
+    readout: Query<bevy::prelude::Entity, With<NameReadout>>,
+    mut shown: Local<Vec<(String, Color)>>,
 ) {
-    let identity = selected.0.and_then(|id| {
-        mirror
-            .0
-            .entities()
-            .find(|entity| entity.id == id)
-            .and_then(|entity| entity.identity)
-    });
-    let (text, color) = match identity {
-        Some(identity) => (
-            client_core::dwarf_name_text(identity.name),
-            crate::appearance::dwarf_tunic_color(identity.colour),
-        ),
-        None => ("", Color::WHITE),
-    };
-    for (mut readout, mut text_color) in &mut readout {
-        if readout.0 != text {
-            readout.0 = text.to_owned();
-        }
-        if text_color.0 != color {
-            text_color.0 = color;
-        }
+    let spans = name_readout_spans(&mirror.0, selected.0);
+    if spans == *shown {
+        return;
     }
+    for root in &readout {
+        commands
+            .entity(root)
+            .despawn_children()
+            .with_children(|root| {
+                for (text, color) in &spans {
+                    root.spawn((
+                        TextSpan::new(text.clone()),
+                        TextFont::from_font_size(22.0),
+                        TextColor(*color),
+                        ClientLocal,
+                    ));
+                }
+            });
+    }
+    *shown = spans;
 }
 
 /// 8.3 (Wolf): time of day, sim time elapsed, and the daemon's speed, in one line.
@@ -3498,41 +3544,142 @@ mod tests {
         assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed paused");
     }
 
-    /// 12.2 AC6. Captures hide every HUD element, so the evidence is this test: the name line
-    /// shows the SELECTED dwarf's name in his tunic colour, and nothing with no selection.
-    #[test]
-    fn the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears() {
-        use protocol::{DwarfColour, DwarfName, Identity};
-        let named = |id, x, name, colour| protocol::Entity {
+    /// The name slot's spans, in order: `(text, colour)` per `TextSpan` child of the readout.
+    fn name_spans(app: &mut App) -> Vec<(String, [u8; 3])> {
+        let world = app.world_mut();
+        let root = world
+            .query_filtered::<bevy::prelude::Entity, With<super::NameReadout>>()
+            .single(world)
+            .unwrap();
+        let children: Vec<_> = world
+            .entity(root)
+            .get::<bevy::prelude::Children>()
+            .map(|children| children.iter().collect())
+            .unwrap_or_default();
+        children
+            .into_iter()
+            .map(|child| {
+                let entity = world.entity(*child);
+                (
+                    entity.get::<bevy::prelude::TextSpan>().unwrap().0.clone(),
+                    bevy::color::ColorToPacked::to_u8_array_no_alpha(
+                        entity
+                            .get::<bevy::prelude::TextColor>()
+                            .unwrap()
+                            .0
+                            .to_srgba(),
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    fn name_text(app: &mut App) -> String {
+        name_spans(app).into_iter().map(|(text, _)| text).collect()
+    }
+
+    fn trade_dwarf(
+        id: u32,
+        name: protocol::DwarfName,
+        colour: protocol::DwarfColour,
+        profession: protocol::Profession,
+    ) -> protocol::Entity {
+        protocol::Entity {
             id,
             kind: protocol::EntityKind::Dwarf,
-            pos: [x, 0, 0],
+            pos: [id as i32, 0, 0],
             state: protocol::JobState::Idle,
             light: None,
-            identity: Some(Identity { name, colour }),
-            profession: None,
+            identity: Some(protocol::Identity { name, colour }),
+            profession: Some(profession),
             job: None,
             carrying: None,
-        };
+        }
+    }
+
+    fn crew_snapshot() -> Snapshot {
+        use protocol::{DwarfColour as C, DwarfName as N, Profession as P};
         let mut snapshot = snapshot_at_tick(0, Speed::Normal);
         snapshot.entities = vec![
-            named(4, 0, DwarfName::Durin, DwarfColour::Red),
-            named(7, 1, DwarfName::Bifur, DwarfColour::Blue),
+            trade_dwarf(1, N::Nain, C::Purple, P::Woodcutter),
+            trade_dwarf(2, N::Ori, C::Green, P::Hauler),
+            trade_dwarf(3, N::Bifur, C::Red, P::Miner),
+            trade_dwarf(4, N::Frar, C::Gold, P::Hauler),
+            trade_dwarf(5, N::Dori, C::Blue, P::Miner),
+        ];
+        snapshot
+    }
+
+    fn entity_delta(tick: u64, entities: Vec<protocol::Entity>) -> Delta {
+        Delta {
+            msg_type: MessageType::Delta,
+            tick,
+            tiles: Vec::new(),
+            entities,
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            refusals: Vec::new(),
+        }
+    }
+
+    /// 12.6 AC5. Captures hide every HUD element, so the evidence is this test: with nothing
+    /// selected the name slot is the crew roster, one `Name  trade` line per dwarf in id order,
+    /// the name in his tunic colour and the trade in grey, and it follows a delta.
+    #[test]
+    fn the_roster_lists_every_dwarf_in_id_order_and_follows_a_trade_change() {
+        let (mut app, sender, _server) = configured_app_with_snapshot(&[], crew_snapshot());
+        app.update();
+        const GREY: [u8; 3] = [150, 160, 170];
+        // Independent oracle: the approved hexes and the approved grey, written out.
+        let name = |text: &str, rgb| (text.to_owned(), rgb);
+        assert_eq!(
+            name_spans(&mut app),
+            vec![
+                name("Nain   ", [0x80, 0x4C, 0xA8]),
+                name("woodcutter\n", GREY),
+                name("Ori    ", [0x3E, 0x92, 0x4C]),
+                name("hauler\n", GREY),
+                name("Bifur  ", [0xB2, 0x3A, 0x34]),
+                name("miner\n", GREY),
+                name("Frar   ", [0xD6, 0xA4, 0x2C]),
+                name("hauler\n", GREY),
+                name("Dori   ", [0x3C, 0x62, 0xBA]),
+                name("miner", GREY),
+            ]
+        );
+        // A delta carries the FULL entity list, so the changed dwarf rides with the other four.
+        let mut crew = crew_snapshot().entities;
+        crew[2].profession = Some(protocol::Profession::Hauler);
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(entity_delta(1, crew)))))
+            .unwrap();
+        app.update();
+        assert_eq!(
+            name_text(&mut app),
+            "Nain   woodcutter\nOri    hauler\nBifur  hauler\nFrar   hauler\nDori   miner"
+        );
+    }
+
+    /// 12.2 AC6, as 12.6 reshaped it. Captures hide every HUD element, so the evidence is this
+    /// test: the name line shows the SELECTED dwarf's name in his tunic colour, a second grey line
+    /// gives his trade and the key, and Escape (no selection) brings the roster back.
+    #[test]
+    fn the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears() {
+        use protocol::{DwarfColour, DwarfName, Profession};
+        let mut snapshot = snapshot_at_tick(0, Speed::Normal);
+        snapshot.entities = vec![
+            trade_dwarf(4, DwarfName::Durin, DwarfColour::Red, Profession::Miner),
+            trade_dwarf(7, DwarfName::Bifur, DwarfColour::Blue, Profession::Hauler),
         ];
         let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
         app.update();
-        let readout = |app: &mut App| {
-            let world = app.world_mut();
-            let (text, colour) = world
-                .query_filtered::<(&Text, &bevy::prelude::TextColor), With<super::NameReadout>>()
-                .single(world)
-                .unwrap();
-            (
-                text.0.clone(),
-                bevy::color::ColorToPacked::to_u8_array_no_alpha(colour.0.to_srgba()),
-            )
-        };
-        assert_eq!(readout(&mut app).0, "", "no selection shows nothing");
+        assert_eq!(
+            name_text(&mut app),
+            "Durin  miner\nBifur  hauler",
+            "no selection shows the roster"
+        );
         let select = |app: &mut App, id| {
             app.world_mut()
                 .insert_resource(crate::pick::SelectedDwarf(id));
@@ -3540,14 +3687,26 @@ mod tests {
         };
         select(&mut app, Some(4));
         // Independent oracle: the approved hexes, written out.
-        assert_eq!(readout(&mut app), ("Durin".to_owned(), [0xB2, 0x3A, 0x34]));
+        assert_eq!(
+            name_spans(&mut app),
+            vec![
+                ("Durin\n".to_owned(), [0xB2, 0x3A, 0x34]),
+                ("miner   T: change trade".to_owned(), [150, 160, 170]),
+            ]
+        );
         select(&mut app, Some(7));
-        assert_eq!(readout(&mut app), ("Bifur".to_owned(), [0x3C, 0x62, 0xBA]));
+        assert_eq!(
+            name_spans(&mut app),
+            vec![
+                ("Bifur\n".to_owned(), [0x3C, 0x62, 0xBA]),
+                ("hauler   T: change trade".to_owned(), [150, 160, 170]),
+            ]
+        );
         select(&mut app, None);
         assert_eq!(
-            readout(&mut app).0,
-            "",
-            "clearing the selection empties the line"
+            name_text(&mut app),
+            "Durin  miner\nBifur  hauler",
+            "clearing the selection brings the roster back"
         );
     }
 

@@ -64,9 +64,9 @@ PY
 mutation "hud never shows the name" gui the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/ingest.rs'); s = p.read_text()
-old = '            client_core::dwarf_name_text(identity.name),\n            crate::appearance::dwarf_tunic_color(identity.colour),\n'
+old = '        let name = client_core::dwarf_name_text(identity.name);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            "",\n            crate::appearance::dwarf_tunic_color(identity.colour),\n'))
+p.write_text(s.replace(old, '        let name = "";\n'))
 PY
 
 mutation "dof focus reverted to translation (feet)" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'
