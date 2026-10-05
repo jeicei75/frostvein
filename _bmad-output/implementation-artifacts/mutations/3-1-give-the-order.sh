@@ -276,12 +276,17 @@ PY
 
 mutation "daemon designate arm decodes but discards" simd designation_and_stockpile_changes_reach_both_clients <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7's Designate arm now extends `refusals` with the sim's result; the seam is unchanged.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '''                protocol::Command::Designate { kind, rect } => {
-                    world.apply_command(sim_core::SimCommand::Designate {
-                        kind: bridge::designation_kind_in(kind),
-                        rect: bridge::rect_in(rect),
-                    });
+                    refusals.extend(
+                        world
+                            .apply_command(sim_core::SimCommand::Designate {
+                                kind: bridge::designation_kind_in(kind),
+                                rect: bridge::rect_in(rect),
+                            })
+                            .map(bridge::refusal_out),
+                    );
                 }
 '''
 assert old in s
@@ -303,20 +308,29 @@ PY
 
 mutation "daemon designate intake is blocked while paused" simd designation_is_applied_while_tick_is_paused <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7's Designate arm now extends `refusals` with the sim's result; the seam is unchanged.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '''                protocol::Command::Designate { kind, rect } => {
-                    world.apply_command(sim_core::SimCommand::Designate {
-                        kind: bridge::designation_kind_in(kind),
-                        rect: bridge::rect_in(rect),
-                    });
+                    refusals.extend(
+                        world
+                            .apply_command(sim_core::SimCommand::Designate {
+                                kind: bridge::designation_kind_in(kind),
+                                rect: bridge::rect_in(rect),
+                            })
+                            .map(bridge::refusal_out),
+                    );
                 }
 '''
 new = '''                protocol::Command::Designate { kind, rect } => {
                     if speed != protocol::Speed::Paused {
-                        world.apply_command(sim_core::SimCommand::Designate {
-                            kind: bridge::designation_kind_in(kind),
-                            rect: bridge::rect_in(rect),
-                        });
+                        refusals.extend(
+                            world
+                                .apply_command(sim_core::SimCommand::Designate {
+                                    kind: bridge::designation_kind_in(kind),
+                                    rect: bridge::rect_in(rect),
+                                })
+                                .map(bridge::refusal_out),
+                        );
                     }
                 }
 '''

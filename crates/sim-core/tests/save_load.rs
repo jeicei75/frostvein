@@ -1,6 +1,7 @@
 use sim_core::{
-    DIG_WORK_TICKS, DesignationKind, Dims, DwarfColour, DwarfName, Identity, Job, JobId, JobKind,
-    JobState, LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile, World,
+    DIG_WORK_TICKS, DesignationKind, Dims, DwarfColour, DwarfName, Identity, ItemKind, Job, JobId,
+    JobKind, JobState, LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile,
+    World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -173,6 +174,7 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.identities(), control.identities());
         assert_eq!(loaded.professions(), control.professions());
         assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.item_kinds(), control.item_kinds());
         assert_eq!(loaded.emitters(), control.emitters());
         assert_eq!(loaded.designations(), control.designations());
         assert_eq!(loaded.zones(), control.zones());
@@ -232,6 +234,75 @@ fn a_world_saved_after_a_reassignment_loads_with_the_new_trade_and_steps_identic
 }
 
 #[test]
+fn a_world_saved_mid_cut_with_wood_on_the_ground_loads_and_steps_identically() {
+    let mut saved = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let mut control = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    // Tree A (73,59) then tree B (73,56): A's logs lie at its base while Nain works B's cut.
+    let a_base = Pos {
+        x: 73,
+        y: 59,
+        z: 12,
+    };
+    let b_base = Pos {
+        x: 73,
+        y: 56,
+        z: 13,
+    };
+    let cut = |base: Pos| SimCommand::Designate {
+        kind: DesignationKind::Cut,
+        rect: Rect {
+            min: base,
+            max: base,
+        },
+    };
+    for world in [&mut saved, &mut control] {
+        assert_eq!(world.apply_command(cut(a_base)), None);
+    }
+    while saved.items().is_empty() {
+        assert!(saved.tick() < 3_000, "tree A was never felled");
+        saved.step();
+        control.step();
+    }
+    for world in [&mut saved, &mut control] {
+        assert_eq!(world.apply_command(cut(b_base)), None);
+    }
+    let holds_a_cut = |world: &World| {
+        world.claims().iter().any(|(_, held)| {
+            world
+                .jobs()
+                .iter()
+                .any(|job| Some(job.id) == *held && job.kind == JobKind::Cut)
+        })
+    };
+    while !holds_a_cut(&saved) {
+        assert!(saved.tick() < 3_000, "nobody ever held tree B's cut");
+        saved.step();
+        control.step();
+    }
+    // THE GUARD: the round trip below covers a cut in hand AND wood on the ground.
+    assert!(saved.item_kinds().iter().all(|(_, k)| *k == ItemKind::Wood));
+    assert_eq!(saved.item_kinds().len(), 4);
+
+    let mut loaded = World::from_save(saved.to_save());
+    assert_eq!(loaded.item_kinds(), saved.item_kinds());
+    for _ in 0..300 {
+        loaded.step();
+        control.step();
+        assert_eq!(loaded.tiles(), control.tiles());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.item_kinds(), control.item_kinds());
+        assert_eq!(loaded.designations(), control.designations());
+        assert_eq!(loaded.dwarves(), control.dwarves());
+    }
+    assert!(
+        loaded.item_kinds().len() > 4,
+        "tree B was felled after the load"
+    );
+}
+
+#[test]
 fn save_round_trip_preserves_emitters() {
     let world = World::generate(42, Dims::DEFAULT);
     let expected = world.emitters();
@@ -266,7 +337,7 @@ fn save_round_trip_preserves_a_mid_haul_carry() {
     let mut save = World::generate(42, Dims::DEFAULT).to_save();
     let stone = Pos { x: 9, y: 8, z: 7 };
     save.next_id = 13;
-    save.items = vec![(12, stone)];
+    save.items = vec![(12, stone, ItemKind::Wood)];
     save.jobs = vec![Job {
         id: JobId(7),
         kind: JobKind::Haul { item: 12 },
@@ -292,7 +363,7 @@ fn save_round_trip_preserves_a_mid_haul_carry() {
             .all(|dwarf| dwarf.carrying.is_none())
     );
     assert_eq!(round_trip.jobs[0].kind, JobKind::Haul { item: 12 });
-    assert_eq!(round_trip.items, vec![(12, stone)]);
+    assert_eq!(round_trip.items, vec![(12, stone, ItemKind::Wood)]);
 }
 
 #[test]
@@ -308,7 +379,7 @@ fn save_round_trip_preserves_items_and_current_job() {
     let mut save = World::generate(42, Dims::DEFAULT).to_save();
     let target = Pos { x: 9, y: 8, z: 7 };
     save.next_id = 13;
-    save.items = vec![(12, target)];
+    save.items = vec![(12, target, ItemKind::Stone)];
     save.jobs = vec![Job {
         id: JobId(7),
         kind: JobKind::Dig,
@@ -322,7 +393,7 @@ fn save_round_trip_preserves_items_and_current_job() {
 
     let round_trip = World::from_save(save).to_save();
 
-    assert_eq!(round_trip.items, vec![(12, target)]);
+    assert_eq!(round_trip.items, vec![(12, target, ItemKind::Stone)]);
     assert_eq!(round_trip.jobs.len(), 1);
     assert_eq!(round_trip.jobs[0].id, JobId(7));
     assert_eq!(round_trip.jobs[0].kind, JobKind::Dig);

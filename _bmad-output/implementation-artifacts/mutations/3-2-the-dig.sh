@@ -3,18 +3,27 @@
 
 mutation "Designate ignores the diggability filter" sim-core designations_keep_only_tiles_workable_by_their_kind <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 split the Dig/Channel filter from the new Cut arm and added the tree exclusions; the sabotage still drops the Dig/Channel filter.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                    positions()
-                        .filter(|pos| match kind {
-                            DesignationKind::Dig => {
-                                matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
-                            }
-                            DesignationKind::Channel => terrain.is_standable(*pos),
-                        })
-                        .collect()
+old = '''                        _ => positions()
+                            .filter(|pos| match kind {
+                                DesignationKind::Dig => {
+                                    matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
+                                        && !is_tree(*pos)
+                                }
+                                DesignationKind::Channel => {
+                                    terrain.is_standable(*pos)
+                                        && !is_tree(Pos {
+                                            z: pos.z - 1,
+                                            ..*pos
+                                        })
+                                }
+                                DesignationKind::Cut => unreachable!("handled above"),
+                            })
+                            .collect(),
 '''
 assert old in s
-p.write_text(s.replace(old, '                    positions().collect()\n'))
+p.write_text(s.replace(old, '                        _ => positions().collect(),\n'))
 PY
 
 mutation "Designate ignores MAX_DESIGNATIONS" sim-core designation_budget_refuses_new_tiles_but_updates_existing_tiles_after_them <<'PY'
@@ -64,10 +73,11 @@ PY
 
 mutation "from_save discards items" sim-core save_round_trip_preserves_items_and_current_job <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 items carry a kind (`(id, pos, kind)`).
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        for (id, pos) in items {\n'
+old = '        for (id, pos, kind) in items {\n'
 assert old in s
-p.write_text(s.replace(old, '        for (id, pos) in Vec::<(u32, Pos)>::new() {\n'))
+p.write_text(s.replace(old, '        for (id, pos, kind) in Vec::<(u32, Pos, ItemKind)>::new() {\n'))
 PY
 
 mutation "from_save discards current_job" sim-core save_round_trip_preserves_items_and_current_job <<'PY'
@@ -80,15 +90,9 @@ PY
 
 mutation "bridge drops items from delta" simd completed_dig_streams_dirty_tile_and_item_in_the_same_delta <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 both item lists go through `items_out` (which zips `items()` with `item_kinds()`).
 p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
-old = '''        items: world
-            .items()
-            .into_iter()
-            .map(|(id, pos)| protocol::Item {
-                id: id.0,
-                pos: pos_out(pos),
-            })
-            .collect(),
+old = '''        items: items_out(world),
 '''
 assert s.count(old) == 2
 cut = s.rfind(old)
@@ -166,8 +170,9 @@ PY
 
 mutation "load accepts an out-of-bounds item" simd out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 the item tuple gained a kind: `(id, pos, _)`.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        for (id, pos) in &save.items {
+old = '''        for (id, pos, _) in &save.items {
             if !in_bounds(*pos) {
                 bail!(
                     "save item {id} position {},{},{} is outside dims {}x{}x{}",
@@ -243,13 +248,22 @@ PY
 
 mutation "create_jobs runs during paused command intake" sim-core designated_tiles_become_one_job_each_only_when_the_schedule_runs <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 counts the applied marks and refuses an empty Designate; the sabotage still lands right after the marks are inserted.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''                    designations.0.insert(pos, kind);
+                    applied += 1;
+                }
+                if applied == 0 {
+                    return Some(Refusal::Designate { kind, rect });
                 }
             }
             SimCommand::CancelDesignation { .. } => {
 '''
 new = '''                    designations.0.insert(pos, kind);
+                    applied += 1;
+                }
+                if applied == 0 {
+                    return Some(Refusal::Designate { kind, rect });
                 }
                 drop(designations);
                 let mut paused_schedule = Schedule::default();
@@ -417,17 +431,16 @@ PY
 
 mutation "dig sets the wrong tile" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
 old = '''                JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(material)) => Some((
-                        job.target,
+                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''                JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(material)) => Some((
-                        Pos { z: job.target.z + 1, ..job.target },
+                    Some(Tile::Solid(_)) => Some((Pos { z: job.target.z + 1, ..job.target }, Tile::Empty)),
 '''))
 PY
 
@@ -453,48 +466,41 @@ PY
 
 mutation "channel writes Empty instead of Ramp" sim-core execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''                        Some(Tile::Solid(material)) => Some((
-                            below,
-                            Tile::Ramp(material),
+old = '''                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((
-                            below,
-                            Tile::Empty,
+p.write_text(s.replace(old, '''                        Some(Tile::Solid(_)) => Some((below, Tile::Empty)),
 '''))
 PY
 
 mutation "channel loses the material" sim-core execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''                        Some(Tile::Solid(material)) => Some((
-                            below,
-                            Tile::Ramp(material),
+old = '''                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((
-                            below,
-                            Tile::Ramp(Material::Stone),
+p.write_text(s.replace(old, '''                        Some(Tile::Solid(_)) => Some((below, Tile::Ramp(Material::Stone))),
 '''))
 PY
 
 mutation "stone is not spawned" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''        if yields_stone {
-            let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-            ecs.spawn((Item, item_id, job.target));
-        }
+old = '''        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+        ecs.spawn((Item(ItemKind::Stone), item_id, job.target));
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        let _ = yields_stone;\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "stone reuses an existing id" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
@@ -660,8 +666,9 @@ PY
 
 mutation "load accepts duplicate item entity ids" simd duplicate_item_entity_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 the item tuple gained a kind: `(id, ..)`.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        for (id, _) in &save.items {
+old = '''        for (id, ..) in &save.items {
             if !seen_ids.insert(*id) {
                 bail!("save reuses entity id {id}");
             }
@@ -735,10 +742,11 @@ PY
 
 mutation "stale channel job retries forever" sim-core execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''        let Some((changed_pos, tile, yields_stone)) = change else {
+old = '''        let Some((changed_pos, tile)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
@@ -746,7 +754,7 @@ old = '''        let Some((changed_pos, tile, yields_stone)) = change else {
         };
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''        let Some((changed_pos, tile, yields_stone)) = change else {
+p.write_text(s.replace(old, '''        let Some((changed_pos, tile)) = change else {
             release_claim(ecs, entity);
             continue;
         };
@@ -928,14 +936,15 @@ PY
 
 mutation "terrain mutation leaves other dwarves' cached paths stale" sim-core save_load_recomputes_every_path_invalidated_by_another_dig <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
 old = '''        clear_paths(ecs);
-        if yields_stone {
+        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if yields_stone {\n'))
+p.write_text(s.replace(old, '        let item_id = ecs.resource_mut::<IdAllocator>().allocate();\n'))
 PY
 
 mutation "each claim search gets a fresh node budget" sim-core a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on <<'PY'

@@ -223,8 +223,9 @@ PY
 
 mutation "CancelDesignation cancels haul jobs too" sim-core cancelling_marks_over_a_stone_never_drops_its_haul_job <<'PY'
 import pathlib
+# Re-pointed 2026-10-05 (12.7): 12.7 added `JobKind::Cut` to the tile-job filter; the sabotage still drops the whole filter.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    .filter(|job| matches!(job.kind, JobKind::Dig | JobKind::Channel))\n'
+old = '                    .filter(|job| {\n                        matches!(job.kind, JobKind::Dig | JobKind::Channel | JobKind::Cut)\n                    })\n'
 assert old in s
 p.write_text(s.replace(old, ''))
 PY
