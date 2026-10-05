@@ -236,7 +236,7 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
   - [x] Run the Verification recipe: GREEN, then the deliberate RED. Record both outputs.
   - [x] Write `12-6-signoff/vehicle-card.md` in the seat's launch form. Say where to look: the roster is
     top-right under the clock, and refusals are bottom-left.
-  - [ ] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~55 min, [[gate-ooms-at-default-parallelism]]).
+  - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~55 min, [[gate-ooms-at-default-parallelism]]).
 
 ## Dev Notes
 
@@ -453,6 +453,9 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
   and is filed as **#166** (`bug`, `route:story`). The recipe's criterion is the two lines ("whatever the
   exit code"), and they hold.
 
+- **Full gate GREEN** on `72be96c`, `RUST_TEST_THREADS=1 scripts/gate.sh`, 3413 s (cargo test 231 s, pixel
+  guards 3143 s, mutation tables still apply). AC11 (the seat) is open: `12-6-signoff/vehicle-card.md`.
+
 ### Completion Notes List
 
 - `set_profession` is dispatched before the rect prelude. Because the prelude's and the closing
@@ -492,3 +495,4 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
 | --- | --- |
 | 2026-10-05 | Story created on `98149e1`. RED on the live wire (`trade_wire.py`: `set_profession` unrecognized, profession never changes, no refusal). Look draft `12-6-signoff/draft.md` written. |
 | 2026-10-05 | Task 0 ruled by Wolf: draft approved as drafted; an emptied trade is allowed (no last-of-trade refusal, `TradeRefusal` dropped, refusal is `{dwarf}` only); fixed refusal text. |
+| 2026-10-05 | Dev (Sonnet 5.5 agents A and B, Opus verifying): `set_profession` on the wire, in the sim (`release_claim` of an old-trade job), in simd, both clients' refusal text, gui roster, `T` and `--trade`. 12/12 mutations killed; live wire OK and the deliberate RED shown; `trade_wire.py`'s held-job check corrected; #166 filed (pre-existing `--select` capture ceiling). Full gate GREEN 3413 s on `72be96c`. Awaiting Wolf's seat (AC11). |
