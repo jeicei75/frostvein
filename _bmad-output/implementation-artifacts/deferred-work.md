@@ -2448,3 +2448,21 @@ the story, and one of them is also issue #125.
   Three effects: the pick-up stone pops into his hands; a dropped stone can ride away with him; the dig
   is mostly unseen at Fast. Wolf parked it on #164 at review, 2026-10-04. His seat verdict was "need to
   fine tune it later on".
+
+## Deferred from: code review of 12-6-wolf-gives-them-their-trades (2026-10-05)
+
+- **`gui --select <missing id> --trade` still sends `set_profession`** (edge + feature + acceptance, LOW, RAN;
+  `crates/gui/src/ingest.rs:1791` against `:2677`). `refuse_select_of_a_missing_dwarf` only writes
+  `AppExit::error()`, so `send_commands` writes the line first. Every attached client then shows
+  `trade refused: no such dwarf`, and the world is unchanged. This contradicts `12-6-signoff/draft.md:66`.
+  Fix: give `push_startup_trade` the same dwarf-exists check. The GitHub issue was drafted and is not filed
+  (permission blocked at review).
+- **The roster test reaches "Escape brings the roster back" with `select(None)`, not the Escape key**
+  (acceptance, LOW; `ingest.rs:3787`).
+- **The roster's id-order assert cannot fail on order** (acceptance, LOW; `ingest.rs:3682`). The fixture is
+  pre-sorted, so the order rests on `Mirror.entities` being a `BTreeMap`.
+- **The determinism test's `SetProfession` reassigns an idle woodcutter** (acceptance, LOW;
+  `same_seed_and_commands_remain_deterministic`). `release_claim` determinism is covered only by the
+  save/load round trip.
+- **`trade_change_lines` is silent for a dwarf that first appears, or reappears, in a delta** (edge, LOW;
+  `ingest.rs:1808`). It is unreachable while no dwarf spawns after connect.

@@ -238,6 +238,83 @@ draft (`12-6-signoff/draft.md`) at Task 0, before any gui display is built.
     top-right under the clock, and refusals are bottom-left.
   - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~55 min, [[gate-ooms-at-default-parallelism]]).
 
+### Review Findings
+
+Code review run 1, 2026-10-05, on `9d6ce0a` (diff `98149e1..HEAD`, 24 files). All four layers ran the
+binaries and none timed out. Blind Hunter and Edge Case Hunter ran on Sonnet, with R1 territories; the
+Acceptance and Feature Auditors ran on Opus over the whole diff. Every layer's cargo ran (1.97.1), and every
+suite was green in its own target dir. Live runs:
+- `trade_wire.py` gave `TRADES WIRE OK` three times; reclaim by miner 4 at tick 289 each time.
+- The real gui `--select 2 --trade hauler` printed the `sent` line and then the `trade` line, three times.
+- `a_trade_set_from_the_gui_comes_back_on_the_wire` passed.
+- An attached tui followed the trade change and showed `trade refused: no such dwarf`.
+- The hauler half of AC2 was observed on the wire: stone 11 put down at tick 165 and delivered by Frar at
+  tick 379.
+
+No code defect was found at HIGH or MED. Every finding is in a record or doc, or is a LOW test or instrument
+gap. Tally: 0 decision-needed, 4 patch, 5 defer, 5 dismissed. Layer and severity are in brackets.
+
+- [x] [Review][Patch] **AD-10's Rule line still lists four commands** (acceptance, MED for the doc reader).
+  The new amendment says "only the enumeration grows", and Task 7 says to add `set_profession` to the list.
+  The binding Rule line was not edited (`ARCHITECTURE-SPINE.md:155-156`); 2026-08-06's precedent did edit
+  it. [`_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-01/ARCHITECTURE-SPINE.md:155`]
+- [x] [Review][Patch] **The seat card's step 3 cannot select Bifur as written** (feature, MED for the card
+  reader). Step 2 arms stockpile mode, and nothing disarms it. `select_dwarf` returns early on
+  `*mode != DesignateMode::None` (`pick.rs:112`), and only Escape resets the mode (`designate.rs:162`). A
+  literal click starts a 1x1 stockpile drag, and then `T` does nothing. Add "press `Esc`" before the click.
+  [`_bmad-output/implementation-artifacts/12-6-signoff/vehicle-card.md:51`]
+- [x] [Review][Patch] **The seat card still reads `Seat result: _pending_`** (feature + acceptance, LOW;
+  same file as the patch above). The story and the board record AC11 PASSED ("works", `a5eb634`).
+  [`_bmad-output/implementation-artifacts/12-6-signoff/vehicle-card.md:65`]
+- [x] [Review][Patch] **The seat card implies Dori takes the released mark at once** (feature, LOW; same
+  file). Measured: 272 ticks, about 27 s at Normal. The mark waits behind Dori's earlier marks in FIFO
+  order. [`_bmad-output/implementation-artifacts/12-6-signoff/vehicle-card.md:55`]
+- [x] [Review][Defer] **`--select <missing id> --trade` still sends `set_profession`** (edge + feature +
+  acceptance, LOW, RAN; `crates/gui/src/ingest.rs:1791` against `:2677`). The run exits 1. Before it does,
+  `send_commands` has written the command, and every attached client shows `trade refused: no such dwarf`.
+  The world is unchanged. — deferred: LOW; it is loud (exit 1), and the world is unchanged. The GitHub issue
+  was drafted, but filing it was blocked by the session's permission classifier (see the review summary).
+- [x] [Review][Defer] **The roster test reaches "Escape brings the roster back" with `select(None)`, not the
+  Escape key** (acceptance, LOW; `crates/gui/src/ingest.rs:3787`). The Escape→deselect path is 12.2 code that
+  12.6 did not change. — deferred: test gap, LOW
+- [x] [Review][Defer] **The roster's id-order assert cannot fail on order** (acceptance, LOW;
+  `crates/gui/src/ingest.rs:3682`). `crew_snapshot()` lists ids already sorted, so the order holds only
+  because `Mirror.entities` is a `BTreeMap`. — deferred: test gap, LOW
+- [x] [Review][Defer] **The determinism test's `SetProfession` hits an idle dwarf** (acceptance, LOW, RAN;
+  `same_seed_and_commands_remain_deterministic`). At seed 42, tick 60, Id(0) is an idle woodcutter, so
+  `release_claim`'s determinism is covered only by the save/load round trip. AC4's letter is met.
+  — deferred: test gap, LOW
+- [x] [Review][Defer] **`trade_change_lines` is silent for a dwarf that first appears, or reappears, in a
+  delta** (edge, LOW, READ; `crates/gui/src/ingest.rs:1808`). The case is unreachable today, because no
+  dwarf spawns after connect. It becomes a silent instrument hole the day one does. — deferred: latent and
+  unreachable, LOW
+
+Dismissed (5):
+- Edge's MED "`T` twice before the delta sends a duplicate". By spec, `T` cycles from the mirror (AC7, Key
+  decisions), and a same-trade set is a no-op. A delta follows every command even when paused (feature,
+  RAN).
+- "A selected dwarf that disappears blanks the slot". Dwarves never despawn, and `--select` of a non-dwarf
+  is refused by `refuse_select_of_a_missing_dwarf`.
+- `update_refusal_hint` is not ordered after `trade_key`. At worst the slot clears one frame late, which is
+  cosmetic.
+- Blind's notes that a reassign while holding a vanished job id was not exercised, and that a woodcutter
+  idles. Those are coverage notes and ruled behaviour.
+
+**Patch pass 1, 2026-10-05.** All 4 patches landed: `e64bdbb` (AD-10) and `aa771b6` (seat card). Every
+patch is a doc edit. `git diff --name-only 9d6ce0a..HEAD` lists two `.md` files and nothing else. No test
+or script reads either file, so no new test or mutation row exists. **The full gate was not re-run (Wolf,
+at the checkpoint).** The doc-only diff leaves every gate input unchanged since `72be96c`'s green 3413 s.
+This is not a new green. The pre-commit fast gate passed on both commits.
+
+| Item | Side written for | Side tested | Pre-existing state checked |
+|---|---|---|---|
+| AD-10 Rule line | a reader of the binding Rule line | the 2026-10-05 amendment ("only the enumeration grows") and the 2026-08-06 precedent, read against the edited line | the four-command Rule line at `9d6ce0a` |
+| Seat card: `Esc` before the click | a seat reader following step 3 literally | the code path: `pick.rs:112` returns early off `DesignateMode::None`, and with no drag in progress one `Esc` resets the mode (`designate.rs:162-164`) | the card at `9d6ce0a`, with stockpile mode still armed after step 2 |
+| Seat card: seat result | a reader of the card alone | the story and board record of AC11 ("works", `a5eb634`) | the `_pending_` line at `9d6ce0a` |
+| Seat card: Dori's wait | a seat reader timing step 5 | the review's live measurement (272 ticks, about 27 s at Normal, FIFO behind her marks); not re-measured here | the "takes the mark" wording at `9d6ce0a` |
+
+None of these rows is REWORK. This is the first patch pass.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -497,3 +574,5 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
 | 2026-10-05 | Task 0 ruled by Wolf: draft approved as drafted; an emptied trade is allowed (no last-of-trade refusal, `TradeRefusal` dropped, refusal is `{dwarf}` only); fixed refusal text. |
 | 2026-10-05 | Dev (Sonnet 5.5 agents A and B, Opus verifying): `set_profession` on the wire, in the sim (`release_claim` of an old-trade job), in simd, both clients' refusal text, gui roster, `T` and `--trade`. 12/12 mutations killed; live wire OK and the deliberate RED shown; `trade_wire.py`'s held-job check corrected; #166 filed (pre-existing `--select` capture ceiling). Full gate GREEN 3413 s on `72be96c`. Awaiting Wolf's seat (AC11). |
 | 2026-10-05 | AC11 PASSED at Wolf's seat ("works", `a5eb634`). Status -> review. |
+| 2026-10-05 | Code review run 1 on `9d6ce0a`: 4 layers, all ran the binaries; no code HIGH/MED. 4 doc/record patches left as action items (Wolf), 5 deferred, 5 dismissed. Status -> in-progress. |
+| 2026-10-05 | Patch pass 1: 4/4 doc patches landed (`e64bdbb` AD-10 Rule line; `aa771b6` seat card: Esc, Dori's FIFO wait, seat result). Doc-only; full gate not re-run (Wolf); fast gate green on both commits. Status -> review for round 2. |
