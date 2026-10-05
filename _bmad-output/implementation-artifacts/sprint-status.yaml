@@ -2554,7 +2554,11 @@ development_status:
   #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
-  12-7-timber: review
+  12-7-timber: in-progress
+  #   Code review run 1 2026-10-05 on fb726ce: no HIGH/MED; 3 patches LEFT AS ACTION ITEMS (refusal texts name the
+  #     cap, tui recipe counts the mark colour, items_out by id); 8 deferred. D2 found the gui MIRRORS the tui
+  #     (pre-existing) -> #169. AC12's `4` clear NOT observed. Launcher no longer pulls (6126e9e, #143).
+  #     Next: /bmad-review-patch, then the `4` clear at the seat, then the FULL gate, then the PR.
   #   AC12 PASSED at Wolf's seat 2026-10-05 ("that works now", 4be19a0); log pop-in = #164 (out of scope). Next: code review.
   #   Seat 2026-10-05: "works .. but cut trees have some blocks in the air" -> #168 (dig chips over air),
   #     fixed aed8c5b, row 17 KILLED. Next: Wolf re-checks the felled pines, then review. Full gate NOT re-run since.

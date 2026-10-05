@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.6's creation
 
 # Story 12.7: Timber
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -286,6 +286,106 @@ Task 0, before any gui or tui display is built. Wolf ruled Task 0 at creation.
   - [x] Write `12-7-signoff/vehicle-card.md` in the seat's launch form. Say where to look: the hint bar is
     bottom-left, the marks are at the pines' feet, and the log is at the foot of the felled pine.
   - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (about 55 min, [[gate-ooms-at-default-parallelism]]).
+
+### Review Findings
+
+Code review run 1, 2026-10-05, on `fb726ce` (diff `fd9ca98..HEAD`, 19 code files). There were four layers
+and none timed out. Blind Hunter and Edge Case Hunter ran on Sonnet with R1 territories. The Acceptance and
+Feature Auditors ran on Opus over the whole diff. Every layer's cargo ran (1.97.1), and each built in its own
+target dir. Live runs:
+- `timber_wire.py` gave `TIMBER WIRE OK` on two fresh daemons. A empty at t272, 4 wood on the pile, B
+  unchanged.
+- The row-3 mutant, rebuilt from a source copy under `/tmp`, gave `TIMBER WIRE RED` (`tree B … changed:
+  tick 272`).
+- Save/load mid-cut with wood on the ground resumed and felled B. A kind-less save was refused.
+- The real gui, paused mid-cut, printed `gui dwarf 0 clip dig`.
+- A Blind Hunter probe felled every tree on seeds 42/7/99. Logs equalled the trunk cells cut, every one wood.
+- `fmt`, `clippy -D warnings` and every non-ignored test were green on HEAD.
+
+The pixel guards were NOT re-run on HEAD. The full gate is last green on `a7b1ded`, before `aed8c5b`
+(#168), and must re-run before the PR. No HIGH or MED code defect was found. Tally: 2 decision-needed
+(both resolved), 3 patch, 8 defer, 12 dismissed. Layer and severity are in brackets.
+
+- [x] [Review][Decision] **At a full designation cap, the refusal names the wrong cause** (blind + feature,
+  LOW-MED; a misreported error, the latent class). Cap-skipped cells count as not applied
+  (`sim-core/src/lib.rs:1794`). So at `MAX_DESIGNATIONS` (4096; one 64×64 dig drag reaches it), any drag
+  over real trees or rock reads `cut refused: no tree` / `dig refused: nothing to dig`. The texts are Task
+  0.4's ruling, and `a_cut_against_a_full_cap_is_refused…` pins the refusal but not what it says.
+  Options: (a) widen the three texts (`… : no tree, or the mark limit is reached`); (b) a distinct cause on
+  the wire (a refusal field, i.e. a protocol change); (c) accept.
+  — RESOLVED (Wolf, option a): widen the three texts. Becomes the patch below.
+- [x] [Review][Decision] **AC12's record does not itemise tui parity or the `4` clear** (acceptance, LOW;
+  record). The pass rests on "works .. but cut trees have some blocks in the air" and then "that works now".
+  The second visit was "for the floating blocks only". Confirm whether both were seen at the seat.
+  — RESOLVED (Wolf, 2026-10-05): he ran the tui beside the gui, both with compasses. The parity check
+  found that the gui is a MIRROR image of the tui: north is up in both, but the hauled logs are left in
+  the gui and right in the tui. Measured with the gui's own projection: screen `perp_dot(east, north)` is
+  -1.000 in the tui and +0.87..+0.99 in the gui at all 8 yaws, so the handedness is opposite at every
+  angle. `world_to_render` `(x,z,-y)` is a proper rotation of a left-handed sim frame. This predates 12.7
+  (the gui transform and the north-only compass); filed as **#169** (bug, route:story, route:undecided).
+  It is not a 12.7 defect: both clients show the same felled tree, mark and log. The `4` clear was NOT
+  observed (Wolf: "no because got confused"), so AC12's "clears a mark with `4`" stays OPEN until it is
+  seen at the seat.
+
+Patches: Wolf chose to LEAVE THEM AS ACTION ITEMS (2026-10-05), for a `/bmad-review-patch` session. Before
+the PR: the 3 patches, the `4` clear at the seat, and the full gate on the final HEAD.
+Review cost $26.45 / 483 turns (subagents 78.1%; it also carries the launcher fix's few turns). Reaped
+140.7 GB of /tmp layer caches (70.7 GB of free space reclaimed).
+- [ ] [Review][Patch] **Widen the three `Refusal::Designate` texts to name the cap** (from D1; blind +
+  feature, LOW-MED, misreported error). `cut refused: no tree, or the mark limit is reached` and its dig and
+  channel twins, re-pinned in `every_refusal_has_its_one_text`. [`crates/client-core/src/lib.rs:14`]
+- [ ] [Review][Patch] **The story's tui recipe `/` count cannot fail** (acceptance, LOW; a broken
+  instrument, the latent class, CONFIRMED). `grep -o '/' f2.txt | wc -l` gives 2 with a mark and 1 with
+  none: the status row's `z 13/31` carries a `/`. The dev fixed the same collision in `tally_marks` but not
+  in the recipe. Count the mark colour (`38;2;226;96;64m/`) instead.
+  [`12-7-timber.md` Verification, the tui recipe's `grep -o '/'` line]
+- [ ] [Review][Patch] **`items_out` pairs ids with kinds by position and checks only with `debug_assert_eq!`**
+  (edge, LOW; latent silent trap). `items()` keeps an item only if it has a `Pos`; `item_kinds()` keeps
+  every `Item`. One item without a `Pos` would shift every later kind in a release daemon, with no log.
+  Unreachable today. Look the kind up by id instead of zipping. [`crates/simd/src/bridge.rs:88`]
+- [x] [Review][Defer] **Stacked items hop one step while a carrier stands on their cell** (blind + feature
+  + acceptance, LOW, cosmetic; new in 12.7). `item_stacks` counts carried items, whose wire `pos` is the
+  carrier's cell, so a hauler crossing a pile cell lifts a higher-id log by 0.28. The gui knows `carrying`
+  and could skip those items. [`crates/gui/src/project.rs:2262`] — deferred: LOW cosmetic; the LOW-tail cap.
+- [x] [Review][Defer] **A pile of 4-5 logs pokes out of its cell** (blind, LOW, cosmetic). The 4th log's top
+  is 1.12 cells above the floor, inside the cell the felled trunk vacated. Seen and passed at the seat.
+  [`crates/gui/src/appearance.rs:251`] — deferred: LOW cosmetic.
+- [x] [Review][Defer] **`item_stacks` re-sorts all items every frame, and once per released item**
+  (blind, LOW). n is in the hundreds. [`crates/gui/src/project.rs:566,2625`] — deferred: no measured cost.
+- [x] [Review][Defer] **The loader accepts a cut mark that is not a tree base** (edge, LOW, RAN). With a
+  hand-edited save, a mark on air is "worked" and vanishes with no wood, and a mid-trunk or foliage mark
+  idles the woodcutter forever. The `JobKind::Cut` arm checks the kind only, as Dig's does.
+  [`crates/simd/src/main.rs:641`] — deferred: only a hand-edited save reaches it.
+- [x] [Review][Defer] **The bridge's "every designation kind" table lacks `Cut`, and nothing unit-pins
+  `refusal_out(Designate)` or `item_kind_out`** (acceptance, LOW). Covered end to end by the serve test and
+  rows 5/8/10. [`crates/simd/src/bridge.rs:381`] — deferred: covered by serve.rs.
+- [x] [Review][Defer] **`--drag` is dead headless, and its new README row does not say it needs a window**
+  (feature, LOW, RAN; pre-existing). `--drag cut` and `--drag dig` both panic `scripted --drag never
+  completed`, so `assert_drag_produced_work(Cut)` runs only at the seat. It is loud, not silent.
+  [`README.md:271`] — deferred: pre-existing, loud.
+- [x] [Review][Defer] **A lagging walker can miss the whole cut swing** (feature, LOW, RAN in lavapipe).
+  Nain never printed `clip dig` during his 50 work ticks at ~1 fps, though the cut completed. He does when
+  the world is paused. This is #164's gating (`DwarfClip::Dig if !arrived`), and it is 0.25 s at fast4x.
+  [`crates/gui/src/project.rs:509`] — deferred: #164 / 12.8's clip tuning.
+- [x] [Review][Defer] **The approved draft says felling takes "10 s … like a dig"** (acceptance, LOW;
+  record). `CUT_WORK_TICKS = DIG_WORK_TICKS = 50` is 5 s at Normal, and the vehicle card says ~5 s.
+  [`_bmad-output/implementation-artifacts/12-7-signoff/draft.md`] — deferred: signed-off artifact; the code
+  matches "like a dig".
+
+Dismissed (12):
+- An out-of-bounds single-z rect is silent. Task 0.3 ruled it, and the gui cannot reach it, because
+  worldgen clamps ground at `dims.z - 2`.
+- Multi-z and inverted rects are stderr-only. Pre-existing.
+- The new tally test misses the `take(map_cells)` guard. The older tally test kills it.
+- A cut with no woodcutter is silent. A design limit, as for dig.
+- A cut drag takes one z from the anchor. Design; the preview shows it.
+- `Item.kind` is required on the wire. The spec says "always serialized".
+- Dig and channel now refuse. Task 0.3.
+- A log is carried crosswise. The approved look.
+- The roster note. Not a defect.
+- The cancel note. Not a defect.
+- The gate on HEAD. A known pre-PR action, not a finding.
+- The protocol NOTE was dropped, not replaced. Moot, since `kind` now exists.
 
 ## Dev Notes
 
@@ -577,3 +677,4 @@ cell). Read the marks at their feet. Nain (purple)
 | 2026-10-05 | Dev (Sonnet 5.5 agents A and B, Opus verifying): `designate cut`, `DwarfJob::Cut`, `ItemKind` and `Refusal::Designate` on the wire; whole-tree felling into one log per trunk cell; dig/channel never take trees; zero-cell rects refused; gui cut mode `5`, cut mark, stacked logs, Dig clip placeholder; tui `/` and `=`. Live wire OK (4 logs) and the deliberate RED shown; 20/20 + 24/24 re-pointed mutations killed; spine AD-16 amended; README; seat card. Full gate GREEN 3251 s on `a7b1ded`. Awaiting Wolf's seat (AC12). |
 | 2026-10-05 | Seat (AC12): Wolf "works .. but cut trees have some blocks in the air". #168 filed; dig-debris chips spawned over air on every emptied tree tile. Fixed (`aed8c5b`): chips only over a solid or ramp floor. Mutation row 17 added and KILLED. Back to the seat for the floating blocks only. |
 | 2026-10-05 | AC12 PASSED at Wolf's seat ("that works now", `4be19a0`). The log popping into the hauler's hands is #164 (out of scope; recorded there). Status -> review. Full gate last green on `a7b1ded`; re-run before the PR. |
+| 2026-10-05 | Code review run 1 on `fb726ce` (4 layers, none timed out): no HIGH/MED code defect; 2 decisions resolved, 3 patches left as action items, 8 deferred, 12 dismissed. D2's tui check found the gui is a mirror image of the tui (pre-existing): #169. The `4` clear was not observed. Status -> in-progress. The launcher no longer pulls (`6126e9e`, #143, Wolf's request during the review). |
