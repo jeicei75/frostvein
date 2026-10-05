@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-03
+# last_updated: 2026-10-05
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -2539,7 +2539,8 @@ development_status:
   #     Seat ruled 2026-10-03: a dig is 10 swings (DIG_WORK_TICKS 50; hauls keep WORK_TICKS 5), stop first, stop-then-drop.
   #     AC10 PASSED at Wolf's seat 2026-10-03 ("ok.. well need to fine tune it later on", 9e347da); #162/#163 filed.
   #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
-  12-6-wolf-gives-them-their-trades: review
+  12-6-wolf-gives-them-their-trades: done
+  #   Merged 2026-10-05 as PR #167 (fd9ca98). Flipped to done on the 12.7 branch (it merged at review).
   #   Patch pass 1 2026-10-05: 4/4 doc patches landed (e64bdbb, aa771b6); doc-only, full gate NOT re-run (Wolf),
   #     fast gate green on both. $1.50. Round 2 skipped (Wolf: "PR"). PR #167 opened on 6c59d37
   #     (full gate cited from 72be96c; every later commit is _bmad-output/ only). Next: Wolf merges.
@@ -2553,7 +2554,11 @@ development_status:
   #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
-  12-7-timber: backlog
+  12-7-timber: ready-for-dev
+  #   Created 2026-10-05 on fd9ca98. RED on the live wire (12-7-signoff/timber_wire.py): `designate kind cut`
+  #     is unrecognized; a dig mark lands on a trunk and digs it away for nothing. Trees have no identity:
+  #     one tree = trunk column + foliage in its 3x3 column (trunks >= 3 apart; crowns can TOUCH, 22 of 57
+  #     distance-3 pairs on DEFAULT_SEED, so no flood fill). Look draft in 12-7-signoff/; Task 0 open.
   12-8-dwarves-at-work-the-cut: backlog
   12-9-one-dwarf-per-tile: backlog
   12-10-ore-in-the-rock: backlog
