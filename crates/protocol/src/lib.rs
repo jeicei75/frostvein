@@ -146,7 +146,13 @@ pub struct Rect {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Refusal {
-    PlaceStockpile { rect: Rect },
+    PlaceStockpile {
+        rect: Rect,
+    },
+    /// The only cause is an unknown dwarf id.
+    SetProfession {
+        dwarf: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,6 +193,10 @@ pub enum Command {
     },
     RemoveStockpile {
         rect: Rect,
+    },
+    SetProfession {
+        dwarf: u32,
+        profession: Profession,
     },
 }
 
@@ -744,5 +754,27 @@ mod tests {
         ] {
             assert_eq!(serde_json::to_value(value).unwrap()["type"], wire);
         }
+    }
+
+    #[test]
+    fn set_profession_command_wire_is_literal() {
+        let literal = r#"{"type":"set_profession","dwarf":2,"profession":"hauler"}"#;
+        let command: Command = serde_json::from_str(literal).unwrap();
+        assert_eq!(
+            command,
+            Command::SetProfession {
+                dwarf: 2,
+                profession: Profession::Hauler
+            }
+        );
+        assert_eq!(serde_json::to_string(&command).unwrap(), literal);
+    }
+
+    #[test]
+    fn set_profession_refusal_wire_is_literal() {
+        let literal = r#"{"command":"set_profession","dwarf":999}"#;
+        let refusal: Refusal = serde_json::from_str(literal).unwrap();
+        assert_eq!(refusal, Refusal::SetProfession { dwarf: 999 });
+        assert_eq!(serde_json::to_string(&refusal).unwrap(), literal);
     }
 }
