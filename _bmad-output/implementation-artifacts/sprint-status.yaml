@@ -2541,7 +2541,8 @@ development_status:
   #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
   12-6-wolf-gives-them-their-trades: review
   #   Patch pass 1 2026-10-05: 4/4 doc patches landed (e64bdbb, aa771b6); doc-only, full gate NOT re-run (Wolf),
-  #     fast gate green on both. $1.50. Next: /clear + /bmad-code-review (run 2) or PR on Wolf's yes.
+  #     fast gate green on both. $1.50. Round 2 skipped (Wolf: "PR"). PR #167 opened on 6c59d37
+  #     (full gate cited from 72be96c; every later commit is _bmad-output/ only). Next: Wolf merges.
   #   Code review run 1 2026-10-05 on 9d6ce0a: 4 layers ran the binaries, none timed out; no code HIGH/MED.
   #     0 decision / 4 patch (all docs: AD-10 Rule list, vehicle card Esc + seat result + Dori timing) left as
   #     action items by Wolf / 5 defer / 5 dismissed -> in-progress.
