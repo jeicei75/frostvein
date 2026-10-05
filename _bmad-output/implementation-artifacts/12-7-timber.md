@@ -19,8 +19,7 @@ so that the pines become something my fortress collects.
 and the board edit. Its first commit flips 12.6 to `done` in both its story file and the board, because 12.6
 merged at `review`. Epic 12's nine standing ACs (`epics.md:2422-2434`) bind this story and are not restated.
 "Wire diff" below satisfies standing AC 4. Standing AC 7 applies: Wolf approves `12-7-signoff/draft.md` at
-Task 0, before any gui or tui display is built. Sim, protocol and simd work (Tasks 1-3) may start before the
-ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
+Task 0, before any gui or tui display is built. Wolf ruled Task 0 at creation.
 
 ## Found at creation (2026-10-05, on `fd9ca98`)
 
@@ -80,7 +79,7 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
   (`WIRE` `:295-305`, `DELTA_WIRE` `:307-316`, the delta string at `:338`, the decode asserts `:449-450`, the
   Item literal table `:685-700`). Replace the `:249` NOTE.
 - NEW `protocol::Refusal::Designate { kind: DesignationKind, rect: Rect }` gives
-  `{"command":"designate","kind":"cut","rect":{…}}`. Which kinds can be refused is Task 0.3.
+  `{"command":"designate","kind":"cut","rect":{…}}`, for a cut, dig or channel rect that marks nothing (Task 0.3).
 - `Entity`, `Snapshot` and `Delta` keep their shape.
 - **Save:** `SaveState.items` becomes `Vec<(u32, Pos, ItemKind)>`, and `DesignationKind::Cut` and
   `JobKind::Cut` serialize through the existing derives. A pre-12.7 save fails to decode, and simd refuses it
@@ -89,7 +88,8 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
 ## Acceptance Criteria
 
 1. The real daemon is the judge. A tree marked for cutting is claimed only by a woodcutter. When he finishes,
-   every tile of that tree is `empty` on the wire and wood item(s) lie at its base (`timber_wire.py`: GREEN).
+   every tile of that tree is `empty` on the wire, and one wood item per trunk cell lies at its base
+   (`timber_wire.py`: GREEN).
 2. One tree is its trunk column plus the `TreeFoliage` in the 3×3 column around it, from the base to one
    above the top trunk cell. A scenario test cuts A and asserts every tile of B (whose crown touches A's)
    unchanged.
@@ -98,7 +98,7 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
 4. A `designate cut` marks every tree with a tile in the rect, with one mark at the trunk's base. Marks
    count toward `MAX_DESIGNATIONS`. A cut rect that marks no tree is refused on the next delta (12.1's shape).
 5. A dig mark never lands on a `TreeTrunk`/`TreeFoliage` tile, and a channel mark never lands on a cell
-   standing on one. What a dig or channel rect that marks nothing does is ruled by Task 0.3.
+   standing on one. A dig or channel rect that marks nothing is refused like a cut (Task 0.3).
 6. A `cancel_designation` rect that holds the mark's base or any tile of the marked tree removes the cut mark
    and its job. A woodcutter holding that job lets go.
 7. Determinism (standing AC 3): seed plus a command log with a cut gives identical state, `item_kinds()`
@@ -119,23 +119,19 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings, at creation (open).**
-  1. **Look draft** (`12-7-signoff/draft.md`): approve, or change. One choice inside it: while a woodcutter
-     works a cut, **(a, recommended) the Dig clip, facing the trunk**, as a placeholder until 12.8, or (b)
-     no clip, standing still.
-  2. **Logs per pine:** **(a, recommended) one**, at the trunk's base: nothing stacks, and 12.12's wood
-     target is a constant anyway. (b) One per trunk cell (3-5): the logs share the base cell, and the gui
-     draws them stacked.
-  3. **A dig or channel rect that marks nothing:**
-     - **(a, recommended) refuse it**, like the cut: one `Refusal::Designate { kind, rect }` for all three
-       kinds. Standing AC 6 says a rect that applies to zero tiles is a refusal, and this story moves dig's
-       filter. Side effect: the gui sends a channel drag as one rect per surface row. Over a forest edge,
-       the treetop rows become `channel refused: nothing to channel` while the ground rows still apply.
-     - (b) Refuse only `cut`, and file an issue for the dig/channel silence.
-     - Either way, a rect wholly out of bounds stays as it is today: dropped in the prelude
-       (`lib.rs:1623-1668`), which no client can produce.
-  4. The refusal texts: `cut refused: no tree`, `dig refused: nothing to dig`, `channel refused: nothing to
-     channel`. Each is a `&'static str` in `client_core::refusal_text`, like 12.1's.
+- [x] **Task 0: Wolf's rulings, 2026-10-05, at creation.**
+  1. **Look draft APPROVED as drafted** (`12-7-signoff/draft.md`), with **(a)**: while a woodcutter works a
+     cut, he plays the **Dig clip, facing the trunk**, as a placeholder until 12.8.
+  2. **One log per trunk cell (3-5)**, all at the trunk's base. Wolf picked this over the recommended single
+     log. Tree A has 4 trunk cells (z 12-15), so it leaves 4 logs. The gui stacks items that share a cell
+     (Task 4); the tui still shows one `=` per cell.
+  3. **A dig, channel or cut rect that marks nothing is REFUSED:** one `Refusal::Designate { kind, rect }`
+     for all three kinds (standing AC 6). The side effect is accepted: over a forest edge, the treetop rows
+     of a gui channel drag show `channel refused: nothing to channel` while the ground rows apply. A rect
+     wholly out of bounds stays as today: it is dropped in the prelude (`lib.rs:1623-1668`), and no client
+     can produce one.
+  4. **Refusal texts as written:** `cut refused: no tree`, `dig refused: nothing to dig`, `channel refused:
+     nothing to channel`. Each is a `&'static str` in `client_core::refusal_text`.
 - [ ] **Task 1: protocol (wire diff).** RED first: write the literal pins below before the types.
   - [ ] `DesignationKind::Cut`, `DwarfJob::Cut { target: [i32; 3] }`, `ItemKind { Stone, Wood }`,
     `Item.kind`, `Refusal::Designate { kind, rect }`. `Refusal` stays `Copy`.
@@ -167,8 +163,9 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
     - Channel keeps a standable cell only where the tile below is not a tree material.
     - Cut maps each in-rect tile through `tree_of` and marks each distinct base once, under the existing
       cap check (`:1684`).
-    - When zero cells are applied, return `Some(Refusal::Designate { kind, rect })`. A re-mark of an
-      existing mark counts as applied. Task 0.3 rules whether dig and channel do this too.
+    - When zero cells are applied, for any of the three kinds, return
+      `Some(Refusal::Designate { kind, rect })` (Task 0.3). A re-mark of an existing mark counts as applied.
+      Existing tests that designate over nothing and expect `None` flip to the refusal.
     - Leave the rect prelude (`:1623-1668`) byte-identical: rows in `3-1-give-the-order.sh` quote it.
   - [ ] `CancelDesignation` (`:1692-1732`): also remove any `Cut` mark whose base is in the rect, or whose
     `tree_of(base)` has a tile in it. Add `JobKind::Cut` to the tile-job filter (`:1709`), so its job goes
@@ -178,8 +175,8 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
   - [ ] `execute_jobs`: NEW `pub const CUT_WORK_TICKS: u32 = 50;` beside `DIG_WORK_TICKS` (`:50`), with
     `// NOTE: tuned with 12.8's clip`. When the cut completes:
     - if `tree_of(target)` is `None`, take the existing remove-job/mark/release branch (`:1140-1145`);
-    - otherwise `set_tile(Empty)` every tile, then `clear_paths`, then spawn wood at the base (count per
-      Task 0.2), then remove the job and the mark, then `release_claim`.
+    - otherwise `set_tile(Empty)` every tile, then `clear_paths`, then spawn one `Item(ItemKind::Wood)`
+      per trunk cell at the base (Task 0.2), then remove the job and the mark, then `release_claim`.
   - [ ] Dig and channel completion: tree targets can no longer arrive there, so remove the
     `yields_stone`/tree branch (`:1119`, `:1132`, `:1152`), and spawn `Item(ItemKind::Stone)`. Re-point or
     retire the mutation rows that quote it (Dev Notes, trap 1).
@@ -192,8 +189,8 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
     - check `scenario.rs:63` (its 30 digs exclude trunks but not foliage, and it asserts the pile fills).
   - [ ] NEW `sim-core/tests/scenario.rs` tests (DEFAULT_SEED, whose tree pair is measured):
     - `cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing`: mark A (73,59); step
-      until A's tiles are all empty; assert every tile of B (73,56) equals its pre-cut tile, that wood has
-      kind `Wood` at A's base, and that only Nain ever held the job (assert `claims()` each step);
+      until A's tiles are all empty; assert every tile of B (73,56) equals its pre-cut tile, that exactly 4 items
+      of kind `Wood` (A's trunk cells) lie at A's base, and that only Nain ever held the job (assert `claims()` each step);
     - `a_cut_is_hauled_to_the_pile_as_wood`;
     - `a_cut_over_no_tree_is_refused_and_a_dig_never_marks_a_tree` (also channel standing on a tree);
     - `a_cancel_touching_a_marked_tree_removes_its_mark_and_releases_the_woodcutter`;
@@ -233,15 +230,19 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
   - [ ] Items (`project.rs:2091-2097`): branch on `item.kind`. Wood is a log (NEW `WOOD_ITEM_SCALE: Vec3`
     and a wood colour, both in `appearance.rs` beside `STONE_ITEM_SCALE`, `:233`). The carry branch
     (`:533-547`) uses the same per-kind scale.
-  - [ ] Clip (Task 0.1): `dwarf_clip` (`:425-437`) and `dig_yaw` (`:2458-2467`) handle `DwarfJob::Cut`.
+  - [ ] Stacking (Task 0.2): items that share a cell draw stacked by ascending id, the n-th one log height
+    above the first (`item_translation`, `:2202`). This applies to every item kind; for stones it only
+    changes #154's two-on-one-cell case.
+  - [ ] Clip (Task 0.1): `dwarf_clip` (`:425-437`) returns Dig for a `DwarfJob::Cut` in Work, and
+    `dig_yaw` (`:2458-2467`) faces its target. `// NOTE: placeholder until 12.8's Cut clip.`
   - [ ] Headless tests (`tests/headless.rs`):
     - a `Digit5` drag over a trunk writes exactly one `designate` with `"kind":"cut"` at the trunk's
       level, and a ground-level drag at a tree's foot writes it one level up (`drag_one_tile`, `:4020`);
     - a clear drag at the foot writes a cancel rect that holds the base;
     - a cut mark projects at the base with the cut material;
     - a wood item projects as a log, and a stone still as a stone (`snapshot_item_receives_a_render_mesh`,
-      `:2041`, is the pattern);
-    - a woodcutter on a `cut` job in Work gets the ruled clip.
+      `:2041`, is the pattern); four logs on one cell draw at four distinct heights;
+    - a woodcutter on a `cut` job in Work gets the Dig clip.
 - [ ] **Task 5: tui (AC10).**
   - [ ] `palette.rs`: `designation_cell(Cut)` is `/` (226,96,64). Add a `wood_item_cell` (`=`,
     (164,116,66)) and its stored twin (zone green), and add both to `every_look_is_pinned`'s `markers`
@@ -260,6 +261,7 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
     3. the crown box is 5×5 (it takes B's crown) → the same test's neighbour assert, and the live recipe's RED;
     4. `trade(Cut) => Miner` → the only-Nain assert;
     5. the wood spawns as `Stone` → the kind assert, and the serve test;
+    5b. one log per tree, not per trunk cell → the exactly-4 assert;
     6. the dig filter takes tree tiles again → the filter test;
     7. the channel filter takes cells on trees → the filter test;
     8. a no-tree cut is not refused → the refusal test, and the serve test;
@@ -269,6 +271,7 @@ ruling, but Task 0.2 and 0.3 change their constants and their refusal scope.
     12. gui cut mode sends `dig` → the drag test;
     13. gui clear omits the cut-target rect → the clear test;
     14. gui wood draws as a stone → the projection test;
+    14b. gui items sharing a cell all draw at the same height → the stacking test;
     15. tui wood uses the stone glyph → the view test.
   - [ ] Spine `architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md` AD-16 (`:121-144`): add an "Amended
     2026-10-xx (Story 12.7)" paragraph.
@@ -383,7 +386,8 @@ python3 _bmad-output/implementation-artifacts/12-7-signoff/timber_wire.py 7703
   - `TIMBER WIRE RED`, exit 1. The daemon log shows `unrecognized client message` for both cut commands.
 - **GREEN, required of dev:**
   - every NEVER becomes a tick: the cut mark, Nain holding the cut, every tile of A empty, wood at the base,
-    wood on the pile, and the no-tree refusal;
+    wood on the pile, and the no-tree refusal. Record how many wood items appeared at A's base: 4, one per
+    trunk cell (Task 0.2);
   - `tree B … changed: no`, `dig mark placed on tree D: no`, `tree D changed: no`;
   - `TIMBER WIRE OK`, exit 0;
   - record every tick.
@@ -437,3 +441,4 @@ cell). Read the marks at their feet. Nain (purple)
 | Date | Change |
 | --- | --- |
 | 2026-10-05 | Story created on `fd9ca98`. RED on the live wire (`timber_wire.py`: `designate kind cut` unrecognized; a dig mark lands on a trunk and digs it away, dropping nothing). Look draft `12-7-signoff/draft.md` written; Task 0 open. |
+| 2026-10-05 | Task 0 ruled by Wolf: draft approved with the Dig clip as the cut placeholder; one log per trunk cell (over the recommended one per pine), stacked in the gui; zero-cell dig/channel/cut rects all refused; refusal texts as written. |

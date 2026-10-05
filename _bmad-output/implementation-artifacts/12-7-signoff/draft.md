@@ -1,5 +1,8 @@
 # 12.7 look draft: cut marks, felling and wood (for Wolf's approval, Task 0)
 
+**APPROVED by Wolf as drafted, 2026-10-05**, with §2 (a), the dig swing as the placeholder, and one log
+per trunk cell (§3, the stacked case).
+
 A cheap text mock (standing AC 7). It shows what you will see; nothing here is built yet. Keys,
 slots and colours are today's, measured from `crates/gui/src/designate.rs`, `appearance.rs` and
 `crates/tui/src/palette.rs` on `fd9ca98`.
