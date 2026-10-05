@@ -299,6 +299,22 @@ fn a_set_profession_refusal_shows_on_the_status_row() {
     }
 }
 
+#[test]
+fn a_designate_refusal_shows_on_the_status_row() {
+    let frames = capture_frames_refusing(Some(protocol::Refusal::Designate {
+        kind: protocol::DesignationKind::Cut,
+        rect: protocol::Rect {
+            min: [64, 64, 8],
+            max: [64, 64, 8],
+        },
+    }));
+    assert_eq!(frames.len(), 4, "{frames:?}");
+    assert!(!frames[0].contains("refused"), "{}", frames[0]);
+    for line in &frames[1..] {
+        assert!(line.contains("cut refused: no tree"), "{line}");
+    }
+}
+
 fn capture_load_frames(send_load: bool) -> Vec<String> {
     const SAVED_TICK: u64 = 3;
     const MAX_CAPTURE_BYTES: u64 = 1024 * 1024;

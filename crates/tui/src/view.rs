@@ -6,8 +6,8 @@ use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
     BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, carrier_cell, crowd_cell, cursor_cell, designation_cell,
-    dim, dwarf_colour, entity_cell, item_cell, pending_rect_cell, stored_item_cell, tile_cell,
-    zone_cell,
+    dim, dwarf_colour, entity_cell, item_cell, pending_rect_cell, stored_item_cell,
+    stored_wood_item_cell, tile_cell, wood_item_cell, zone_cell,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,13 +100,18 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
     let designation_glyphs = [
         designation_cell(protocol::DesignationKind::Dig).glyph,
         designation_cell(protocol::DesignationKind::Channel).glyph,
+        designation_cell(protocol::DesignationKind::Cut).glyph,
     ];
     let zone_glyph = zone_cell().glyph;
+    // NOTE: the bottom three rows are roster, status and hint text. The cut mark's ASCII `/` also
+    // appears in the status row's `z 1/2`, so counting there would invent a mark.
+    let map_cells = usize::from(framebuffer.w) * usize::from(framebuffer.h.saturating_sub(3));
     MarkTally {
         z: state.z,
         drawn_designations: framebuffer
             .cells
             .iter()
+            .take(map_cells)
             .filter(|cell| designation_glyphs.contains(&cell.glyph))
             .count(),
         drawn_zones: framebuffer
@@ -314,10 +319,12 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
     let mut item_counts = BTreeMap::new();
     for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
-            framebuffer.cells[index] = if mirror.zones().iter().any(|zone| zone.pos == item.pos) {
-                stored_item_cell()
-            } else {
-                item_cell()
+            let stored = mirror.zones().iter().any(|zone| zone.pos == item.pos);
+            framebuffer.cells[index] = match (item.kind, stored) {
+                (protocol::ItemKind::Stone, true) => stored_item_cell(),
+                (protocol::ItemKind::Stone, false) => item_cell(),
+                (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
+                (protocol::ItemKind::Wood, false) => wood_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
@@ -1348,6 +1355,52 @@ mod tests {
         assert_eq!(framebuffer.cell(2, 1), zone_cell());
         assert_eq!(framebuffer.cell(3, 1), item_cell());
         assert_ne!(stored_item_cell().fg, item_cell().fg);
+    }
+
+    /// 12.7: a log draws `=`, not the stone's `*`, and a stored log draws it in the stockpile green.
+    #[test]
+    fn a_wood_item_draws_as_a_log_and_a_stored_one_in_the_stockpile_colour() {
+        let mut snapshot = empty_snapshot(Dims { x: 5, y: 3, z: 2 });
+        snapshot.zones = vec![Zone { pos: [1, 1, 1] }];
+        snapshot.items = vec![
+            Item {
+                id: 5,
+                pos: [1, 1, 1],
+                kind: protocol::ItemKind::Wood,
+            },
+            Item {
+                id: 6,
+                pos: [3, 1, 1],
+                kind: protocol::ItemKind::Wood,
+            },
+        ];
+
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+
+        assert_eq!(framebuffer.cell(3, 1), wood_item_cell());
+        assert_eq!(framebuffer.cell(1, 1), stored_wood_item_cell());
+        assert_eq!(framebuffer.cell(3, 1).glyph, '=');
+        assert_eq!(framebuffer.cell(1, 1).fg, zone_cell().fg);
+    }
+
+    /// 12.7: the `marks:` tally counts a cut mark. A cut glyph the tally does not know reads as
+    /// "drawn 0 of 1" and the frame calls itself incomplete.
+    #[test]
+    fn the_mark_tally_counts_a_cut_mark() {
+        let dims = Dims { x: 64, y: 64, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.designations = vec![Designation {
+            pos: [32, 32, 1],
+            kind: DesignationKind::Cut,
+        }];
+        let mirror = mirror(&snapshot);
+        let state = initial(&mirror, Some(1));
+        let framebuffer = render(&mirror, &state, 11, 9);
+        assert!(framebuffer.cells.iter().any(|cell| cell.glyph == '/'));
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        assert_eq!(tally.mirror_designations, 1);
+        assert_eq!(tally.drawn_designations, 1, "the cut glyph was not counted");
+        assert!(tally.complete());
     }
 
     #[test]

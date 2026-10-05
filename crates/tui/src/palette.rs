@@ -113,10 +113,14 @@ pub fn dwarf_colour(colour: DwarfColour) -> Rgb {
 
 pub fn designation_cell(kind: DesignationKind) -> Cell {
     match kind {
-        // 12.7 Task 5: Cut is a stub that draws like Dig until its own `/` cell lands.
-        DesignationKind::Dig | DesignationKind::Cut => Cell {
+        DesignationKind::Dig => Cell {
             glyph: '×',
             fg: (232, 176, 72),
+        },
+        // ASCII on purpose: `♠`, `♨` and `☺` draw as wide emoji in Windows Terminal (#152).
+        DesignationKind::Cut => Cell {
+            glyph: '/',
+            fg: (226, 96, 64),
         },
         DesignationKind::Channel => Cell {
             glyph: '▼',
@@ -144,6 +148,22 @@ pub fn item_cell() -> Cell {
 pub fn stored_item_cell() -> Cell {
     Cell {
         glyph: item_cell().glyph,
+        fg: zone_cell().fg,
+    }
+}
+
+/// A log: ASCII `=`, for the same reason as the cut mark's `/`.
+pub fn wood_item_cell() -> Cell {
+    Cell {
+        glyph: '=',
+        fg: (164, 116, 66),
+    }
+}
+
+/// A log on a stockpile cell: the log glyph in the stockpile's colour, like a stored stone.
+pub fn stored_wood_item_cell() -> Cell {
+    Cell {
+        glyph: wood_item_cell().glyph,
         fg: zone_cell().fg,
     }
 }
@@ -282,6 +302,20 @@ mod tests {
             }
         );
         assert_eq!(
+            wood_item_cell(),
+            Cell {
+                glyph: '=',
+                fg: (164, 116, 66),
+            }
+        );
+        assert_eq!(
+            stored_wood_item_cell(),
+            Cell {
+                glyph: '=',
+                fg: (88, 190, 118),
+            }
+        );
+        assert_eq!(
             crowd_cell(),
             Cell {
                 glyph: '⚇',
@@ -299,6 +333,7 @@ mod tests {
         let markers = [
             designation_cell(DesignationKind::Dig),
             designation_cell(DesignationKind::Channel),
+            designation_cell(DesignationKind::Cut),
             zone_cell(),
             cursor_cell(),
             pending_rect_cell(Mode::Dig),
@@ -306,6 +341,7 @@ mod tests {
             pending_rect_cell(Mode::Stockpile),
             pending_rect_cell(Mode::Remove),
             item_cell(),
+            wood_item_cell(),
             crowd_cell(),
             carrier_cell(),
         ];
@@ -319,6 +355,10 @@ mod tests {
                 Cell {
                     glyph: '▼',
                     fg: (92, 174, 224),
+                },
+                Cell {
+                    glyph: '/',
+                    fg: (226, 96, 64),
                 },
                 Cell {
                     glyph: '≡',
@@ -347,6 +387,10 @@ mod tests {
                 Cell {
                     glyph: '*',
                     fg: (176, 172, 160),
+                },
+                Cell {
+                    glyph: '=',
+                    fg: (164, 116, 66),
                 },
                 Cell {
                     glyph: '⚇',

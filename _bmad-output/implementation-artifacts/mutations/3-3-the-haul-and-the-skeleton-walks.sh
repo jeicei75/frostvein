@@ -341,12 +341,16 @@ import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 5.2 moved `tui` off `snapshot.*` onto the shared client-core mirror,
 # which rotted this anchor. The seam is unchanged.
+# Re-pointed 2026-10-05 (12.7): the item layer now picks the cell by kind (a `match` on kind and
+# stored-ness); the seam is unchanged.
 old = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
-            framebuffer.cells[index] = if mirror.zones().iter().any(|zone| zone.pos == item.pos) {
-                stored_item_cell()
-            } else {
-                item_cell()
+            let stored = mirror.zones().iter().any(|zone| zone.pos == item.pos);
+            framebuffer.cells[index] = match (item.kind, stored) {
+                (protocol::ItemKind::Stone, true) => stored_item_cell(),
+                (protocol::ItemKind::Stone, false) => item_cell(),
+                (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
+                (protocol::ItemKind::Wood, false) => wood_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
@@ -355,10 +359,12 @@ old = '''    for item in mirror.items() {
 assert s.count(old) == 1
 new = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
-            framebuffer.cells[index] = if mirror.zones().iter().any(|zone| zone.pos == item.pos) {
-                stored_item_cell()
-            } else {
-                item_cell()
+            let stored = mirror.zones().iter().any(|zone| zone.pos == item.pos);
+            framebuffer.cells[index] = match (item.kind, stored) {
+                (protocol::ItemKind::Stone, true) => stored_item_cell(),
+                (protocol::ItemKind::Stone, false) => item_cell(),
+                (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
+                (protocol::ItemKind::Wood, false) => wood_item_cell(),
             };
         }
     }
