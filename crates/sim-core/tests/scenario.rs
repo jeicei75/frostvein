@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sim_core::{
-    DesignationKind, Dims, DwarfColour, DwarfName, Identity, Job, JobId, JobKind, JobState,
-    Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile, World,
+    DesignationKind, Dims, DwarfColour, DwarfName, Id, Identity, Job, JobId, JobKind, JobState,
+    Material, Pos, Profession, Rect, Refusal, SavedDwarf, SimCommand, Tile, World,
 };
 
 fn rect(min: Pos, max: Pos) -> Rect {
@@ -1751,6 +1751,221 @@ fn each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders() {
     );
 }
 
+/// DEFAULT_SEED, one reachable channel mark beside dwarf 0. Steps until a miner holds it AND the
+/// other miner is eligible (every reaction delay is 5-30 ticks from `created_tick`) and idle.
+/// Returns the world, the holder, the other miner and the job.
+fn channel_held_by_a_miner() -> (World, Id, Id, Job) {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let dwarf = world.dwarves()[0].1;
+    let t = Pos {
+        x: dwarf.x + 2,
+        ..dwarf
+    };
+    assert!(is_standable(&world, t));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(t, t),
+    });
+    let miners: Vec<Id> = world
+        .professions()
+        .into_iter()
+        .filter(|(_, p)| *p == Profession::Miner)
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(miners.len(), 2);
+    loop {
+        assert!(world.tick() < 200, "no miner ever held the channel");
+        world.step();
+        let job = world
+            .jobs()
+            .into_iter()
+            .find(|j| j.kind == JobKind::Channel);
+        let Some(job) = job else { continue };
+        if world.tick() < job.created_tick + 31 {
+            continue;
+        }
+        let claims = world.claims();
+        if let Some(holder) = miners
+            .iter()
+            .copied()
+            .find(|m| claims.contains(&(*m, Some(job.id))))
+        {
+            let other = miners.iter().copied().find(|m| *m != holder).unwrap();
+            assert!(
+                claims.contains(&(other, None)),
+                "the other miner must be idle: {claims:?}"
+            );
+            return (world, holder, other, job);
+        }
+    }
+}
+
+#[test]
+fn a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job() {
+    let (mut world, holder, other, job) = channel_held_by_a_miner();
+    let refusal = world.apply_command(SimCommand::SetProfession {
+        dwarf: holder,
+        profession: Profession::Hauler,
+    });
+    assert_eq!(refusal, None);
+    world.step();
+    let claims = world.claims();
+    assert!(
+        !claims
+            .iter()
+            .any(|(id, held)| *id == holder && held.is_some_and(|j| j == job.id)),
+        "the reassigned miner still holds the channel: {claims:?}"
+    );
+    assert!(
+        world.jobs().iter().any(|j| j.id == job.id),
+        "the released job left the queue"
+    );
+    assert!(
+        claims.contains(&(other, Some(job.id))),
+        "the other miner did not take the same JobId in one step: {claims:?}"
+    );
+    for _ in 0..600 {
+        if world.tile(job.target) != Some(Tile::Solid(Material::Stone))
+            && !world
+                .designations()
+                .contains(&(job.target, DesignationKind::Channel))
+        {
+            break;
+        }
+        world.step();
+    }
+    assert!(
+        !world
+            .designations()
+            .contains(&(job.target, DesignationKind::Channel)),
+        "the channel mark was never worked off"
+    );
+}
+
+#[test]
+fn a_reassigned_hauler_puts_the_stone_down_and_another_hauler_delivers_it() {
+    let (mut world, zones) = backlog_world();
+    let (carrier, item) = loop {
+        assert!(world.tick() < 5000, "no hauler ever carried a stone");
+        world.step();
+        let positions = world.dwarves();
+        let found = world.carrying().into_iter().find_map(|(id, held)| {
+            let item = held?;
+            let pos = positions.iter().find(|d| d.0 == id)?.1;
+            (!zones.contains(&pos)).then_some((id, item))
+        });
+        if let Some(found) = found {
+            break found;
+        }
+    };
+    world.apply_command(SimCommand::SetProfession {
+        dwarf: carrier,
+        profession: Profession::Miner,
+    });
+    assert!(
+        world.carrying().contains(&(carrier, None)),
+        "the reassigned hauler still carries"
+    );
+    assert!(world.items().iter().any(|(id, _)| id.0 == item));
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .any(|j| j.kind == (JobKind::Haul { item })),
+        "the haul job for the dropped stone is gone"
+    );
+    assert!(world.claims().contains(&(carrier, None)));
+    loop {
+        assert!(
+            world.tick() < 5000,
+            "the dropped stone never reached the pile"
+        );
+        world.step();
+        if world
+            .items()
+            .iter()
+            .any(|(id, pos)| id.0 == item && zones.contains(pos))
+        {
+            break;
+        }
+    }
+}
+
+#[test]
+fn a_trade_change_to_the_same_trade_keeps_the_job() {
+    let (mut world, holder, _, job) = channel_held_by_a_miner();
+    let before = world.claims();
+    let refusal = world.apply_command(SimCommand::SetProfession {
+        dwarf: holder,
+        profession: Profession::Miner,
+    });
+    assert_eq!(refusal, None);
+    assert_eq!(world.claims(), before);
+    assert!(world.claims().contains(&(holder, Some(job.id))));
+    world.step();
+    assert!(world.claims().contains(&(holder, Some(job.id))));
+}
+
+#[test]
+fn an_unknown_dwarf_is_refused_and_an_emptied_trade_is_allowed() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let before = world.professions();
+    let refusal = world.apply_command(SimCommand::SetProfession {
+        dwarf: Id(999),
+        profession: Profession::Hauler,
+    });
+    assert_eq!(refusal, Some(Refusal::SetProfession { dwarf: Id(999) }));
+    assert_eq!(world.professions(), before);
+
+    for (id, _) in before.iter().filter(|(_, p)| *p == Profession::Hauler) {
+        let refusal = world.apply_command(SimCommand::SetProfession {
+            dwarf: *id,
+            profession: Profession::Miner,
+        });
+        assert_eq!(refusal, None);
+    }
+    assert!(
+        world
+            .professions()
+            .iter()
+            .all(|(_, p)| *p != Profession::Hauler)
+    );
+
+    // NOTE: Wolf's ruling (12.6 Task 0.2): a trade nobody has leaves its jobs waiting, silently.
+    let stone = dig_one_stone(&mut world);
+    let pile = world.dwarves()[0].1;
+    assert_ne!(pile, stone);
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    world.step();
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .any(|j| matches!(j.kind, JobKind::Haul { .. }))
+    );
+    for _ in 0..300 {
+        world.step();
+        let jobs = world.jobs();
+        assert!(
+            world.claims().iter().all(|(_, held)| held.is_none_or(|j| {
+                !matches!(
+                    jobs.iter().find(|job| job.id == j).map(|job| job.kind),
+                    Some(JobKind::Haul { .. })
+                )
+            })),
+            "a haul job was claimed with no hauler alive"
+        );
+    }
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .any(|j| matches!(j.kind, JobKind::Haul { .. }))
+    );
+}
+
 #[test]
 fn same_seed_and_commands_remain_deterministic() {
     let mut first = World::generate(42, Dims::DEFAULT);
@@ -1777,9 +1992,18 @@ fn same_seed_and_commands_remain_deterministic() {
         second.apply_command(command);
     }
 
-    for _ in 0..200 {
+    for tick in 0..200 {
+        if tick == 60 {
+            let command = SimCommand::SetProfession {
+                dwarf: first.professions()[0].0,
+                profession: Profession::Hauler,
+            };
+            first.apply_command(command);
+            second.apply_command(command);
+        }
         first.step();
         second.step();
+        assert_eq!(first.professions(), second.professions());
         assert_eq!(first.dwarves(), second.dwarves());
         assert_eq!(first.jobs(), second.jobs());
         assert_eq!(first.claims(), second.claims());

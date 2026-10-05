@@ -69,6 +69,8 @@ or `☻` where he shares a cell with a stone; `⚇` marks two dwarves sharing on
 dimmed with depth. The bottom row is the key hint; the row above it reports the tick, the
 speed, the z-level and the dwarf count; the row above that is the roster: each dwarf's name,
 ascending by id, in his tunic colour, then his trade (miner, hauler or woodcutter) in grey.
+The roster follows a trade change on the next delta. A refused command shows on the status
+row, e.g. `stockpile refused: no valid cells` or `trade refused: no such dwarf`.
 
 **The camp is not on the level you open at.** The dwarves, the campfire and the torches all
 sit at z 9 on the shipped seed, while the most-standable-ground rule opens you at z 19 — a
@@ -196,6 +198,7 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | `C` | print the framing as a pasteable `--camera` line |
 | LMB | select the dwarf under the cursor and follow him (with no designate mode armed) |
 | `Esc` | release the selection, or abort a designation |
+| `T` | with a dwarf selected, change his trade: miner → hauler → woodcutter → miner |
 | `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
 | `ctrl` + `S` / `ctrl` + `L` | save / load the world (the daemon writes `frostvein.save` and says `saved tick N`; a load snaps every client back). While `ctrl` is held the keyboard camera keys do nothing, so the chord never moves the view |
 | `H` | hide / show the whole HUD: fps overlay, readouts, hint |
@@ -219,6 +222,17 @@ wider rethink — issue #118.
 The slice keys are the **unshifted comma and period**. The on-screen hint calls them `<` / `>`,
 which reads as "shift these", and that has already cost one session — see #102, where naming the
 controls in the client itself is tracked.
+
+**Crew and trades.** With nothing selected, the top-right slot under the clock is the crew roster:
+one line per dwarf in id order, his name in his tunic colour and his trade in grey. Selecting a
+dwarf replaces it with his name, then his trade and `T: change trade`. `T` sends the next trade,
+and the line changes only when the daemon's next delta says so, so it reads the world, not the
+request. Giving away a dwarf's trade releases the job he holds to the next free dwarf of that
+trade. An emptied trade is allowed: its jobs wait silently, and the roster is the only signal. A
+refused change shows bottom-left, like a refused stockpile, until your next world command.
+`--trade` prints `gui sent set_profession dwarf <id> <trade>` when it sends, and every change of a
+dwarf's trade on the wire after the snapshot prints `gui dwarf <id> trade <trade>` to stderr, by
+design.
 
 Selecting a dwarf drops the zoom to a readable distance and keeps him centred as he walks; `Esc`
 hands the camera back. Nothing above is rebindable, deliberately — there is no rebinding system
@@ -256,6 +270,7 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--camera <yaw,pitch,distance,fx,fy,fz>` | open at a framing; works interactively too |
 | `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |
 | `--select <id>` | start with dwarf `<id>` selected, as if clicked; an explicit `--distance` keeps its zoom, and an id that is not a dwarf in the daemon's snapshot fails the run |
+| `--trade <miner\|hauler\|woodcutter>` | with `--select`, send that dwarf's trade change once, after the snapshot, as `T` would; without `--select`, or with an unknown trade, the run fails |
 | `--z <level>` | pin the slice level |
 | `--subdiv <n>` | terrain subdivision; defaults to the shipped 4, and the recipes pass it anyway so the frame says what it was |
 | `--expect-haul` | fail the capture unless a stone was seen on a stockpile tile (`items on stockpile=N` on the `motion:` line) |

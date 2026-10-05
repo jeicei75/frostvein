@@ -180,6 +180,58 @@ fn save_load_then_tick_matches_never_saved() {
 }
 
 #[test]
+fn a_world_saved_after_a_reassignment_loads_with_the_new_trade_and_steps_identically() {
+    let mut saved = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let mut control = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let dwarf = saved.dwarves()[0].1;
+    let channel = SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: Rect {
+            min: Pos {
+                x: dwarf.x + 2,
+                ..dwarf
+            },
+            max: Pos {
+                x: dwarf.x + 2,
+                ..dwarf
+            },
+        },
+    };
+    saved.apply_command(channel);
+    control.apply_command(channel);
+    while saved.claims().iter().all(|(_, held)| held.is_none()) {
+        assert!(saved.tick() < 200, "no miner ever held the channel");
+        saved.step();
+        control.step();
+    }
+    let holder = saved
+        .claims()
+        .into_iter()
+        .find_map(|(id, held)| held.map(|_| id))
+        .unwrap();
+    let reassign = SimCommand::SetProfession {
+        dwarf: holder,
+        profession: Profession::Hauler,
+    };
+    saved.apply_command(reassign);
+    control.apply_command(reassign);
+    saved.step();
+    control.step();
+    assert!(saved.professions().contains(&(holder, Profession::Hauler)));
+
+    let mut loaded = World::from_save(saved.to_save());
+    assert!(loaded.professions().contains(&(holder, Profession::Hauler)));
+    for _ in 0..200 {
+        loaded.step();
+        control.step();
+        assert_eq!(loaded.professions(), control.professions());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.dwarves(), control.dwarves());
+    }
+}
+
+#[test]
 fn save_round_trip_preserves_emitters() {
     let world = World::generate(42, Dims::DEFAULT);
     let expected = world.emitters();

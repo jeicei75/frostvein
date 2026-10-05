@@ -93,11 +93,13 @@ pub enum SimCommand {
     CancelDesignation { rect: Rect },
     PlaceStockpile { rect: Rect },
     RemoveStockpile { rect: Rect },
+    SetProfession { dwarf: Id, profession: Profession },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     PlaceStockpile { rect: Rect },
+    SetProfession { dwarf: Id },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -505,6 +507,8 @@ fn claim_jobs(
         for (slot, (entity, id, pos, current, carrying, profession)) in
             dwarves.iter_mut().enumerate()
         {
+            // NOTE: a trade with no dwarf leaves its jobs unclaimed and silent, by Wolf's ruling
+            // (12.6 Task 0.2); the roster is the player's signal.
             if trade(job.kind) != **profession {
                 // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
                 continue;
@@ -1612,12 +1616,17 @@ impl World {
     /// paused. Designation intake changes marks only; it is not world advancement.
     // NOTE: command ordering is explicit at the call site rather than enforced by `.chain()`.
     pub fn apply_command(&mut self, command: SimCommand) -> Option<Refusal> {
+        // Before the rect prelude: this command carries no rect.
+        if let SimCommand::SetProfession { dwarf, profession } = command {
+            return self.set_profession(dwarf, profession);
+        }
         let dims = self.dims();
         let rect = match command {
             SimCommand::Designate { rect, .. }
             | SimCommand::CancelDesignation { rect }
             | SimCommand::PlaceStockpile { rect }
             | SimCommand::RemoveStockpile { rect } => rect,
+            SimCommand::SetProfession { .. } => unreachable!("dispatched before the rect prelude"),
         };
         let min = Pos {
             x: rect.min.x.min(rect.max.x),
@@ -1741,6 +1750,41 @@ impl World {
                     zones.0.remove(&pos);
                 }
             }
+            SimCommand::SetProfession { .. } => unreachable!("dispatched before the rect prelude"),
+        }
+        None
+    }
+
+    fn set_profession(&mut self, dwarf: Id, profession: Profession) -> Option<Refusal> {
+        let Some(entity) = self
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.contains::<Dwarf>() && entity.get::<Id>() == Some(&dwarf))
+            .map(|entity| entity.id())
+        else {
+            return Some(Refusal::SetProfession { dwarf });
+        };
+        if self.ecs.get::<Profession>(entity) == Some(&profession) {
+            return None;
+        }
+        // NOTE: an emptied trade is allowed (12.6 Task 0.2); no last-of-trade refusal.
+        self.ecs.entity_mut(entity).insert(profession);
+        let held = self
+            .ecs
+            .get::<CurrentJob>(entity)
+            .and_then(|current| current.0)
+            .and_then(|job_id| {
+                self.ecs
+                    .resource::<Jobs>()
+                    .iter()
+                    .find(|job| job.id == job_id)
+            })
+            .copied();
+        // A held job is always of the old trade, so a changed trade lets go of it. Not
+        // `retry_claim`: the job did not fail, and a cooldown would delay the right-trade claim.
+        // NOTE: the released job's `WorkProgress` is lost; the next miner starts the dig from 0.
+        if held.is_some_and(|job| trade(job.kind) != profession) {
+            release_claim(&mut self.ecs, entity);
         }
         None
     }

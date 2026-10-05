@@ -420,6 +420,10 @@ pub fn entity_appearance(kind: EntityKind) -> EntityAppearance {
     }
 }
 
+/// The grey of a dwarf's trade and the key hint beside it: the tui's roster grey, approved in the
+/// 12.6 look draft (`12-6-signoff/draft.md`).
+pub const TRADE_TEXT_COLOR: Color = Color::srgb_u8(150, 160, 170);
+
 /// A dwarf's tunic colour, from the approved 12.2 draft (`12-2-signoff/draft.md`). The tui draws
 /// the same five hexes for the roster (`tui::palette::dwarf_colour`); both clients own their copy.
 pub fn dwarf_tunic_color(colour: protocol::DwarfColour) -> Color {

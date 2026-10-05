@@ -241,6 +241,16 @@ fn tick(
                         rect: bridge::rect_in(rect),
                     });
                 }
+                protocol::Command::SetProfession { dwarf, profession } => {
+                    refusals.extend(
+                        world
+                            .apply_command(sim_core::SimCommand::SetProfession {
+                                dwarf: sim_core::Id(dwarf),
+                                profession: bridge::profession_in(profession),
+                            })
+                            .map(bridge::refusal_out),
+                    );
+                }
             }
         }
         // Fire a scheduled speed change the moment the world stands on its tick, BEFORE the step
@@ -802,6 +812,7 @@ fn command_rects(command: &protocol::Command) -> Option<&[protocol::Rect]> {
         | protocol::Command::RemoveStockpile { rect } => Some(std::slice::from_ref(rect)),
         protocol::Command::PlaceStockpile { rects } => Some(rects),
         protocol::Command::SetSpeed { .. }
+        | protocol::Command::SetProfession { .. }
         | protocol::Command::Save
         | protocol::Command::Load
         | protocol::Command::Quit => None,

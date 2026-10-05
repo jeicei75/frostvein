@@ -31,9 +31,10 @@ use bevy::{
     post_process::{bloom::Bloom, dof::DepthOfField},
     prelude::{
         AmbientLight, Camera3d, ClearColor, Color, Commands, Component, DefaultPlugins,
-        DirectionalLight, GlobalTransform, GlobalZIndex, Has, KeyCode, Node, PerspectiveProjection,
-        PositionType, Projection, Query, Res, ResMut, Resource, Text, TextColor, TextFont, Time,
-        Transform, TransformSystems, Vec2, Vec3, Window, With, Without, px,
+        DirectionalLight, GlobalTransform, GlobalZIndex, Has, KeyCode, Local, Node,
+        PerspectiveProjection, PositionType, Projection, Query, Res, ResMut, Resource, Text,
+        TextColor, TextFont, TextSpan, Time, Transform, TransformSystems, Vec2, Vec3, Window, With,
+        Without, px,
     },
     render::renderer::RenderAdapterInfo,
     window::PrimaryWindow,
@@ -808,7 +809,8 @@ pub fn projection_systems(app: &mut App) {
         // written it, or the displayed level trails the cut by one frame.
         .add_systems(Update, update_slice_readout.after(ProjectionSet))
         .add_systems(Update, update_clock_readout.after(ProjectionSet))
-        .add_systems(Update, update_name_readout.after(ProjectionSet));
+        .add_systems(Update, update_name_readout.after(ProjectionSet))
+        .add_systems(Update, report_trade_changes.after(ingest_messages));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
     // another is the same defect this function's own doc comment describes: `crates/gui/tests/
@@ -878,6 +880,8 @@ pub fn client_systems(app: &mut App) {
     // Bevy's overlay plugin owns opaque UI component types. Every entity it creates is
     // still GUI-local, so classify the complete startup scene after all plugin setup.
     .add_systems(bevy::app::PostStartup, classify_client_local)
+    // Its own registration, not a member of the Startup tuple above: mutation rows quote that tuple.
+    .add_systems(Startup, push_startup_trade)
     .add_systems(
         Update,
         (
@@ -945,6 +949,7 @@ pub fn client_systems(app: &mut App) {
                 .after(crate::command::toggle_pause)
                 .before(send_commands),
             crate::command::save_load_keys.before(send_commands),
+            crate::command::trade_key.before(send_commands),
             // Before `send_commands`, so the hand-back reaches the socket on the frame the
             // exit is requested rather than never.
             crate::command::restore_speed_on_exit.before(send_commands),
@@ -1017,6 +1022,8 @@ struct Args {
     distance: Option<f32>,
     /// `--select <id>`: start with this dwarf selected, as if he had been clicked.
     select: Option<u32>,
+    /// `--trade <miner|hauler|woodcutter>`: send `set_profession` for the `--select`ed dwarf once.
+    trade: Option<protocol::Profession>,
     camera: Option<CameraStart>,
     cursor: Option<Vec2>,
     at_tick: Option<u64>,
@@ -1148,6 +1155,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     let mut slice_level = None;
     let mut distance = None;
     let mut select = None;
+    let mut trade = None;
     let mut camera = None;
     let mut cursor = None;
     let mut at_tick = None;
@@ -1261,6 +1269,14 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
                     .parse()
                     .context("invalid --select id")?,
             );
+        } else if arg == "--trade" {
+            let value = args.next().context("--trade requires a trade name")?;
+            trade = Some(match value.to_string_lossy().as_ref() {
+                "miner" => protocol::Profession::Miner,
+                "hauler" => protocol::Profession::Hauler,
+                "woodcutter" => protocol::Profession::Woodcutter,
+                other => bail!("unknown --trade {other}: expected miner, hauler or woodcutter"),
+            });
         } else if arg == "--camera" {
             let value = args
                 .next()
@@ -1339,6 +1355,9 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
     if drag.is_some() && capture.is_none() {
         bail!("--drag requires --capture");
     }
+    if trade.is_some() && select.is_none() {
+        bail!("--trade requires --select; it names no dwarf of its own");
+    }
     if drag.is_some() && cursor.is_some() {
         // `apply_scripted_input` takes the drag branch OR the cursor branch, never both, so a
         // `--cursor` passed alongside `--drag` is parsed, validated, inserted and then never
@@ -1359,6 +1378,7 @@ fn parse_args_from(args: impl IntoIterator<Item = OsString>) -> anyhow::Result<A
         slice_level,
         distance,
         select,
+        trade,
         camera,
         cursor,
         at_tick,
@@ -1539,6 +1559,9 @@ fn insert_capture_resources(app: &mut App, args: &Args) {
     }
     if let Some(id) = args.select {
         app.insert_resource(crate::pick::SelectedDwarf(Some(id)));
+    }
+    if let Some(trade) = args.trade {
+        app.insert_resource(StartupTrade(trade));
     }
     if let Some(camera) = args.camera {
         app.insert_resource(camera);
@@ -1734,7 +1757,9 @@ pub struct Hud;
 #[derive(Component)]
 pub struct ClockReadout;
 
-/// The selected dwarf's name, in his tunic colour. Empty with no selection.
+/// The name slot. Nothing selected: the crew roster, one `Name  trade` line per dwarf in id order.
+/// A dwarf selected: his name, then his trade and the key that changes it. The text lives in
+/// `TextSpan` children, one per colour; the root is empty.
 #[derive(Component)]
 pub struct NameReadout;
 
@@ -1757,33 +1782,136 @@ fn setup_name_readout(mut commands: Commands) {
     ));
 }
 
+/// `--trade`'s request, waiting for the first frame after the snapshot.
+#[derive(Resource)]
+struct StartupTrade(protocol::Profession);
+
+/// Sends `--trade` once, for the `--select`ed dwarf, then forgets it. The connect snapshot is
+/// already in the mirror at `Startup`, so this is "after the snapshot".
+fn push_startup_trade(
+    mut commands: Commands,
+    trade: Option<Res<StartupTrade>>,
+    selected: Res<crate::pick::SelectedDwarf>,
+    mut pending: ResMut<crate::command::PendingCommands>,
+) {
+    let (Some(trade), Some(dwarf)) = (trade, selected.0) else {
+        return;
+    };
+    pending.push(protocol::Command::SetProfession {
+        dwarf,
+        profession: trade.0,
+    });
+    commands.remove_resource::<StartupTrade>();
+}
+
+/// The `gui dwarf {id} trade {trade}` lines for every dwarf whose wire profession differs from the
+/// last look. `seen` is `None` until the first call, which records the snapshot and prints nothing.
+fn trade_change_lines(
+    seen: &mut Option<std::collections::BTreeMap<u32, protocol::Profession>>,
+    mirror: &Mirror,
+) -> Vec<String> {
+    let now: std::collections::BTreeMap<u32, protocol::Profession> = mirror
+        .entities()
+        .filter_map(|entity| Some((entity.id, entity.profession?)))
+        .collect();
+    let lines = match seen.as_ref() {
+        None => Vec::new(),
+        Some(before) => now
+            .iter()
+            .filter(|(id, trade)| before.get(id).is_some_and(|old| old != *trade))
+            .map(|(id, trade)| {
+                format!(
+                    "gui dwarf {id} trade {}",
+                    client_core::profession_text(*trade)
+                )
+            })
+            .collect(),
+    };
+    *seen = Some(now);
+    lines
+}
+
+/// NOTE: chatty by design, as 12.5's clip line is. Printed from the MIRROR, never at send time, so
+/// it only ever reports the daemon's word; a dead daemon arm prints nothing here.
+fn report_trade_changes(
+    mirror: Res<MirrorResource>,
+    mut seen: Local<Option<std::collections::BTreeMap<u32, protocol::Profession>>>,
+) {
+    for line in trade_change_lines(&mut seen, &mirror.0) {
+        eprintln!("{line}");
+    }
+}
+
+/// The coloured pieces of the name slot, read from the MIRROR: the trade shown is the one the
+/// daemon last reported, never the one a key asked for.
+fn name_readout_spans(mirror: &Mirror, selected: Option<u32>) -> Vec<(String, Color)> {
+    let grey = crate::appearance::TRADE_TEXT_COLOR;
+    let trade = |entity: &protocol::Entity| entity.profession.map(client_core::profession_text);
+    if let Some(id) = selected {
+        let Some(entity) = mirror.entities().find(|entity| entity.id == id) else {
+            return Vec::new();
+        };
+        let Some(identity) = entity.identity else {
+            return Vec::new();
+        };
+        let mut spans = Vec::new();
+        let name = client_core::dwarf_name_text(identity.name);
+        let color = crate::appearance::dwarf_tunic_color(identity.colour);
+        match trade(entity) {
+            Some(trade) => {
+                spans.push((format!("{name}\n"), color));
+                spans.push((format!("{trade}   T: change trade"), grey));
+            }
+            None => spans.push((name.to_owned(), color)),
+        }
+        return spans;
+    }
+    let mut spans = Vec::new();
+    let dwarves = mirror
+        .entities()
+        .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        .filter_map(|entity| Some((entity, entity.identity?)))
+        .collect::<Vec<_>>();
+    for (index, (entity, identity)) in dwarves.iter().enumerate() {
+        // NOTE: names are padded to the longest (6) so the trade column lines up; no wrapping logic.
+        let name = format!("{:<7}", client_core::dwarf_name_text(identity.name));
+        let newline = if index + 1 < dwarves.len() { "\n" } else { "" };
+        spans.push((name, crate::appearance::dwarf_tunic_color(identity.colour)));
+        spans.push((
+            format!("{}{newline}", trade(entity).unwrap_or_default()),
+            grey,
+        ));
+    }
+    spans
+}
+
 fn update_name_readout(
+    mut commands: Commands,
     mirror: Res<MirrorResource>,
     selected: Res<crate::pick::SelectedDwarf>,
-    mut readout: Query<(&mut Text, &mut TextColor), With<NameReadout>>,
+    readout: Query<bevy::prelude::Entity, With<NameReadout>>,
+    mut shown: Local<Vec<(String, Color)>>,
 ) {
-    let identity = selected.0.and_then(|id| {
-        mirror
-            .0
-            .entities()
-            .find(|entity| entity.id == id)
-            .and_then(|entity| entity.identity)
-    });
-    let (text, color) = match identity {
-        Some(identity) => (
-            client_core::dwarf_name_text(identity.name),
-            crate::appearance::dwarf_tunic_color(identity.colour),
-        ),
-        None => ("", Color::WHITE),
-    };
-    for (mut readout, mut text_color) in &mut readout {
-        if readout.0 != text {
-            readout.0 = text.to_owned();
-        }
-        if text_color.0 != color {
-            text_color.0 = color;
-        }
+    let spans = name_readout_spans(&mirror.0, selected.0);
+    if spans == *shown {
+        return;
     }
+    for root in &readout {
+        commands
+            .entity(root)
+            .despawn_children()
+            .with_children(|root| {
+                for (text, color) in &spans {
+                    root.spawn((
+                        TextSpan::new(text.clone()),
+                        TextFont::from_font_size(22.0),
+                        TextColor(*color),
+                        ClientLocal,
+                    ));
+                }
+            });
+    }
+    *shown = spans;
 }
 
 /// 8.3 (Wolf): time of day, sim time elapsed, and the daemon's speed, in one line.
@@ -3498,41 +3626,142 @@ mod tests {
         assert_eq!(readout(&mut app), "01:15   elapsed 0d 03:15   speed paused");
     }
 
-    /// 12.2 AC6. Captures hide every HUD element, so the evidence is this test: the name line
-    /// shows the SELECTED dwarf's name in his tunic colour, and nothing with no selection.
-    #[test]
-    fn the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears() {
-        use protocol::{DwarfColour, DwarfName, Identity};
-        let named = |id, x, name, colour| protocol::Entity {
+    /// The name slot's spans, in order: `(text, colour)` per `TextSpan` child of the readout.
+    fn name_spans(app: &mut App) -> Vec<(String, [u8; 3])> {
+        let world = app.world_mut();
+        let root = world
+            .query_filtered::<bevy::prelude::Entity, With<super::NameReadout>>()
+            .single(world)
+            .unwrap();
+        let children: Vec<_> = world
+            .entity(root)
+            .get::<bevy::prelude::Children>()
+            .map(|children| children.iter().collect())
+            .unwrap_or_default();
+        children
+            .into_iter()
+            .map(|child| {
+                let entity = world.entity(*child);
+                (
+                    entity.get::<bevy::prelude::TextSpan>().unwrap().0.clone(),
+                    bevy::color::ColorToPacked::to_u8_array_no_alpha(
+                        entity
+                            .get::<bevy::prelude::TextColor>()
+                            .unwrap()
+                            .0
+                            .to_srgba(),
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    fn name_text(app: &mut App) -> String {
+        name_spans(app).into_iter().map(|(text, _)| text).collect()
+    }
+
+    fn trade_dwarf(
+        id: u32,
+        name: protocol::DwarfName,
+        colour: protocol::DwarfColour,
+        profession: protocol::Profession,
+    ) -> protocol::Entity {
+        protocol::Entity {
             id,
             kind: protocol::EntityKind::Dwarf,
-            pos: [x, 0, 0],
+            pos: [id as i32, 0, 0],
             state: protocol::JobState::Idle,
             light: None,
-            identity: Some(Identity { name, colour }),
-            profession: None,
+            identity: Some(protocol::Identity { name, colour }),
+            profession: Some(profession),
             job: None,
             carrying: None,
-        };
+        }
+    }
+
+    fn crew_snapshot() -> Snapshot {
+        use protocol::{DwarfColour as C, DwarfName as N, Profession as P};
         let mut snapshot = snapshot_at_tick(0, Speed::Normal);
         snapshot.entities = vec![
-            named(4, 0, DwarfName::Durin, DwarfColour::Red),
-            named(7, 1, DwarfName::Bifur, DwarfColour::Blue),
+            trade_dwarf(1, N::Nain, C::Purple, P::Woodcutter),
+            trade_dwarf(2, N::Ori, C::Green, P::Hauler),
+            trade_dwarf(3, N::Bifur, C::Red, P::Miner),
+            trade_dwarf(4, N::Frar, C::Gold, P::Hauler),
+            trade_dwarf(5, N::Dori, C::Blue, P::Miner),
+        ];
+        snapshot
+    }
+
+    fn entity_delta(tick: u64, entities: Vec<protocol::Entity>) -> Delta {
+        Delta {
+            msg_type: MessageType::Delta,
+            tick,
+            tiles: Vec::new(),
+            entities,
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            refusals: Vec::new(),
+        }
+    }
+
+    /// 12.6 AC5. Captures hide every HUD element, so the evidence is this test: with nothing
+    /// selected the name slot is the crew roster, one `Name  trade` line per dwarf in id order,
+    /// the name in his tunic colour and the trade in grey, and it follows a delta.
+    #[test]
+    fn the_roster_lists_every_dwarf_in_id_order_and_follows_a_trade_change() {
+        let (mut app, sender, _server) = configured_app_with_snapshot(&[], crew_snapshot());
+        app.update();
+        const GREY: [u8; 3] = [150, 160, 170];
+        // Independent oracle: the approved hexes and the approved grey, written out.
+        let name = |text: &str, rgb| (text.to_owned(), rgb);
+        assert_eq!(
+            name_spans(&mut app),
+            vec![
+                name("Nain   ", [0x80, 0x4C, 0xA8]),
+                name("woodcutter\n", GREY),
+                name("Ori    ", [0x3E, 0x92, 0x4C]),
+                name("hauler\n", GREY),
+                name("Bifur  ", [0xB2, 0x3A, 0x34]),
+                name("miner\n", GREY),
+                name("Frar   ", [0xD6, 0xA4, 0x2C]),
+                name("hauler\n", GREY),
+                name("Dori   ", [0x3C, 0x62, 0xBA]),
+                name("miner", GREY),
+            ]
+        );
+        // A delta carries the FULL entity list, so the changed dwarf rides with the other four.
+        let mut crew = crew_snapshot().entities;
+        crew[2].profession = Some(protocol::Profession::Hauler);
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(entity_delta(1, crew)))))
+            .unwrap();
+        app.update();
+        assert_eq!(
+            name_text(&mut app),
+            "Nain   woodcutter\nOri    hauler\nBifur  hauler\nFrar   hauler\nDori   miner"
+        );
+    }
+
+    /// 12.2 AC6, as 12.6 reshaped it. Captures hide every HUD element, so the evidence is this
+    /// test: the name line shows the SELECTED dwarf's name in his tunic colour, a second grey line
+    /// gives his trade and the key, and Escape (no selection) brings the roster back.
+    #[test]
+    fn the_name_hud_shows_the_selected_dwarfs_name_in_his_colour_and_clears() {
+        use protocol::{DwarfColour, DwarfName, Profession};
+        let mut snapshot = snapshot_at_tick(0, Speed::Normal);
+        snapshot.entities = vec![
+            trade_dwarf(4, DwarfName::Durin, DwarfColour::Red, Profession::Miner),
+            trade_dwarf(7, DwarfName::Bifur, DwarfColour::Blue, Profession::Hauler),
         ];
         let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
         app.update();
-        let readout = |app: &mut App| {
-            let world = app.world_mut();
-            let (text, colour) = world
-                .query_filtered::<(&Text, &bevy::prelude::TextColor), With<super::NameReadout>>()
-                .single(world)
-                .unwrap();
-            (
-                text.0.clone(),
-                bevy::color::ColorToPacked::to_u8_array_no_alpha(colour.0.to_srgba()),
-            )
-        };
-        assert_eq!(readout(&mut app).0, "", "no selection shows nothing");
+        assert_eq!(
+            name_text(&mut app),
+            "Durin  miner\nBifur  hauler",
+            "no selection shows the roster"
+        );
         let select = |app: &mut App, id| {
             app.world_mut()
                 .insert_resource(crate::pick::SelectedDwarf(id));
@@ -3540,14 +3769,209 @@ mod tests {
         };
         select(&mut app, Some(4));
         // Independent oracle: the approved hexes, written out.
-        assert_eq!(readout(&mut app), ("Durin".to_owned(), [0xB2, 0x3A, 0x34]));
+        assert_eq!(
+            name_spans(&mut app),
+            vec![
+                ("Durin\n".to_owned(), [0xB2, 0x3A, 0x34]),
+                ("miner   T: change trade".to_owned(), [150, 160, 170]),
+            ]
+        );
         select(&mut app, Some(7));
-        assert_eq!(readout(&mut app), ("Bifur".to_owned(), [0x3C, 0x62, 0xBA]));
+        assert_eq!(
+            name_spans(&mut app),
+            vec![
+                ("Bifur\n".to_owned(), [0x3C, 0x62, 0xBA]),
+                ("hauler   T: change trade".to_owned(), [150, 160, 170]),
+            ]
+        );
         select(&mut app, None);
         assert_eq!(
-            readout(&mut app).0,
+            name_text(&mut app),
+            "Durin  miner\nBifur  hauler",
+            "clearing the selection brings the roster back"
+        );
+    }
+
+    fn press_key(app: &mut App, key: KeyCode) {
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(key);
+        app.update();
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.release_all();
+        keys.clear();
+    }
+
+    /// 12.6 AC7. `T` with a dwarf selected writes exactly ONE `set_profession` with the NEXT trade
+    /// to the socket; with nothing selected it writes nothing. The readout reads the MIRROR: after
+    /// the key it still says the OLD trade, and moves only when a delta says so. If it showed the
+    /// request, a daemon that ignored the command would look like it worked.
+    #[test]
+    fn t_sends_one_set_profession_with_the_next_trade_and_the_readout_waits_for_the_wire() {
+        let (mut app, sender, server) = configured_app_with_snapshot(&[], crew_snapshot());
+        app.update();
+
+        press_key(&mut app, KeyCode::KeyT);
+        assert!(
+            read_one_command(&server).is_empty(),
+            "T with nothing selected must write nothing"
+        );
+
+        // Dwarf 3 is Bifur, a miner.
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(3)));
+        app.update();
+        press_key(&mut app, KeyCode::KeyT);
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_profession","dwarf":3,"profession":"hauler"}"#
+        );
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "one press must send exactly one command"
+        );
+        assert_eq!(
+            name_text(&mut app),
+            "Bifur\nminer   T: change trade",
+            "the readout must still say the OLD trade until the wire changes it"
+        );
+
+        let mut crew = crew_snapshot().entities;
+        crew[2].profession = Some(protocol::Profession::Hauler);
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(entity_delta(1, crew)))))
+            .unwrap();
+        app.update();
+        assert_eq!(name_text(&mut app), "Bifur\nhauler   T: change trade");
+
+        // The order wraps: a woodcutter's next trade is miner.
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(1)));
+        app.update();
+        press_key(&mut app, KeyCode::KeyT);
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_profession","dwarf":1,"profession":"miner"}"#
+        );
+    }
+
+    /// 12.6 AC8. A `set_profession` refusal in a delta shows in the refusal slot with
+    /// `refusal_text`'s words, and the next world command, `T` included, clears it.
+    #[test]
+    fn a_trade_refusal_shows_in_the_refusal_slot_and_t_clears_it() {
+        let (mut app, sender, _server) = configured_app_with_snapshot(&[], crew_snapshot());
+        app.update();
+        let hud = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<&Text, With<crate::designate::RefusalHint>>()
+                .single(app.world())
+                .unwrap()
+                .0
+                .clone()
+        };
+        let refusal = protocol::Refusal::SetProfession { dwarf: 999 };
+        let mut delta = entity_delta(1, crew_snapshot().entities);
+        delta.refusals = vec![refusal];
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta))))
+            .unwrap();
+        app.update();
+        assert_eq!(hud(&mut app), "trade refused: no such dwarf");
+        app.world_mut()
+            .insert_resource(crate::pick::SelectedDwarf(Some(3)));
+        app.update();
+        assert_eq!(hud(&mut app), "trade refused: no such dwarf");
+        press_key(&mut app, KeyCode::KeyT);
+        app.update();
+        assert_eq!(
+            hud(&mut app),
             "",
-            "clearing the selection empties the line"
+            "T is a world command and clears the refusal"
+        );
+    }
+
+    /// 12.6 AC9. `--trade` needs `--select` (it names no dwarf of its own) and only knows the three
+    /// trades; either mistake is a parse error rather than a flag that quietly does nothing.
+    #[test]
+    fn the_trade_flag_needs_a_selection_and_a_known_trade() {
+        let parse = |args: &[&str]| {
+            super::parse_args_from(
+                args.iter()
+                    .map(std::ffi::OsString::from)
+                    .collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(
+            parse(&["--select", "2", "--trade", "hauler"])
+                .unwrap()
+                .trade,
+            Some(protocol::Profession::Hauler)
+        );
+        assert_eq!(
+            parse(&["--select", "2", "--trade", "woodcutter"])
+                .unwrap()
+                .trade,
+            Some(protocol::Profession::Woodcutter)
+        );
+        assert_eq!(
+            parse(&["--select", "2", "--trade", "miner"]).unwrap().trade,
+            Some(protocol::Profession::Miner)
+        );
+        assert!(
+            parse(&["--trade", "hauler"]).is_err(),
+            "--trade needs --select"
+        );
+        assert!(
+            parse(&["--select", "2", "--trade", "smith"]).is_err(),
+            "an unknown trade is a parse error"
+        );
+        assert!(
+            parse(&["--select", "2", "--trade"]).is_err(),
+            "--trade needs a value"
+        );
+        assert_eq!(parse(&["--select", "2"]).unwrap().trade, None);
+    }
+
+    /// 12.6 AC9. `--trade` pushes the command ONCE, after the snapshot, for the `--select`ed dwarf.
+    #[test]
+    fn the_trade_flag_sends_one_set_profession_for_the_selected_dwarf() {
+        let (mut app, _sender, server) =
+            configured_app_with_snapshot(&["--select", "3", "--trade", "hauler"], crew_snapshot());
+        app.update();
+        assert_eq!(
+            read_one_command(&server),
+            r#"{"type":"set_profession","dwarf":3,"profession":"hauler"}"#
+        );
+        app.update();
+        app.update();
+        assert!(
+            read_one_command(&server).is_empty(),
+            "--trade must send once, not every frame"
+        );
+    }
+
+    /// 12.6 AC9. The `trade` line is printed from the MIRROR: nothing for the snapshot, one line per
+    /// change of a dwarf's wire profession after it, and nothing for a delta that changes none.
+    #[test]
+    fn a_trade_line_is_reported_only_for_a_change_the_wire_made() {
+        let mut seen = None;
+        let mut crew = crew_snapshot();
+        let mirror = Mirror::from_snapshot(crew.clone()).unwrap();
+        assert!(
+            super::trade_change_lines(&mut seen, &mirror).is_empty(),
+            "the snapshot itself prints nothing"
+        );
+        assert!(super::trade_change_lines(&mut seen, &mirror).is_empty());
+        crew.entities[2].profession = Some(protocol::Profession::Hauler);
+        let changed = Mirror::from_snapshot(crew).unwrap();
+        assert_eq!(
+            super::trade_change_lines(&mut seen, &changed),
+            vec!["gui dwarf 3 trade hauler".to_owned()]
+        );
+        assert!(
+            super::trade_change_lines(&mut seen, &changed).is_empty(),
+            "a change is reported once"
         );
     }
 
@@ -4377,6 +4801,10 @@ mod tests {
             (
                 KeyCode::Escape,
                 "abort designation / clear selection (designate.rs, pick.rs)",
+            ),
+            (
+                KeyCode::KeyT,
+                "change the selected dwarf's trade (command.rs)",
             ),
             (KeyCode::Digit1, "designate dig (designate.rs)"),
             (KeyCode::Digit2, "designate channel (designate.rs)"),

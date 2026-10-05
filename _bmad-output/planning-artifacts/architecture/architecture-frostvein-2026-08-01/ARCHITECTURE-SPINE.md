@@ -153,7 +153,7 @@ graph LR
 - **Binds:** F3, F6, F7
 - **Prevents:** mid-tick mutation; I/O-order nondeterminism
 - **Rule:** only world-mutating commands (`designate`, `cancel_designation`,
-  `place_stockpile`, `remove_stockpile`) ride the queue: `simd` queues them
+  `place_stockpile`, `remove_stockpile`, `set_profession`) ride the queue: `simd` queues them
   decoded; `sim-core`
   consumes the queue at the start of the next loop iteration, in arrival
   order. Control commands (`set_speed`, `save`, `load`, `quit`) concern the
@@ -175,6 +175,12 @@ graph LR
   would have kept the count at three at the price of a wire command whose
   name lied about half of what it did — in the one crate whose entire job is
   being the single source of message shapes.
+- **Amended 2026-10-05 (Story 12.6):** a fifth world-mutating command,
+  `set_profession { dwarf, profession }`, rides the queue. It is the first
+  that names a dwarf instead of a rect: the first selection-driven command.
+  The split is unchanged — a trade change is world state, saved and claimed
+  on — so only the enumeration grows. Its one refusal (an unknown dwarf id)
+  rides the next delta's `refusals` like 12.1's.
 
 ### AD-11 — Save/load is an explicit `SaveState` struct
 
