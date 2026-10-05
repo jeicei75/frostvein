@@ -2555,6 +2555,9 @@ development_status:
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
   12-7-timber: in-progress
+  #   Dev done 2026-10-05 (Sonnet 5.5 agents + Opus): live wire OK (4 logs at A's base, Nain the only holder),
+  #     deliberate RED (row 3, 5x5 crown) shown; 12-7.sh 20/20 KILLED + 24/24 re-pointed old rows KILLED;
+  #     FULL GATE GREEN 3251 s on a7b1ded. Next: Wolf's seat (AC12, 12-7-signoff/vehicle-card.md), then review.
   #   Created 2026-10-05 on fd9ca98. RED on the live wire (12-7-signoff/timber_wire.py): `designate kind cut`
   #     is unrecognized; a dig mark lands on a trunk and digs it away for nothing. Trees have no identity:
   #     one tree = trunk column + foliage in its 3x3 column (trunks >= 3 apart; crowns can TOUCH, 22 of 57

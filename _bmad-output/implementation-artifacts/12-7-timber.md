@@ -285,7 +285,7 @@ Task 0, before any gui or tui display is built. Wolf ruled Task 0 at creation.
   - [x] Run the Verification recipe: GREEN, then the deliberate RED (row 3). Record both outputs.
   - [x] Write `12-7-signoff/vehicle-card.md` in the seat's launch form. Say where to look: the hint bar is
     bottom-left, the marks are at the pines' feet, and the log is at the foot of the felled pine.
-  - [ ] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (about 55 min, [[gate-ooms-at-default-parallelism]]).
+  - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (about 55 min, [[gate-ooms-at-default-parallelism]]).
 
 ## Dev Notes
 
@@ -498,6 +498,8 @@ cell). Read the marks at their feet. Nain (purple)
   was never refused`. Row 11: `save_load.rs:287`, `item_kinds()` after load. Row 13: `the last cancel
   must hold the trunk's base`. Row 14: `a log, not a cube`. Rows 12, 14b, 15 and 16 died on their
   named tests' first asserts. Row 16 (the placeholder clip) is beyond the story's list.
+- **Full gate GREEN** on `a7b1ded`: `RUST_TEST_THREADS=1 scripts/gate.sh`, 3251 s (cargo test 237 s,
+  pixel guards 2978 s), `GATE GREEN`, exit 0.
 
 ### Completion Notes List
 
@@ -561,3 +563,4 @@ cell). Read the marks at their feet. Nain (purple)
 | --- | --- |
 | 2026-10-05 | Story created on `fd9ca98`. RED on the live wire (`timber_wire.py`: `designate kind cut` unrecognized; a dig mark lands on a trunk and digs it away, dropping nothing). Look draft `12-7-signoff/draft.md` written; Task 0 open. |
 | 2026-10-05 | Task 0 ruled by Wolf: draft approved with the Dig clip as the cut placeholder; one log per trunk cell (over the recommended one per pine), stacked in the gui; zero-cell dig/channel/cut rects all refused; refusal texts as written. |
+| 2026-10-05 | Dev (Sonnet 5.5 agents A and B, Opus verifying): `designate cut`, `DwarfJob::Cut`, `ItemKind` and `Refusal::Designate` on the wire; whole-tree felling into one log per trunk cell; dig/channel never take trees; zero-cell rects refused; gui cut mode `5`, cut mark, stacked logs, Dig clip placeholder; tui `/` and `=`. Live wire OK (4 logs) and the deliberate RED shown; 20/20 + 24/24 re-pointed mutations killed; spine AD-16 amended; README; seat card. Full gate GREEN 3251 s on `a7b1ded`. Awaiting Wolf's seat (AC12). |
