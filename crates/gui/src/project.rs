@@ -2001,7 +2001,13 @@ pub fn reconcile(
                     commands.entity(entity).despawn();
                 }
             }
-            if position[2] <= slice.level() && matches!(mirror.tile(*position), Some(Tile::Empty)) {
+            // Debris lies on whatever is under the emptied tile; with nothing there it would hang
+            // in the air, as a felled pine's crown did (#168).
+            let below = [position[0], position[1], position[2] - 1];
+            if position[2] <= slice.level()
+                && matches!(mirror.tile(*position), Some(Tile::Empty))
+                && matches!(mirror.tile(below), Some(Tile::Solid(_) | Tile::Ramp(_)))
+            {
                 for offset in chip_offsets() {
                     let mut entity = commands.spawn((
                         DigChip(*position),

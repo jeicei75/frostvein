@@ -193,3 +193,12 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''                    | protocol::DwarfJob::Channel { .. }
 '''))
 PY
+
+# #168, found at the seat (AC12): a felled pine left dig-debris chips hanging where its crown was.
+mutation "17 debris spawns over air again" gui a_felled_tree_leaves_debris_at_its_foot_and_none_in_the_air <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                && matches!(mirror.tile(below), Some(Tile::Solid(_) | Tile::Ramp(_)))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                && (below[2] < 0 || true)\n'))
+PY

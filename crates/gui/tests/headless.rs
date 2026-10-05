@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -1001,6 +1001,51 @@ fn sliced_view_does_not_spawn_dig_chips_above_the_cut() {
     assert_eq!(
         chips, 0,
         "a later dig above the selected level must not leave floating debris"
+    );
+}
+
+/// #168: a felled pine empties its whole column in one delta. Debris lies only where something
+/// is under the emptied tile, so the foot of the trunk keeps its chips and the air above gets none.
+#[test]
+fn a_felled_tree_leaves_debris_at_its_foot_and_none_in_the_air() {
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 1, y: 1, z: 4 },
+        vec![
+            Tile::Solid(Material::Stone),
+            Tile::Solid(Material::TreeTrunk),
+            Tile::Solid(Material::TreeTrunk),
+            Tile::Solid(Material::TreeFoliage),
+        ],
+        Vec::new(),
+    ));
+    app.update();
+
+    apply_delta(
+        &mut app,
+        delta(
+            (1..=3)
+                .map(|z| TileChange {
+                    pos: [0, 0, z],
+                    tile: Tile::Empty,
+                })
+                .collect(),
+            Vec::new(),
+        ),
+    );
+    app.update();
+
+    let mut chips_per_tile = BTreeMap::<[i32; 3], usize>::new();
+    for chip in app
+        .world_mut()
+        .query::<&gui::project::DigChip>()
+        .iter(app.world())
+    {
+        *chips_per_tile.entry(chip.0).or_default() += 1;
+    }
+    assert_eq!(
+        chips_per_tile,
+        BTreeMap::from([([0, 0, 1], gui::project::CHIPS_PER_TILE)]),
+        "debris at the trunk's foot only: none may hang where the trunk and crown were"
     );
 }
 
@@ -2189,8 +2234,10 @@ fn atmosphere_entities_are_client_local_and_never_world_projected() {
 
 #[test]
 fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_them() {
-    let mut app = headless_app(snapshot(
-        vec![Tile::Solid(Material::Ice), Tile::Empty],
+    // The dug tile has a floor under it: debris only lies on something (#168).
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 1, y: 1, z: 2 },
+        vec![Tile::Solid(Material::Ice), Tile::Solid(Material::Ice)],
         Vec::new(),
     ));
     app.update();
@@ -2198,7 +2245,7 @@ fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_
         &mut app,
         delta(
             vec![TileChange {
-                pos: [0, 0, 0],
+                pos: [0, 0, 1],
                 tile: Tile::Empty,
             }],
             Vec::new(),
@@ -2222,7 +2269,11 @@ fn empty_tile_delta_leaves_deterministic_client_local_chips_and_snapshot_clears_
 
     apply_snapshot(
         &mut app,
-        snapshot(vec![Tile::Solid(Material::Ice), Tile::Empty], Vec::new()),
+        snapshot_with_dims(
+            Dims { x: 1, y: 1, z: 2 },
+            vec![Tile::Solid(Material::Ice), Tile::Empty],
+            Vec::new(),
+        ),
     );
     app.update();
     assert_eq!(chips.iter(app.world()).count(), 0);
