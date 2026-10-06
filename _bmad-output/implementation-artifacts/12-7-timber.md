@@ -127,11 +127,13 @@ Task 0, before any gui or tui display is built. Wolf ruled Task 0 at creation.
      (Task 4); the tui still shows one `=` per cell.
   3. **A dig, channel or cut rect that marks nothing is REFUSED:** one `Refusal::Designate { kind, rect }`
      for all three kinds (standing AC 6). The side effect is accepted: over a forest edge, the treetop rows
-     of a gui channel drag show `channel refused: nothing to channel` while the ground rows apply. A rect
+     of a gui channel drag show `channel refused: nothing to channel` while the ground rows apply.
+     (Text superseded by review D1, 2026-10-05: `…, or the mark limit is reached`.) A rect
      wholly out of bounds stays as today: it is dropped in the prelude (`lib.rs:1623-1668`), and no client
      can produce one.
   4. **Refusal texts as written:** `cut refused: no tree`, `dig refused: nothing to dig`, `channel refused:
-     nothing to channel`. Each is a `&'static str` in `client_core::refusal_text`.
+     nothing to channel`. Each is a `&'static str` in `client_core::refusal_text`. Superseded by review
+     D1 (2026-10-05): each text now ends `, or the mark limit is reached`.
 - [x] **Task 1: protocol (wire diff).** RED first: write the literal pins below before the types.
   - [x] `DesignationKind::Cut`, `DwarfJob::Cut { target: [i32; 3] }`, `ItemKind { Stone, Wood }`,
     `Item.kind`, `Refusal::Designate { kind, rect }`. `Refusal` stays `Copy`.
@@ -354,7 +356,7 @@ included. Closure table (no REWORK rows: this is round 1's first patch pass):
 
 | Item | Written for | Then tested | Pre-existing-state fixture |
 | --- | --- | --- | --- |
-| Refusal texts | the text source (`refusal_text`) | the display side: gui HUD `ingest.rs:4018` asserts HUD == `refusal_text` exactly; tui `a_designate_refusal_shows_on_the_status_row` run with the full text pinned | the tui's 80-column headless frame. It went RED with the full text pinned (`…or the mark limit ` clipped), so that test keeps its old `contains("cut refused: no tree")` claim and the clip is recorded as a NOTE, not hidden |
+| Refusal texts | the text source (`refusal_text`) | the display side: tui `a_designate_refusal_shows_on_the_status_row` run with the full text pinned. (Corrected in run 2: the gui HUD test at `ingest.rs:4018` sends a `PlaceStockpile` refusal and compares against `refusal_text` itself, so it pins no wording; no display path pins the new texts.) | the tui frame at this devpod's 80 columns (`tput cols`; the tui's own fallback is 100). It went RED with the full text pinned (`…or the mark limit ` clipped), so that test keeps its old `contains("cut refused: no tree")` claim and the clip is recorded as a NOTE, not hidden |
 | `items_out` join | a world holding an item with no `Pos` | release AND debug builds; release showed the silent mispairing (item 3 → `Wood`) | `an_item_without_a_position_does_not_shift_later_kinds`: ids 1 and 3 positioned, id 2 kind-only. The normal side (every item positioned) is serve.rs plus rows 5/8/10, all in the green full gate |
 | tui recipe count | a frame WITH a cut mark | a frame with NO mark, on a fresh release `simd 7713` (DEFAULT_SEED) | the status row's `z 13/31`: bare `/` count 1 unmarked / 2 marked, mark-colour count 0 / 1. The same line's `=` count was checked too: 0 `=` in the chrome, so it is sound |
 - [x] [Review][Defer] **Stacked items hop one step while a carrier stands on their cell** (blind + feature
@@ -421,7 +423,7 @@ audit ENDS here. The next spend goes to the seat.
 - NOT observed: the gui HUD showing the widened text (vehicle card step (d) will be the first time), and
   AC12's `4` clear.
 
-- [ ] [Review][Patch] **The closure table's refusal-texts row overclaims its display-side test, and
+- [x] [Review][Patch] **The closure table's refusal-texts row overclaims its display-side test, and
   misnames the 80 columns** (acceptance + blind, LOW, REWORK; a misreported verification).
   - `ingest.rs:4018` sends a `Refusal::PlaceStockpile`, not a `Designate`, and compares the HUD against
     `refusal_text(&expected)` itself, so it pins no wording.
@@ -432,11 +434,11 @@ audit ENDS here. The next spend goes to the seat.
     full-text pin goes GREEN at `COLUMNS=120` or with `TERM` unset. Keeping the prefix is right, because a
     full pin would be venue-flaky.
   - Correct the row and the NOTE wording.
-  [`12-7-timber.md:357`, `crates/client-core/src/lib.rs:14`]
-- [ ] [Review][Patch] **Task 0.3, Task 0.4 and the draft still quote the old texts, with no pointer to D1**
+  [`12-7-timber.md:357`, `crates/client-core/src/lib.rs:14`] — FIXED 2026-10-06 (row corrected in place, NOTE drops the gui claim).
+- [x] [Review][Patch] **Task 0.3, Task 0.4 and the draft still quote the old texts, with no pointer to D1**
   (acceptance, LOW; the partial-doc-update shape). They are records of rulings, so the old texts stay, but
   each needs a one-line "superseded by D1 (2026-10-05)" note.
-  [`12-7-timber.md:130,133`, `12-7-signoff/draft.md:46`]
+  [`12-7-timber.md:130,133`, `12-7-signoff/draft.md:46`] — FIXED 2026-10-06.
 - [x] [Review][Defer] **At the mark cap, a designate that overlaps existing marks drops its new cells
   silently** (feature + blind, LOW, RAN; pre-existing since 3.2's cap). An already-marked cell counts as
   applied, so `applied > 0`, there is no refusal, and the new cells are dropped. Live: a dig over
@@ -453,7 +455,8 @@ Dismissed (5):
 - `tui --frame` cannot show a refusal. That was the orchestrator's prompt error; `tui/src/main.rs:409`
   documents it, and `--frames N` does show one.
 
-Patches: Wolf chose to LEAVE THEM AS ACTION ITEMS (2026-10-06). Review cost $7.23 / 170 turns (subagents
+Patches: Wolf first chose to leave them as action items, then said "fix" (2026-10-06): both landed with
+the PR push, records and a comment only. Review cost $7.23 / 170 turns (subagents
 58.5%). Reaped 5.6 GB of /tmp layer caches (3.1 GB of free space reclaimed).
 
 ## Dev Notes
@@ -750,4 +753,4 @@ cell). Read the marks at their feet. Nain (purple)
 | 2026-10-05 | AC12 PASSED at Wolf's seat ("that works now", `4be19a0`). The log popping into the hauler's hands is #164 (out of scope; recorded there). Status -> review. Full gate last green on `a7b1ded`; re-run before the PR. |
 | 2026-10-05 | Code review run 1 on `fb726ce` (4 layers, none timed out): no HIGH/MED code defect; 2 decisions resolved, 3 patches left as action items, 8 deferred, 12 dismissed. D2's tui check found the gui is a mirror image of the tui (pre-existing): #169. The `4` clear was not observed. Status -> in-progress. The launcher no longer pulls (`6126e9e`, #143, Wolf's request during the review). |
 | 2026-10-06 | Review patch pass 1: the three refusal texts name the mark cap (`660c8f4`; tui clips them below ~95-110 columns, Wolf: land as ruled); `items_out` joins kinds by id (`9d96a7d`); the tui recipe counts the cut-mark colour (`ce737d6`); mutation rows 18-19 KILLED (`47c2f5c`). Full gate GREEN 3284 s on `47c2f5c`. Still open: AC12's `4` clear at the seat. Status stays in-progress. |
-| 2026-10-06 | Code review run 2 on the patch diff `8c3764f..7499534` (4 layers, none timed out): 0 HIGH/MED, so the static audit ends. D1's cap refusal observed live. 2 LOW record patches left as action items; the partial-cap silent drop deferred as #170. Status stays in-progress. |
+| 2026-10-06 | Code review run 2 on the patch diff `8c3764f..7499534` (4 layers, none timed out): 0 HIGH/MED, so the static audit ends. D1's cap refusal observed live. 2 LOW record patches fixed on Wolf's "fix" (records + a comment); the partial-cap silent drop deferred as #170. Pushed and PR opened on his yes; AC12's `4` clear still OPEN, so status stays in-progress. |

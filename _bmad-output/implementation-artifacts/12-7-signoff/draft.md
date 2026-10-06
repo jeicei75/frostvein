@@ -46,6 +46,9 @@ shows today:
 cut refused: no tree
 ```
 
+Superseded by review D1 (2026-10-05): the text now reads `cut refused: no tree, or the mark limit is
+reached`.
+
 ## 2. Felling (gui and tui)
 
 The woodcutter walks to the foot of the tree and works it (10 s at normal speed, like a dig). When he

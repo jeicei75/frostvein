@@ -12,8 +12,8 @@ pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
         protocol::Refusal::PlaceStockpile { .. } => "stockpile refused: no valid cells",
         protocol::Refusal::SetProfession { .. } => "trade refused: no such dwarf",
         // The sim counts a cell skipped at MAX_DESIGNATIONS as not applied, so a full mark cap
-        // refuses with these same texts. NOTE: the tui status row clips at the frame width and
-        // needs ~110 columns to show the channel text whole; the gui HUD shows it in full.
+        // refuses with these same texts. NOTE: the tui status row clips at the terminal's width
+        // (100 columns when it has none) and needs ~110 to show the channel text whole.
         protocol::Refusal::Designate { kind, .. } => match kind {
             protocol::DesignationKind::Cut => "cut refused: no tree, or the mark limit is reached",
             protocol::DesignationKind::Dig => {
