@@ -2555,6 +2555,9 @@ development_status:
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
   12-7-timber: in-progress
+  #   Review patch pass 1 2026-10-06: all 3 patches landed (660c8f4, 9d96a7d, ce737d6), rows 18-19 KILLED
+  #     (47c2f5c); FULL GATE GREEN 3284 s on 47c2f5c. Refusal texts clip in a tui < ~95-110 cols (Wolf: as ruled).
+  #     Next: optional round-2 review, the `4` clear at the seat (push first), then Wolf's yes for the PR.
   #   Code review run 1 2026-10-05 on fb726ce: no HIGH/MED; 3 patches LEFT AS ACTION ITEMS (refusal texts name the
   #     cap, tui recipe counts the mark colour, items_out by id); 8 deferred. D2 found the gui MIRRORS the tui
   #     (pre-existing) -> #169. AC12's `4` clear NOT observed. Launcher no longer pulls (6126e9e, #143).

@@ -331,18 +331,32 @@ Patches: Wolf chose to LEAVE THEM AS ACTION ITEMS (2026-10-05), for a `/bmad-rev
 the PR: the 3 patches, the `4` clear at the seat, and the full gate on the final HEAD.
 Review cost $26.45 / 483 turns (subagents 78.1%; it also carries the launcher fix's few turns). Reaped
 140.7 GB of /tmp layer caches (70.7 GB of free space reclaimed).
-- [ ] [Review][Patch] **Widen the three `Refusal::Designate` texts to name the cap** (from D1; blind +
+- [x] [Review][Patch] **Widen the three `Refusal::Designate` texts to name the cap** (from D1; blind +
   feature, LOW-MED, misreported error). `cut refused: no tree, or the mark limit is reached` and its dig and
   channel twins, re-pinned in `every_refusal_has_its_one_text`. [`crates/client-core/src/lib.rs:14`]
-- [ ] [Review][Patch] **The story's tui recipe `/` count cannot fail** (acceptance, LOW; a broken
+  — LANDED `660c8f4`. The tui status row clips the tail below ~95 (cut) to ~110 (channel) columns. Wolf
+  ruled on 2026-10-06 to land the texts as ruled and record the limit in a `// NOTE:` at `refusal_text`.
+- [x] [Review][Patch] **The story's tui recipe `/` count cannot fail** (acceptance, LOW; a broken
   instrument, the latent class, CONFIRMED). `grep -o '/' f2.txt | wc -l` gives 2 with a mark and 1 with
   none: the status row's `z 13/31` carries a `/`. The dev fixed the same collision in `tally_marks` but not
   in the recipe. Count the mark colour (`38;2;226;96;64m/`) instead.
-  [`12-7-timber.md` Verification, the tui recipe's `grep -o '/'` line]
-- [ ] [Review][Patch] **`items_out` pairs ids with kinds by position and checks only with `debug_assert_eq!`**
+  [`12-7-timber.md` Verification, the tui recipe's `grep -o '/'` line] — LANDED `ce737d6`.
+- [x] [Review][Patch] **`items_out` pairs ids with kinds by position and checks only with `debug_assert_eq!`**
   (edge, LOW; latent silent trap). `items()` keeps an item only if it has a `Pos`; `item_kinds()` keeps
   every `Item`. One item without a `Pos` would shift every later kind in a release daemon, with no log.
   Unreachable today. Look the kind up by id instead of zipping. [`crates/simd/src/bridge.rs:88`]
+  — LANDED `9d96a7d`.
+
+**Review patch pass 1, 2026-10-06** (`660c8f4`..`47c2f5c`). Every patch was RED before its fix. Mutation
+rows 18 and 19 were run as a focused scratch table: both KILLED; exclusivity is unverified. The full gate
+(`RUST_TEST_THREADS=1 scripts/gate.sh`) was GREEN on `47c2f5c`, exit 0, in 3284 s, pixel guards
+included. Closure table (no REWORK rows: this is round 1's first patch pass):
+
+| Item | Written for | Then tested | Pre-existing-state fixture |
+| --- | --- | --- | --- |
+| Refusal texts | the text source (`refusal_text`) | the display side: gui HUD `ingest.rs:4018` asserts HUD == `refusal_text` exactly; tui `a_designate_refusal_shows_on_the_status_row` run with the full text pinned | the tui's 80-column headless frame. It went RED with the full text pinned (`…or the mark limit ` clipped), so that test keeps its old `contains("cut refused: no tree")` claim and the clip is recorded as a NOTE, not hidden |
+| `items_out` join | a world holding an item with no `Pos` | release AND debug builds; release showed the silent mispairing (item 3 → `Wood`) | `an_item_without_a_position_does_not_shift_later_kinds`: ids 1 and 3 positioned, id 2 kind-only. The normal side (every item positioned) is serve.rs plus rows 5/8/10, all in the green full gate |
+| tui recipe count | a frame WITH a cut mark | a frame with NO mark, on a fresh release `simd 7713` (DEFAULT_SEED) | the status row's `z 13/31`: bare `/` count 1 unmarked / 2 marked, mark-colour count 0 / 1. The same line's `=` count was checked too: 0 `=` in the chrome, so it is sound |
 - [x] [Review][Defer] **Stacked items hop one step while a carrier stands on their cell** (blind + feature
   + acceptance, LOW, cosmetic; new in 12.7). `item_stacks` counts carried items, whose wire `pos` is the
   carrier's cell, so a hauler crossing a pile cell lifts a higher-id log by 0.28. The gui knows `carrying`
@@ -680,3 +694,4 @@ cell). Read the marks at their feet. Nain (purple)
 | 2026-10-05 | Seat (AC12): Wolf "works .. but cut trees have some blocks in the air". #168 filed; dig-debris chips spawned over air on every emptied tree tile. Fixed (`aed8c5b`): chips only over a solid or ramp floor. Mutation row 17 added and KILLED. Back to the seat for the floating blocks only. |
 | 2026-10-05 | AC12 PASSED at Wolf's seat ("that works now", `4be19a0`). The log popping into the hauler's hands is #164 (out of scope; recorded there). Status -> review. Full gate last green on `a7b1ded`; re-run before the PR. |
 | 2026-10-05 | Code review run 1 on `fb726ce` (4 layers, none timed out): no HIGH/MED code defect; 2 decisions resolved, 3 patches left as action items, 8 deferred, 12 dismissed. D2's tui check found the gui is a mirror image of the tui (pre-existing): #169. The `4` clear was not observed. Status -> in-progress. The launcher no longer pulls (`6126e9e`, #143, Wolf's request during the review). |
+| 2026-10-06 | Review patch pass 1: the three refusal texts name the mark cap (`660c8f4`; tui clips them below ~95-110 columns, Wolf: land as ruled); `items_out` joins kinds by id (`9d96a7d`); the tui recipe counts the cut-mark colour (`ce737d6`); mutation rows 18-19 KILLED (`47c2f5c`). Full gate GREEN 3284 s on `47c2f5c`. Still open: AC12's `4` clear at the seat. Status stays in-progress. |
