@@ -202,3 +202,24 @@ old = '                && matches!(mirror.tile(below), Some(Tile::Solid(_) | Til
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                && (below[2] < 0 || true)\n'))
 PY
+
+# Review patch pass (2026-10-06). D1: a full mark cap refuses with these texts, so they name it.
+mutation "18 the cut refusal forgets the mark cap" client-core every_refusal_has_its_one_text <<'PY'
+import pathlib
+p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
+old = '            protocol::DesignationKind::Cut => "cut refused: no tree, or the mark limit is reached",\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            protocol::DesignationKind::Cut => "cut refused: no tree",\n'))
+PY
+
+# items() drops an item with no Pos while item_kinds() keeps it; a zip shifts every later kind.
+mutation "19 the bridge zips items to kinds by position" simd an_item_without_a_position_does_not_shift_later_kinds <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
+old = '            kind: item_kind_out(kinds[&id]),\n'
+assert s.count(old) == 1
+s = s.replace(old, '            kind: item_kind_out(zipped.next().unwrap()),\n')
+old = '    let kinds: std::collections::BTreeMap<_, _> = kinds.into_iter().collect();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let mut zipped = kinds.into_iter().map(|(_, kind)| kind);\n'))
+PY
