@@ -2577,7 +2577,10 @@ development_status:
   #     is unrecognized; a dig mark lands on a trunk and digs it away for nothing. Trees have no identity:
   #     one tree = trunk column + foliage in its 3x3 column (trunks >= 3 apart; crowns can TOUCH, 22 of 57
   #     distance-3 pairs on DEFAULT_SEED, so no flood fill). Look draft in 12-7-signoff/; Task 0 open.
-  12-8-dwarves-at-work-the-cut: backlog
+  12-8-dwarves-at-work-the-cut: ready-for-dev
+  #   Created 2026-10-06 on 486095d. RED live: Nain logs `clip dig` on a cut (placeholder); startup `clips Walk,
+  #     Dig, Carry`. #173 NOT reproduced (pine mesh in flat green, not cubes) -> instrument only. #174 draft
+  #     12-8-signoff/draft.md awaits Wolf. Task 0 open: draft, chop period, #164 at Fast, #173 scope.
   #   2026-10-06 (Wolf): #164 (work visuals trail the walker), #173 (ghost pine) and #174 (cut-mode feel)
   #     FOLDED IN; see epics.md Story 12.8. Larger than drafted; the cap is soft.
   12-9-one-dwarf-per-tile: backlog
