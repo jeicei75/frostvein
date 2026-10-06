@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.6's creation
 
 # Story 12.7: Timber
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -754,3 +754,4 @@ cell). Read the marks at their feet. Nain (purple)
 | 2026-10-05 | Code review run 1 on `fb726ce` (4 layers, none timed out): no HIGH/MED code defect; 2 decisions resolved, 3 patches left as action items, 8 deferred, 12 dismissed. D2's tui check found the gui is a mirror image of the tui (pre-existing): #169. The `4` clear was not observed. Status -> in-progress. The launcher no longer pulls (`6126e9e`, #143, Wolf's request during the review). |
 | 2026-10-06 | Review patch pass 1: the three refusal texts name the mark cap (`660c8f4`; tui clips them below ~95-110 columns, Wolf: land as ruled); `items_out` joins kinds by id (`9d96a7d`); the tui recipe counts the cut-mark colour (`ce737d6`); mutation rows 18-19 KILLED (`47c2f5c`). Full gate GREEN 3284 s on `47c2f5c`. Still open: AC12's `4` clear at the seat. Status stays in-progress. |
 | 2026-10-06 | Code review run 2 on the patch diff `8c3764f..7499534` (4 layers, none timed out): 0 HIGH/MED, so the static audit ends. D1's cap refusal observed live. 2 LOW record patches fixed on Wolf's "fix" (records + a comment); the partial-cap silent drop deferred as #170. Pushed and PR opened on his yes; AC12's `4` clear still OPEN, so status stays in-progress. |
+| 2026-10-06 | MERGED as PR #171 (`110cab4`), before the `4` clear. Wolf then ran it at the seat on `main`: a cut mark cleared with `4`, and "cut marks are cleared in tui .. that we can close". AC12 CLOSED. His seat video (`12-7-signoff/gui 2026-10-06 13-54-50.mp4`, 30 MB, not committed) shows new gui issues: #173 (a pine drawn as bare green cubes) and #174 (cut-mode hover flicker, whole-area drag, tint a marked tree); both are folded into 12.8 with #164. Status -> done (flipped on the 12.8 branch, since 12.7 merged at in-progress). |

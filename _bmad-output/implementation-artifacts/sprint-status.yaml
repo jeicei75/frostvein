@@ -2554,7 +2554,9 @@ development_status:
   #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
-  12-7-timber: in-progress
+  12-7-timber: done
+  #   MERGED as PR #171 (110cab4) 2026-10-06. AC12's `4` clear SEEN at the seat afterwards (Wolf: "that we can
+  #     close"); flipped to done on the 12.8 branch. Seat video issues #173 #174 folded into 12.8 with #164.
   #   Code review run 2 2026-10-06 on the patch diff 8c3764f..7499534: 0 HIGH/MED -> stopping rule, audit ENDS.
   #     2 LOW record patches FIXED (Wolf: fix, push, PR); partial-cap silent drop deferred -> #170. D1 cap
   #     refusal now OBSERVED live. PR opened; AC12's `4` clear still OPEN at the seat.
