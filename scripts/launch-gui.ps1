@@ -39,9 +39,6 @@
     The daemon port. Defaults to 7451, which is also `protocol::DEFAULT_PORT` — so a bare `simd`
     with no argument listens on exactly this port.
 
-.PARAMETER SkipFetch
-    Do not fetch/pull the checkout first. The SHA check still runs.
-
 .PARAMETER GuiArgs
     Anything else is forwarded to gui.exe unchanged, AFTER the port and `--assets`. Put `--` first
     when a flag might be mistaken for one of this script's own parameters; that form always works.
@@ -69,7 +66,7 @@
 .NOTES
     WALKED ON WINDOWS 2026-09-07. Written in a Linux devpod with no Windows and no display, so it
     shipped unrun — and was then exercised at the seat: the happy path, MISMATCH (on a genuinely
-    stale binary, not a staged one), `unrecognised stamp`, the diverged-checkout refusal, and the
+    stale binary, not a staged one), `unrecognised stamp`, the diverged-checkout refusal (retired 2026-10-05 with the pull), and the
     `-dirty` refusal. A check that has never been seen to refuse is a habit rather than a guard;
     these have now been seen. Transcripts are in the story's Verification section.
 #>
@@ -81,7 +78,6 @@ param(
     # 7451, matching `protocol::DEFAULT_PORT` -- the constant was moved 7373 -> 7451 in this same
     # commit so the two cannot drift. A bare `simd` therefore lands on exactly this port.
     [int]$Port = 7451,
-    [switch]$SkipFetch,
     # Everything else goes straight to gui.exe. This exists so that wanting a flag is never a
     # reason to bypass the SHA check -- a hand-run gui.exe is exactly the case where a stale binary
     # goes unnoticed, which is the failure this script was written to close.
@@ -129,14 +125,10 @@ if (-not (Test-Path -LiteralPath $assets -PathType Container)) {
     Fail "the checkout has no assets/ directory: $assets"
 }
 
-# --- Bring the checkout up to date ------------------------------------------------------------
-if (-not $SkipFetch) {
-    Write-Host "launch-gui: fetching $Checkout"
-    & git -C $Checkout fetch --prune
-    if ($LASTEXITCODE -ne 0) { Fail 'git fetch failed' }
-    & git -C $Checkout pull --ff-only
-    if ($LASTEXITCODE -ne 0) { Fail 'git pull --ff-only failed; the checkout has diverged' }
-}
+# NEVER fetch or pull (Wolf, 2026-10-05; #143). A pull moved HEAD past the binary every time new
+# commits landed, so the SHA check below refused a build that had been fine a minute before. The
+# checkout moves only when Wolf pulls it himself; the check still refuses a binary that does not
+# match, so a pull without a rebuild is caught rather than run.
 
 # The checkout's HEAD, short, to compare against the stamp. `build.rs` uses `git rev-parse --short`,
 # so this must too, or the comparison is between two different lengths of the same commit.

@@ -1,13 +1,9 @@
 # Mutation set for story 5.1. Run:
 # scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/5-1-the-world-grows-things-that-glow.sh
 
-mutation "tree yield guard always spawns stone" sim-core execute_jobs_digs_tree_materials_without_spawning_items <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if yields_stone {\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '        if yields_stone || true {\n'))
-PY
+# Retired 2026-10-05 (12.7): "tree yield guard always spawns stone" attacked `if yields_stone || true` in execute_jobs.
+# Dig and channel can no longer be marked on tree tiles (12.7), so the tree branch and `yields_stone` are gone;
+# a tree yields wood through a cut, pinned by 12-7.sh (rows 1, 2, 5 and 5b).
 
 mutation "tree placement ignores the camp clearing" sim-core pines_use_both_tree_materials_and_leave_the_camp_clear <<'PY'
 import pathlib

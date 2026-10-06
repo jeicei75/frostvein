@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.5's creation
 
 # Story 12.6: Wolf Gives Them Their Trades
 
-Status: review
+Status: done
 
 ## Story
 
@@ -576,3 +576,4 @@ target/release/gui 7496 --headless --subdiv 4 --select 2 --trade hauler --frames
 | 2026-10-05 | AC11 PASSED at Wolf's seat ("works", `a5eb634`). Status -> review. |
 | 2026-10-05 | Code review run 1 on `9d6ce0a`: 4 layers, all ran the binaries; no code HIGH/MED. 4 doc/record patches left as action items (Wolf), 5 deferred, 5 dismissed. Status -> in-progress. |
 | 2026-10-05 | Patch pass 1: 4/4 doc patches landed (`e64bdbb` AD-10 Rule line; `aa771b6` seat card: Esc, Dori's FIFO wait, seat result). Doc-only; full gate not re-run (Wolf); fast gate green on both commits. Status -> review for round 2. |
+| 2026-10-05 | Merged as PR #167 (`fd9ca98`). Status -> done, recorded on the 12.7 branch. |

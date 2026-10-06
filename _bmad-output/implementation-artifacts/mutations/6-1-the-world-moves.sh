@@ -138,9 +138,10 @@ PY
 mutation "the blend lifts every item back off the tile floor" gui a_projected_item_is_rubble_resting_on_the_tile_floor <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            transform.translation = item_translation(*position);'
+# Re-pointed 2026-10-05 (12.7): `item_translation` takes the item's kind and stack slot (wood and stacking), so the quoted call is the three-argument form; the sabotage still drops back to the tile centre.
+old = '            transform.translation = item_translation(item.pos, item.kind, stacks[&item.id]);'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            transform.translation = world_to_render(*position);'))
+p.write_text(s.replace(old, '            transform.translation = world_to_render(item.pos);'))
 PY
 
 mutation "an item swallows the debris chips that share its tile" gui project::tests::a_stone_item_never_encloses_its_chips <<'PY'

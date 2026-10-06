@@ -2466,3 +2466,34 @@ the story, and one of them is also issue #125.
   save/load round trip.
 - **`trade_change_lines` is silent for a dwarf that first appears, or reappears, in a delta** (edge, LOW;
   `ingest.rs:1808`). It is unreachable while no dwarf spawns after connect.
+
+## Deferred from: code review of 12-7-timber (2026-10-05)
+
+- **Stacked items hop one step while a carrier stands on their cell** (blind + feature + acceptance, LOW,
+  cosmetic; new in 12.7; `crates/gui/src/project.rs:2262`). `item_stacks` counts carried items, whose wire
+  `pos` is the carrier's cell, so a hauler crossing a pile cell lifts a higher-id log by `ITEM_STACK_STEP`.
+  The gui knows `carrying` and could skip those items.
+- **A pile of 4-5 logs pokes out of its cell** (blind, LOW, cosmetic; `crates/gui/src/appearance.rs:251`).
+  The 4th log's top is 1.12 cells above the floor. Seen and passed at the seat.
+- **`item_stacks` re-sorts all items every frame, and once per released item** (blind, LOW;
+  `crates/gui/src/project.rs:566,2625`). No measured cost; n is in the hundreds.
+- **The loader accepts a cut mark that is not a tree base** (edge, LOW, RAN; `crates/simd/src/main.rs:641`).
+  With a hand-edited save, a mark on air is worked and vanishes with no wood, and a mid-trunk or foliage
+  mark idles the woodcutter forever.
+- **The bridge's "every designation kind" table lacks `Cut`, and nothing unit-pins
+  `refusal_out(Designate)` or `item_kind_out`** (acceptance, LOW; `crates/simd/src/bridge.rs:381`). Covered
+  end to end by the serve test.
+- **`--drag` is dead headless, and its README row does not say it needs a window** (feature, LOW, RAN;
+  pre-existing; `README.md:271`). `--drag cut` and `--drag dig` both panic `scripted --drag never completed`.
+- **A lagging walker can miss the whole cut swing** (feature, LOW, RAN in lavapipe;
+  `crates/gui/src/project.rs:509`). It is #164's `DwarfClip::Dig if !arrived` gating. The cut window is 5 s
+  at Normal and 0.25 s at fast4x. This is input for 12.8's clip tuning.
+- **The approved 12.7 draft says felling takes "10 s … like a dig"** (acceptance, LOW; record). The code is
+  50 ticks (5 s), equal to dig.
+
+## Deferred from: code review of 12-7-timber, run 2 (2026-10-06)
+
+- **At the mark cap, a designate that overlaps existing marks drops its new cells silently** (feature +
+  blind, LOW, RAN; pre-existing since story 3.2's cap; `crates/sim-core/src/lib.rs:1794`). An
+  already-marked cell counts as applied, so no refusal is raised. THE ISSUE IS THE STATE: **#170**
+  (route:undecided).

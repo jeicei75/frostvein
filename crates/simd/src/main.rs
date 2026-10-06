@@ -222,10 +222,14 @@ fn tick(
                     return Ok(());
                 }
                 protocol::Command::Designate { kind, rect } => {
-                    world.apply_command(sim_core::SimCommand::Designate {
-                        kind: bridge::designation_kind_in(kind),
-                        rect: bridge::rect_in(rect),
-                    });
+                    refusals.extend(
+                        world
+                            .apply_command(sim_core::SimCommand::Designate {
+                                kind: bridge::designation_kind_in(kind),
+                                rect: bridge::rect_in(rect),
+                            })
+                            .map(bridge::refusal_out),
+                    );
                 }
                 protocol::Command::CancelDesignation { rect } => {
                     world.apply_command(sim_core::SimCommand::CancelDesignation {
@@ -407,7 +411,7 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
             .filter(|job| {
                 matches!(
                     job.kind,
-                    sim_core::JobKind::Dig | sim_core::JobKind::Channel
+                    sim_core::JobKind::Dig | sim_core::JobKind::Channel | sim_core::JobKind::Cut
                 )
             })
             .count();
@@ -429,7 +433,7 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 save.items.len()
             );
         }
-        let item_ids: BTreeSet<_> = save.items.iter().map(|(id, _)| *id).collect();
+        let item_ids: BTreeSet<_> = save.items.iter().map(|(id, ..)| *id).collect();
         let mut seen_job_ids = BTreeSet::new();
         let mut seen_job_targets = BTreeSet::new();
         let mut seen_haul_items = BTreeSet::new();
@@ -450,7 +454,7 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 bail!("save reuses job id {}", job.id.0);
             }
             match job.kind {
-                sim_core::JobKind::Dig | sim_core::JobKind::Channel => {
+                sim_core::JobKind::Dig | sim_core::JobKind::Channel | sim_core::JobKind::Cut => {
                     if !seen_job_targets.insert(job.target) {
                         bail!(
                             "save reuses job target {},{},{}",
@@ -483,7 +487,7 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 id.0
             );
         }
-        for (id, pos) in &save.items {
+        for (id, pos, _) in &save.items {
             if !in_bounds(*pos) {
                 bail!(
                     "save item {id} position {},{},{} is outside dims {}x{}x{}",
@@ -598,7 +602,7 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 );
             }
         }
-        for (id, _) in &save.items {
+        for (id, ..) in &save.items {
             if !seen_ids.insert(*id) {
                 bail!("save reuses entity id {id}");
             }
@@ -637,6 +641,7 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
             let (expected_designation, kind_name) = match job.kind {
                 sim_core::JobKind::Dig => (sim_core::DesignationKind::Dig, "dig"),
                 sim_core::JobKind::Channel => (sim_core::DesignationKind::Channel, "channel"),
+                sim_core::JobKind::Cut => (sim_core::DesignationKind::Cut, "cut"),
                 // A haul job names a stone, not a tile: it has no designation and never had
                 // one. Its own rules live with the haul validation below.
                 sim_core::JobKind::Haul { .. } => continue,

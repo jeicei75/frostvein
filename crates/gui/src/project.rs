@@ -17,14 +17,14 @@ use bevy::{
     world_serialization::{WorldAsset, WorldAssetRoot},
 };
 use client_core::Mirror;
-use protocol::{DesignationKind, Dims, EntityKind, Material, Tile};
+use protocol::{DesignationKind, Dims, EntityKind, ItemKind, Material, Tile};
 
 use crate::{
     appearance::{
-        CARRY_OFFSET, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, debris_color,
-        designation_color, entity_appearance, flicker_scale, foliage_snow_color,
-        hover_highlight_color, light_properties, material_color, rim_dissolved_color,
-        rim_dissolved_color_at, snow_cap_color, zone_color,
+        CARRY_OFFSET, ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE,
+        WOOD_ITEM_DROP, WOOD_ITEM_SCALE, debris_color, designation_color, entity_appearance,
+        flicker_scale, foliage_snow_color, hover_highlight_color, light_properties, material_color,
+        rim_dissolved_color, rim_dissolved_color_at, snow_cap_color, wood_item_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
@@ -275,6 +275,8 @@ pub struct ProjectionAssets {
     debris: Handle<StandardMaterial>,
     dig_mark: Handle<StandardMaterial>,
     channel_mark: Handle<StandardMaterial>,
+    cut_mark: Handle<StandardMaterial>,
+    wood_item: Handle<StandardMaterial>,
     zone_mark: Handle<StandardMaterial>,
     hover_highlight: Handle<StandardMaterial>,
     trees: [Handle<WorldAsset>; 4],
@@ -422,11 +424,17 @@ impl DwarfClip {
 /// Dig is tested FIRST on purpose: a dwarf can be in `work` on a dig while the wire still says he
 /// carries a stone, and he swings. `work` alone is not a dig, because a hauler's pick-up and drop
 /// are `work` runs too -- only a dig or channel job makes it a swing.
+///
+/// A woodcutter working a cut swings too. // NOTE: placeholder until 12.8's Cut clip.
 pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
     if entity.state == protocol::JobState::Work
         && matches!(
             entity.job,
-            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
+            Some(
+                protocol::DwarfJob::Dig { .. }
+                    | protocol::DwarfJob::Channel { .. }
+                    | protocol::DwarfJob::Cut { .. }
+            )
         )
     {
         DwarfClip::Dig
@@ -536,21 +544,28 @@ pub fn sync_dwarf_work(
     for (item, marker, parent) in &items {
         match (carried.get(&marker.0), parent) {
             (Some(&dwarf), parent) if parent.map(ChildOf::parent) != Some(dwarf) => {
-                commands.entity(item).insert((
-                    ChildOf(dwarf),
-                    // The dwarf entity is scaled by `METRES_TO_CELLS` and a child inherits it, so
-                    // the stone's own scale is divided by it to stay `STONE_ITEM_SCALE` DRAWN.
-                    Transform::from_translation(CARRY_OFFSET)
-                        .with_scale(Vec3::splat(STONE_ITEM_SCALE / METRES_TO_CELLS)),
-                ));
+                if let Some(held) = mirror.0.items().find(|at| at.id == marker.0) {
+                    commands.entity(item).insert((
+                        ChildOf(dwarf),
+                        // The dwarf entity is scaled by `METRES_TO_CELLS` and a child inherits it,
+                        // so the item's own scale is divided by it to stay its per-kind scale
+                        // DRAWN.
+                        Transform::from_translation(CARRY_OFFSET)
+                            .with_scale(item_scale(held.kind) / METRES_TO_CELLS),
+                    ));
+                }
             }
             (None, Some(parent)) if !walking_in.contains(&parent.parent()) => {
                 // Let go, once he is drawn on the cell: unparent and snap back to the cell the
                 // wire now says it is on.
                 if let Some(at) = mirror.0.items().find(|at| at.id == marker.0) {
                     commands.entity(item).remove::<ChildOf>().insert(
-                        Transform::from_translation(item_translation(at.pos))
-                            .with_scale(Vec3::splat(STONE_ITEM_SCALE)),
+                        Transform::from_translation(item_translation(
+                            at.pos,
+                            at.kind,
+                            item_stacks(&mirror.0)[&at.id],
+                        ))
+                        .with_scale(item_scale(at.kind)),
                     );
                 }
             }
@@ -717,6 +732,10 @@ pub fn setup_projection_assets(
         channel_mark: materials.add(terrain_standard_material(designation_color(
             DesignationKind::Channel,
         ))),
+        cut_mark: materials.add(terrain_standard_material(designation_color(
+            DesignationKind::Cut,
+        ))),
+        wood_item: materials.add(terrain_standard_material(wood_item_color())),
         zone_mark: materials.add(terrain_standard_material(zone_color())),
         hover_highlight: materials.add(terrain_standard_material(hover_highlight_color())),
         trees: asset_server.as_ref().map_or_else(
@@ -925,10 +944,15 @@ fn preview_cells(
             designation_target(mirror, release, mode),
         ),
         _ => {
+            // Cut's single level is the cut-target level, the one the release sends.
+            let z = match mode {
+                DesignateMode::Cut => designation_target(mirror, anchor, mode)[2],
+                _ => anchor.tile[2],
+            };
             let rect = client_core::rect_on_level(
                 (anchor.tile[0], anchor.tile[1]),
                 (release.tile[0], release.tile[1]),
-                anchor.tile[2],
+                z,
             );
             (rect.min[1]..=rect.max[1])
                 .flat_map(|y| (rect.min[0]..=rect.max[0]).map(move |x| [x, y, rect.min[2]]))
@@ -948,6 +972,8 @@ fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
         DesignateMode::Channel | DesignateMode::Stockpile => {
             client_core::is_standable(mirror, tile)
         }
+        // Cut keeps a tile only where a tree stands: the sim marks every tree with a tile in the rect.
+        DesignateMode::Cut => crate::designate::is_tree_tile(mirror, tile),
         // Clear removes rather than designates; there is nothing for the sim to filter.
         DesignateMode::Clear | DesignateMode::None => true,
     }
@@ -975,6 +1001,9 @@ fn preview_appearance(
             assets.channel_mark.clone(),
         ),
         DesignateMode::Stockpile => (slab_transform(tile, -0.46), assets.zone_mark.clone()),
+        // The cut preview sits where the committed mark will: at the trunk base's floor, and it
+        // lights a foliage tile at its own level too, so the whole tree it catches reads.
+        DesignateMode::Cut => (slab_transform(tile, -0.46), assets.cut_mark.clone()),
         DesignateMode::None | DesignateMode::Clear => (
             slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
             assets.hover_highlight.clone(),
@@ -1972,7 +2001,13 @@ pub fn reconcile(
                     commands.entity(entity).despawn();
                 }
             }
-            if position[2] <= slice.level() && matches!(mirror.tile(*position), Some(Tile::Empty)) {
+            // Debris lies on whatever is under the emptied tile; with nothing there it would hang
+            // in the air, as a felled pine's crown did (#168).
+            let below = [position[0], position[1], position[2] - 1];
+            if position[2] <= slice.level()
+                && matches!(mirror.tile(*position), Some(Tile::Empty))
+                && matches!(mirror.tile(below), Some(Tile::Solid(_) | Tile::Ramp(_)))
+            {
                 for offset in chip_offsets() {
                     let mut entity = commands.spawn((
                         DigChip(*position),
@@ -2002,6 +2037,9 @@ pub fn reconcile(
         .map(|item| (item.id, item.pos))
         .collect();
     let item_ids: std::collections::BTreeSet<_> = visible_items.iter().map(|(id, _)| *id).collect();
+    let item_kinds: std::collections::BTreeMap<_, _> =
+        mirror.items().map(|item| (item.id, item.kind)).collect();
+    let stacks = item_stacks(mirror);
     wanted.extend(visible_items.iter().map(|(id, pos)| (*id, (*pos, None))));
     for (bevy_entity, marker, _, _) in projected.iter() {
         if !terrain.get(bevy_entity).is_ok() && !wanted.contains_key(&marker.0) {
@@ -2089,12 +2127,15 @@ pub fn reconcile(
                     if let Some(light) = mirror_entity.light {
                         entity.insert((point_light(light), ProjectedLight(light)));
                     }
-                } else if item_ids.contains(&id) {
+                } else if let Some(&kind) = item_kinds.get(&id) {
                     entity.insert((
                         Mesh3d(assets.cube.clone()),
-                        MeshMaterial3d(assets.slot(TerrainSlot::Stone, 0)),
-                        Transform::from_translation(item_translation(position))
-                            .with_scale(Vec3::splat(STONE_ITEM_SCALE)),
+                        MeshMaterial3d(match kind {
+                            ItemKind::Stone => assets.slot(TerrainSlot::Stone, 0),
+                            ItemKind::Wood => assets.wood_item.clone(),
+                        }),
+                        Transform::from_translation(item_translation(position, kind, stacks[&id]))
+                            .with_scale(item_scale(kind)),
                     ));
                 }
             }
@@ -2197,10 +2238,39 @@ pub fn reconcile(
     }
 }
 
-/// Where a stone item is drawn: the tile centre, dropped onto the tile floor. Both the spawn and
+/// Where an item is drawn: the tile centre, dropped onto the tile floor, and lifted one log height
+/// per item already stacked below it on the cell (`stack`, from `item_stacks`). Both the spawn and
 /// `blend_entities` call this so the two cannot drift apart.
-fn item_translation(position: [i32; 3]) -> Vec3 {
-    world_to_render(position) + Vec3::new(0.0, STONE_ITEM_DROP, 0.0)
+fn item_translation(position: [i32; 3], kind: ItemKind, stack: usize) -> Vec3 {
+    let drop = match kind {
+        ItemKind::Stone => STONE_ITEM_DROP,
+        ItemKind::Wood => WOOD_ITEM_DROP,
+    };
+    world_to_render(position) + Vec3::new(0.0, drop + ITEM_STACK_STEP * stack as f32, 0.0)
+}
+
+/// The drawn size of an item: a stone is a small cube, a log a long box.
+fn item_scale(kind: ItemKind) -> Vec3 {
+    match kind {
+        ItemKind::Stone => Vec3::splat(STONE_ITEM_SCALE),
+        ItemKind::Wood => WOOD_ITEM_SCALE,
+    }
+}
+
+/// Each item's place in the pile on its cell: items that share a cell stack by ascending id, so
+/// every log is drawn at its own height instead of inside the one below.
+fn item_stacks(mirror: &Mirror) -> std::collections::BTreeMap<u32, usize> {
+    let mut items = mirror.items().collect::<Vec<_>>();
+    items.sort_unstable_by_key(|item| item.id);
+    let mut seen = std::collections::BTreeMap::<[i32; 3], usize>::new();
+    items
+        .into_iter()
+        .map(|item| {
+            let below = seen.entry(item.pos).or_default();
+            *below += 1;
+            (item.id, *below - 1)
+        })
+        .collect()
 }
 
 /// The z a DIG slab is drawn at. A dig marks the top face of its own tile, but
@@ -2239,6 +2309,10 @@ fn designation_mark_transform(
             slab_transform([x, y, dig_mark_level(mirror, position, level)], 0.54)
         }
         DesignationKind::Channel => channel_slab(mirror, position, level),
+        // The mark sits at the trunk's base cell, on the ground that trunk stands on.
+        // NOTE: not lifted over cells drawn above it as dig's is: a tree's base has open air
+        // around it, and the trunk is not a cube that could seal the slab in.
+        DesignationKind::Cut => slab_transform(position, -0.46),
     }
 }
 
@@ -2453,13 +2527,15 @@ pub struct DwarfHeadings(
     // first, then dig) -- until then he is still walking in and keeps his walking heading.
     std::collections::BTreeMap<u32, bevy::prelude::Quat>,
 );
-/// The yaw toward the tile a dwarf is digging, while he works a DIG. `None` for a channel (dug
-/// under his own feet) and for anything that is not digging.
+/// The yaw toward the tile a dwarf is digging, while he works a DIG or a CUT. `None` for a
+/// channel (dug under his own feet) and for anything that is not digging.
 fn dig_yaw(entity: &protocol::Entity) -> Option<bevy::prelude::Quat> {
     if entity.state != protocol::JobState::Work {
         return None;
     }
-    let Some(protocol::DwarfJob::Dig { target }) = entity.job else {
+    // NOTE: placeholder until 12.8's Cut clip: a woodcutter faces the trunk like a miner faces rock.
+    let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job
+    else {
         return None;
     };
     // The yaw from his cell to the target is the yaw of a step between them.
@@ -2544,8 +2620,9 @@ pub fn blend_entities(
         .collect::<std::collections::BTreeMap<_, _>>();
     let items = mirror
         .items()
-        .map(|item| (item.id, item.pos))
+        .map(|item| (item.id, item))
         .collect::<std::collections::BTreeMap<_, _>>();
+    let stacks = item_stacks(mirror);
     for (marker, mut transform, walk_phase, parent) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
             let previous = mirror
@@ -2597,14 +2674,14 @@ pub fn blend_entities(
             {
                 transform.rotation = *rotation;
             }
-        } else if let Some(position) = items.get(&marker.0).filter(|_| parent.is_none()) {
+        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none()) {
             // A carried item has a parent and is placed by `sync_dwarf_work`, not here.
             //
             // Items have no previous wire state; snapping is the only wire-true presentation.
             // Must go through `item_translation` for the same reason the spawn does: this is the
             // sole writer of translation after spawn, so a bare `world_to_render` here would lift
             // every item back off the tile floor on the frame after it appeared.
-            transform.translation = item_translation(*position);
+            transform.translation = item_translation(item.pos, item.kind, stacks[&item.id]);
         }
     }
 }
@@ -2813,6 +2890,7 @@ impl ProjectionAssets {
         match kind {
             DesignationKind::Dig => self.dig_mark.clone(),
             DesignationKind::Channel => self.channel_mark.clone(),
+            DesignationKind::Cut => self.cut_mark.clone(),
         }
     }
 
@@ -3681,9 +3759,57 @@ mod tests {
     fn an_item_rests_on_the_tile_floor_at_spawn_and_after_the_blend() {
         let position = [3, 4, 5];
         let resting = world_to_render(position).y - 0.3;
-        assert!((item_translation(position).y - resting).abs() < 1e-6);
-        assert_eq!(item_translation(position).x, world_to_render(position).x);
-        assert_eq!(item_translation(position).z, world_to_render(position).z);
+        let stone = item_translation(position, ItemKind::Stone, 0);
+        assert!((stone.y - resting).abs() < 1e-6);
+        assert_eq!(stone.x, world_to_render(position).x);
+        assert_eq!(stone.z, world_to_render(position).z);
+    }
+
+    /// 12.7: the cut preview lights exactly the tree tiles the sim will catch, at the cut level.
+    /// A ground drag follows the same rule the release does: one level above the ground picked.
+    #[test]
+    fn the_cut_preview_lights_only_tree_tiles_at_the_cut_level() {
+        use crate::{designate::DesignateMode, pick::Face};
+        use protocol::Material::{Stone, TreeFoliage, TreeTrunk};
+        let dims = Dims { x: 3, y: 1, z: 4 };
+        let mut tiles = vec![Tile::Empty; 12];
+        let at = |x: usize, z: usize| x + z * 3;
+        for x in 0..3 {
+            tiles[at(x, 0)] = Tile::Solid(Stone);
+        }
+        tiles[at(1, 1)] = Tile::Solid(TreeTrunk);
+        tiles[at(1, 2)] = Tile::Solid(TreeTrunk);
+        tiles[at(0, 2)] = Tile::Solid(TreeFoliage);
+        tiles[at(2, 2)] = Tile::Solid(TreeFoliage);
+        let mirror = world(dims, tiles);
+        let cell = |tile| crate::pick::PickedCell {
+            tile,
+            face: Face::Top,
+        };
+
+        // Dragged over the ground: the cut level is the one above it, where only the trunk is.
+        assert_eq!(
+            preview_cells(
+                &mirror,
+                3,
+                cell([0, 0, 0]),
+                cell([2, 0, 0]),
+                DesignateMode::Cut
+            ),
+            vec![[1, 0, 1]],
+            "empty air beside a trunk must not light"
+        );
+        // Dragged from a crown tile: the trunk's own level, and the foliage on it lights too.
+        assert_eq!(
+            preview_cells(
+                &mirror,
+                3,
+                cell([0, 0, 2]),
+                cell([2, 0, 2]),
+                DesignateMode::Cut
+            ),
+            vec![[0, 0, 2], [1, 0, 2], [2, 0, 2]]
+        );
     }
 
     fn world(dims: Dims, tiles: Vec<Tile>) -> Mirror {

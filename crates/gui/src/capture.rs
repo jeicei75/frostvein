@@ -168,7 +168,7 @@ impl DrawStats {
     /// flag nor a zone it was never going to create.
     fn assert_drag_produced_work(&self, mode: DesignateMode) {
         match mode {
-            DesignateMode::Dig | DesignateMode::Channel => assert!(
+            DesignateMode::Dig | DesignateMode::Channel | DesignateMode::Cut => assert!(
                 self.expected_designations > 0,
                 "scripted --drag designated nothing: the mirror holds no designations at or \
                  below z {}, so this capture shows none of what it was taken to show",
@@ -2176,6 +2176,14 @@ mod tests {
         DrawStats::new(4, 12, 5, 5, 0, 1, 0, 1).assert_drag_produced_work(DesignateMode::Stockpile);
         // Clear REMOVES; ending with nothing to count is the correct outcome, not a failure.
         DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0).assert_drag_produced_work(DesignateMode::Clear);
+        // 12.7: a cut drag that marked no tree must fail like a dig that marked no tile.
+        assert!(
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0)
+                .assert_drag_produced_work(DesignateMode::Cut))
+            .is_err(),
+            "a cut drag that produced no designation must fail, not pass silently"
+        );
+        DrawStats::new(4, 12, 5, 5, 1, 0, 1, 0).assert_drag_produced_work(DesignateMode::Cut);
     }
 
     #[test]

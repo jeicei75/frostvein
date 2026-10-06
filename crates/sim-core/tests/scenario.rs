@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sim_core::{
-    DesignationKind, Dims, DwarfColour, DwarfName, Id, Identity, Job, JobId, JobKind, JobState,
-    Material, Pos, Profession, Rect, Refusal, SavedDwarf, SimCommand, Tile, World,
+    DesignationKind, Dims, DwarfColour, DwarfName, Id, Identity, ItemKind, Job, JobId, JobKind,
+    JobState, Material, Pos, Profession, Rect, Refusal, SavedDwarf, SimCommand, Tile, World,
 };
 
 fn rect(min: Pos, max: Pos) -> Rect {
@@ -60,7 +60,7 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
     for y in camp.y - 7..=camp.y + 7 {
         for x in camp.x - 7..=camp.x + 7 {
             let pos = Pos { x, y, z: camp.z };
-            if matches!(world.tile(pos), Some(Tile::Solid(material)) if material != Material::TreeTrunk)
+            if matches!(world.tile(pos), Some(Tile::Solid(material)) if !matches!(material, Material::TreeTrunk | Material::TreeFoliage))
                 && [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
                     .into_iter()
                     .any(|(nx, ny)| {
@@ -225,9 +225,8 @@ fn same_seed_wanders_identically() {
     }
 }
 
-#[test]
-fn trees_do_not_enclose_the_camp_from_outside_dig_work() {
-    let mut world = World::generate(42, Dims::DEFAULT);
+/// The trunk tile nearest the camp that has a standable cell beside it at its own level.
+fn nearest_trunk_beside_open_ground(world: &World) -> Pos {
     let camp = world.camp_origin();
     let mut trunks = Vec::new();
     for z in 0..world.dims().z as i32 {
@@ -237,7 +236,7 @@ fn trees_do_not_enclose_the_camp_from_outside_dig_work() {
                 if world.tile(pos) == Some(Tile::Solid(Material::TreeTrunk))
                     && [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
                         .into_iter()
-                        .any(|(nx, ny)| is_standable(&world, Pos { x: nx, y: ny, z }))
+                        .any(|(nx, ny)| is_standable(world, Pos { x: nx, y: ny, z }))
                 {
                     trunks.push(pos);
                 }
@@ -245,13 +244,18 @@ fn trees_do_not_enclose_the_camp_from_outside_dig_work() {
         }
     }
     trunks.sort_by_key(|pos| (pos.x.abs_diff(camp.x) + pos.y.abs_diff(camp.y), *pos));
-    let target = trunks[0];
+    trunks[0]
+}
+
+#[test]
+fn trees_do_not_enclose_the_camp_from_outside_cut_work() {
+    let mut world = World::generate(42, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let target = nearest_trunk_beside_open_ground(&world);
     assert!((target.x - camp.x).abs() > 3 || (target.y - camp.y).abs() > 3);
 
-    world.apply_command(SimCommand::Designate {
-        kind: DesignationKind::Dig,
-        rect: rect(target, target),
-    });
+    // Trees are cut, never dug (12.7): the woodcutter fells the whole tree, trunk tile included.
+    assert_eq!(cut(&mut world, target), None);
     for _ in 0..1_000 {
         world.step();
         if world.tile(target) == Some(Tile::Empty) {
@@ -1519,7 +1523,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             profession: Profession::Hauler,
         },
     ];
-    save.items = vec![(2, first), (3, second)];
+    save.items = vec![(2, first, ItemKind::Stone), (3, second, ItemKind::Stone)];
     save.next_id = 4;
     save.jobs = vec![
         Job {
@@ -1971,7 +1975,12 @@ fn same_seed_and_commands_remain_deterministic() {
     let mut first = World::generate(42, Dims::DEFAULT);
     let mut second = World::generate(42, Dims::DEFAULT);
     let channel_pos = first.dwarves()[0].1;
+    let trunk = nearest_trunk_beside_open_ground(&first);
     let commands = [
+        SimCommand::Designate {
+            kind: DesignationKind::Cut,
+            rect: rect(trunk, trunk),
+        },
         SimCommand::Designate {
             kind: DesignationKind::Channel,
             rect: rect(channel_pos, channel_pos),
@@ -1992,11 +2001,21 @@ fn same_seed_and_commands_remain_deterministic() {
         second.apply_command(command);
     }
 
-    for tick in 0..200 {
+    for tick in 0..400 {
         if tick == 60 {
             let command = SimCommand::SetProfession {
                 dwarf: first.professions()[0].0,
                 profession: Profession::Hauler,
+            };
+            first.apply_command(command);
+            second.apply_command(command);
+        }
+        // Seed 42's woodcutter is dwarf 0, who was just made a hauler: hand him the axe back, so
+        // the cut is felled inside the window and `item_kinds` compares real wood.
+        if tick == 120 {
+            let command = SimCommand::SetProfession {
+                dwarf: first.professions()[0].0,
+                profession: Profession::Woodcutter,
             };
             first.apply_command(command);
             second.apply_command(command);
@@ -2010,11 +2029,20 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.carrying(), second.carrying());
         assert_eq!(first.identities(), second.identities());
         assert_eq!(first.items(), second.items());
+        assert_eq!(first.item_kinds(), second.item_kinds());
         assert_eq!(first.emitters(), second.emitters());
         assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
         assert_eq!(first.zones(), second.zones());
     }
+    // THE GUARD: the cut was felled inside the window, so `item_kinds` compared real wood.
+    assert!(
+        first
+            .item_kinds()
+            .iter()
+            .any(|(_, kind)| *kind == ItemKind::Wood),
+        "the cut never produced wood in 400 ticks"
+    );
 }
 
 #[test]
@@ -2257,4 +2285,429 @@ fn an_opened_pile_cell_receives_the_stone() {
     }
     assert!(world.jobs().is_empty(), "never hauled once opened");
     assert_eq!(world.items(), vec![(sim_core::Id(10), pile)]);
+}
+
+// ---- Story 12.7: timber (DEFAULT_SEED's measured trees) ----
+
+/// Tree A and tree B stand at x 73. Their crowns touch (story 12.7, "Found at creation").
+const TREE_A: (i32, i32) = (73, 59);
+const TREE_B: (i32, i32) = (73, 56);
+
+/// An independent oracle for the tree rule, written from the story's wording and not from the
+/// sim's `tree_of`: the trunk column, plus the foliage in the 3x3 column around it, from the base
+/// to one above the top trunk cell. Returns the base and every tile.
+fn tree_tiles(world: &World, column: (i32, i32)) -> (Pos, BTreeSet<Pos>) {
+    let (x, y) = column;
+    let trunk: Vec<i32> = (0..world.dims().z as i32)
+        .filter(|z| world.tile(Pos { x, y, z: *z }) == Some(Tile::Solid(Material::TreeTrunk)))
+        .collect();
+    assert!(
+        !trunk.is_empty(),
+        "no trunk at {column:?}: pinned to DEFAULT_SEED"
+    );
+    let (base, top) = (trunk[0], *trunk.last().unwrap());
+    let mut tiles: BTreeSet<Pos> = trunk.iter().map(|z| Pos { x, y, z: *z }).collect();
+    for z in base..=top + 1 {
+        for fy in y - 1..=y + 1 {
+            for fx in x - 1..=x + 1 {
+                let pos = Pos { x: fx, y: fy, z };
+                if world.tile(pos) == Some(Tile::Solid(Material::TreeFoliage)) {
+                    tiles.insert(pos);
+                }
+            }
+        }
+    }
+    (Pos { x, y, z: base }, tiles)
+}
+
+fn kinds_at(world: &World, pos: Pos, kind: ItemKind) -> usize {
+    let kinds: BTreeMap<Id, ItemKind> = world.item_kinds().into_iter().collect();
+    world
+        .items()
+        .iter()
+        .filter(|(id, at)| *at == pos && kinds[id] == kind)
+        .count()
+}
+
+fn is_tree_material(tile: Option<Tile>) -> bool {
+    matches!(
+        tile,
+        Some(Tile::Solid(Material::TreeTrunk | Material::TreeFoliage))
+    )
+}
+
+fn cut(world: &mut World, pos: Pos) -> Option<Refusal> {
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Cut,
+        rect: rect(pos, pos),
+    })
+}
+
+fn woodcutter(world: &World) -> Id {
+    world
+        .professions()
+        .into_iter()
+        .find_map(|(id, profession)| (profession == Profession::Woodcutter).then_some(id))
+        .expect("DEFAULT_SEED has a woodcutter")
+}
+
+/// Which dwarf holds a job of this kind right now, if any.
+fn holder_of(world: &World, kind: JobKind) -> Option<Id> {
+    let jobs = world.jobs();
+    world.claims().into_iter().find_map(|(id, held)| {
+        let job = jobs.iter().find(|job| Some(job.id) == held)?;
+        (job.kind == kind).then_some(id)
+    })
+}
+
+#[test]
+fn cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let (a_base, a_tiles) = tree_tiles(&world, TREE_A);
+    let (_, b_tiles) = tree_tiles(&world, TREE_B);
+    assert!(a_tiles.is_disjoint(&b_tiles));
+    let b_before: Vec<_> = b_tiles.iter().map(|p| (*p, world.tile(*p))).collect();
+    let nain = woodcutter(&world);
+    let trunk_cells = a_tiles
+        .iter()
+        .filter(|p| world.tile(**p) == Some(Tile::Solid(Material::TreeTrunk)))
+        .count();
+    assert_eq!(trunk_cells, 4, "tree A has four trunk cells (z 12-15)");
+
+    assert_eq!(cut(&mut world, a_base), None);
+    assert_eq!(
+        world.designations(),
+        vec![(a_base, DesignationKind::Cut)],
+        "one mark, at the base"
+    );
+    let mut ever_held = false;
+    for _ in 0..3_000 {
+        world.step();
+        if let Some(holder) = holder_of(&world, JobKind::Cut) {
+            assert_eq!(holder, nain, "only the woodcutter holds a cut");
+            ever_held = true;
+        }
+        if a_tiles.iter().all(|p| world.tile(*p) == Some(Tile::Empty)) {
+            break;
+        }
+    }
+    assert!(ever_held, "the woodcutter never held the cut");
+    for tile in &a_tiles {
+        assert_eq!(
+            world.tile(*tile),
+            Some(Tile::Empty),
+            "{tile:?} still stands"
+        );
+    }
+    for (pos, before) in b_before {
+        assert_eq!(world.tile(pos), before, "tree B changed at {pos:?}");
+    }
+    assert_eq!(
+        kinds_at(&world, a_base, ItemKind::Wood),
+        4,
+        "one log per trunk cell, at the base"
+    );
+    assert!(
+        world
+            .item_kinds()
+            .iter()
+            .all(|(_, kind)| *kind == ItemKind::Wood),
+        "a cut leaves no stone"
+    );
+    assert!(world.designations().is_empty());
+    assert!(world.jobs().iter().all(|job| job.kind != JobKind::Cut));
+    assert!(
+        world
+            .claims()
+            .iter()
+            .all(|(id, held)| *id != nain || held.is_none())
+    );
+}
+
+#[test]
+fn a_cut_is_hauled_to_the_pile_as_wood() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let (a_base, _) = tree_tiles(&world, TREE_A);
+    let pile = (3..12)
+        .flat_map(|r| {
+            [
+                (camp.x - r - 2, camp.y),
+                (camp.x, camp.y + r),
+                (camp.x, camp.y - r - 2),
+                (camp.x + r, camp.y),
+            ]
+        })
+        .find(|(px, py)| {
+            (*px..*px + 3)
+                .all(|x| (*py..*py + 3).all(|y| is_standable(&world, Pos { x, y, z: camp.z })))
+        })
+        .expect("a 3x3 standable pile near the camp");
+    let corner = Pos {
+        x: pile.0,
+        y: pile.1,
+        z: camp.z,
+    };
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            corner,
+            Pos {
+                x: corner.x + 2,
+                y: corner.y + 2,
+                ..corner
+            },
+        ),
+    });
+    let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
+    assert_eq!(zones.len(), 9);
+    assert_eq!(cut(&mut world, a_base), None);
+
+    let mut on_pile = 0;
+    for _ in 0..8_000 {
+        world.step();
+        on_pile = world
+            .items()
+            .iter()
+            .filter(|(_, pos)| zones.contains(pos))
+            .count();
+        if on_pile == 4 {
+            break;
+        }
+    }
+    assert_eq!(on_pile, 4, "all four logs reach the pile");
+    let kinds: BTreeMap<Id, ItemKind> = world.item_kinds().into_iter().collect();
+    for (id, pos) in world.items() {
+        assert_eq!(kinds[&id], ItemKind::Wood);
+        assert!(
+            zones.contains(&pos),
+            "log {id:?} is at {pos:?}, off the pile"
+        );
+    }
+}
+
+#[test]
+fn a_cut_over_no_tree_is_refused_and_a_dig_never_marks_a_tree() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let (d_base, d_tiles) = tree_tiles(&world, (65, 56));
+    let air = rect(
+        Pos {
+            x: camp.x - 2,
+            y: camp.y - 2,
+            ..camp
+        },
+        Pos {
+            x: camp.x - 1,
+            y: camp.y - 1,
+            ..camp
+        },
+    );
+    let refusal = world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Cut,
+        rect: air,
+    });
+    assert_eq!(
+        refusal,
+        Some(Refusal::Designate {
+            kind: DesignationKind::Cut,
+            rect: air
+        })
+    );
+    assert!(world.designations().is_empty());
+
+    // A dig over a trunk, and over a foliage tile, marks nothing and is refused.
+    let foliage = *d_tiles
+        .iter()
+        .find(|p| world.tile(**p) == Some(Tile::Solid(Material::TreeFoliage)))
+        .unwrap();
+    for target in [d_base, foliage] {
+        let refused = world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        });
+        assert_eq!(
+            refused,
+            Some(Refusal::Designate {
+                kind: DesignationKind::Dig,
+                rect: rect(target, target)
+            })
+        );
+    }
+    assert!(world.designations().is_empty(), "no dig mark on a tree");
+
+    // A dig over the whole tree and the stone under it marks the stone only.
+    let floor = rect(
+        Pos {
+            x: d_base.x - 1,
+            y: d_base.y - 1,
+            z: d_base.z - 1,
+        },
+        Pos {
+            x: d_base.x + 1,
+            y: d_base.y + 1,
+            z: d_tiles.iter().map(|p| p.z).max().unwrap(),
+        },
+    );
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: floor
+        }),
+        None
+    );
+    let marked = world.designations();
+    assert!(!marked.is_empty(), "the ground under the tree takes a dig");
+    for (pos, kind) in &marked {
+        assert_eq!(*kind, DesignationKind::Dig);
+        assert!(
+            !is_tree_material(world.tile(*pos)),
+            "dig mark on tree {pos:?}"
+        );
+    }
+    // Re-marking an existing mark counts as applied.
+    let (again, _) = marked[0];
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(again, again)
+        }),
+        None
+    );
+    world.apply_command(SimCommand::CancelDesignation { rect: floor });
+    assert!(world.designations().is_empty());
+
+    // A channel over a cell standing on a tree (the air over a crown tip) marks nothing.
+    let dims = world.dims();
+    let on_tree = (0..dims.z as i32)
+        .flat_map(|z| {
+            (0..dims.y as i32).flat_map(move |y| (0..dims.x as i32).map(move |x| Pos { x, y, z }))
+        })
+        .find(|pos| {
+            is_standable(&world, *pos)
+                && is_tree_material(world.tile(Pos {
+                    z: pos.z - 1,
+                    ..*pos
+                }))
+        })
+        .expect("a cell standing on a treetop");
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(on_tree, on_tree)
+        }),
+        Some(Refusal::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(on_tree, on_tree)
+        })
+    );
+    assert!(world.designations().is_empty(), "no channel mark on a tree");
+    // A channel on ordinary ground still marks.
+    let ground_cell = Pos { z: camp.z, ..camp };
+    assert!(is_standable(&world, ground_cell));
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(ground_cell, ground_cell)
+        }),
+        None
+    );
+    assert_eq!(
+        world.designations(),
+        vec![(ground_cell, DesignationKind::Channel)]
+    );
+}
+
+#[test]
+fn a_cancel_touching_a_marked_tree_removes_its_mark_and_releases_the_woodcutter() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let (a_base, a_tiles) = tree_tiles(&world, TREE_A);
+    let (b_base, b_tiles) = tree_tiles(&world, TREE_B);
+    let nain = woodcutter(&world);
+    let crown = *a_tiles
+        .iter()
+        .rev()
+        .find(|p| world.tile(**p) == Some(Tile::Solid(Material::TreeFoliage)))
+        .unwrap();
+    assert_ne!(crown, a_base);
+    cut(&mut world, a_base);
+    cut(&mut world, b_base);
+    assert_eq!(world.designations().len(), 2);
+
+    // A rect over a tile of B only leaves A's mark alone, even where the crowns touch.
+    let b_only = *b_tiles
+        .iter()
+        .find(|p| world.tile(**p) == Some(Tile::Solid(Material::TreeFoliage)))
+        .unwrap();
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(b_only, b_only),
+    });
+    assert_eq!(world.designations(), vec![(a_base, DesignationKind::Cut)]);
+
+    for _ in 0..600 {
+        if holder_of(&world, JobKind::Cut) == Some(nain) {
+            break;
+        }
+        world.step();
+    }
+    assert_eq!(holder_of(&world, JobKind::Cut), Some(nain));
+
+    // A rect holding a CROWN tile, not the base, removes the mark, its job and the claim.
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(crown, crown),
+    });
+    assert!(world.designations().is_empty());
+    assert!(world.jobs().iter().all(|job| job.kind != JobKind::Cut));
+    assert_eq!(holder_of(&world, JobKind::Cut), None);
+    assert!(world.claims().iter().all(|(_, held)| held.is_none()));
+    for _ in 0..200 {
+        world.step();
+    }
+    assert!(
+        a_tiles.iter().all(|p| is_tree_material(world.tile(*p))),
+        "the cancelled tree stands"
+    );
+
+    // A rect over the base alone also removes a mark.
+    cut(&mut world, a_base);
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(a_base, a_base),
+    });
+    assert!(world.designations().is_empty());
+}
+
+#[test]
+fn a_cut_against_a_full_cap_is_refused_and_adds_no_mark() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    for y in 0..32 {
+        for x in 0..128 {
+            assert!(world.set_tile(Pos { x, y, z: 8 }, Tile::Solid(Material::Stone)));
+        }
+    }
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos { x: 0, y: 0, z: 8 },
+            Pos {
+                x: 127,
+                y: 31,
+                z: 8,
+            },
+        ),
+    });
+    assert_eq!(world.designations().len(), 4096);
+    let (a_base, _) = tree_tiles(&world, TREE_A);
+    assert_eq!(
+        cut(&mut world, a_base),
+        Some(Refusal::Designate {
+            kind: DesignationKind::Cut,
+            rect: rect(a_base, a_base)
+        })
+    );
+    assert_eq!(world.designations().len(), 4096);
+    assert!(
+        !world
+            .designations()
+            .iter()
+            .any(|(_, kind)| *kind == DesignationKind::Cut)
+    );
 }

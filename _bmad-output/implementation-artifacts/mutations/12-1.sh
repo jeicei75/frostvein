@@ -59,9 +59,11 @@ PY
 mutation "tui draws stored stones grey" tui a_stone_on_a_stockpile_cell_draws_in_the_stockpile_colour <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = '                stored_item_cell()\n            } else {\n                item_cell()\n'
+# Re-pointed 2026-10-05 (12.7): the item layer now picks the cell by kind and stored-ness in one
+# `match`, so the seam is the stone-on-a-stockpile arm.
+old = '                (protocol::ItemKind::Stone, true) => stored_item_cell(),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                item_cell()\n            } else {\n                item_cell()\n'))
+p.write_text(s.replace(old, '                (protocol::ItemKind::Stone, true) => item_cell(),\n'))
 PY
 
 # Review patch pass (2026-09-29).

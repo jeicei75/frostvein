@@ -48,6 +48,8 @@ pub const WORK_TICKS: u32 = 5;
 /// (Wolf at the 12.5 seat, 2026-10-03: "maybe it could dig longer one cell.. now it's just one
 /// hit", then "10 swings"). 5 s at Normal. Hauls keep `WORK_TICKS`.
 pub const DIG_WORK_TICKS: u32 = 50;
+// NOTE: tuned with 12.8's clip.
+pub const CUT_WORK_TICKS: u32 = 50;
 const RETRY_COOLDOWN: u64 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,6 +81,7 @@ pub struct Pos {
 pub enum DesignationKind {
     Dig,
     Channel,
+    Cut,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,6 +103,7 @@ pub enum SimCommand {
 pub enum Refusal {
     PlaceStockpile { rect: Rect },
     SetProfession { dwarf: Id },
+    Designate { kind: DesignationKind, rect: Rect },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,8 +128,14 @@ pub struct Id(pub u32);
 #[derive(Component)]
 pub struct Dwarf;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum ItemKind {
+    Stone,
+    Wood,
+}
+
 #[derive(Component)]
-struct Item;
+struct Item(ItemKind);
 
 #[derive(Component)]
 struct Emitter(LightKind);
@@ -226,6 +236,7 @@ pub struct JobId(pub u32);
 pub enum JobKind {
     Dig,
     Channel,
+    Cut,
     // NOTE: `item` is the identity. `Job.target` for a Haul is only the stone's position at
     // creation, kept so load validation can bounds-check every job the same way. Claiming and
     // execution read the stone's live `Pos` — never `target`, which is stale the moment the
@@ -275,7 +286,7 @@ impl Jobs {
             return false;
         }
         match job.kind {
-            JobKind::Dig | JobKind::Channel => {
+            JobKind::Dig | JobKind::Channel | JobKind::Cut => {
                 if self.targets.contains(&job.target) {
                     return false;
                 }
@@ -295,7 +306,7 @@ impl Jobs {
     fn remove(&mut self, id: JobId) -> Option<Job> {
         let job = self.by_id.remove(&id)?;
         match job.kind {
-            JobKind::Dig | JobKind::Channel => {
+            JobKind::Dig | JobKind::Channel | JobKind::Cut => {
                 self.targets.remove(&job.target);
             }
             JobKind::Haul { item } => {
@@ -332,6 +343,7 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
         let kind = match designation {
             DesignationKind::Dig => JobKind::Dig,
             DesignationKind::Channel => JobKind::Channel,
+            DesignationKind::Cut => JobKind::Cut,
         };
         let inserted = jobs.insert(Job {
             id,
@@ -435,6 +447,7 @@ fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
 fn trade(kind: JobKind) -> Profession {
     match kind {
         JobKind::Dig | JobKind::Channel => Profession::Miner,
+        JobKind::Cut => Profession::Woodcutter,
         JobKind::Haul { .. } => Profession::Hauler,
     }
 }
@@ -796,6 +809,59 @@ fn astar(
     astar_with_budget(terrain, blocked, from, goals, &mut nodes_remaining).0
 }
 
+/// The one tree rule: a tree is its trunk column plus the `TreeFoliage` in the 3x3 column around
+/// it, from the base to one above the top trunk cell. Returns the base (the lowest contiguous
+/// trunk cell) and every tile. `None` for anything that is not a tree tile.
+// NOTE: relies on `place_trees` keeping trunks at least 3 apart (Chebyshev), so no other tree's
+// tile lies in the 3x3 box; crowns can still touch, which is why this is a box and not a flood
+// fill. The gui's `incremental_tree_cover` uses the same box. Foliage with no trunk in reach is
+// no tree.
+fn tree_of(terrain: &Terrain, pos: Pos) -> Option<(Pos, Vec<Pos>)> {
+    let is_trunk = |p: Pos| terrain.tile(p) == Some(Tile::Solid(Material::TreeTrunk));
+    let column = match terrain.tile(pos)? {
+        Tile::Solid(Material::TreeTrunk) => (pos.x, pos.y),
+        Tile::Solid(Material::TreeFoliage) => {
+            let beside = (-1..=1)
+                .flat_map(|dy| (-1..=1).map(move |dx| (pos.x + dx, pos.y + dy)))
+                .find(|&(x, y)| is_trunk(Pos { x, y, z: pos.z }));
+            beside.or_else(|| {
+                let below = Pos {
+                    z: pos.z - 1,
+                    ..pos
+                };
+                is_trunk(below).then_some((pos.x, pos.y))
+            })?
+        }
+        _ => return None,
+    };
+    let (x, y) = column;
+    // The trunk cell of this column the search stands on: the one at `pos.z`, else the one under it.
+    let mut anchor = pos.z;
+    while !is_trunk(Pos { x, y, z: anchor }) {
+        anchor -= 1;
+    }
+    let mut base = anchor;
+    while is_trunk(Pos { x, y, z: base - 1 }) {
+        base -= 1;
+    }
+    let mut top = anchor;
+    while is_trunk(Pos { x, y, z: top + 1 }) {
+        top += 1;
+    }
+    let mut tiles: Vec<Pos> = (base..=top).map(|z| Pos { x, y, z }).collect();
+    for z in base..=top + 1 {
+        for fy in y - 1..=y + 1 {
+            for fx in x - 1..=x + 1 {
+                let p = Pos { x: fx, y: fy, z };
+                if terrain.tile(p) == Some(Tile::Solid(Material::TreeFoliage)) {
+                    tiles.push(p);
+                }
+            }
+        }
+    }
+    Some((Pos { x, y, z: base }, tiles))
+}
+
 /// `items` holds UNCARRIED stones only — a stone in transit occupies no tile, so a carrier
 /// crossing the pile never blocks a tile for anyone else.
 fn work_positions(
@@ -807,7 +873,7 @@ fn work_positions(
     carrying: Option<u32>,
 ) -> BTreeSet<Pos> {
     match job.kind {
-        JobKind::Dig => [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        JobKind::Dig | JobKind::Cut => [(-1, 0), (1, 0), (0, -1), (0, 1)]
             .into_iter()
             .map(|(dx, dy)| Pos {
                 x: job.target.x + dx,
@@ -1073,6 +1139,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             .unwrap_or(0);
         let needed = match job.kind {
             JobKind::Dig | JobKind::Channel => DIG_WORK_TICKS,
+            JobKind::Cut => CUT_WORK_TICKS,
             JobKind::Haul { .. } => WORK_TICKS,
         };
         if progress < needed {
@@ -1109,15 +1176,38 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             continue;
         }
 
+        if job.kind == JobKind::Cut {
+            let tree = tree_of(ecs.resource::<Terrain>(), job.target);
+            if let Some((base, tiles)) = tree {
+                let mut trunk_cells = 0;
+                for tile in &tiles {
+                    let terrain = ecs.resource::<Terrain>();
+                    if terrain.tile(*tile) == Some(Tile::Solid(Material::TreeTrunk)) {
+                        trunk_cells += 1;
+                    }
+                    let changed = ecs.resource_mut::<Terrain>().set_tile(*tile, Tile::Empty);
+                    debug_assert!(changed, "tree tiles are in bounds");
+                }
+                clear_paths(ecs);
+                // One log per trunk cell, all at the base (Wolf, 12.7 Task 0.2).
+                for _ in 0..trunk_cells {
+                    let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+                    ecs.spawn((Item(ItemKind::Wood), item_id, base));
+                }
+            }
+            ecs.resource_mut::<Jobs>().remove(job.id);
+            ecs.resource_mut::<Designations>().0.remove(&job.target);
+            release_claim(ecs, entity);
+            continue;
+        }
+
         let change = {
             let terrain = ecs.resource::<Terrain>();
             match job.kind {
+                // NOTE: designation never marks tree tiles (12.7), so a dig or channel target is
+                // never a tree material by the time it completes.
                 JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(material)) => Some((
-                        job.target,
-                        Tile::Empty,
-                        !matches!(material, Material::TreeTrunk | Material::TreeFoliage),
-                    )),
+                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),
                     _ => None,
                 },
                 JobKind::Channel => {
@@ -1126,18 +1216,16 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                         ..job.target
                     };
                     match terrain.tile(below) {
-                        Some(Tile::Solid(material)) => Some((
-                            below,
-                            Tile::Ramp(material),
-                            !matches!(material, Material::TreeTrunk | Material::TreeFoliage),
-                        )),
+                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
                         _ => None,
                     }
                 }
-                JobKind::Haul { .. } => unreachable!("haul jobs are dispatched above"),
+                JobKind::Cut | JobKind::Haul { .. } => {
+                    unreachable!("cut and haul jobs are dispatched above")
+                }
             }
         };
-        let Some((changed_pos, tile, yields_stone)) = change else {
+        let Some((changed_pos, tile)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
@@ -1149,10 +1237,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             "job targets were bounds-checked at designation time"
         );
         clear_paths(ecs);
-        if yields_stone {
-            let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-            ecs.spawn((Item, item_id, job.target));
-        }
+        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+        ecs.spawn((Item(ItemKind::Stone), item_id, job.target));
         ecs.resource_mut::<Jobs>().remove(job.id);
         ecs.resource_mut::<Designations>().0.remove(&job.target);
         release_claim(ecs, entity);
@@ -1432,10 +1518,11 @@ impl World {
         dwarves.sort_by_key(|dwarf| dwarf.id);
         let jobs = self.jobs();
         let job_resource = self.ecs.resource::<Jobs>();
+        let kinds: BTreeMap<Id, ItemKind> = self.item_kinds().into_iter().collect();
         let items = self
             .items()
             .into_iter()
-            .map(|(id, pos)| (id.0, pos))
+            .map(|(id, pos)| (id.0, pos, kinds[&id]))
             .collect();
         let emitters = self
             .emitters()
@@ -1529,8 +1616,8 @@ impl World {
                     .insert(WorkProgress(dwarf.work_progress));
             }
         }
-        for (id, pos) in items {
-            world.ecs.spawn((Item, Id(id), pos));
+        for (id, pos, kind) in items {
+            world.ecs.spawn((Item(kind), Id(id), pos));
         }
         for (id, pos, light) in emitters {
             world.ecs.spawn((Emitter(light), Id(id), pos));
@@ -1667,19 +1754,42 @@ impl World {
             })
         };
         match command {
-            SimCommand::Designate { kind, .. } => {
+            SimCommand::Designate { kind, rect } => {
                 let workable: Vec<_> = {
                     let terrain = self.ecs.resource::<Terrain>();
-                    positions()
-                        .filter(|pos| match kind {
-                            DesignationKind::Dig => {
-                                matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
-                            }
-                            DesignationKind::Channel => terrain.is_standable(*pos),
-                        })
-                        .collect()
+                    let is_tree = |pos: Pos| {
+                        matches!(
+                            terrain.tile(pos),
+                            Some(Tile::Solid(Material::TreeTrunk | Material::TreeFoliage))
+                        )
+                    };
+                    match kind {
+                        // One mark per distinct tree base, in ascending order.
+                        DesignationKind::Cut => positions()
+                            .filter_map(|pos| tree_of(terrain, pos).map(|(base, _)| base))
+                            .collect::<BTreeSet<_>>()
+                            .into_iter()
+                            .collect(),
+                        _ => positions()
+                            .filter(|pos| match kind {
+                                DesignationKind::Dig => {
+                                    matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
+                                        && !is_tree(*pos)
+                                }
+                                DesignationKind::Channel => {
+                                    terrain.is_standable(*pos)
+                                        && !is_tree(Pos {
+                                            z: pos.z - 1,
+                                            ..*pos
+                                        })
+                                }
+                                DesignationKind::Cut => unreachable!("handled above"),
+                            })
+                            .collect(),
+                    }
                 };
                 let mut designations = self.ecs.resource_mut::<Designations>();
+                let mut applied = 0;
                 for pos in workable {
                     if designations.0.len() >= MAX_DESIGNATIONS
                         && !designations.0.contains_key(&pos)
@@ -1687,6 +1797,10 @@ impl World {
                         continue;
                     }
                     designations.0.insert(pos, kind);
+                    applied += 1;
+                }
+                if applied == 0 {
+                    return Some(Refusal::Designate { kind, rect });
                 }
             }
             SimCommand::CancelDesignation { .. } => {
@@ -1697,6 +1811,31 @@ impl World {
                         designations.0.remove(pos);
                     }
                 }
+                // A cut mark sits at its tree's base, which a surface-following clear drag never
+                // reaches: the rect also cancels a mark whose tree has any tile in it.
+                let cut_bases: Vec<Pos> = {
+                    let terrain = self.ecs.resource::<Terrain>();
+                    self.ecs
+                        .resource::<Designations>()
+                        .0
+                        .iter()
+                        .filter(|(_, kind)| **kind == DesignationKind::Cut)
+                        .filter(|(base, _)| {
+                            tree_of(terrain, **base).is_some_and(|(_, tiles)| {
+                                tiles.iter().any(|tile| targets.contains(tile))
+                            })
+                        })
+                        .map(|(base, _)| *base)
+                        .collect()
+                };
+                let mut targets = targets;
+                {
+                    let mut designations = self.ecs.resource_mut::<Designations>();
+                    for base in cut_bases {
+                        designations.0.remove(&base);
+                        targets.insert(base);
+                    }
+                }
                 // Tile jobs only. A haul job's `target` is the stone's position when the job was
                 // created and is stale the moment it is picked up, so matching cancel rects
                 // against it would drop a haul the player never cancelled — and haul jobs are
@@ -1705,7 +1844,9 @@ impl World {
                     .ecs
                     .resource::<Jobs>()
                     .iter()
-                    .filter(|job| matches!(job.kind, JobKind::Dig | JobKind::Channel))
+                    .filter(|job| {
+                        matches!(job.kind, JobKind::Dig | JobKind::Channel | JobKind::Cut)
+                    })
                     .filter(|job| targets.contains(&job.target))
                     .map(|job| job.id)
                     .collect();
@@ -1870,6 +2011,18 @@ impl World {
             .collect();
         items.sort_by_key(|(id, _)| *id);
         items
+    }
+
+    /// Sorted ascending by `Id`. A sibling reader to `items()`, which keeps its signature.
+    pub fn item_kinds(&self) -> Vec<(Id, ItemKind)> {
+        let mut kinds: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Item>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<Item>()?.0)))
+            .collect();
+        kinds.sort_by_key(|(id, _)| *id);
+        kinds
     }
 
     /// Sorted ascending by `Id`.
@@ -2232,8 +2385,12 @@ mod tests {
         let mut world = World::generate(42, Dims::DEFAULT);
         let later = Pos { x: 9, y: 8, z: 7 };
         let earlier = Pos { x: 1, y: 2, z: 3 };
-        world.ecs.spawn((super::Item, super::Id(12), later));
-        world.ecs.spawn((super::Item, super::Id(11), earlier));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), later));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(11), earlier));
 
         assert_eq!(
             world.items(),
@@ -2271,7 +2428,9 @@ mod tests {
             (10, Pos { x: 22, y: 20, z: 8 }),
         ];
         for (id, pos) in loose {
-            world.ecs.spawn((super::Item, super::Id(id), pos));
+            world
+                .ecs
+                .spawn((super::Item(super::ItemKind::Stone), super::Id(id), pos));
         }
         world.ecs.resource_mut::<super::Tick>().0 = 7;
 
@@ -2316,9 +2475,11 @@ mod tests {
     #[test]
     fn no_stockpile_means_no_haul_job_at_all() {
         let mut world = World::generate(42, Dims::DEFAULT);
-        world
-            .ecs
-            .spawn((super::Item, super::Id(12), Pos { x: 20, y: 20, z: 8 }));
+        world.ecs.spawn((
+            super::Item(super::ItemKind::Stone),
+            super::Id(12),
+            Pos { x: 20, y: 20, z: 8 },
+        ));
 
         super::create_haul_jobs(&mut world.ecs);
         assert!(world.jobs().is_empty());
@@ -2339,7 +2500,9 @@ mod tests {
         let mut world = World::generate(42, Dims::DEFAULT);
         let stone = world.dwarves()[1].1;
         let pile = world.dwarves()[0].1;
-        world.ecs.spawn((super::Item, super::Id(12), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), stone));
         place_stockpile(&mut world, pile);
         super::create_haul_jobs(&mut world.ecs);
         let job = world.jobs()[0];
@@ -2399,7 +2562,9 @@ mod tests {
         let cell = corridor(&mut world);
         let stone = cell(2);
         let pile = cell(4);
-        world.ecs.spawn((super::Item, super::Id(12), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), stone));
         place_stockpile(&mut world, pile);
         // A real, unrelated order at the stone's tile. The dig path removes the designation at
         // `job.target`; a haul must not, or it deletes an order the player gave.
@@ -2492,7 +2657,9 @@ mod tests {
             },
             Tile::Empty,
         ));
-        world.ecs.spawn((super::Item, super::Id(12), stranded));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), stranded));
 
         for _ in 0..60 {
             world.step();
@@ -2512,8 +2679,12 @@ mod tests {
         let cell = corridor(&mut world);
         let loose = cell(2);
         let pile = cell(4);
-        world.ecs.spawn((super::Item, super::Id(11), pile));
-        world.ecs.spawn((super::Item, super::Id(12), loose));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(11), pile));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), loose));
         place_stockpile(&mut world, pile);
 
         for _ in 0..60 {
@@ -2569,7 +2740,9 @@ mod tests {
         let mut world = World::generate(42, Dims::DEFAULT);
         let cell = corridor(&mut world);
         let stone = cell(2);
-        world.ecs.spawn((super::Item, super::Id(12), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), stone));
         place_stockpile(&mut world, cell(4));
         super::create_haul_jobs(&mut world.ecs);
         let job = world.jobs()[0];
@@ -2800,7 +2973,9 @@ mod tests {
         let stone = cell(1);
         let stale = cell(3);
         let pile = cell(4);
-        world.ecs.spawn((super::Item, super::Id(12), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), stone));
         place_stockpile(&mut world, pile);
         assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
             id: JobId(0),
@@ -2841,7 +3016,9 @@ mod tests {
         let cell = corridor(&mut world);
         let loose = cell(2);
         let pile = cell(4);
-        world.ecs.spawn((super::Item, super::Id(12), loose));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), loose));
         place_stockpile(&mut world, pile);
         // Zone tiles are validated standable when the command lands and never re-checked, so a
         // pile can lose its floor to a later dig.
@@ -2907,7 +3084,9 @@ mod tests {
         let mut world = World::generate(42, Dims::DEFAULT);
         let start = world.dwarves()[0].1;
         let stone = Pos { x: 0, y: 0, z: 1 };
-        world.ecs.spawn((super::Item, super::Id(12), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), stone));
         let entity = world
             .ecs
             .iter_entities()
@@ -2957,7 +3136,9 @@ mod tests {
         let mut world = World::generate(42, Dims::DEFAULT);
         let dwarf_pos = world.dwarves()[0].1;
         let far_away = Pos { x: 0, y: 0, z: 1 };
-        world.ecs.spawn((super::Item, super::Id(12), far_away));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), far_away));
         let job = Job {
             id: JobId(0),
             kind: JobKind::Haul { item: 12 },
@@ -2993,8 +3174,14 @@ mod tests {
         let dwarf_pos = world.dwarves()[0].1;
         let far_away = Pos { x: 0, y: 0, z: 1 };
         world.ecs.resource_mut::<super::Zones>().0.insert(dwarf_pos);
-        world.ecs.spawn((super::Item, super::Id(11), dwarf_pos));
-        world.ecs.spawn((super::Item, super::Id(12), far_away));
+        world.ecs.spawn((
+            super::Item(super::ItemKind::Stone),
+            super::Id(11),
+            dwarf_pos,
+        ));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(12), far_away));
         let entity = world
             .ecs
             .iter_entities()
@@ -3045,11 +3232,21 @@ mod tests {
             .resource_mut::<super::Zones>()
             .0
             .extend([pocket[0], pocket[1]]);
-        world.ecs.spawn((super::Item, super::Id(11), pocket[1]));
-        world
-            .ecs
-            .spawn((super::Item, super::Id(12), Pos { x: 0, y: 0, z: 1 }));
-        world.ecs.spawn((super::Item, super::Id(13), pocket[0]));
+        world.ecs.spawn((
+            super::Item(super::ItemKind::Stone),
+            super::Id(11),
+            pocket[1],
+        ));
+        world.ecs.spawn((
+            super::Item(super::ItemKind::Stone),
+            super::Id(12),
+            Pos { x: 0, y: 0, z: 1 },
+        ));
+        world.ecs.spawn((
+            super::Item(super::ItemKind::Stone),
+            super::Id(13),
+            pocket[0],
+        ));
         let entity = world
             .ecs
             .iter_entities()
@@ -3328,6 +3525,10 @@ mod tests {
         }
 
         assert_eq!(world.items(), vec![(super::Id(10), target)]);
+        assert_eq!(
+            world.item_kinds(),
+            vec![(super::Id(10), super::ItemKind::Stone)]
+        );
         assert!(world.jobs().is_empty());
     }
 
@@ -3390,7 +3591,9 @@ mod tests {
         let stone = free_cell_beside(&world, hauler_pos, &[dig_target, miner_pos]);
         let pile = free_cell_beside(&world, stone, &[dig_target, miner_pos, stone]);
         assert!(world.set_tile(dig_target, Tile::Solid(Material::Stone)));
-        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(50), stone));
         world.ecs.resource_mut::<super::Zones>().0.insert(pile);
         {
             let mut jobs = world.ecs.resource_mut::<Jobs>();
@@ -3437,7 +3640,9 @@ mod tests {
         let (_, near) = dwarf_of(&world, super::Profession::Miner, 0);
         let stone = free_cell_beside(&world, near, &[]);
         let pile = free_cell_beside(&world, stone, &[stone]);
-        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(50), stone));
         world.ecs.resource_mut::<super::Zones>().0.insert(pile);
         assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
             id: JobId(0),
@@ -3678,7 +3883,9 @@ mod tests {
         set_profession(&mut world, 2, super::Profession::Hauler);
         // Dig 0's only work position is miner 1's pocket.
         insert_dig(&mut world, 0, pocket(121, 120));
-        world.ecs.spawn((super::Item, super::Id(50), stone));
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(50), stone));
         world.ecs.resource_mut::<super::Zones>().0.insert(pile);
         assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
             id: JobId(1),
@@ -4080,7 +4287,7 @@ mod tests {
     }
 
     #[test]
-    fn execute_jobs_digs_tree_materials_without_spawning_items() {
+    fn a_dig_mark_never_lands_on_a_tree_tile() {
         for material in [Material::TreeTrunk, Material::TreeFoliage] {
             let mut world = World::generate(42, Dims::DEFAULT);
             let work = world.dwarves()[0].1;
@@ -4089,38 +4296,29 @@ mod tests {
                 ..work
             };
             assert!(world.set_tile(target, Tile::Solid(material)));
-            world.drain_dirty();
-            let items_before = world.items().len();
-            let job = Job {
-                id: JobId(0),
-                kind: JobKind::Dig,
-                target,
-                created_tick: 0,
-                retry_after: 0,
+            let rect = super::Rect {
+                min: target,
+                max: target,
             };
-            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
-            let entity = world
-                .ecs
-                .iter_entities()
-                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
-                .expect("dwarf zero exists")
-                .id();
-            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
-            world
-                .ecs
-                .entity_mut(entity)
-                .insert(super::WorkProgress(super::DIG_WORK_TICKS));
-
-            super::execute_jobs(&mut world.ecs);
-
-            assert_eq!(world.tile(target), Some(Tile::Empty));
-            assert_eq!(world.drain_dirty(), vec![(target, Tile::Empty)]);
-            assert_eq!(world.items().len(), items_before, "dug {material:?}");
+            let kind = super::DesignationKind::Dig;
+            assert_eq!(
+                world.apply_command(super::SimCommand::Designate { kind, rect }),
+                Some(super::Refusal::Designate { kind, rect }),
+                "dig over {material:?}"
+            );
+            assert!(world.designations().is_empty(), "dig over {material:?}");
+            // Stone beside it still takes the mark.
+            assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+            assert_eq!(
+                world.apply_command(super::SimCommand::Designate { kind, rect }),
+                None
+            );
+            assert_eq!(world.designations(), vec![(target, kind)]);
         }
     }
 
     #[test]
-    fn execute_jobs_channels_tree_materials_without_spawning_items() {
+    fn a_channel_mark_never_lands_on_a_cell_standing_on_a_tree_tile() {
         for material in [Material::TreeTrunk, Material::TreeFoliage] {
             let mut world = World::generate(42, Dims::DEFAULT);
             let target = world.dwarves()[0].1;
@@ -4130,33 +4328,23 @@ mod tests {
             };
             assert!(world.set_tile(below, Tile::Solid(material)));
             assert!(world.set_tile(target, Tile::Empty));
-            world.drain_dirty();
-            let items_before = world.items().len();
-            let job = Job {
-                id: JobId(0),
-                kind: JobKind::Channel,
-                target,
-                created_tick: 0,
-                retry_after: 0,
+            let rect = super::Rect {
+                min: target,
+                max: target,
             };
-            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
-            let entity = world
-                .ecs
-                .iter_entities()
-                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
-                .expect("dwarf zero exists")
-                .id();
-            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
-            world
-                .ecs
-                .entity_mut(entity)
-                .insert(super::WorkProgress(super::DIG_WORK_TICKS));
-
-            super::execute_jobs(&mut world.ecs);
-
-            assert_eq!(world.tile(below), Some(Tile::Ramp(material)));
-            assert_eq!(world.drain_dirty(), vec![(below, Tile::Ramp(material))]);
-            assert_eq!(world.items().len(), items_before, "channelled {material:?}");
+            let kind = super::DesignationKind::Channel;
+            assert_eq!(
+                world.apply_command(super::SimCommand::Designate { kind, rect }),
+                Some(super::Refusal::Designate { kind, rect }),
+                "channel over {material:?}"
+            );
+            assert!(world.designations().is_empty(), "channel over {material:?}");
+            assert!(world.set_tile(below, Tile::Solid(Material::Stone)));
+            assert_eq!(
+                world.apply_command(super::SimCommand::Designate { kind, rect }),
+                None
+            );
+            assert_eq!(world.designations(), vec![(target, kind)]);
         }
     }
 

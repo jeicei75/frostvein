@@ -32,14 +32,7 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
             .collect(),
-        items: world
-            .items()
-            .into_iter()
-            .map(|(id, pos)| protocol::Item {
-                id: id.0,
-                pos: pos_out(pos),
-            })
-            .collect(),
+        items: items_out(world),
         speed,
         tick: world.tick(),
     }
@@ -84,17 +77,39 @@ pub fn delta(
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
             .collect(),
-        items: world
-            .items()
-            .into_iter()
-            .map(|(id, pos)| protocol::Item {
-                id: id.0,
-                pos: pos_out(pos),
-            })
-            .collect(),
+        items: items_out(world),
         speed,
 
         refusals,
+    }
+}
+
+fn items_out(world: &sim_core::World) -> Vec<protocol::Item> {
+    join_items(world.items(), world.item_kinds())
+}
+
+/// Joined by id, not by position: `items()` drops an item with no `Pos`, `item_kinds()` keeps it,
+/// so a zip would hand every later item its neighbour's kind. Both read `Item` + `Id`, so every
+/// id in `items` has a kind.
+fn join_items(
+    items: Vec<(sim_core::Id, sim_core::Pos)>,
+    kinds: Vec<(sim_core::Id, sim_core::ItemKind)>,
+) -> Vec<protocol::Item> {
+    let kinds: std::collections::BTreeMap<_, _> = kinds.into_iter().collect();
+    items
+        .into_iter()
+        .map(|(id, pos)| protocol::Item {
+            id: id.0,
+            pos: pos_out(pos),
+            kind: item_kind_out(kinds[&id]),
+        })
+        .collect()
+}
+
+fn item_kind_out(kind: sim_core::ItemKind) -> protocol::ItemKind {
+    match kind {
+        sim_core::ItemKind::Stone => protocol::ItemKind::Stone,
+        sim_core::ItemKind::Wood => protocol::ItemKind::Wood,
     }
 }
 
@@ -177,6 +192,7 @@ fn dwarf_job(job: sim_core::Job) -> protocol::DwarfJob {
     match job.kind {
         sim_core::JobKind::Dig => protocol::DwarfJob::Dig { target },
         sim_core::JobKind::Channel => protocol::DwarfJob::Channel { target },
+        sim_core::JobKind::Cut => protocol::DwarfJob::Cut { target },
         // NOTE: a haul's `target` is the stone's position at creation and goes stale at pick-up,
         // so it is not on the wire.
         sim_core::JobKind::Haul { .. } => protocol::DwarfJob::Haul,
@@ -258,6 +274,7 @@ pub(crate) fn designation_kind_in(kind: protocol::DesignationKind) -> sim_core::
     match kind {
         protocol::DesignationKind::Dig => sim_core::DesignationKind::Dig,
         protocol::DesignationKind::Channel => sim_core::DesignationKind::Channel,
+        protocol::DesignationKind::Cut => sim_core::DesignationKind::Cut,
     }
 }
 
@@ -265,6 +282,7 @@ fn designation_kind_out(kind: sim_core::DesignationKind) -> protocol::Designatio
     match kind {
         sim_core::DesignationKind::Dig => protocol::DesignationKind::Dig,
         sim_core::DesignationKind::Channel => protocol::DesignationKind::Channel,
+        sim_core::DesignationKind::Cut => protocol::DesignationKind::Cut,
     }
 }
 
@@ -290,6 +308,10 @@ pub(crate) fn refusal_out(refusal: sim_core::Refusal) -> protocol::Refusal {
         sim_core::Refusal::SetProfession { dwarf } => {
             protocol::Refusal::SetProfession { dwarf: dwarf.0 }
         }
+        sim_core::Refusal::Designate { kind, rect } => protocol::Refusal::Designate {
+            kind: designation_kind_out(kind),
+            rect: rect_out(rect),
+        },
     }
 }
 
@@ -307,7 +329,7 @@ fn pos_out(pos: sim_core::Pos) -> [i32; 3] {
 
 #[cfg(test)]
 mod tests {
-    use super::{delta, designation_kind_in, snapshot};
+    use super::{delta, designation_kind_in, join_items, snapshot};
 
     /// The wire mapping, restated independently of the code under test.
     ///
@@ -750,6 +772,34 @@ mod tests {
         assert_eq!(
             super::dwarf_job(job(sim_core::JobKind::Channel)),
             wire(r#"{"channel":{"target":[3,41,9]}}"#)
+        );
+    }
+
+    /// `items()` keeps an item only if it has a `Pos`; `item_kinds()` keeps every `Item`. The
+    /// fixture is that pre-existing gap: item 2 has a kind but no position, so it is absent from
+    /// `items`. Item 3 must still carry its OWN kind, not item 2's.
+    #[test]
+    fn an_item_without_a_position_does_not_shift_later_kinds() {
+        let at = |x| sim_core::Pos { x, y: 0, z: 0 };
+        let items = vec![(sim_core::Id(1), at(1)), (sim_core::Id(3), at(3))];
+        let kinds = vec![
+            (sim_core::Id(1), sim_core::ItemKind::Stone),
+            (sim_core::Id(2), sim_core::ItemKind::Wood),
+            (sim_core::Id(3), sim_core::ItemKind::Stone),
+        ];
+
+        let out = join_items(items, kinds);
+
+        let got: Vec<_> = out
+            .iter()
+            .map(|item| (item.id, item.pos, item.kind))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (1, [1, 0, 0], protocol::ItemKind::Stone),
+                (3, [3, 0, 0], protocol::ItemKind::Stone),
+            ]
         );
     }
 }

@@ -64,7 +64,8 @@ per tick from there.
 You open at the **centre of the map**, on the z-level with the most standable ground.
 Terrain is one z-level at a time in 24-bit colour — snow `░`, ice `▒`, soil `▓`, stone `█`,
 ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves on top, torches `†` and a
-campfire `♨` beneath them. A named dwarf is `☻` in his tunic colour; a nameless one is `☺`,
+campfire `♨` beneath them. A pine marked for cutting shows `/` at its trunk's foot, and a log
+of wood lies as `=` (green once it is on a stockpile). A named dwarf is `☻` in his tunic colour; a nameless one is `☺`,
 or `☻` where he shares a cell with a stone; `⚇` marks two dwarves sharing one cell. Where a tile is empty the ground up to three levels below shows through,
 dimmed with depth. The bottom row is the key hint; the row above it reports the tick, the
 speed, the z-level and the dwarf count; the row above that is the roster: each dwarf's name,
@@ -199,7 +200,7 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | LMB | select the dwarf under the cursor and follow him (with no designate mode armed) |
 | `Esc` | release the selection, or abort a designation |
 | `T` | with a dwarf selected, change his trade: miner → hauler → woodcutter → miner |
-| `1` `2` `3` `4` | designate dig / channel / stockpile / clear — then LMB-drag a rectangle |
+| `1` `2` `3` `4` `5` | designate dig / channel / stockpile / clear / cut — then LMB-drag a rectangle. A cut marks every pine the drag catches, once each, at the foot of its trunk; a woodcutter fells the whole tree and leaves one log per trunk cell. `4` over a pine's foot clears its cut mark |
 | `ctrl` + `S` / `ctrl` + `L` | save / load the world (the daemon writes `frostvein.save` and says `saved tick N`; a load snaps every client back). While `ctrl` is held the keyboard camera keys do nothing, so the chord never moves the view |
 | `H` | hide / show the whole HUD: fps overlay, readouts, hint |
 | `space` | pause / resume the sim |
@@ -267,6 +268,7 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--capture <path>` | save a PNG, validate its ranges, then exit |
 | `--clock <hour>` | pin the displayed hour (`0 ≤ hour < 24`); without it the clock follows the daemon tick, except every `--capture` defaults to a 22:00 pin |
 | `--frames N` / `--at-tick N` | when to capture |
+| `--drag <mode,x0,y0,x1,y1>` | perform one designation drag between two viewport points (pixels) before the capture, as LMB would, and fail the capture if it designated nothing; `mode` is `dig`, `channel`, `stockpile`, `clear` or `cut` |
 | `--camera <yaw,pitch,distance,fx,fy,fz>` | open at a framing; works interactively too |
 | `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |
 | `--select <id>` | start with dwarf `<id>` selected, as if clicked; an explicit `--distance` keeps its zoom, and an id that is not a dwarf in the daemon's snapshot fails the run |

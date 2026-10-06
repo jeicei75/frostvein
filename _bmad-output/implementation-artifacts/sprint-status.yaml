@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-03
+# last_updated: 2026-10-06
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-05
+last_updated: 2026-10-06
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2539,7 +2539,8 @@ development_status:
   #     Seat ruled 2026-10-03: a dig is 10 swings (DIG_WORK_TICKS 50; hauls keep WORK_TICKS 5), stop first, stop-then-drop.
   #     AC10 PASSED at Wolf's seat 2026-10-03 ("ok.. well need to fine tune it later on", 9e347da); #162/#163 filed.
   #     FULL GATE GREEN 2026-10-04 on 9561ab7 (3269 s). -> review.
-  12-6-wolf-gives-them-their-trades: review
+  12-6-wolf-gives-them-their-trades: done
+  #   Merged 2026-10-05 as PR #167 (fd9ca98). Flipped to done on the 12.7 branch (it merged at review).
   #   Patch pass 1 2026-10-05: 4/4 doc patches landed (e64bdbb, aa771b6); doc-only, full gate NOT re-run (Wolf),
   #     fast gate green on both. $1.50. Round 2 skipped (Wolf: "PR"). PR #167 opened on 6c59d37
   #     (full gate cited from 72be96c; every later commit is _bmad-output/ only). Next: Wolf merges.
@@ -2553,7 +2554,27 @@ development_status:
   #     unrecognized client message; profession never changes, the held channel job stays held, no refusal.
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
-  12-7-timber: backlog
+  12-7-timber: in-progress
+  #   Code review run 2 2026-10-06 on the patch diff 8c3764f..7499534: 0 HIGH/MED -> stopping rule, audit ENDS.
+  #     2 LOW record patches FIXED (Wolf: fix, push, PR); partial-cap silent drop deferred -> #170. D1 cap
+  #     refusal now OBSERVED live. PR opened; AC12's `4` clear still OPEN at the seat.
+  #   Review patch pass 1 2026-10-06: all 3 patches landed (660c8f4, 9d96a7d, ce737d6), rows 18-19 KILLED
+  #     (47c2f5c); FULL GATE GREEN 3284 s on 47c2f5c. Refusal texts clip in a tui < ~95-110 cols (Wolf: as ruled).
+  #     Next: optional round-2 review, the `4` clear at the seat (push first), then Wolf's yes for the PR.
+  #   Code review run 1 2026-10-05 on fb726ce: no HIGH/MED; 3 patches LEFT AS ACTION ITEMS (refusal texts name the
+  #     cap, tui recipe counts the mark colour, items_out by id); 8 deferred. D2 found the gui MIRRORS the tui
+  #     (pre-existing) -> #169. AC12's `4` clear NOT observed. Launcher no longer pulls (6126e9e, #143).
+  #     Next: /bmad-review-patch, then the `4` clear at the seat, then the FULL gate, then the PR.
+  #   AC12 PASSED at Wolf's seat 2026-10-05 ("that works now", 4be19a0); log pop-in = #164 (out of scope). Next: code review.
+  #   Seat 2026-10-05: "works .. but cut trees have some blocks in the air" -> #168 (dig chips over air),
+  #     fixed aed8c5b, row 17 KILLED. Next: Wolf re-checks the felled pines, then review. Full gate NOT re-run since.
+  #   Dev done 2026-10-05 (Sonnet 5.5 agents + Opus): live wire OK (4 logs at A's base, Nain the only holder),
+  #     deliberate RED (row 3, 5x5 crown) shown; 12-7.sh 20/20 KILLED + 24/24 re-pointed old rows KILLED;
+  #     FULL GATE GREEN 3251 s on a7b1ded. Next: Wolf's seat (AC12, 12-7-signoff/vehicle-card.md), then review.
+  #   Created 2026-10-05 on fd9ca98. RED on the live wire (12-7-signoff/timber_wire.py): `designate kind cut`
+  #     is unrecognized; a dig mark lands on a trunk and digs it away for nothing. Trees have no identity:
+  #     one tree = trunk column + foliage in its 3x3 column (trunks >= 3 apart; crowns can TOUCH, 22 of 57
+  #     distance-3 pairs on DEFAULT_SEED, so no flood fill). Look draft in 12-7-signoff/; Task 0 open.
   12-8-dwarves-at-work-the-cut: backlog
   12-9-one-dwarf-per-tile: backlog
   12-10-ore-in-the-rock: backlog

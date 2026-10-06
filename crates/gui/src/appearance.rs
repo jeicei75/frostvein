@@ -203,6 +203,9 @@ pub fn designation_color(kind: DesignationKind) -> Color {
     match kind {
         DesignationKind::Dig => Color::srgb_u8(56, 132, 250),
         DesignationKind::Channel => Color::srgb_u8(150, 96, 230),
+        // 12.7: a cold cyan-green, 66+ from every TUI mark colour and 50+ from the dig, channel and
+        // zone literals above; `mark_colours_are_distinct_cold_literals` holds the floors.
+        DesignationKind::Cut => Color::srgb_u8(30, 190, 150),
     }
 }
 
@@ -232,6 +235,21 @@ pub fn hover_highlight_color() -> Color {
 /// capture self-test passed throughout, because the pixels DID change.
 pub const STONE_ITEM_SCALE: f32 = 0.4;
 
+/// A log lying on the ground: 0.7 x 0.28 x 0.28 of a cell, long along x (12.7 draft §3).
+pub const WOOD_ITEM_SCALE: Vec3 = Vec3::new(0.7, 0.28, 0.28);
+
+/// A log's brown. The same literal as the TUI's `=` (`crates/tui/src/palette.rs`), carried by
+/// pointer rather than import because `gui` never depends on `tui`.
+pub fn wood_item_color() -> Color {
+    Color::srgb_u8(164, 116, 66)
+}
+
+/// How far each further item on one cell is lifted above the one before it: one log height
+/// (`WOOD_ITEM_SCALE.y`), for every kind (12.7 Task 0.2).
+// NOTE: a stone is 0.4 tall, so two stones on one cell overlap by 0.12; they still draw at two
+// distinct heights, which is all #154's two-on-one-cell case needs.
+pub const ITEM_STACK_STEP: f32 = WOOD_ITEM_SCALE.y;
+
 /// Where a carried stone's CENTRE sits on the dwarf that carries it: his glTF/Bevy local space in
 /// METRES (origin at his feet, +Y up, facing -Z).
 ///
@@ -254,6 +272,9 @@ pub const CARRY_OFFSET: Vec3 = Vec3::new(0.0, 0.705, -0.580);
 /// Rests the shrunken item on the tile floor rather than leaving it floating mid-voxel, which is
 /// where a centred sub-unit cube would otherwise sit. The chips are already low for this reason.
 pub const STONE_ITEM_DROP: f32 = -(0.5 - STONE_ITEM_SCALE / 2.0);
+
+/// The same floor-resting drop for a log, from its own half-height.
+pub const WOOD_ITEM_DROP: f32 = -(0.5 - WOOD_ITEM_SCALE.y / 2.0);
 
 #[cfg(test)]
 mod flicker_tests {
@@ -678,6 +699,11 @@ mod tests {
                 [150, 96, 230],
             ),
             ("zone", zone_color(), [40, 120, 150]),
+            (
+                "cut",
+                designation_color(DesignationKind::Cut),
+                [30, 190, 150],
+            ),
         ];
         let terrain = [
             Material::Stone,
@@ -729,6 +755,18 @@ mod tests {
             ("TUI dig", [232, 176, 72]),
             ("TUI channel", [92, 174, 224]),
             ("TUI zone", [88, 190, 118]),
+            // 12.7: the rest of the TUI's mark colours, so the cut colour is held clear of every
+            // one of them, not only of the three that existed when this list was written.
+            ("TUI cut", [226, 96, 64]),
+            ("TUI cursor", [246, 242, 226]),
+            ("TUI pending dig", [218, 142, 54]),
+            ("TUI pending channel", [70, 148, 202]),
+            ("TUI pending stockpile", [64, 166, 96]),
+            ("TUI pending remove", [218, 82, 82]),
+            ("TUI stone", [176, 172, 160]),
+            ("TUI wood", [164, 116, 66]),
+            ("TUI crowd", [240, 120, 130]),
+            ("TUI carrier", [226, 198, 140]),
         ];
         for (name, _, rgb) in marks {
             for (tui_name, tui_rgb) in tui_marks {

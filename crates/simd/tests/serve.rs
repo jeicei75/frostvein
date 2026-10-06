@@ -1263,7 +1263,11 @@ fn out_of_bounds_job_save_is_logged_and_the_daemon_keeps_ticking() {
 fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
-    state.items.push((10, sim_core::Pos { x: 0, y: -1, z: 0 }));
+    state.items.push((
+        10,
+        sim_core::Pos { x: 0, y: -1, z: 0 },
+        sim_core::ItemKind::Stone,
+    ));
     fs::write(
         daemon.save_path(),
         serde_json::to_vec(&state).expect("encode out-of-bounds item fixture"),
@@ -1289,9 +1293,11 @@ fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
 #[test]
 fn duplicate_item_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
-    state
-        .items
-        .push((state.dwarves[0].id, state.dwarves[0].pos));
+    state.items.push((
+        state.dwarves[0].id,
+        state.dwarves[0].pos,
+        sim_core::ItemKind::Stone,
+    ));
 
     assert_save_is_rejected_without_stopping_ticks(state, "save reuses entity id 0");
 }
@@ -1318,7 +1324,11 @@ fn emitter_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
 #[test]
 fn item_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
-    state.items.push((state.next_id, state.dwarves[0].pos));
+    state.items.push((
+        state.next_id,
+        state.dwarves[0].pos,
+        sim_core::ItemKind::Stone,
+    ));
 
     assert_save_is_rejected_without_stopping_ticks(
         state,
@@ -1427,7 +1437,9 @@ fn duplicate_job_target_save_is_logged_and_the_daemon_keeps_ticking() {
 fn save_with_items(count: u32) -> sim_core::SaveState {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
     let pos = state.dwarves[0].pos;
-    state.items = (0..count).map(|index| (10 + index, pos)).collect();
+    state.items = (0..count)
+        .map(|index| (10 + index, pos, sim_core::ItemKind::Stone))
+        .collect();
     state.next_id = 10 + count;
     state
 }
@@ -2602,4 +2614,247 @@ fn an_unscheduled_command_cancels_a_pending_schedule() {
         last = delta.tick;
     }
     assert!(last > target, "test must run past the cancelled tick");
+}
+
+/// Story 12.7's live recipe (`12-7-signoff/timber_wire.py`) as a test: the same commands, judged
+/// from the daemon's own deltas. Pinned to DEFAULT_SEED's trees: A's trunk column is (73,59) and
+/// B's is (73,56), and their crowns touch; D's is (65,56). Each effect is judged from the first
+/// delta that shows it, never from the send tick (a command lands a few ticks after the send).
+#[test]
+fn a_cut_fells_one_whole_tree_into_wood_and_a_cut_over_nothing_is_refused() {
+    use protocol::{DesignationKind, DwarfJob, ItemKind, Material, Tile};
+    use std::collections::BTreeSet;
+
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let camp = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.kind == protocol::EntityKind::Campfire)
+        .expect("the camp has a campfire")
+        .pos;
+    assert_eq!(
+        camp,
+        [64, 64, 9],
+        "the recipe is pinned to DEFAULT_SEED's camp"
+    );
+    let woodcutter = dwarf_professions(&snapshot)
+        .into_iter()
+        .find_map(|(id, profession)| (profession == protocol::Profession::Woodcutter).then_some(id))
+        .expect("the spawn pool has a woodcutter");
+    let mut mirror =
+        client_core::Mirror::from_snapshot(snapshot).expect("the snapshot must build a mirror");
+
+    // The tree rule restated from the story's wording, over the wire's tiles.
+    let dims = mirror.dims();
+    let tree = |mirror: &client_core::Mirror, x: i32, y: i32| {
+        let trunk: Vec<i32> = (0..dims.z as i32)
+            .filter(|z| mirror.tile([x, y, *z]) == Some(Tile::Solid(Material::TreeTrunk)))
+            .collect();
+        assert!(
+            !trunk.is_empty(),
+            "no trunk at {x},{y}: pinned to DEFAULT_SEED"
+        );
+        let (base, top) = (trunk[0], *trunk.last().unwrap());
+        let mut cells: BTreeSet<[i32; 3]> = trunk.iter().map(|z| [x, y, *z]).collect();
+        for z in base..=top + 1 {
+            for fx in x - 1..=x + 1 {
+                for fy in y - 1..=y + 1 {
+                    if mirror.tile([fx, fy, z]) == Some(Tile::Solid(Material::TreeFoliage)) {
+                        cells.insert([fx, fy, z]);
+                    }
+                }
+            }
+        }
+        ([x, y, base], cells)
+    };
+    let (a_base, a_cells) = tree(&mirror, 73, 59);
+    let (b_base, b_cells) = tree(&mirror, 73, 56);
+    let (d_base, d_cells) = tree(&mirror, 65, 56);
+    assert_eq!(
+        (a_base, b_base, d_base),
+        ([73, 59, 12], [73, 56, 13], [65, 56, 10])
+    );
+    assert!(a_cells.is_disjoint(&b_cells));
+    let a_trunk = a_cells
+        .iter()
+        .filter(|p| mirror.tile(**p) == Some(Tile::Solid(Material::TreeTrunk)))
+        .count();
+    assert_eq!(a_trunk, 4, "tree A has four trunk cells");
+    let tiles_of = |mirror: &client_core::Mirror, cells: &BTreeSet<[i32; 3]>| -> Vec<_> {
+        cells.iter().map(|p| (*p, mirror.tile(*p))).collect()
+    };
+    let (b_before, d_before) = (tiles_of(&mirror, &b_cells), tiles_of(&mirror, &d_cells));
+
+    let [cx, cy, cz] = camp;
+    let pile = (3..12)
+        .flat_map(|r| {
+            [
+                (cx - r - 2, cy),
+                (cx, cy + r),
+                (cx, cy - r - 2),
+                (cx + r, cy),
+            ]
+        })
+        .find(|&(px, py)| {
+            (px..px + 3)
+                .all(|x| (py..py + 3).all(|y| client_core::is_standable(&mirror, [x, y, cz])))
+        })
+        .expect("a 3x3 standable pile near the camp");
+    let pile_cells: BTreeSet<[i32; 3]> = (pile.0..pile.0 + 3)
+        .flat_map(|x| (pile.1..pile.1 + 3).map(move |y| [x, y, cz]))
+        .collect();
+    let cell = |p: [i32; 3]| {
+        format!(
+            "{{\"min\":[{},{},{}],\"max\":[{},{},{}]}}",
+            p[0], p[1], p[2], p[0], p[1], p[2]
+        )
+    };
+    let no_tree = protocol::Rect {
+        min: [cx - 2, cy - 2, cz],
+        max: [cx - 1, cy - 1, cz],
+    };
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"cut\",\"rect\":{}}}\n",
+            cell(a_base)
+        )
+        .as_bytes(),
+    );
+    send_literal(
+        &mut writer,
+        br#"{"type":"designate","kind":"cut","rect":{"min":[62,62,9],"max":[63,63,9]}}
+"#,
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"designate\",\"kind\":\"dig\",\"rect\":{}}}\n",
+            cell(d_base)
+        )
+        .as_bytes(),
+    );
+    send_literal(
+        &mut writer,
+        format!(
+            "{{\"type\":\"place_stockpile\",\"rects\":[{{\"min\":[{},{},{cz}],\"max\":[{},{},{cz}]}}]}}\n",
+            pile.0,
+            pile.1,
+            pile.0 + 2,
+            pile.1 + 2
+        )
+        .as_bytes(),
+    );
+    send_speed(&mut writer, protocol::Speed::Fast4x);
+
+    let (mut cut_mark, mut cut_held, mut felled, mut wood_on_pile) = (None, None, None, None);
+    let (mut refused, mut dig_on_tree, mut b_changed, mut d_changed) = (None, None, None, None);
+    let mut logs_at_base = 0;
+    for _ in 0..3000 {
+        let delta = read_delta(&mut reader);
+        let tick = delta.tick;
+        mirror.apply_delta(delta.clone());
+        for mark in &delta.designations {
+            if mark.kind == DesignationKind::Cut && mark.pos == a_base {
+                cut_mark.get_or_insert(tick);
+            }
+            if mark.kind == DesignationKind::Dig && d_cells.contains(&mark.pos) {
+                dig_on_tree.get_or_insert(tick);
+            }
+        }
+        for entity in &delta.entities {
+            if entity.profession == Some(protocol::Profession::Woodcutter)
+                && entity.job == Some(DwarfJob::Cut { target: a_base })
+            {
+                cut_held.get_or_insert((entity.id, tick));
+            }
+        }
+        let wood: Vec<_> = delta
+            .items
+            .iter()
+            .filter(|item| item.kind == ItemKind::Wood)
+            .collect();
+        if felled.is_none() && a_cells.iter().all(|p| mirror.tile(*p) == Some(Tile::Empty)) {
+            felled = Some(tick);
+            // The same delta that empties the tree carries its logs: one per trunk cell.
+            logs_at_base = wood.iter().filter(|item| item.pos == a_base).count();
+            assert!(
+                delta.items.iter().all(|item| item.kind == ItemKind::Wood),
+                "tick {tick}: a cut leaves no stone"
+            );
+        }
+        if wood_on_pile.is_none() && wood.iter().any(|item| pile_cells.contains(&item.pos)) {
+            wood_on_pile = Some(tick);
+        }
+        let want = protocol::Refusal::Designate {
+            kind: DesignationKind::Cut,
+            rect: no_tree,
+        };
+        if delta.refusals.contains(&want) {
+            refused.get_or_insert(tick);
+        }
+        if b_changed.is_none() && tiles_of(&mirror, &b_cells) != b_before {
+            b_changed = Some(tick);
+        }
+        if d_changed.is_none() && tiles_of(&mirror, &d_cells) != d_before {
+            d_changed = Some(tick);
+        }
+        if wood_on_pile.is_some() && refused.is_some() {
+            break;
+        }
+    }
+
+    assert!(cut_mark.is_some(), "no cut mark at A's base");
+    let (holder, _) = cut_held.expect("no woodcutter ever held the cut");
+    assert_eq!(holder, woodcutter, "only the woodcutter holds a cut");
+    assert!(felled.is_some(), "tree A never came down");
+    assert_eq!(logs_at_base, 4, "one log per trunk cell, at A's base");
+    assert!(wood_on_pile.is_some(), "no log ever reached the pile");
+    assert!(refused.is_some(), "a cut over no tree was never refused");
+    assert_eq!(b_changed, None, "tree B changed with A's fall");
+    assert_eq!(dig_on_tree, None, "a dig mark landed on tree D");
+    assert_eq!(d_changed, None, "tree D changed");
+}
+
+#[test]
+fn a_save_from_before_item_kinds_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let pos = state.dwarves[0].pos;
+    state.next_id = 13;
+    state.items = vec![(12, pos, sim_core::ItemKind::Stone)];
+    let mut value = serde_json::to_value(&state).expect("encode save fixture");
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(value.clone()).is_ok(),
+        "positive control: the save with item kinds must decode"
+    );
+    // A pre-12.7 item is `[id, pos]`: drop the kind from every entry.
+    for item in value["items"].as_array_mut().expect("items array") {
+        item.as_array_mut().unwrap().pop();
+    }
+    assert!(serde_json::from_value::<sim_core::SaveState>(value.clone()).is_err());
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&value).expect("encode kind-less save fixture"),
+    )
+    .expect("write kind-less save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("could not decode frostvein.save"),
+        "unexpected kind-less save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
 }

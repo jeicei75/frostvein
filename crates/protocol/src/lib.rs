@@ -107,6 +107,7 @@ pub enum Profession {
 pub enum DwarfJob {
     Dig { target: [i32; 3] },
     Channel { target: [i32; 3] },
+    Cut { target: [i32; 3] },
     Haul,
 }
 
@@ -135,6 +136,7 @@ pub enum Speed {
 pub enum DesignationKind {
     Dig,
     Channel,
+    Cut,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,6 +154,11 @@ pub enum Refusal {
     /// The only cause is an unknown dwarf id.
     SetProfession {
         dwarf: u32,
+    },
+    /// A dig, channel or cut rect that marked nothing.
+    Designate {
+        kind: DesignationKind,
+        rect: Rect,
     },
 }
 
@@ -245,8 +252,15 @@ pub struct Zone {
 pub struct Item {
     pub id: u32,
     pub pos: [i32; 3],
+    pub kind: ItemKind,
 }
-// NOTE: a second item kind adds a kind field; stone is the only item in phase one.
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemKind {
+    Stone,
+    Wood,
+}
 
 /// Full world state, sent on connect (AD-3). Field order is wire order.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -299,7 +313,7 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
-        "items": [{"id": 12, "pos": [1, 2, 3]}],
+        "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
         "speed": "normal",
         "tick": 9
     }"#;
@@ -311,7 +325,7 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
-        "items": [{"id": 12, "pos": [1, 2, 3]}],
+        "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
         "speed": "fast"
     }"#;
 
@@ -329,13 +343,27 @@ mod tests {
             }
         );
         assert_eq!(serde_json::to_string(&refusal).unwrap(), literal);
+        let designate =
+            r#"{"command":"designate","kind":"cut","rect":{"min":[73,59,12],"max":[73,59,12]}}"#;
+        let refusal_cut: Refusal = serde_json::from_str(designate).unwrap();
+        assert_eq!(
+            refusal_cut,
+            Refusal::Designate {
+                kind: DesignationKind::Cut,
+                rect: Rect {
+                    min: [73, 59, 12],
+                    max: [73, 59, 12]
+                }
+            }
+        );
+        assert_eq!(serde_json::to_string(&refusal_cut).unwrap(), designate);
         let mut plain: Delta = serde_json::from_str(DELTA_WIRE).unwrap();
         assert!(plain.refusals.is_empty());
         let plain_value: serde_json::Value = serde_json::from_str(DELTA_WIRE).unwrap();
         assert_eq!(serde_json::to_value(&plain).unwrap(), plain_value);
         assert_eq!(
             serde_json::to_string(&plain).unwrap(),
-            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3]}],"speed":"fast"}"#
+            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3],"kind":"stone"}],"speed":"fast"}"#
         );
         plain.refusals.push(refusal);
         let encoded = serde_json::to_string(&plain).unwrap();
@@ -442,12 +470,13 @@ mod tests {
             snapshot.items,
             vec![Item {
                 id: 12,
-                pos: [1, 2, 3]
+                pos: [1, 2, 3],
+                kind: ItemKind::Stone
             }]
         );
         assert_eq!(
             serde_json::to_string(&snapshot.items[0]).unwrap(),
-            r#"{"id":12,"pos":[1,2,3]}"#
+            r#"{"id":12,"pos":[1,2,3],"kind":"stone"}"#
         );
         assert_eq!(snapshot.speed, Speed::Normal);
         assert_eq!(snapshot.tick, 9);
@@ -500,7 +529,8 @@ mod tests {
             delta.items,
             vec![Item {
                 id: 12,
-                pos: [1, 2, 3]
+                pos: [1, 2, 3],
+                kind: ItemKind::Stone
             }]
         );
         assert_eq!(delta.speed, Speed::Fast);
@@ -526,6 +556,16 @@ mod tests {
                     rect: Rect {
                         min: [1, 2, 3],
                         max: [4, 5, 3],
+                    },
+                },
+            ),
+            (
+                r#"{"type":"designate","kind":"cut","rect":{"min":[73,59,12],"max":[73,59,12]}}"#,
+                Command::Designate {
+                    kind: DesignationKind::Cut,
+                    rect: Rect {
+                        min: [73, 59, 12],
+                        max: [73, 59, 12],
                     },
                 },
             ),
@@ -642,6 +682,12 @@ mod tests {
                 DwarfJob::Channel { target: [4, 5, 6] },
                 r#"{"channel":{"target":[4,5,6]}}"#,
             ),
+            (
+                DwarfJob::Cut {
+                    target: [73, 59, 12],
+                },
+                r#"{"cut":{"target":[73,59,12]}}"#,
+            ),
             (DwarfJob::Haul, "\"haul\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
@@ -679,25 +725,31 @@ mod tests {
         for (value, wire) in [
             (DesignationKind::Dig, "\"dig\""),
             (DesignationKind::Channel, "\"channel\""),
+            (DesignationKind::Cut, "\"cut\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }
-        let item_wire = r#"{"id":12,"pos":[1,2,3]}"#;
-        assert_eq!(
-            serde_json::from_str::<Item>(item_wire).unwrap(),
-            Item {
-                id: 12,
-                pos: [1, 2, 3],
-            }
-        );
-        assert_eq!(
-            serde_json::to_string(&Item {
-                id: 12,
-                pos: [1, 2, 3],
-            })
-            .unwrap(),
-            item_wire
-        );
+        for (item_wire, item) in [
+            (
+                r#"{"id":12,"pos":[1,2,3],"kind":"stone"}"#,
+                Item {
+                    id: 12,
+                    pos: [1, 2, 3],
+                    kind: ItemKind::Stone,
+                },
+            ),
+            (
+                r#"{"id":13,"pos":[73,59,12],"kind":"wood"}"#,
+                Item {
+                    id: 13,
+                    pos: [73, 59, 12],
+                    kind: ItemKind::Wood,
+                },
+            ),
+        ] {
+            assert_eq!(serde_json::from_str::<Item>(item_wire).unwrap(), item);
+            assert_eq!(serde_json::to_string(&item).unwrap(), item_wire);
+        }
         assert_eq!(
             serde_json::to_value(Command::SetSpeed {
                 speed: Speed::Paused,
