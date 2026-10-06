@@ -502,7 +502,7 @@ target/release/tui 7703 --frame --z 13 > "$SCRATCH/f1.txt" 2> "$SCRATCH/m1.txt" 
 python3 -c 'import socket,json; s=socket.create_connection(("127.0.0.1",7703)); f=s.makefile(); f.readline(); s.sendall(b"{\"type\":\"set_speed\",\"speed\":\"paused\"}\n{\"type\":\"designate\",\"kind\":\"cut\",\"rect\":{\"min\":[73,56,13],\"max\":[73,56,13]}}\n"); f.readline(); f.readline()'
 target/release/tui 7703 --frame --z 13 > "$SCRATCH/f2.txt" 2> "$SCRATCH/m2.txt"   # B marked
 target/release/tui 7703 --frame --z 9  > "$SCRATCH/f3.txt" 2> /dev/null            # the pile
-grep -o '/' "$SCRATCH/f2.txt" | wc -l; grep -o '=' "$SCRATCH/f3.txt" | wc -l
+grep -o '38;2;226;96;64m/' "$SCRATCH/f2.txt" | wc -l; grep -o '=' "$SCRATCH/f3.txt" | wc -l
 ```
 
 - **Observed at creation** (fresh release `simd 7706`, `fd9ca98`):
@@ -512,7 +512,9 @@ grep -o '/' "$SCRATCH/f2.txt" | wc -l; grep -o '=' "$SCRATCH/f3.txt" | wc -l
     `span x[73..73] y[56..56]` and one `×` in the frame. The tally sees a mark at that cell, so `0 of 0`
     after the cut is the feature missing, not the instrument.
 - **Required of dev:**
-  - after the cut, `designations=1 of 1`, with `span x[73..73] y[56..56]` and exactly one `/` in `f2.txt`;
+  - after the cut, `designations=1 of 1`, with `span x[73..73] y[56..56]` and exactly one cut-mark `/`
+    (`38;2;226;96;64m/`) in `f2.txt`. A bare `/` count cannot fail: the status row's `z 13/31` carries one
+    (review patch, 2026-10-06: bare count 1 unmarked / 2 marked, mark-colour count 0 / 1);
   - at z 9, at least one `=` in `f3.txt` (in stockpile green): the log the GREEN run delivered;
   - zero of either is a failure, whatever the exit code.
 
