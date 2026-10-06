@@ -11,10 +11,17 @@ pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
     match refusal {
         protocol::Refusal::PlaceStockpile { .. } => "stockpile refused: no valid cells",
         protocol::Refusal::SetProfession { .. } => "trade refused: no such dwarf",
+        // The sim counts a cell skipped at MAX_DESIGNATIONS as not applied, so a full mark cap
+        // refuses with these same texts. NOTE: the tui status row clips at the frame width and
+        // needs ~110 columns to show the channel text whole; the gui HUD shows it in full.
         protocol::Refusal::Designate { kind, .. } => match kind {
-            protocol::DesignationKind::Cut => "cut refused: no tree",
-            protocol::DesignationKind::Dig => "dig refused: nothing to dig",
-            protocol::DesignationKind::Channel => "channel refused: nothing to channel",
+            protocol::DesignationKind::Cut => "cut refused: no tree, or the mark limit is reached",
+            protocol::DesignationKind::Dig => {
+                "dig refused: nothing to dig, or the mark limit is reached"
+            }
+            protocol::DesignationKind::Channel => {
+                "channel refused: nothing to channel, or the mark limit is reached"
+            }
         },
     }
 }
@@ -397,21 +404,21 @@ mod tests {
                     kind: protocol::DesignationKind::Cut,
                     rect,
                 },
-                "cut refused: no tree",
+                "cut refused: no tree, or the mark limit is reached",
             ),
             (
                 protocol::Refusal::Designate {
                     kind: protocol::DesignationKind::Dig,
                     rect,
                 },
-                "dig refused: nothing to dig",
+                "dig refused: nothing to dig, or the mark limit is reached",
             ),
             (
                 protocol::Refusal::Designate {
                     kind: protocol::DesignationKind::Channel,
                     rect,
                 },
-                "channel refused: nothing to channel",
+                "channel refused: nothing to channel, or the mark limit is reached",
             ),
         ] {
             assert_eq!(refusal_text(&refusal), text);

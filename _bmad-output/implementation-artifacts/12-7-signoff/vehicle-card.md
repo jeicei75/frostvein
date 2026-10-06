@@ -74,7 +74,9 @@ placeholder?
 ## (d) A cut over nothing
 
 Press `5` and drag on the bare camp floor, where there are no trees. The slot above the hint bar
-reads `cut refused: no tree`, and the tui status row reads the same.
+reads `cut refused: no tree, or the mark limit is reached`, and the tui status row reads the same
+if the tui is ~95 columns or wider; a narrower one clips the tail.
 
 **Allowed by your ruling (Task 0.3):** a channel drag over the edge of a forest now raises
-`channel refused: nothing to channel` for the treetop rows, while the ground rows still apply.
+`channel refused: nothing to channel, or the mark limit is reached` for the treetop rows, while the
+ground rows still apply.
