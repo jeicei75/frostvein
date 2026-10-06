@@ -2635,6 +2635,16 @@ So that felling reads as work like digging does.
 **When** Wolf assigns professions and designates a dig, a stockpile and a cut,
 **Then** he watches dig, haul and cut happen at the same time, in one sitting, and each animation reads, unless he ruled under FR45 that it ships plain or is parked (success criterion 1). This is the first story where all three trades and their animations exist.
 
+**Folded in (Wolf, 2026-10-06, after 12.7's seat):** three gui issues that this story's seat would otherwise trip over.
+- **#164: work visuals trail the drawn walker.** The stone pops into a hauler's hands before his drawn body arrives, rides past the drop, and the dig is unseen at Fast. A lagging walker can miss the whole 50-tick cut swing, which is 12.7's deferred finding. **Given** dig, haul and cut at Normal and at Fast, **Then** each work visual plays where the drawn dwarf is, and a pick-up does not appear before he arrives.
+- **#173: a ghost pine.** After a cut session, one pine was drawn as bare green foliage cubes with no snow (Wolf's seat video). It is not reproduced yet; the boot world is clean. **Given** one pine of a touching pair is felled, **Then** every remaining tree cell is drawn by exactly one path (mesh or cube), and no pine falls back to cubes. Reproduce it first, red before the fix.
+- **#174: cut-mode feel.**
+  - The hover flickers over crowns, because the pick skips foliage.
+  - While dragging, the WHOLE area shows; on release, only the trees in it are marked.
+  - A marked tree is tinted green whole, not only by a slab at its foot.
+
+  The look items are draft-first, per the M3 look rule.
+
 ### Story 12.9: One Dwarf per Tile
 
 As the boss,
