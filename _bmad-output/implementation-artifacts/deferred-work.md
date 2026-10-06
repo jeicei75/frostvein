@@ -2490,3 +2490,10 @@ the story, and one of them is also issue #125.
   at Normal and 0.25 s at fast4x. This is input for 12.8's clip tuning.
 - **The approved 12.7 draft says felling takes "10 s … like a dig"** (acceptance, LOW; record). The code is
   50 ticks (5 s), equal to dig.
+
+## Deferred from: code review of 12-7-timber, run 2 (2026-10-06)
+
+- **At the mark cap, a designate that overlaps existing marks drops its new cells silently** (feature +
+  blind, LOW, RAN; pre-existing since story 3.2's cap; `crates/sim-core/src/lib.rs:1794`). An
+  already-marked cell counts as applied, so no refusal is raised. THE ISSUE IS THE STATE: **#170**
+  (route:undecided).

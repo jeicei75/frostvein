@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-05
+# last_updated: 2026-10-06
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-05
+last_updated: 2026-10-06
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2555,6 +2555,9 @@ development_status:
   #     Task 0 RULED 2026-10-05 (Wolf): draft approved (roster in the name slot, `T` cycles the trade); an
   #     emptied trade is ALLOWED (no last-of-trade refusal); fixed text 'trade refused: no such dwarf'.
   12-7-timber: in-progress
+  #   Code review run 2 2026-10-06 on the patch diff 8c3764f..7499534: 0 HIGH/MED -> stopping rule, audit ENDS.
+  #     2 LOW record patches LEFT AS ACTION ITEMS; partial-cap silent drop deferred -> #170. D1 cap refusal
+  #     now OBSERVED live. Next: 2 record patches, the `4` clear at the seat (push first), then the PR.
   #   Review patch pass 1 2026-10-06: all 3 patches landed (660c8f4, 9d96a7d, ce737d6), rows 18-19 KILLED
   #     (47c2f5c); FULL GATE GREEN 3284 s on 47c2f5c. Refusal texts clip in a tui < ~95-110 cols (Wolf: as ruled).
   #     Next: optional round-2 review, the `4` clear at the seat (push first), then Wolf's yes for the PR.

@@ -401,6 +401,61 @@ Dismissed (12):
 - The gate on HEAD. A known pre-PR action, not a finding.
 - The protocol NOTE was dropped, not replaced. Moot, since `kind` now exists.
 
+**Code review run 2, 2026-10-06** — the patch-pass diff `8c3764f..7499534` only (round 2 for this diff).
+Four layers, none timed out: blind (Sonnet, client-core), edge (Sonnet, simd + tests + mutation rows),
+acceptance and feature (Opus, whole diff). Each ran cargo in its own target dir.
+
+**Delta against run 1:** 3 NEW findings (all LOW, records), 1 REWORK (the closure table's refusal-texts row
+overclaims its display-side test; the code fix itself holds), 1 pre-existing defect found live and filed
+as **#170**. Severity: 0 HIGH, 0 MED. **Stopping rule:** none of the new findings is HIGH, so the static
+audit ENDS here. The next spend goes to the seat.
+
+**Observed live this run** (feature, release `simd`, DEFAULT_SEED):
+- D1's outcome is now observed. With 4096 marks, a cut on tree B (73,56,13) is refused on the wire and the
+  tui shows `cut refused: no tree, or the mark lim` (clipped at 80 columns). Control: cancel one mark (4095)
+  and the identical cut is accepted.
+- After felling A beside the 12.5 channel block, items 10-13 are `stone` and 14-17 are `wood` on the wire,
+  with none mispaired.
+- Re-proven by acceptance: both REDs (old cut text, zip join in release) and the recipe's 0/1 and 1/2 counts.
+- Mutation rows 18 and 19 apply once each to the current source (edge, read-only count).
+- NOT observed: the gui HUD showing the widened text (vehicle card step (d) will be the first time), and
+  AC12's `4` clear.
+
+- [ ] [Review][Patch] **The closure table's refusal-texts row overclaims its display-side test, and
+  misnames the 80 columns** (acceptance + blind, LOW, REWORK; a misreported verification).
+  - `ingest.rs:4018` sends a `Refusal::PlaceStockpile`, not a `Designate`, and compares the HUD against
+    `refusal_text(&expected)` itself, so it pins no wording.
+  - The tui test keeps `contains("cut refused: no tree")`, which mutation row 18 would leave green.
+  - So the new texts are pinned only at their source, and the NOTE's "the gui HUD shows it in full" has no
+    test behind it.
+  - The 80 columns are this devpod's `tput cols`, not the tui: `frame_size()` falls back to 100×40, and the
+    full-text pin goes GREEN at `COLUMNS=120` or with `TERM` unset. Keeping the prefix is right, because a
+    full pin would be venue-flaky.
+  - Correct the row and the NOTE wording.
+  [`12-7-timber.md:357`, `crates/client-core/src/lib.rs:14`]
+- [ ] [Review][Patch] **Task 0.3, Task 0.4 and the draft still quote the old texts, with no pointer to D1**
+  (acceptance, LOW; the partial-doc-update shape). They are records of rulings, so the old texts stay, but
+  each needs a one-line "superseded by D1 (2026-10-05)" note.
+  [`12-7-timber.md:130,133`, `12-7-signoff/draft.md:46`]
+- [x] [Review][Defer] **At the mark cap, a designate that overlaps existing marks drops its new cells
+  silently** (feature + blind, LOW, RAN; pre-existing since 3.2's cap). An already-marked cell counts as
+  applied, so `applied > 0`, there is no refusal, and the new cells are dropped. Live: a dig over
+  (0..3,0,0..1) at 4096 returned `refusals []` and marked 0 new z 1 cells. D1 only surfaces the all-new
+  case. [`crates/sim-core/src/lib.rs:1794`] — deferred, pre-existing; filed **#170** (route:undecided:
+  reporting a partial apply is a wire change).
+
+Dismissed (5):
+- The tui clips the cap clause at 80 columns. Already ruled: land as ruled, plus a NOTE.
+- `kinds[&id]` could panic. `items()` ids are a strict subset of `item_kinds()` ids
+  (`lib.rs:2005-2026`), and a panic is louder than the old silent mispair.
+- Mixed-kind items are only covered transitively on the wire. `serve.rs:2779` asserts `Wood` on the wire.
+- Text casing and formatter-split arms. Cosmetic.
+- `tui --frame` cannot show a refusal. That was the orchestrator's prompt error; `tui/src/main.rs:409`
+  documents it, and `--frames N` does show one.
+
+Patches: Wolf chose to LEAVE THEM AS ACTION ITEMS (2026-10-06). Review cost $7.23 / 170 turns (subagents
+58.5%). Reaped 5.6 GB of /tmp layer caches (3.1 GB of free space reclaimed).
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -695,3 +750,4 @@ cell). Read the marks at their feet. Nain (purple)
 | 2026-10-05 | AC12 PASSED at Wolf's seat ("that works now", `4be19a0`). The log popping into the hauler's hands is #164 (out of scope; recorded there). Status -> review. Full gate last green on `a7b1ded`; re-run before the PR. |
 | 2026-10-05 | Code review run 1 on `fb726ce` (4 layers, none timed out): no HIGH/MED code defect; 2 decisions resolved, 3 patches left as action items, 8 deferred, 12 dismissed. D2's tui check found the gui is a mirror image of the tui (pre-existing): #169. The `4` clear was not observed. Status -> in-progress. The launcher no longer pulls (`6126e9e`, #143, Wolf's request during the review). |
 | 2026-10-06 | Review patch pass 1: the three refusal texts name the mark cap (`660c8f4`; tui clips them below ~95-110 columns, Wolf: land as ruled); `items_out` joins kinds by id (`9d96a7d`); the tui recipe counts the cut-mark colour (`ce737d6`); mutation rows 18-19 KILLED (`47c2f5c`). Full gate GREEN 3284 s on `47c2f5c`. Still open: AC12's `4` clear at the seat. Status stays in-progress. |
+| 2026-10-06 | Code review run 2 on the patch diff `8c3764f..7499534` (4 layers, none timed out): 0 HIGH/MED, so the static audit ends. D1's cap refusal observed live. 2 LOW record patches left as action items; the partial-cap silent drop deferred as #170. Status stays in-progress. |
