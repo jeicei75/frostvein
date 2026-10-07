@@ -210,8 +210,8 @@ to the seat.
     Commit the GLB BEFORE any row runs: `mutate.sh` does not back up `assets/` (`mutate.sh:71`).
   - [ ] Re-point old rows the change breaks (12.5 rows on `dwarf_clip`, the `clips Walk, Dig, Carry` literal).
     Run them, and every row must be KILLED.
-  - [ ] README `gui` section: the Cut clip and the clip list, cut-mode pick/box/tint, the `materials=` line.
-  - [ ] Seat card `12-8-signoff/vehicle-card.md` in the seat's launch form (see Verification).
+  - [x] README `gui` section: the Cut clip and the clip list, cut-mode pick/box/tint, the `materials=` line.
+  - [x] Seat card `12-8-signoff/vehicle-card.md` in the seat's launch form (see Verification).
 - [ ] **Task 7: the live recipe, the seat (AC9), then the full gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`
   on the final HEAD.
 
@@ -460,6 +460,12 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
     variants apart; only the handle count (4) does. A non-tint handle swap shows as a 5th handle or a
     new label. Kept minimal; per-variant labels only if a #173 reproduction needs them.
   - Mutations: see the Task 5 rows of `12-8.sh` (below).
+- **Task 6 so far:** `12-8.sh` has 15 rows, and every one ran KILLED in the per-task runs above. The
+  rows the change broke were re-pointed and re-run KILLED: four in 12.5, one in 12.7, one in 8.1.
+  - README: the Cut clip, the clip list, cut-mode pick/box/tint and the `materials=` line.
+  - Seat card `12-8-signoff/vehicle-card.md`, in two passes (pass 2 after the GLB is promoted).
+  - Open: the whole-file run after the GLB promotion, since `mutate.sh` does not back up `assets/`.
+- **Pushed** `4eb9e42` with `push.sh --fast` (VERIFIED) for seat pass 1. Full gate running detached.
 - **Task 2a**: brief `src-assets/prompts/dwarf-miner-round-20.md` (`6425a40`). Tool A (re-use the
   pickaxe) or B (an axe, a 21st joint, Wolf's explicit yes) is decided at the seat.
 
