@@ -200,7 +200,7 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | LMB | select the dwarf under the cursor and follow him (with no designate mode armed) |
 | `Esc` | release the selection, or abort a designation |
 | `T` | with a dwarf selected, change his trade: miner → hauler → woodcutter → miner |
-| `1` `2` `3` `4` `5` | designate dig / channel / stockpile / clear / cut — then LMB-drag a rectangle. A cut marks every pine the drag catches, once each, at the foot of its trunk; a woodcutter fells the whole tree and leaves one log per trunk cell. `4` over a pine's foot clears its cut mark |
+| `1` `2` `3` `4` `5` | designate dig / channel / stockpile / clear / cut — then LMB-drag a rectangle. A cut marks every pine the drag catches, once each, at the foot of its trunk; a woodcutter fells the whole tree and leaves one log per trunk cell. `4` over a pine's foot clears its cut mark. In cut mode the pointer stops at the pine you point at, crown or trunk, and sits at its foot; while you drag, every cell of the box shows a hover slab and the pines it catches turn flat green. A marked pine stays flat green, with its mark slab at the foot, until it is felled or cleared |
 | `ctrl` + `S` / `ctrl` + `L` | save / load the world (the daemon writes `frostvein.save` and says `saved tick N`; a load snaps every client back). While `ctrl` is held the keyboard camera keys do nothing, so the chord never moves the view |
 | `H` | hide / show the whole HUD: fps overlay, readouts, hint |
 | `space` | pause / resume the sim |
