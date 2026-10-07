@@ -1,0 +1,49 @@
+00:02.015  blend            | Read blend: "C:\Users\suihk\AppData\Local\Temp\claude\D--Workspace-frostvein\88e7df19-28da-4f38-a611-c5069d80d703\scratchpad\head.blend"
+00:02.093  blend            | Read blend: "D:\Workspace\frostvein\src-assets\blender\SM_VoxelDwarf_Miner01.blend"
+HEAD   21 parts, 3360 tris, 20 joints, geometry 66b513ee84730b0c
+       Carry c50f8269451166101c9dc64f18fc93e9a4be8584a3f73d2d6f39b1439a175bde
+       Dig   844687a11997b6826d097eee23bb3332c3838be56e26b5666038da56c472b962
+       Walk  b1079d210fb881bdcc87ee2a2d4992b4c3b0a6572707339ff86ac2907950d3ea
+saved  22 parts, 3456 tris, 21 joints, geometry 058050c8002a9a80
+       Carry d5637d199ac20895c25dfb1b63bdeebd1b72a494d3f2ce7b49027defd2af1516
+       Cut   1a40193d842fc1068a52380f3605b530ae172360f3999664efc5e191ff5f040e
+       Dig   0da15832629121145613045d8c6dd6fa30ec3c5ac88e995546caf55e3ea964de
+       Walk  69a3d226c2a31f3dfc7ed3443b35cd26341293a3c8414f2cd559dc75775fd894
+PAINT r17 -- T_VoxelDwarf_r17 512x512 packed, 75 cells, face island 176x128 px
+RIG r17 -- SK_VoxelDwarf_Miner01_r17, 19 joints, rigid weights by box
+BUILD r17 -- 22 parts, 3360 triangles
+ACTION Walk -- frames 0..24 at 24 fps (1.000 s), 79 fcurves, 1975 keys
+STRIDE 0.493 m per cycle (0.246 m per step); stance 13/24 frames = 54.2%
+SPEED  at v m/s the clip plays at v / 0.493
+REACH  worst 0.18944 m of 0.20000 m available (94.7%); 0 solves clamped -- none
+joint 'pick': parent hand.R, 20 joints; r17_pickaxe groups ['pick']
+Walk: `pick` keyed at rest, frames 0..24; round-18 curves hash 628961a89cccd44cfcad1fc2eff84907f0124c275db083453d28e0a6727af3c7
+ACTION Dig -- frames 0..24 at 24 fps, 86 fcurves, 2150 keys
+STRIKE frame 18 (phase 0.750): blade tip (0.434, 0.692, 0.007), head eye (0.417, 0.808, 0.205)
+joint 'pick': parent hand.R, 20 joints; r17_pickaxe groups ['pick']
+ACTION Carry -- frames 0..24 at 24 fps, 86 fcurves, 2150 keys
+PALMS  worst miss 9.4 mm off the stone face, worst facing dot 0.970 (1 = square)
+joint 'axe': parent chest, 21 joints; r17_axe 64 verts 96 tris; parts 22
+Walk: `axe` keyed at rest, frames 0..24; round-19 curves UNCHANGED
+Dig: `axe` keyed at rest, frames 0..24; round-19 curves UNCHANGED
+Carry: `axe` keyed at rest, frames 0..24; round-19 curves UNCHANGED
+  arm solved on 24 frames: worst grip miss 30.6 mm (frame 11), worst axis dot 0.983, worst wrist bend 21 deg
+ACTION Cut -- frames 0..24 at 24 fps, 93 fcurves, 2325 keys
+BITE frame 18 (phase 0.750): edge (Vector((0.2850880026817322, 0.9594518542289734, 0.5874307751655579)), Vector((0.2865455150604248, 1.0652259588241577, 0.6186352968215942)), Vector((0.28800296783447266, 1.1710001230239868, 0.6498397588729858)))
+detached: pose is bind; actions Carry(fake user True), Cut(fake user True), Dig(fake user True), Walk(fake user True)
+cold   22 parts, 3456 tris, 21 joints, geometry 058050c8002a9a80
+       Carry d5637d199ac20895c25dfb1b63bdeebd1b72a494d3f2ce7b49027defd2af1516
+       Cut   1a40193d842fc1068a52380f3605b530ae172360f3999664efc5e191ff5f040e
+       Dig   0da15832629121145613045d8c6dd6fa30ec3c5ac88e995546caf55e3ea964de
+       Walk  69a3d226c2a31f3dfc7ed3443b35cd26341293a3c8414f2cd559dc75775fd894
+old 21 parts: HEAD == saved == cold                        YES
+r17_axe: saved == cold                                     YES
+joints: HEAD 20, saved 21, cold 21                         YES
+actions exactly Carry, Cut, Dig, Walk (saved, cold)        YES
+every action: saved == cold                                YES
+Walk/Dig/Carry 20-joint curves == round 19 (saved, cold)   YES
+Walk/Dig/Carry HEAD hashes == round 19                     YES
+COLDRUN PASS
+Blender 5.2.1 LTS (hash 9e2066aef7ef built 2026-08-25 02:38:20)
+
+Blender quit
