@@ -1092,8 +1092,42 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
         writeln!(writer, "{command}").expect("command must write");
     }
     writer.flush().expect("commands must flush");
-    // Drain the deltas so the daemon never blocks on a full socket while the gui runs.
-    let drain = std::thread::spawn(move || for _ in reader.lines().map_while(Result::ok) {});
+    // Drain the deltas so the daemon never blocks on a full socket while the gui runs. The drawn
+    // woodcutter trails the wire, and a cut lasts 5 s: measured idle on this devpod, he was drawn at
+    // the trunk 4.1 s into it (wire work 22.4 s, `clip cut` 26.5 s). Lavapipe's ~0.55 s frames are
+    // clamped to Bevy's 0.25 s virtual delta, so his walk runs at under half speed, and under the
+    // full gate's load he missed the cut entirely. So the sim pauses for HOLD while the wire says he
+    // works the cut: a paused swing holds and the walker still catches up. Then it resumes, so his
+    // `clip walk` follows.
+    const HOLD: Duration = Duration::from_secs(30);
+    let woodcutter_ids = woodcutters.clone();
+    let mut resume = writer.try_clone().expect("write half must clone");
+    let drain = std::thread::spawn(move || {
+        let mut held = false;
+        for line in reader.lines().map_while(Result::ok) {
+            let cutting = !held
+                && serde_json::from_str::<serde_json::Value>(&line).is_ok_and(|delta| {
+                    delta["entities"].as_array().is_some_and(|entities| {
+                        entities.iter().any(|e| {
+                            e["id"]
+                                .as_u64()
+                                .is_some_and(|id| woodcutter_ids.contains(&(id as u32)))
+                                && e["state"] == "work"
+                                && e["job"].get("cut").is_some()
+                        })
+                    })
+                });
+            if cutting {
+                held = true;
+                let _ = writeln!(resume, r#"{{"type":"set_speed","speed":"paused"}}"#);
+                let mut later = resume.try_clone().expect("write half must clone");
+                std::thread::spawn(move || {
+                    std::thread::sleep(HOLD);
+                    let _ = writeln!(later, r#"{{"type":"set_speed","speed":"normal"}}"#);
+                });
+            }
+        }
+    });
 
     let out = std::env::temp_dir().join(format!(
         "frostvein-pixel-guard-{}-work-clips.png",
