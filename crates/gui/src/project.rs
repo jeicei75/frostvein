@@ -21,7 +21,7 @@ use protocol::{DesignationKind, Dims, EntityKind, ItemKind, Material, Tile};
 
 use crate::{
     appearance::{
-        CARRY_OFFSET, ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE,
+        CARRY_OFFSET, CUT_OFFSET, ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE,
         WOOD_ITEM_DROP, WOOD_ITEM_SCALE, debris_color, designation_color, entity_appearance,
         flicker_scale, foliage_snow_color, hover_highlight_color, light_properties, material_color,
         rim_dissolved_color, rim_dissolved_color_at, snow_cap_color, wood_item_color, zone_color,
@@ -2560,6 +2560,55 @@ pub fn drive_dwarf_walk(
         eprintln!(
             "gui dwarf walk: STALLED -- no dwarf has covered any ground, so every phase is still at bind"
         );
+    }
+}
+
+/// The armature node's translation as the GLB authored it, captured the first frame the nudge
+/// sees it. The node is the `AnimationPlayer`'s entity (`SK_VoxelDwarf_Miner01_r17`).
+#[derive(Component)]
+pub struct ArmatureRest(Vec3);
+
+/// While a dwarf plays `Cut`, draw him `CUT_OFFSET` toward the trunk by moving his armature node
+/// -- never the dwarf entity, which `drawn_at_cell` and the walker own. Runs right after
+/// `drive_dwarf_walk`. Bevy local -Z is his facing, and the dwarf's scale turns metres into cells.
+///
+/// NOTE: the nudge pops, without an ease, on the frame the clip switches.
+pub fn nudge_dwarf_for_cut(
+    mut commands: Commands,
+    mut players: Query<(BevyEntity, &mut Transform, Option<&ArmatureRest>), With<AnimationPlayer>>,
+    parents: Query<&ChildOf>,
+    clips: Query<&DwarfClip>,
+) {
+    for (entity, mut transform, rest) in players.iter_mut() {
+        let mut current = entity;
+        let mut chosen = None;
+        for _ in 0..8 {
+            if let Ok(clip) = clips.get(current) {
+                chosen = Some(*clip);
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+        let Some(chosen) = chosen else {
+            continue;
+        };
+        let rest = match rest {
+            Some(rest) => rest.0,
+            None => {
+                commands
+                    .entity(entity)
+                    .insert(ArmatureRest(transform.translation));
+                transform.translation
+            }
+        };
+        transform.translation = if chosen == DwarfClip::Cut {
+            rest + Vec3::new(0.0, 0.0, -CUT_OFFSET)
+        } else {
+            rest
+        };
     }
 }
 

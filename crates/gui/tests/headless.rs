@@ -6013,6 +6013,97 @@ fn a_woodcutter_on_a_cut_job_in_work_gets_the_cut_clip() {
     assert_eq!(dwarf_clip_of(&mut app, 7), DwarfClip::Cut);
 }
 
+/// 12.8 Job 2: while he plays Cut the ARMATURE node (the player's entity) is drawn `CUT_OFFSET`
+/// toward the trunk and nothing else moves; the dwarf entity stays on its cell and the node
+/// returns exactly to rest when the work ends. A digger is never nudged.
+#[test]
+fn a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not() {
+    use bevy::prelude::{AnimationPlayer, ChildOf, Transform, Vec3};
+    let cut = protocol::DwarfJob::Cut { target: [2, 0, 0] };
+    let dig = protocol::DwarfJob::Dig { target: [2, 0, 0] };
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0]), dwarf(8, [1, 0, 0])],
+    ));
+    app.update();
+    // The glTF loader's `SK_` armature node, standing in: a child of the dwarf carrying the player.
+    let rest = Vec3::new(0.0, 0.0, -0.175_165_92);
+    for id in [7, 8] {
+        let dwarf_entity = app
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &WorldProjected)>()
+            .iter(app.world())
+            .find(|(_, marker)| marker.0 == id)
+            .map(|(entity, _)| entity)
+            .unwrap();
+        app.world_mut().spawn((
+            AnimationPlayer::default(),
+            Transform::from_translation(rest),
+            ChildOf(dwarf_entity),
+        ));
+    }
+    let armature = |app: &mut App, id: u32| -> Vec3 {
+        let dwarf_entity = app
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &WorldProjected)>()
+            .iter(app.world())
+            .find(|(_, marker)| marker.0 == id)
+            .map(|(entity, _)| entity)
+            .unwrap();
+        app.world_mut()
+            .query::<(&AnimationPlayer, &Transform, &ChildOf)>()
+            .iter(app.world())
+            .find(|(_, _, parent)| parent.0 == dwarf_entity)
+            .map(|(_, transform, _)| transform.translation)
+            .unwrap()
+    };
+    let drawn = |app: &mut App, id: u32| -> Vec3 {
+        app.world_mut()
+            .query::<(&WorldProjected, &Transform)>()
+            .iter(app.world())
+            .find(|(marker, _)| marker.0 == id)
+            .map(|(_, transform)| transform.translation)
+            .unwrap()
+    };
+    app.update();
+    assert_eq!(armature(&mut app, 7), rest);
+    let cell = drawn(&mut app, 7);
+
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![
+                working(7, [0, 0, 0], JobState::Work, Some(cut), None),
+                working(8, [1, 0, 0], JobState::Work, Some(dig), None),
+            ],
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(
+        armature(&mut app, 7),
+        rest + Vec3::new(0.0, 0.0, -gui::appearance::CUT_OFFSET)
+    );
+    assert_eq!(armature(&mut app, 8), rest, "a digger is not nudged");
+    assert_eq!(drawn(&mut app, 7), cell, "the dwarf entity must not move");
+
+    apply_delta(
+        &mut app,
+        delta_at(
+            2,
+            Vec::new(),
+            vec![working(7, [0, 0, 0], JobState::Walk, None, None)],
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(armature(&mut app, 7), rest, "the nudge must clear exactly");
+}
+
 /// 12.7 Task 0.1: and he faces the trunk while he does it.
 #[test]
 fn a_woodcutter_working_a_cut_faces_the_trunk() {

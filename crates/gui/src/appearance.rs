@@ -269,6 +269,12 @@ pub const ITEM_STACK_STEP: f32 = WOOD_ITEM_SCALE.y;
 /// beard clears the stone by 1.4 mm at the top of the bob.
 pub const CARRY_OFFSET: Vec3 = Vec3::new(0.0, 0.705, -0.580);
 
+/// How far toward the trunk, in METRES along his facing (local -Z), a woodcutter is drawn while he
+/// plays `Cut`. The clip is authored against bark 0.95 m ahead, but the client stands him where
+/// the bark is 1.30 m away; the round-20 seat ruled the 0.35 m difference closes at the dwarf, not
+/// in the clip (`src-assets/prompts/dwarf-miner-round-20-report.md` §2).
+pub const CUT_OFFSET: f32 = 0.35;
+
 /// Rests the shrunken item on the tile floor rather than leaving it floating mid-voxel, which is
 /// where a centred sub-unit cube would otherwise sit. The chips are already low for this reason.
 pub const STONE_ITEM_DROP: f32 = -(0.5 - STONE_ITEM_SCALE / 2.0);
