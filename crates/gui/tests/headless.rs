@@ -5203,6 +5203,43 @@ fn the_dig_phase_runs_on_delivered_ticks_and_holds_when_the_ticks_repeat() {
     assert!((after.phase - tick_factor(&app) / 5.0).abs() < 1e-5);
 }
 
+/// 12.8 Task 0.2: a cut swings once per 10 delivered ticks (5 chops in a 50-tick cut), a dig once per
+/// 5. Five ticks in, a dig has wrapped its whole swing and a cut is half way through its own.
+#[test]
+fn a_cut_swing_advances_at_half_the_rate_of_a_dig_swing() {
+    let settled_after_five_ticks = |job: protocol::DwarfJob| {
+        let mut app = headless_app(snapshot(
+            vec![Tile::Empty, Tile::Empty],
+            vec![dwarf(7, [0, 0, 0])],
+        ));
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            100,
+        )));
+        app.update();
+        for offset in 0..4_u64 {
+            let at = working(7, [0, 0, 0], JobState::Work, Some(job), None);
+            apply_delta(&mut app, delta_at(10 + offset, Vec::new(), vec![at]));
+            app.update();
+        }
+        let at = working(7, [0, 0, 0], JobState::Work, Some(job), None);
+        apply_delta(&mut app, delta_at(14, Vec::new(), vec![at]));
+        for _ in 0..9 {
+            app.update();
+        }
+        dig_phase_of(&mut app, 7).phase
+    };
+    let dig = settled_after_five_ticks(DIG_AT_EAST);
+    let cut = settled_after_five_ticks(protocol::DwarfJob::Cut { target: [1, 0, 0] });
+    assert!(
+        !(1e-5..=1.0 - 1e-5).contains(&dig),
+        "a dig wraps at 5 ticks: {dig}"
+    );
+    assert!(
+        (cut - 0.5).abs() < 1e-5,
+        "a cut is half way at 5 ticks: {cut}"
+    );
+}
+
 fn drawn_rotation(app: &mut App, id: u32) -> bevy::prelude::Quat {
     app.world_mut()
         .query::<(&WorldProjected, &Transform)>()
@@ -5948,13 +5985,13 @@ fn a_carried_log_is_drawn_at_the_log_scale() {
     assert!((dropped.translation.y - (world_to_render([1, 0, 0]).y - 0.36)).abs() < 1e-6);
 }
 
-/// 12.7 Task 0.1: a woodcutter working a cut plays the Dig clip, and only while he works it.
+/// 12.8 Task 3: a woodcutter working a cut plays the Cut clip, and only while he works it.
 #[test]
-fn a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip() {
+fn a_woodcutter_on_a_cut_job_in_work_gets_the_cut_clip() {
     use gui::project::{DwarfClip, dwarf_clip};
     let cut = protocol::DwarfJob::Cut { target: [2, 0, 0] };
     let working_cut = working(1, [0, 0, 0], JobState::Work, Some(cut), None);
-    assert_eq!(dwarf_clip(&working_cut), DwarfClip::Dig);
+    assert_eq!(dwarf_clip(&working_cut), DwarfClip::Cut);
     // Still walking to the tree: not a swing.
     let walking = working(1, [0, 0, 0], JobState::Walk, Some(cut), None);
     assert_eq!(dwarf_clip(&walking), DwarfClip::Walk);
@@ -5973,7 +6010,7 @@ fn a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip() {
         ),
     );
     app.update();
-    assert_eq!(dwarf_clip_of(&mut app, 7), DwarfClip::Dig);
+    assert_eq!(dwarf_clip_of(&mut app, 7), DwarfClip::Cut);
 }
 
 /// 12.7 Task 0.1: and he faces the trunk while he does it.

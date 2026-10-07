@@ -183,15 +183,12 @@ p.write_text(s.replace(old, '                (protocol::ItemKind::Wood, false) =
 PY
 
 # Beyond the story's list: Task 0.1's placeholder clip has a test, so it gets a row.
-mutation "16 a woodcutter working a cut walks" gui a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip <<'PY'
+mutation "16 a woodcutter working a cut walks" gui a_woodcutter_on_a_cut_job_in_work_gets_the_cut_clip <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '''                    | protocol::DwarfJob::Channel { .. }
-                    | protocol::DwarfJob::Cut { .. }
-'''
+old = '    } else if working && matches!(entity.job, Some(protocol::DwarfJob::Cut { .. })) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                    | protocol::DwarfJob::Channel { .. }
-'''))
+p.write_text(s.replace(old, '    } else if working && false && matches!(entity.job, Some(protocol::DwarfJob::Cut { .. })) {\n'))
 PY
 
 # #168, found at the seat (AC12): a felled pine left dig-debris chips hanging where its crown was.

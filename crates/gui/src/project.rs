@@ -328,8 +328,8 @@ struct ClipNode {
 /// The dwarf's clips, wrapped in the one graph Bevy needs to play anything. One node plays at a
 /// time (no blending), so the graph is just a place to hang each clip.
 ///
-/// `Walk` is required; a GLB without it builds no graph at all. `dig` and `carry` are `None` while
-/// the promoted GLB does not carry them yet, and a dwarf whose chosen clip is absent simply holds
+/// `Walk` is required; a GLB without it builds no graph at all. `dig`, `carry` and `cut` are `None`
+/// while the promoted GLB does not carry them yet, and a dwarf whose chosen clip is absent simply holds
 /// `Walk` (see `DwarfClips::resolve`).
 #[derive(Clone)]
 struct DwarfClips {
@@ -337,6 +337,7 @@ struct DwarfClips {
     walk: ClipNode,
     dig: Option<ClipNode>,
     carry: Option<ClipNode>,
+    cut: Option<ClipNode>,
 }
 
 impl DwarfClips {
@@ -345,6 +346,8 @@ impl DwarfClips {
             DwarfClip::Walk => Some(&self.walk),
             DwarfClip::Dig => self.dig.as_ref(),
             DwarfClip::Carry => self.carry.as_ref(),
+            // NOTE: until the Cut clip is promoted a cut swings the Dig clip.
+            DwarfClip::Cut => self.cut.as_ref().or(self.dig.as_ref()),
         }
     }
 
@@ -368,10 +371,15 @@ impl DwarfClips {
     }
 
     fn nodes(&self) -> impl Iterator<Item = AnimationNodeIndex> {
-        [Some(&self.walk), self.dig.as_ref(), self.carry.as_ref()]
-            .into_iter()
-            .flatten()
-            .map(|clip| clip.node)
+        [
+            Some(&self.walk),
+            self.dig.as_ref(),
+            self.carry.as_ref(),
+            self.cut.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|clip| clip.node)
     }
 }
 
@@ -406,6 +414,7 @@ pub enum DwarfClip {
     Walk,
     Dig,
     Carry,
+    Cut,
 }
 
 impl DwarfClip {
@@ -415,6 +424,25 @@ impl DwarfClip {
             DwarfClip::Walk => "walk",
             DwarfClip::Dig => "dig",
             DwarfClip::Carry => "carry",
+            DwarfClip::Cut => "cut",
+        }
+    }
+
+    /// Whether the clip is a work swing, timed in delivered ticks rather than ground covered.
+    fn swings(self) -> bool {
+        matches!(self, DwarfClip::Dig | DwarfClip::Cut)
+    }
+
+    /// How many ticks one swing takes: a cut is 5 chops in its 50 ticks (12.8 Task 0.2), a dig or
+    /// channel 10 swings in theirs.
+    ///
+    /// NOTE: this crate cannot import sim-core. 50 is a whole number of swings at both periods, so the
+    /// last swing ends as the work does; a `DIG_WORK_TICKS` or `CUT_WORK_TICKS` that is not a multiple
+    /// of its period would cut the last swing short.
+    fn swing_ticks(self) -> u64 {
+        match self {
+            DwarfClip::Cut => 10,
+            _ => 5,
         }
     }
 }
@@ -423,21 +451,18 @@ impl DwarfClip {
 ///
 /// Dig is tested FIRST on purpose: a dwarf can be in `work` on a dig while the wire still says he
 /// carries a stone, and he swings. `work` alone is not a dig, because a hauler's pick-up and drop
-/// are `work` runs too -- only a dig or channel job makes it a swing.
-///
-/// A woodcutter working a cut swings too. // NOTE: placeholder until 12.8's Cut clip.
+/// are `work` runs too -- only a dig, channel or cut job makes it a swing.
 pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
-    if entity.state == protocol::JobState::Work
+    let working = entity.state == protocol::JobState::Work;
+    if working
         && matches!(
             entity.job,
-            Some(
-                protocol::DwarfJob::Dig { .. }
-                    | protocol::DwarfJob::Channel { .. }
-                    | protocol::DwarfJob::Cut { .. }
-            )
+            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
         )
     {
         DwarfClip::Dig
+    } else if working && matches!(entity.job, Some(protocol::DwarfJob::Cut { .. })) {
+        DwarfClip::Cut
     } else if entity.carrying.is_some() {
         DwarfClip::Carry
     } else {
@@ -445,18 +470,10 @@ pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
     }
 }
 
-/// How many ticks one swing of the pick takes. A dig's work run is sim-core's `DIG_WORK_TICKS`
-/// (50, Wolf's ten swings at the 12.5 seat), and the phase wraps, so one run plays ten swings.
-///
-/// NOTE: this crate cannot import sim-core. 50 is a whole number of 5-tick swings, so the last
-/// swing ends as the tile changes; a `DIG_WORK_TICKS` that is not a multiple of this would cut
-/// the last swing short.
-const WORK_SWING_TICKS: u64 = 5;
-
 /// Where in its swing a digging dwarf is, timed in DELIVERED sim ticks (12.5 AC4).
 ///
 /// `entered` is the mirror tick of the delta on which he began this work run. `phase` is
-/// `(mirror tick - entered + TickClock::factor()) / WORK_SWING_TICKS`, wrapped to `[0, 1)`: delivered
+/// `(mirror tick - entered + TickClock::factor()) / DwarfClip::swing_ticks`, wrapped to `[0, 1)`: delivered
 /// ticks plus AD-15's blend factor. Never wall time and never a predicted tick, so a paused world
 /// (the same tick delivered again) holds the swing, and a fast one swings fast.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
@@ -509,7 +526,7 @@ pub fn sync_dwarf_work(
         }
         let still_holding = !arrived && holders.contains(&bevy_entity);
         let chosen = match dwarf_clip(entity) {
-            DwarfClip::Dig if !arrived => {
+            swing if swing.swings() && !arrived => {
                 if entity.carrying.is_some() || still_holding {
                     DwarfClip::Carry
                 } else {
@@ -519,16 +536,16 @@ pub fn sync_dwarf_work(
             DwarfClip::Walk if still_holding => DwarfClip::Carry,
             chosen => chosen,
         };
-        if chosen == DwarfClip::Dig {
+        if chosen.swings() {
             let tick = mirror.0.tick();
-            let was_digging = *clip == DwarfClip::Dig;
+            let was_digging = *clip == chosen;
             dig.entered = headings
                 .1
                 .get(&entity.id)
                 .copied()
                 .unwrap_or(if was_digging { dig.entered } else { tick });
             dig.phase = ((tick.saturating_sub(dig.entered) as f32 + clock.factor())
-                / WORK_SWING_TICKS as f32)
+                / chosen.swing_ticks() as f32)
                 .rem_euclid(1.0);
         }
         if *clip != chosen {
@@ -790,8 +807,9 @@ pub fn setup_projection_assets(
                     let label = crate::ingest::dwarf_clip_label(&names, wanted)?;
                     Some(asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#{label}")))
                 };
-                let (walk, dig, carry) = (load("Walk"), load("Dig"), load("Carry"));
-                let present = [walk.clone(), dig.clone(), carry.clone()]
+                let (walk, dig, carry, cut) =
+                    (load("Walk"), load("Dig"), load("Carry"), load("Cut"));
+                let present = [walk.clone(), dig.clone(), carry.clone(), cut.clone()]
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
@@ -803,13 +821,14 @@ pub fn setup_projection_assets(
                         clip,
                     })
                 };
-                // `present` is in Walk, Dig, Carry order, so the nodes come out in that order too.
-                let (walk, dig, carry) = (take(walk), take(dig), take(carry));
+                // `present` is in Walk, Dig, Carry, Cut order, so the nodes come out in that order too.
+                let (walk, dig, carry, cut) = (take(walk), take(dig), take(carry), take(cut));
                 walk.map(|walk| DwarfClips {
                     graph: graphs.add(graph),
                     walk,
                     dig,
                     carry,
+                    cut,
                 })
             }
             _ => None,
@@ -2473,7 +2492,11 @@ pub fn drive_dwarf_walk(
         return;
     }
     if stalled {
-        for (name, clip) in [("Dig", &walk.dig), ("Carry", &walk.carry)] {
+        for (name, clip) in [
+            ("Dig", &walk.dig),
+            ("Carry", &walk.carry),
+            ("Cut", &walk.cut),
+        ] {
             if !clip.as_ref().is_some_and(|clip| clips.contains(&clip.clip)) {
                 eprintln!("gui dwarf walk: STALLED -- the {name} clip never loaded");
             }
@@ -2504,9 +2527,9 @@ pub fn drive_dwarf_walk(
         for other in walk.nodes().filter(|other| *other != node.node) {
             player.stop(other);
         }
-        // `Walk` and `Carry` are locked to ground covered; `Dig` runs on delivered ticks.
+        // `Walk` and `Carry` are locked to ground covered; `Dig` and `Cut` run on delivered ticks.
         let phase = match clip {
-            DwarfClip::Dig => dig_phase.phase,
+            DwarfClip::Dig | DwarfClip::Cut => dig_phase.phase,
             DwarfClip::Walk | DwarfClip::Carry => walk_phase.phase(),
         };
         player
@@ -2560,7 +2583,6 @@ fn dig_yaw(entity: &protocol::Entity) -> Option<bevy::prelude::Quat> {
     if entity.state != protocol::JobState::Work {
         return None;
     }
-    // NOTE: placeholder until 12.8's Cut clip: a woodcutter faces the trunk like a miner faces rock.
     let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job
     else {
         return None;
@@ -2603,11 +2625,11 @@ impl DwarfHeadings {
                 // The dig ended where he stood: hold the rock-facing until his next step.
                 self.0.insert(id, rotation);
             }
-            if dwarf_clip(entity) == DwarfClip::Dig {
+            if dwarf_clip(entity).swings() {
                 // The same run continues only if he was already digging THIS job; a new job, or a
                 // run after a walk, starts a new swing at this delta's tick.
                 let continues = mirror.previous_entity(id).is_some_and(|previous| {
-                    dwarf_clip(previous) == DwarfClip::Dig && previous.job == entity.job
+                    dwarf_clip(previous).swings() && previous.job == entity.job
                 });
                 if !(continues && self.1.contains_key(&id)) {
                     self.1.insert(id, mirror.tick());
@@ -2627,7 +2649,7 @@ impl DwarfHeadings {
             .collect();
         self.1 = mirror
             .entities()
-            .filter(|entity| dwarf_clip(entity) == DwarfClip::Dig)
+            .filter(|entity| dwarf_clip(entity).swings())
             .map(|entity| (entity.id, mirror.tick()))
             .collect();
     }

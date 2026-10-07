@@ -1037,13 +1037,14 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
             .map(|(id, _)| *id)
             .collect::<Vec<_>>()
     };
-    let (miners, haulers) = (
+    let (miners, haulers, woodcutters) = (
         ids_of(protocol::Profession::Miner),
         ids_of(protocol::Profession::Hauler),
+        ids_of(protocol::Profession::Woodcutter),
     );
     assert!(
-        !miners.is_empty() && !haulers.is_empty(),
-        "the crew needs a miner and a hauler: {professions:?}"
+        !miners.is_empty() && !haulers.is_empty() && !woodcutters.is_empty(),
+        "the crew needs a miner, a hauler and a woodcutter: {professions:?}"
     );
 
     let camp = snapshot
@@ -1083,6 +1084,9 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
             px + 2,
             py + 2
         ),
+        // 12.8 AC7: tree A of DEFAULT_SEED, the woodcutter's cut.
+        r#"{"type":"designate","kind":"cut","rect":{"min":[73,59,12],"max":[73,59,12]}}"#
+            .to_string(),
         r#"{"type":"set_speed","speed":"normal"}"#.to_string(),
     ] {
         writeln!(writer, "{command}").expect("command must write");
@@ -1107,7 +1111,7 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
     drop(daemon);
     let _ = drain.join();
 
-    // `gui dwarf {id} clip {walk|dig|carry}`, in print order.
+    // `gui dwarf {id} clip {walk|dig|carry|cut}`, in print order.
     let stderr = String::from_utf8_lossy(&result.stderr);
     let clips: Vec<(u32, &str)> = stderr
         .lines()
@@ -1137,12 +1141,14 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
             .collect::<Vec<_>>()
     };
     println!(
-        "AC8 clip lines (gui exit {:?}): miners dig {:?} walk {:?}; haulers carry {:?} walk {:?}",
+        "AC8 clip lines (gui exit {:?}): miners dig {:?} walk {:?}; haulers carry {:?} walk {:?}; woodcutters cut {:?} walk {:?}",
         result.status.code(),
         counts(&miners, "dig"),
         counts(&miners, "walk"),
         counts(&haulers, "carry"),
         counts(&haulers, "walk"),
+        counts(&woodcutters, "cut"),
+        counts(&woodcutters, "walk"),
     );
     let miner = miners.iter().find(|id| returns_to_walk(**id, "dig"));
     assert!(
@@ -1154,11 +1160,28 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
         hauler.is_some(),
         "no hauler {haulers:?} logged `clip carry` followed by `clip walk`; clip lines seen: {clips:?}"
     );
+    let woodcutter = woodcutters.iter().find(|id| returns_to_walk(**id, "cut"));
     assert!(
-        stderr.contains("clips Walk, Dig, Carry"),
-        "the startup line must name all three clips:\n{stderr}"
+        woodcutter.is_some(),
+        "no woodcutter {woodcutters:?} logged `clip cut` followed by `clip walk`; clip lines seen: {clips:?}"
     );
-    let stalled: Vec<&str> = stderr.lines().filter(|l| l.contains("STALLED")).collect();
+    // NOTE: the promoted GLB has no Cut clip yet, so the line reads `clip Cut ABSENT` and a cut
+    // plays Dig; once Cut is promoted only the first form can pass.
+    assert!(
+        stderr.contains("clips Walk, Dig, Carry, Cut")
+            || (stderr.contains("clip Cut ABSENT")
+                && !["Walk", "Dig", "Carry"]
+                    .iter()
+                    .any(|name| stderr.contains(&format!("clip {name} ABSENT")))),
+        "the startup line must name all four clips (or only Cut ABSENT):\n{stderr}"
+    );
+    // NOTE: while Cut is ABSENT from the promoted GLB the stall check names it too; that is the
+    // known absence the startup line reports above, not a new stall.
+    let cut_absent = stderr.contains("clip Cut ABSENT");
+    let stalled: Vec<&str> = stderr
+        .lines()
+        .filter(|l| l.contains("STALLED") && !(cut_absent && l.contains("the Cut clip")))
+        .collect();
     assert!(
         stalled.is_empty(),
         "the dwarf animation stalled -- a clip was chosen that never played: {stalled:?}"
