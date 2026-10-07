@@ -168,18 +168,18 @@ to the seat.
     `the_embedded_dwarf_carries_walk_dig_and_carry_by_name` (`ingest.rs:5960`) covers all four;
   - [x] if Cut is missing from the GLB, Cut falls back to Dig. The startup line says `clip Cut ABSENT`, the
     same shape as the others.
-- [ ] **Task 4: #174 cut mode, per the approved draft (AC5).** RED first for the pick and the box; the tint is
+- [x] **Task 4: #174 cut mode, per the approved draft (AC5).** RED first for the pick and the box; the tint is
   judged at the seat.
-  - [ ] **Pick:** in cut mode only, a ray entering a foliage cell resolves to that tree, the same answer
+  - [x] **Pick:** in cut mode only, a ray entering a foliage cell resolves to that tree, the same answer
     `cut_target` gives for its trunk (`designate.rs:272`). Pure test with `pillars()` (`pick.rs:490`) and
     `ray_at` (`:699`): sweep rays across one crown at pitch 0.45. In cut mode, every hit stays within that
     tree's 3×3 column; in dig mode, today's fall-through is unchanged. RED first.
-  - [ ] **Box:** the Cut arm of `preview_cells` returns the whole rect at the cut level. `preview_appearance`
+  - [x] **Box:** the Cut arm of `preview_cells` returns the whole rect at the cut level. `preview_appearance`
     draws non-tree cells in the hover material and the caught trees per the draft. Extend
     `the_cut_preview_lights_only_tree_tiles_at_the_cut_level` (`project.rs:3771`): its new name and asserts
     say "every rect cell is previewed; only tree cells in the cut style". The release still sends one
     `Designate{Cut, rect}` (unchanged).
-  - [ ] **Tint**, per Task 0.1. For (a), follow `apply_dwarf_tunics` (`project.rs:3511-3606`):
+  - [x] **Tint**, per Task 0.1. For (a), follow `apply_dwarf_tunics` (`project.rs:3511-3606`):
     - a marker on a `TreeMesh` whose base carries a cut designation, set and cleared from
       `mirror.designations()` (`client-core/src/lib.rs:181`);
     - on `Added<MeshMaterial3d>` and on `Changed<marker>`, swap in ONE shared tinted clone of `M_VoxelPine`,
@@ -190,10 +190,10 @@ to the seat.
 
     Headless test: mark a tree, and its mesh carries the tinted handle; clear the mark, and it carries the
     original. The incremental path is covered by felling the marked tree's neighbour.
-- [ ] **Task 5: #173's instrument (AC6).** Once the scene reports trees loaded, the gui prints
+- [x] **Task 5: #173's instrument (AC6).** Once the scene reports trees loaded, the gui prints
   `gui trees: materials=<n> [<label>:<count>, …]`, and again whenever the count changes. `<label>` is the GLB
   material name or `cut-tint`. A probe of this shape ran clean at creation (4 handles, per variant).
-  - [ ] Test: a headless app with two marked pines reports `cut-tint:2`, and the line changes when one mark
+  - [x] Test: a headless app with two marked pines reports `cut-tint:2`, and the line changes when one mark
     is cleared.
   - [ ] If Wolf reproduces the ghost at the seat (Task 7), file the line in #173. Do NOT fix #173 in this
     story without a red reproduction (M2-27). If a fix is found, it gets its own task with Wolf's yes.
@@ -411,6 +411,55 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
     - 12.7 row 16.
   - Untested by any automated test: the Cut→Dig node fallback itself (it needs real assets). The real
     binary exercised it with no STALLED.
+- **Task 4 (#174 cut mode)**, Sonnet subagent: `ac389ab` (pick), `e526fe7` (box), `dbb93da` (tint).
+  - **Pick:** `update_pick` reads `DesignateMode` and passes `cut: bool` to `first_visible_hit`. In cut mode
+    a foliage hit returns `tree_foot`, the ground cell under the trunk, whose `cut_target` is the base.
+    Every other mode passes `false` and is unchanged. The new helper `tree_base_at` serves the pick and
+    the tint.
+    - RED for `in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree` (pick.rs, new `pine()` fixture):
+      "cut mode left the tree's column at yaw -1 ... [57, 52, 1]".
+  - **Box:** `sim_will_keep` keeps every cell for Cut. `preview_appearance` draws `cut_mark` on tree tiles
+    and `hover_highlight` elsewhere.
+    - RED for `the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style` (renamed):
+      "the whole box shows over open ground, not only the trunk".
+  - **Tint (a):**
+    - `CutTinted(bool)` on `TreeMesh` is set from Cut designations and from a live Cut drag's
+      `DragPreviewCells`.
+    - `apply_cut_tint` (the `apply_dwarf_tunics` pattern: `Added<MeshMaterial3d>` + `Changed<CutTinted>`)
+      swaps in ONE shared clone of the pine material with its texture dropped and `base_color` set to
+      foliage (44,100,58). It restores `PineOwnMaterial` when the mark goes. Handles only; no component
+      is removed. The foot slab is kept.
+    - RED for headless `a_cut_marked_pine_wears_the_shared_tint_and_keeps_it_across_a_respawn`: "a
+      cut-marked pine must wear the tint".
+    - Unit test `a_live_cut_drag_tints_the_pines_it_catches_and_no_other_mode_does` was written green
+      only, and its two mutation rows below are its RED.
+  - Re-pointed: 8.1 row "slice visibility is removed from the march".
+  - **Mutations** (orchestrator-run), 8/8 KILLED at the named assertion:
+    - "cut-mode crown fall-through restored" (`pick.rs:841`);
+    - "the box filtered back to trees" ("the whole box shows over open ground");
+    - "the box's open cells drawn in the cut style" ("open air in the box is the hover slab");
+    - "the tint never cleared" ("clearing the mark puts the pine's own material back");
+    - "a respawned pine is not re-tinted" ("a respawned marked pine must come back tinted");
+    - "a live cut drag tints nothing" ("a crown cell in the box tints its pine");
+    - "a drag in any mode tints" ("a dig drag over a crown tints nothing");
+    - 8.1's re-pointed row.
+  - Not judged headless, so judged at the seat: the flat-green pine look, hover slabs over a large box,
+    and the foot hover. `sync_cut_tint_marks` runs every frame over ~265 `TreeMesh` (unmeasured; it
+    inserts only on change).
+- **Task 5 (#173 instrument)**, Sonnet subagent, `4da9568`. `report_pine_materials`
+  (`project.rs`, registered after `apply_cut_tint`) runs once `TreeReportState.reported` is set. It prints
+  `gui trees: materials=<distinct handles> [<label>:<pines>, ...]` whenever the line changes. The label is
+  `cut-tint` for the shared `CutTint` handle, otherwise Bevy's `GltfMaterialName`.
+  - RED for `the_trees_materials_line_counts_pines_per_material_and_follows_the_marks`: `left: ""`.
+  - GREEN asserts, in order: `materials=1 [PineBark:3]`, then `materials=2 [PineBark:1, cut-tint:2]`, then
+    `materials=2 [PineBark:2, cut-tint:1]`.
+  - **Real binary, fresh world** (release `simd 7795`, `gui --headless`):
+    - `gui trees: meshes=259 scenes_loaded=true source=embedded frames=2`
+    - `gui trees: materials=4 [M_VoxelPine:259]`
+  - **Limitation:** all four pine GLBs name their material `M_VoxelPine`, so the label cannot tell the
+    variants apart; only the handle count (4) does. A non-tint handle swap shows as a 5th handle or a
+    new label. Kept minimal; per-variant labels only if a #173 reproduction needs them.
+  - Mutations: see the Task 5 rows of `12-8.sh` (below).
 - **Task 2a**: brief `src-assets/prompts/dwarf-miner-round-20.md` (`6425a40`). Tool A (re-use the
   pickaxe) or B (an axe, a 21st joint, Wolf's explicit yes) is decided at the seat.
 

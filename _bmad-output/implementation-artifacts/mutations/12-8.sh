@@ -99,3 +99,32 @@ old = '    if drag_mode.is_some_and(|mode| mode.0 == Some(DesignateMode::Cut)) {
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    if drag_mode.is_some_and(|mode| mode.0.is_some()) {\n'))
 PY
+
+mutation "the materials line printing a constant" gui the_trees_materials_line_counts_pines_per_material_and_follows_the_marks <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '''    let line = format!(
+        "gui trees: materials={} [{}]",
+        handles.len(),
+        labels.join(", ")
+    );
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let _ = (&handles, &labels);\n    let line = "gui trees: materials=4 [M_VoxelPine:259]".to_string();\n'))
+PY
+
+mutation "the tint is not told apart in the materials line" gui the_trees_materials_line_counts_pines_per_material_and_follows_the_marks <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        let label = if tint.as_ref().is_some_and(|tint| tint.0 == material.0) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let label = if false && tint.as_ref().is_some_and(|tint| tint.0 == material.0) {\n'))
+PY
+
+mutation "the materials line never updates" gui the_trees_materials_line_counts_pines_per_material_and_follows_the_marks <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '    if report.0 != line {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if report.0.is_empty() {\n'))
+PY
