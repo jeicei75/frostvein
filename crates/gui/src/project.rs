@@ -3052,7 +3052,7 @@ fn classify_trunk_column(
 /// The trunk extent of one column: lowest cell, highest cell, and how many cells there actually
 /// are. The third value is what makes a gap visible — without it a dug column is indistinguishable
 /// from a whole one.
-fn trunk_column_extent(mirror: &Mirror, x: i32, y: i32) -> Option<(i32, i32, i32)> {
+pub(crate) fn trunk_column_extent(mirror: &Mirror, x: i32, y: i32) -> Option<(i32, i32, i32)> {
     let mut extent: Option<(i32, i32, i32)> = None;
     for z in 0..mirror.dims().z as i32 {
         if terrain_material_at(mirror, [x, y, z]) == Some(Material::TreeTrunk) {
