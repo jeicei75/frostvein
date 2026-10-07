@@ -767,7 +767,8 @@ pub fn projection_systems(app: &mut App) {
     // here rather than made `Option` in the system: a resource that is genuinely missing in
     // production should fail loudly, not quietly render "cursor -" forever.
     app.init_resource::<PickedTile>();
-    app.init_resource::<crate::project::TreeReportState>();
+    app.init_resource::<crate::project::TreeReportState>()
+        .init_resource::<crate::project::PineMaterialsReport>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<LastRefusal>()
         .init_resource::<crate::pick::SelectedDwarf>()
@@ -801,6 +802,7 @@ pub fn projection_systems(app: &mut App) {
                 crate::project::apply_dwarf_tunics,
                 crate::project::sync_cut_tint_marks,
                 crate::project::apply_cut_tint,
+                crate::project::report_pine_materials,
             )
                 .chain()
                 .in_set(ProjectionSet),

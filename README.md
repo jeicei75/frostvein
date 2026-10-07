@@ -317,6 +317,10 @@ faces his target. Clips are bound by NAME from the embedded GLB, and the startup
 is 5 s at Normal and 1 s at Fast; at Fast the drawn dwarf can trail the wire long enough to miss it
 (#164), so judge the swing at Normal.
 
+Once the trees are reported loaded the gui prints `gui trees: materials=<n> [<label>:<pines>, ...]` to stderr: `<n>`
+distinct materials on pine meshes, each with the number of pines wearing it (GLB material name, or `cut-tint` for
+a cut-marked pine), and again whenever that changes (#173's instrument).
+
 ## Test
 
 ```bash

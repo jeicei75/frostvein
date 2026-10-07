@@ -3242,7 +3242,7 @@ const YAW_SALT: u32 = 0x5941_5721;
 /// One-shot state for `report_tree_meshes_once`.
 #[derive(Resource, Default)]
 pub struct TreeReportState {
-    reported: bool,
+    pub reported: bool,
     /// Tracked separately from `reported` ON PURPOSE. Sharing one flag gated the dwarf line on the
     /// TREES' readiness, and measured at `--z 0` and `--z 5` -- where no tree is above the cut --
     /// the dwarf line then never printed at all, though five dwarves were drawn. An instrument
@@ -3317,6 +3317,68 @@ pub fn report_tree_meshes_once(
             "gui trees: meshes={spawned} scenes_loaded={loaded} source={source} frames={}",
             state.frames
         );
+    }
+}
+
+/// The last `gui trees: materials=` line printed, so a test reads what the system said.
+#[derive(Resource, Default)]
+pub struct PineMaterialsReport(pub String);
+
+/// #173's instrument: once the trees are reported loaded, says how many distinct materials the pine
+/// meshes use and how many PINES wear each (a pine with two meshes on one material counts once),
+/// and says it again whenever that changes. A label is the GLB material name, or `cut-tint`.
+pub fn report_pine_materials(
+    state: Res<TreeReportState>,
+    mut report: ResMut<PineMaterialsReport>,
+    tint: Option<Res<CutTint>>,
+    meshes: Query<(
+        BevyEntity,
+        &MeshMaterial3d<StandardMaterial>,
+        Option<&bevy::gltf::GltfMaterialName>,
+    )>,
+    trees: Query<(), With<TreeMesh>>,
+    parents: Query<&ChildOf>,
+) {
+    if !state.reported {
+        return;
+    }
+    let mut handles = BTreeSet::new();
+    let mut wearing: BTreeSet<(BevyEntity, String)> = BTreeSet::new();
+    for (mesh, material, name) in &meshes {
+        let mut pine = mesh;
+        while !trees.contains(pine) {
+            match parents.get(pine) {
+                Ok(parent) => pine = parent.0,
+                Err(_) => break,
+            }
+        }
+        if !trees.contains(pine) {
+            continue;
+        }
+        handles.insert(material.0.id());
+        let label = if tint.as_ref().is_some_and(|tint| tint.0 == material.0) {
+            "cut-tint".to_string()
+        } else {
+            name.map_or("unnamed".to_string(), |name| name.0.clone())
+        };
+        wearing.insert((pine, label));
+    }
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for (_, label) in &wearing {
+        *counts.entry(label).or_default() += 1;
+    }
+    if counts.is_empty() {
+        return;
+    }
+    let labels: Vec<String> = counts.iter().map(|(l, n)| format!("{l}:{n}")).collect();
+    let line = format!(
+        "gui trees: materials={} [{}]",
+        handles.len(),
+        labels.join(", ")
+    );
+    if report.0 != line {
+        eprintln!("{line}");
+        report.0 = line;
     }
 }
 

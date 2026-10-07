@@ -6193,3 +6193,85 @@ fn a_cut_marked_pine_wears_the_shared_tint_and_keeps_it_across_a_respawn() {
         "the other mark stands"
     );
 }
+
+/// 12.8 Task 5 (#173's instrument): the `gui trees: materials=` line counts the distinct materials on
+/// pine meshes and the pines wearing each, so a pine on the wrong material is visible without a
+/// screenshot. It must MOVE with the marks: a line that printed a constant would pass a single read.
+#[test]
+fn the_trees_materials_line_counts_pines_per_material_and_follows_the_marks() {
+    use bevy::gltf::GltfMaterialName;
+    use bevy::prelude::ChildOf;
+
+    let dims = Dims { x: 8, y: 3, z: 6 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    for x in 0..8 {
+        for y in 0..3 {
+            tiles[index([x, y, 0])] = Tile::Solid(Material::Stone);
+        }
+    }
+    for z in 1..=3 {
+        for x in [1, 3, 5] {
+            tiles[index([x, 1, z])] = Tile::Solid(Material::TreeTrunk);
+        }
+    }
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+    app.update();
+    let original = app
+        .world_mut()
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial::default());
+    // The scene's meshes carry the GLB material name; a stand-in does the same.
+    let trees: Vec<BevyEntity> = {
+        let world = app.world_mut();
+        world
+            .query_filtered::<BevyEntity, With<gui::project::TreeMesh>>()
+            .iter(world)
+            .collect()
+    };
+    assert_eq!(trees.len(), 3, "three pines are drawn as mesh trees");
+    for tree in trees {
+        app.world_mut().spawn((
+            Mesh3d::default(),
+            MeshMaterial3d(original.clone()),
+            GltfMaterialName("PineBark".to_string()),
+            ChildOf(tree),
+        ));
+    }
+    app.world_mut()
+        .resource_mut::<gui::project::TreeReportState>()
+        .reported = true;
+    let line = |app: &App| {
+        app.world()
+            .resource::<gui::project::PineMaterialsReport>()
+            .0
+            .clone()
+    };
+    let mark = |app: &mut App, marks: Vec<[i32; 3]>| {
+        let mut message = delta(Vec::new(), Vec::new());
+        message.designations = marks
+            .into_iter()
+            .map(|pos| Designation {
+                pos,
+                kind: DesignationKind::Cut,
+            })
+            .collect();
+        apply_delta(app, message);
+        app.update();
+        app.update();
+    };
+
+    app.update();
+    assert_eq!(line(&app), "gui trees: materials=1 [PineBark:3]");
+    mark(&mut app, vec![[1, 1, 1], [5, 1, 1]]);
+    assert_eq!(
+        line(&app),
+        "gui trees: materials=2 [PineBark:1, cut-tint:2]"
+    );
+    mark(&mut app, vec![[5, 1, 1]]);
+    assert_eq!(
+        line(&app),
+        "gui trees: materials=2 [PineBark:2, cut-tint:1]"
+    );
+}
