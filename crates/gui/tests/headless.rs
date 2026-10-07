@@ -5416,6 +5416,98 @@ fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
     assert_eq!(dwarf_clip_of(&mut app, 7), Walk, "and walks empty-handed");
 }
 
+/// #164 effect 1: the sim picks the stone up on the tick he reaches its cell, while the client
+/// is still walking him there; the stone must stay on the ground until his drawn body arrives.
+#[test]
+fn a_hauler_does_not_pick_up_his_stone_until_he_is_drawn_at_its_cell() {
+    use bevy::prelude::ChildOf;
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [1, 0, 0],
+        kind: protocol::ItemKind::Stone,
+    }];
+    let mut app = headless_app(start);
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let held = |app: &mut App| {
+        app.world_mut()
+            .query::<(&ProjectedItem, Option<&ChildOf>)>()
+            .iter(app.world())
+            .find(|(item, _)| item.0 == 70)
+            .map(|(_, parent)| parent.is_some())
+            .expect("the stone must be projected")
+    };
+    // One step east onto the stone's cell, and the same delta says he has picked it up.
+    let hauling = working(
+        7,
+        [1, 0, 0],
+        JobState::Walk,
+        Some(protocol::DwarfJob::Haul),
+        Some(70),
+    );
+    apply_delta(
+        &mut app,
+        Delta {
+            items: vec![Item {
+                id: 70,
+                pos: [1, 0, 0],
+                kind: protocol::ItemKind::Stone,
+            }],
+            ..delta_at(1, Vec::new(), vec![hauling])
+        },
+    );
+    app.update();
+    assert!(
+        !held(&mut app),
+        "still walking onto the stone's cell: it is not in his hands yet"
+    );
+    // One cell at 0.9 cells/s is about 1.1 s; 20 frames of 100 ms is well past it.
+    for _ in 0..20 {
+        app.update();
+    }
+    assert!(held(&mut app), "drawn at the cell: he holds it");
+}
+
+/// #164 at Fast: a whole 50-tick work run lasts one second of wall time, so the drawn walker has to
+/// keep pace with the sim speed or he reaches his cell after the work is over.
+#[test]
+fn a_dwarf_walking_in_at_fast_reaches_his_work_clip_within_the_run() {
+    use gui::project::DwarfClip::Dig;
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    // Fast delivers a tick every 20 ms.
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        20,
+    )));
+    app.update();
+    let dig_north = protocol::DwarfJob::Dig { target: [0, 2, 0] };
+    let mut reached = false;
+    for tick in 1..=50 {
+        let delta = Delta {
+            speed: Speed::Fast,
+            ..delta_at(
+                tick,
+                Vec::new(),
+                vec![working(7, [0, 1, 0], JobState::Work, Some(dig_north), None)],
+            )
+        };
+        apply_delta(&mut app, delta);
+        app.update();
+        reached |= dwarf_clip_of(&mut app, 7) == Dig;
+    }
+    assert!(reached, "never reached the Dig clip within the 50-tick run");
+}
+
 /// 12.5 AC7: while a dwarf carries a stone, it is his child at `CARRY_OFFSET`, whatever the blend
 /// does each frame; the delta that clears it puts it back on its cell.
 #[test]
@@ -5482,7 +5574,9 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
             [1, 0, 0],
         ),
     );
-    for _ in 0..4 {
+    // One cell at 0.9 cells/s is about 1.1 s: he is drawn on the stone's cell, and so holds it,
+    // only after 12 frames of 100 ms.
+    for _ in 0..20 {
         app.update();
     }
     let (held, parent) = stone(&mut app);

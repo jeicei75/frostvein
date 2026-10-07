@@ -134,9 +134,9 @@ PY
 mutation "the stone is put down while he is still walking in" gui a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            (None, Some(parent)) if !walking_in.contains(&parent.parent()) => {\n'
+old = 'const DROP_REACH_CELLS: f32 = 0.1;\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            (None, Some(parent)) if true || !walking_in.contains(&parent.parent()) => {\n'))
+p.write_text(s.replace(old, 'const DROP_REACH_CELLS: f32 = 1000.0;\n'))
 PY
 
 mutation "he drops the carry pose while still holding the stone" gui a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on <<'PY'

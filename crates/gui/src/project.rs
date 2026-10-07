@@ -488,7 +488,8 @@ pub fn sync_dwarf_work(
         .iter()
         .filter_map(|(_, _, parent)| parent.map(ChildOf::parent))
         .collect::<std::collections::BTreeSet<_>>();
-    let mut walking_in = std::collections::BTreeSet::new();
+    // Dwarves whose drawn body has not reached his wire cell yet, and where it is.
+    let mut walking_in = BTreeMap::new();
     for entity in mirror.0.entities() {
         let Some((bevy_entity, _, transform, mut clip, mut dig)) = dwarves
             .iter_mut()
@@ -504,7 +505,7 @@ pub fn sync_dwarf_work(
         // already put down is still in his hands.
         let arrived = drawn_at_cell(entity, transform.translation);
         if !arrived {
-            walking_in.insert(bevy_entity);
+            walking_in.insert(bevy_entity, transform.translation);
         }
         let still_holding = !arrived && holders.contains(&bevy_entity);
         let chosen = match dwarf_clip(entity) {
@@ -543,7 +544,12 @@ pub fn sync_dwarf_work(
     // item that has a parent -- so this system is the only thing that places it while it is held.
     for (item, marker, parent) in &items {
         match (carried.get(&marker.0), parent) {
-            (Some(&dwarf), parent) if parent.map(ChildOf::parent) != Some(dwarf) => {
+            // Picked up only once he is drawn at the cell: the sim lifts it the tick he reaches it,
+            // a second before his body does.
+            (Some(&dwarf), parent)
+                if parent.map(ChildOf::parent) != Some(dwarf)
+                    && !walking_in.contains_key(&dwarf) =>
+            {
                 if let Some(held) = mirror.0.items().find(|at| at.id == marker.0) {
                     commands.entity(item).insert((
                         ChildOf(dwarf),
@@ -555,10 +561,15 @@ pub fn sync_dwarf_work(
                     ));
                 }
             }
-            (None, Some(parent)) if !walking_in.contains(&parent.parent()) => {
-                // Let go, once he is drawn on the cell: unparent and snap back to the cell the
-                // wire now says it is on.
-                if let Some(at) = mirror.0.items().find(|at| at.id == marker.0) {
+            (None, Some(parent)) => {
+                // Let go, once he is drawn on the cell the wire put it on (not his own wire cell,
+                // which a dwarf already walking on has left): unparent and snap back to it.
+                if let Some(at) = mirror.0.items().find(|at| at.id == marker.0)
+                    && walking_in.get(&parent.parent()).is_none_or(|drawn| {
+                        let cell = world_to_render(at.pos);
+                        Vec2::new(drawn.x - cell.x, drawn.z - cell.z).length() <= DROP_REACH_CELLS
+                    })
+                {
                     commands.entity(item).remove::<ChildOf>().insert(
                         Transform::from_translation(item_translation(
                             at.pos,
@@ -641,6 +652,22 @@ pub const DWARF_WALK_CELLS_PER_SECOND: f32 = 0.9;
 /// Beyond this the dwarf is not walking, he has been moved -- a respawn, a slice change, a
 /// teleport in a test. Walking him there would crawl him across the map; snap instead.
 pub const DWARF_WALK_SNAP_CELLS: f32 = 2.5;
+
+/// How close his drawn body must be to the cell the wire dropped a stone on for him to let go.
+// NOTE: not exact, because a dwarf already walking on never stands on that cell at a frame
+// boundary; a tenth of a cell is invisible at the carry offset.
+const DROP_REACH_CELLS: f32 = 0.1;
+
+/// The drawn walker keeps pace with the sim: the tick rate over Normal's 10 Hz (`simd` periods).
+// NOTE: Paused keeps 1, so a trailing walker still catches up to his wire cell.
+fn walk_speed_ratio(speed: protocol::Speed) -> f32 {
+    match speed {
+        protocol::Speed::Paused | protocol::Speed::Normal => 1.0,
+        protocol::Speed::Fast => 5.0,
+        protocol::Speed::Fast2x => 10.0,
+        protocol::Speed::Fast4x => 20.0,
+    }
+}
 
 pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree01.glb",
@@ -2646,7 +2673,10 @@ pub fn blend_entities(
                     let drawn = if gap > DWARF_WALK_SNAP_CELLS || gap <= f32::EPSILON {
                         delivered
                     } else {
-                        let step = (DWARF_WALK_CELLS_PER_SECOND * elapsed_seconds).min(gap);
+                        let step = (DWARF_WALK_CELLS_PER_SECOND
+                            * walk_speed_ratio(mirror.speed())
+                            * elapsed_seconds)
+                            .min(gap);
                         from + remaining / gap * step
                     };
                     let travelled = (drawn - from).length();
