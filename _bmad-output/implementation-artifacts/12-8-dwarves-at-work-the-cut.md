@@ -145,10 +145,10 @@ to the seat.
       re-used: the seat decides, and the brief says so;
     - Walk, Dig and Carry are untouched;
     - the report goes to `dwarf-miner-round-20-report.md`.
-  - [ ] **2b — Wolf runs the seat**, watching live. Art hard stop: after two rounds his eye has not judged
+  - [x] **2b — Wolf runs the seat**, watching live. Art hard stop: after two rounds his eye has not judged
     converging, stop and ask him (ship plain or park). One "Art ledger" row per round: model id, his `/cost`,
     his words, verdict.
-  - [ ] **2c — export, check, promote.**
+  - [x] **2c — export, check, promote.**
     - `blender --background src-assets/blender/SM_VoxelDwarf_Miner01.blend --python src-assets/blender/export_dwarf.py`
       (it writes to the gitignored `src-assets/export/`).
     - `check_asset.py` must print four clips, for example
@@ -219,6 +219,7 @@ to the seat.
 
 | Round | Model | Wolf's `/cost` | Wolf's words | Verdict |
 | --- | --- | --- | --- | --- |
+| 20 (`Cut`, axe) | `claude-opus-5-5` (Claude Code + BlenderMCP, Wolf's live seat) | **$21.59** (Opus 5.5 $21.59 + Haiku 4.5 $0.001; 203 requests, API 47m 43s, wall 2h 31m) | "option B with proper axe"; "axe head is rotated to wrong way in the start (backwards) and in the end" (fixed); "when axe is high the head edge should point either straight to front or a little bit down not to left" (fixed); two hands out of reach on this rig: "finish it .. we can use this now.. have to rethink the model and rig anyway at some point" | **Accepted at the Blender seat**, one-handed: bite at 0.95 m plus a 0.35 m client nudge (`CUT_OFFSET`); 21 joints. Judged in game at the seat (Task 7). |
 
 ## Dev Notes
 
@@ -491,6 +492,17 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
   - Seat card `12-8-signoff/vehicle-card.md`, in two passes (pass 2 after the GLB is promoted).
   - Open: the whole-file run after the GLB promotion, since `mutate.sh` does not back up `assets/`.
 - **Pushed** `4eb9e42` with `push.sh --fast` (VERIFIED) for seat pass 1. Full gate running detached.
+- **Task 2 (round 20).** Wolf ran the seat and committed it himself (`ebe6b41`, his own authorship).
+  - Option (B): `r17_axe` on a 21st joint `axe` (child of `chest`), stowed on the pack in
+    Walk/Dig/Carry; one-handed.
+  - The bite was authored at 0.95 m, so the client draws him 0.35 m closer (`CUT_OFFSET`).
+  - Export (`blender --background ... export_dwarf.py`): `rig joints 21, missing 0, unexpected 0`,
+    `clips Carry, Cut, Dig, Walk (63 channels)`.
+  - `check_asset.py` on the promoted file: `tris=3456 joints=21
+    anims=Carry:63ch@1.00s,Cut:63ch@1.00s,Dig:63ch@1.00s,Walk:63ch@1.00s`, exit 0.
+  - Promoted alone in `b5a9e63`; the fast gate was green, and no test pinned the old asset.
+  - **Joint count:** nothing under `crates/` pins it. The exporter's rig gate (missing/unexpected
+    joints) is the pin, and the clips bind by name. No count assertion was added.
 - **Task 2a**: brief `src-assets/prompts/dwarf-miner-round-20.md` (`6425a40`). Tool A (re-use the
   pickaxe) or B (an axe, a 21st joint, Wolf's explicit yes) is decided at the seat.
 

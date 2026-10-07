@@ -128,3 +128,19 @@ old = '    if report.0 != line {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    if report.0.is_empty() {\n'))
 PY
+
+mutation "CUT_OFFSET never applied" gui a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        transform.translation = if chosen == DwarfClip::Cut {\n            rest + Vec3::new(0.0, 0.0, -CUT_OFFSET)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        transform.translation = if chosen == DwarfClip::Cut {\n            rest\n'))
+PY
+
+mutation "the cut nudge never cleared" gui a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        } else {\n            rest\n        };\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        } else {\n            transform.translation\n        };\n'))
+PY
