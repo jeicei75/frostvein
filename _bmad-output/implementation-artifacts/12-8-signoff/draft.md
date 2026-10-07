@@ -1,6 +1,6 @@
 # 12.8 look draft: cut mode (#174), for Wolf's approval (Task 0)
 
-**NOT YET APPROVED.** This is a cheap text mock (standing AC 7). It covers only #174's look items. The cut
+**APPROVED by Wolf 2026-10-07** (Task 0.1): §1 and §2 as drafted, §3 option (a), the foot slab kept. This is a cheap text mock (standing AC 7). It covers only #174's look items. The cut
 swing is a work animation, so it skips the draft and goes straight to the seat. Nothing here is built
 yet. Colours and keys are today's, measured from `crates/gui/src/appearance.rs`, `designate.rs` and
 `project.rs` on `486095d`:

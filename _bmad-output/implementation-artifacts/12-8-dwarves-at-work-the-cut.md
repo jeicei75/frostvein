@@ -99,7 +99,11 @@ to the seat.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings, at creation.** Open; asked at the end of creation.
+- [x] **Task 0: Wolf's rulings, at creation.** Ruled 2026-10-07, all four as recommended:
+  0.1 draft §1 and §2 approved, tint (a) repaint, foot slab kept; 0.2 swing period 10 ticks (5 chops per
+  50-tick cut, `WORK_SWING_TICKS` per-clip); 0.3 (a) the walker's speed scales with the sim speed; 0.4 #173
+  stays instrument-only. The seat-session question (save/load, `--assets`, clock) was not answered.
+  The original asks:
   1. **The draft** `12-8-signoff/draft.md` (#174):
      - §1 pointer, §2 whole box: approve or amend;
      - §3 tint: option (a) repaint the pine green (recommended), (b) a glow, or (c) cubes over its cells;
@@ -350,3 +354,4 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 | Date | Change |
 | --- | --- |
 | 2026-10-06 | Created on `486095d`. Cut clip + #164 + #173 (instrument only, not reproduced) + #174 (draft-first). Task 0 open. |
+| 2026-10-07 | Task 0 ruled by Wolf: draft approved with tint (a) + slab, 10-tick swing, Fast walker scales (a), #173 instrument-only. |
