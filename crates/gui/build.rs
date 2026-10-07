@@ -37,7 +37,12 @@ fn main() {
     // the embedding fix existed to remove. Removed with its consumer.
 }
 
-/// The short SHA, suffixed `-dirty` when the working tree has uncommitted changes.
+/// The short SHA, suffixed `-dirty` when what the binary is built from has uncommitted changes.
+///
+/// Only the build's inputs count: `crates/`, `assets/` (embedded with `include_bytes!`) and the
+/// workspace manifests, untracked files included. A story note, a doc or a seat video elsewhere in
+/// the tree cannot change the binary, and counting them made `launch-gui.ps1` refuse a clean build
+/// (Wolf, 2026-10-07). An uncommitted sabotage under `crates/` still stamps `-dirty`.
 ///
 /// NOTE: untested, and deliberately so — a build script is not compiled into any test target,
 /// so covering this would mean extracting a seam for the sole purpose of testing it. One
@@ -50,7 +55,15 @@ fn sha() -> String {
     let Some(sha) = git(&["rev-parse", "--short", "HEAD"]) else {
         return "unknown".to_string();
     };
-    match git(&["status", "--porcelain"]) {
+    match git(&[
+        "status",
+        "--porcelain",
+        "--",
+        ":/crates",
+        ":/assets",
+        ":/Cargo.toml",
+        ":/Cargo.lock",
+    ]) {
         Some(status) if !status.is_empty() => format!("{sha}-dirty"),
         Some(_) => sha,
         None => format!("{sha}-unknown-dirtiness"),
