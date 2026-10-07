@@ -520,6 +520,7 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
   That is all 17 rows of `12-8.sh` plus the seven re-pointed rows (12.5 x5, 12.7 row 16, 8.1).
   - The two new rows: "CUT_OFFSET never applied" dies at `headless.rs:6086`, and "the cut nudge never
     cleared" at `:6104` ("the nudge must clear exactly").
+- **Full gate on `f7a1649` GREEN** (`RUST_TEST_THREADS=1 scripts/gate.sh`, 3223 s), pixel guards included, with the round-20 GLB.
 - **Task 2a**: brief `src-assets/prompts/dwarf-miner-round-20.md` (`6425a40`). Tool A (re-use the
   pickaxe) or B (an axe, a 21st joint, Wolf's explicit yes) is decided at the seat.
 
