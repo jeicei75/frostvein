@@ -120,22 +120,22 @@ to the seat.
      Effects 1-2 (pick-up/drop gating) are fixed in every case.
   4. **#173:** keep the instrument-only scope (AC6: a fix only from a reproduction), or take #173 out of 12.8.
      Also: did that seat session save/load, use `--assets`, or change the clock?
-- [ ] **Task 1: #164, RED first (AC3, AC4).** Headless (`crates/gui/tests/headless.rs`, MinimalPlugins,
+- [x] **Task 1: #164, RED first (AC3, AC4).** Headless (`crates/gui/tests/headless.rs`, MinimalPlugins,
   `ManualDuration(100ms)`), following `a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on`
   (`:5338`).
-  - [ ] RED first:
+  - [x] RED first:
     - pick-up: one delta steps the hauler into the item's cell AND sets `carrying`; after one `app.update()`
       the item is NOT parented to him. Record the failure;
     - Fast: feed one 50-tick work run at Fast's tick rate and assert the dwarf reaches his work clip within
       the run. Record the failure.
-  - [ ] Gate the pick-up on `drawn_at_cell` (`project.rs:499-500`), as the drop already is, and gate the drop
+  - [x] Gate the pick-up on `drawn_at_cell` (`project.rs:499-500`), as the drop already is, and gate the drop
     on the cell the wire drops at, not his current cell (`:559-571`).
-  - [ ] Implement Task 0.3's ruling for Fast. If (a), the step at `:2649` multiplies by the tick-rate factor
+  - [x] Implement Task 0.3's ruling for Fast. If (a), the step at `:2649` multiplies by the tick-rate factor
     the clock already knows (`TickClock::factor`, `:459`); keep `DWARF_WALK_SNAP_CELLS` (`:644`) as is.
-  - [ ] Both tests GREEN; the old hauler test stays GREEN.
+  - [x] Both tests GREEN; the old hauler test stays GREEN.
 - [ ] **Task 2: the Cut clip, from a live BlenderMCP seat (AC1, AC2).** Tasks 1, 3, 4 and 5 do not need it;
   run them while the seat is pending.
-  - [ ] **2a — write the brief** `src-assets/prompts/dwarf-miner-round-20.md`, in round 19's shape
+  - [x] **2a — write the brief** `src-assets/prompts/dwarf-miner-round-20.md`, in round 19's shape
     (`dwarf-miner-round-19.md`): the "For:" header, the in-place rule, LINEAR keys at 24 fps on frames 0..24
     with frame 24 == frame 0, the action saved unassigned with slotted `fcurves()`, one tool call per pose
     stage with a screenshot each, and the generator script written as it goes. Content:
@@ -157,16 +157,16 @@ to the seat.
     - Promote to `assets/gltf/SM_VoxelDwarf_Miner01.glb` in its OWN commit, and re-run `check_asset.py` on
       the promoted file. Rebuild the gui (`include_bytes!` at `ingest.rs:421-423`).
 - [ ] **Task 3: the gui binds and plays Cut (AC1, AC2).** Add Cut beside Dig at every site:
-  - [ ] `DwarfClip` and `label()` (`project.rs:404-418`); `DwarfClips` field, `node()`, `nodes()`
+  - [x] `DwarfClip` and `label()` (`project.rs:404-418`); `DwarfClips` field, `node()`, `nodes()`
     (`:335-375`); the graph build `load("Cut")`, `present`, `take` order (`:765-786`);
-  - [ ] `dwarf_clip` returns `Cut` for `Work` + `Cut{..}` and drops the placeholder NOTE (`:427-445`);
-  - [ ] the arrival gate and the swing-phase arm treat Cut like Dig (`:510-532`, `:2481-2484`), with Task
+  - [x] `dwarf_clip` returns `Cut` for `Work` + `Cut{..}` and drops the placeholder NOTE (`:427-445`);
+  - [x] the arrival gate and the swing-phase arm treat Cut like Dig (`:510-532`, `:2481-2484`), with Task
     0.2's period; the STALLED loop gains Cut (`:2450`); `dig_yaw` already faces a cut target (`:2532-2543`);
   - [ ] `DWARF_CLIP_NAMES` (`ingest.rs:490`) and its report and absent tests (`:5992`, `:6031-6035`), the
     `README.md:313` literal and the `clip <walk|dig|carry>` README text;
   - [ ] rename `a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip` (`headless.rs:5859`) to `…_the_cut_clip`;
     `the_embedded_dwarf_carries_walk_dig_and_carry_by_name` (`ingest.rs:5960`) covers all four;
-  - [ ] if Cut is missing from the GLB, Cut falls back to Dig. The startup line says `clip Cut ABSENT`, the
+  - [x] if Cut is missing from the GLB, Cut falls back to Dig. The startup line says `clip Cut ABSENT`, the
     same shape as the others.
 - [ ] **Task 4: #174 cut mode, per the approved draft (AC5).** RED first for the pick and the box; the tint is
   judged at the seat.
@@ -343,9 +343,76 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 
 ### Agent Model Used
 
+- Orchestrator + verifier: Claude Opus 5.5 (`claude-opus-5-5[1m]`). Wolf picked Sonnet 5.5 subagents
+  for the implementation (2026-10-07), as in 12.2-12.7. They run one after the other, on one tree.
+
 ### Debug Log References
 
 ### Completion Notes List
+
+- **Task 1 (#164)**, Sonnet subagent, `cd9d9ca`. Pick-up is gated on the drawn body reaching his wire
+  cell. The drop is gated on his drawn body being within `DROP_REACH_CELLS` (0.1 cell) of the cell the
+  wire drops the item on. The walker step is scaled by `walk_speed_ratio(mirror.speed())`: Normal and
+  Paused 1, Fast 5, Fast2x 10, Fast4x 20 (`simd` tick periods).
+  - **Story premise corrected:** `TickClock::factor()` is the 0..1 blend fraction between ticks, not a
+    tick rate. The speed comes from the wire (`Mirror::speed()`).
+  - **RED, recorded before the fix:**
+    - `a_hauler_does_not_pick_up_his_stone_until_he_is_drawn_at_its_cell` panicked with "still walking
+      onto the stone's cell: it is not in his hands yet";
+    - `a_dwarf_walking_in_at_fast_reaches_his_work_clip_within_the_run` panicked with "never reached the
+      Dig clip within the 50-tick run".
+  - GREEN after; `cargo test -p gui` lib 231 and headless 114 pass.
+  - `a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go` waited 4 frames after
+    teleporting the hauler onto the stone, which is exactly the ungated pick-up. It now waits 20 frames;
+    its asserts are unchanged.
+  - The 12.5 row "the stone is put down while he is still walking in" was re-pointed to
+    `DROP_REACH_CELLS = 1000.0`.
+  - **Mutations** (orchestrator-run, `RUST_TEST_THREADS=1 scripts/mutate.sh`), all KILLED by the
+    assertion named:
+    - `12-8.sh` "pick-up ungated" kills the pick-up test at its first assert;
+    - "Fast walker unscaled" (Fast 5.0 → 1.0) kills the Fast test;
+    - the re-pointed 12.5 row kills `a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on`.
+  - Untested: Fast2x and Fast4x ratios (only Fast has a test). At Fast4x a walker can step over the
+    0.1-cell drop window in one frame; he then lets go on arriving at his wire cell, late but never stuck.
+- **Task 3 (Cut binding)**, Sonnet subagent, `f3473fb`. `DwarfClip::Cut` ("cut") is bound by name with
+  `load("Cut")`. `DwarfClips::node(Cut)` falls back to the Dig node while the GLB has no Cut.
+  `WORK_SWING_TICKS` became `DwarfClip::swing_ticks()` (Cut 10, else 5) and `swings()`. The arrival gate,
+  the phase arm, `DwarfHeadings` and the STALLED loop all treat Cut like Dig. `DWARF_CLIP_NAMES` has four
+  names, and the README is updated.
+  - Startup line today (Cut not yet in the GLB): `clip Cut ABSENT -- this dwarf cannot play it; the
+    runtime GLB is behind the .blend`.
+  - RED before the fix:
+    - `a_woodcutter_on_a_cut_job_in_work_gets_the_cut_clip` (renamed): `left: Dig right: Cut`;
+    - new `a_cut_swing_advances_at_half_the_rate_of_a_dig_swing`: "a cut is half way at 5 ticks: 0".
+  - **AC7 real-binary test:** extended `a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon`
+    with a cut on tree A. GREEN (~123 s, lavapipe):
+    - woodcutter cut [(0,1)] then walk;
+    - miners dig and walk;
+    - haulers carry and walk.
+
+    Its deliberate RED (Cut→Dig in `dwarf_clip`) panics at `pixel_guard.rs:1164` "no woodcutter [0]
+    logged clip cut followed by clip walk".
+  - **TEMPORARILY LOOSENED until the GLB is promoted, and must be re-tightened at Task 2c:**
+    - the AC7 test accepts `clip Cut ABSENT` in place of `clips Walk, Dig, Carry, Cut`, and its STALLED
+      filter ignores "the Cut clip never loaded";
+    - `the_embedded_dwarf_carries_walk_dig_and_carry_by_name` asserts a 3-name literal.
+
+    All three carry a NOTE.
+  - **Re-pointed rows:**
+    - 12.5: "Carry is preferred over Dig", "the dig phase runs on wall time", "the dig clip starts while
+      he is still walking in", "the Dig clip is never bound";
+    - 12.7: row 16, now on `..._gets_the_cut_clip`.
+  - **Mutations** (orchestrator-run, `RUST_TEST_THREADS=1 scripts/mutate.sh`), 8/8 KILLED at the
+    targeted assertion:
+    - `12-8.sh` "Cut mapped back to Dig" (headless `:5994`), "Cut mapped back to Dig, seen by the real
+      binary" (`pixel_guard.rs:1164`), "a cut swings at a dig's period" (`:5237`);
+    - the four re-pointed 12.5 rows ("the Dig clip is never bound" at the STALLED assert,
+      `pixel_guard.rs:1185`);
+    - 12.7 row 16.
+  - Untested by any automated test: the Cut→Dig node fallback itself (it needs real assets). The real
+    binary exercised it with no STALLED.
+- **Task 2a**: brief `src-assets/prompts/dwarf-miner-round-20.md` (`6425a40`). Tool A (re-use the
+  pickaxe) or B (an axe, a 21st joint, Wolf's explicit yes) is decided at the seat.
 
 ### File List
 
