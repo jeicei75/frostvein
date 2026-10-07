@@ -14,9 +14,7 @@ use crate::{
     camera::CameraRig,
     designate::DesignateMode,
     ingest::MirrorResource,
-    project::{
-        TerrainTile, WorldProjected, is_tree_foliage, is_visible_at_slice, trunk_column_extent,
-    },
+    project::{TerrainTile, WorldProjected, is_tree_foliage, is_visible_at_slice, tree_base_at},
     slice::SliceLevel,
     transform::{render_to_world, world_to_render},
 };
@@ -376,16 +374,11 @@ fn first_visible_hit(
 /// The ground cell under the trunk of the tree this foliage cell belongs to: the cell whose
 /// `cut_target` is the tree's base. `None` for foliage no trunk reaches.
 fn tree_foot(mirror: &client_core::Mirror, foliage: [i32; 3]) -> Option<PickedCell> {
-    let [fx, fy, fz] = foliage;
-    (-1..=1)
-        .flat_map(|dy| (-1..=1).map(move |dx| (fx + dx, fy + dy)))
-        .find_map(|(x, y)| {
-            let (base, top, _) = trunk_column_extent(mirror, x, y)?;
-            (base <= fz && fz <= top + 1).then_some(PickedCell {
-                tile: [x, y, base - 1],
-                face: Face::Top,
-            })
-        })
+    let [x, y, base] = tree_base_at(mirror, foliage)?;
+    Some(PickedCell {
+        tile: [x, y, base - 1],
+        face: Face::Top,
+    })
 }
 
 fn entry_face(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3, entry: f32) -> Face {

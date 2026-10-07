@@ -799,6 +799,8 @@ pub fn projection_systems(app: &mut App) {
                 crate::project::start_dwarf_walk,
                 crate::project::drive_dwarf_walk,
                 crate::project::apply_dwarf_tunics,
+                crate::project::sync_cut_tint_marks,
+                crate::project::apply_cut_tint,
             )
                 .chain()
                 .in_set(ProjectionSet),

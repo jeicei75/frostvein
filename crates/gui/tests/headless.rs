@@ -6046,3 +6046,150 @@ fn a_woodcutter_working_a_cut_faces_the_trunk() {
         "a cut to his east faces east, drew {drawn:?}"
     );
 }
+
+/// 12.8 Task 4 (§3 option a): a pine with a cut mark wears ONE shared tinted material, the mark's
+/// removal puts its own material back, and a respawn of its `TreeMesh` (the incremental path
+/// despawns and rebuilds a column whenever a tile beside it changes) does not lose the tint.
+///
+/// The GLB scene does not spawn under `MinimalPlugins`, so a mesh child stands in for it, as in the
+/// tunic test. Everything from there is the production path.
+#[test]
+fn a_cut_marked_pine_wears_the_shared_tint_and_keeps_it_across_a_respawn() {
+    use bevy::prelude::{ChildOf, Handle};
+
+    let dims = Dims { x: 8, y: 3, z: 6 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    for x in 0..8 {
+        for y in 0..3 {
+            tiles[index([x, y, 0])] = Tile::Solid(Material::Stone);
+        }
+    }
+    for z in 1..=3 {
+        tiles[index([1, 1, z])] = Tile::Solid(Material::TreeTrunk);
+        tiles[index([5, 1, z])] = Tile::Solid(Material::TreeTrunk);
+    }
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+    app.update();
+    let original = app
+        .world_mut()
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial::default());
+
+    // Stands a scene's mesh under every tree that has none yet.
+    let seat_scenes = |app: &mut App| {
+        let bare: Vec<BevyEntity> = {
+            let world = app.world_mut();
+            let trees: Vec<BevyEntity> = world
+                .query_filtered::<BevyEntity, With<gui::project::TreeMesh>>()
+                .iter(world)
+                .collect();
+            trees
+                .into_iter()
+                .filter(|tree| {
+                    world
+                        .query::<&ChildOf>()
+                        .iter(world)
+                        .all(|child_of| child_of.parent() != *tree)
+                })
+                .collect()
+        };
+        for tree in bare {
+            app.world_mut().spawn((
+                Mesh3d::default(),
+                MeshMaterial3d(original.clone()),
+                ChildOf(tree),
+            ));
+        }
+    };
+    let material_of = |app: &mut App, base: [i32; 3]| -> Handle<StandardMaterial> {
+        let world = app.world_mut();
+        let tree = world
+            .query::<(BevyEntity, &gui::project::TreeMesh)>()
+            .iter(world)
+            .find(|(_, tree)| tree.0 == base)
+            .map(|(entity, _)| entity)
+            .expect("the pine must be drawn as a mesh tree");
+        world
+            .query::<(&ChildOf, &MeshMaterial3d<StandardMaterial>)>()
+            .iter(world)
+            .find(|(child_of, _)| child_of.parent() == tree)
+            .map(|(_, material)| material.0.clone())
+            .expect("the stand-in scene mesh must carry a material")
+    };
+    let mark = |app: &mut App, marks: Vec<[i32; 3]>| {
+        let mut message = delta(Vec::new(), Vec::new());
+        message.designations = marks
+            .into_iter()
+            .map(|pos| Designation {
+                pos,
+                kind: DesignationKind::Cut,
+            })
+            .collect();
+        apply_delta(app, message);
+        app.update();
+    };
+    seat_scenes(&mut app);
+    app.update();
+    assert_eq!(
+        material_of(&mut app, [1, 1, 1]),
+        original,
+        "unmarked pines keep their own"
+    );
+
+    mark(&mut app, vec![[1, 1, 1], [5, 1, 1]]);
+    let tinted = material_of(&mut app, [1, 1, 1]);
+    assert_ne!(tinted, original, "a cut-marked pine must wear the tint");
+    assert_eq!(
+        material_of(&mut app, [5, 1, 1]),
+        tinted,
+        "every marked pine shares ONE tinted material"
+    );
+    assert_eq!(
+        app.world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&tinted)
+            .unwrap()
+            .base_color,
+        gui::appearance::material_color(Material::TreeFoliage),
+        "the tint is the foliage green"
+    );
+
+    // Respawn the marked pine: a tile beside its column changes, so the incremental path rebuilds it.
+    // A delta carries the whole designation set, so it must restate the marks.
+    let mut respawn = delta(
+        vec![TileChange {
+            pos: [2, 1, 0],
+            tile: Tile::Empty,
+        }],
+        Vec::new(),
+    );
+    respawn.designations = ([[1, 1, 1], [5, 1, 1]])
+        .map(|pos| Designation {
+            pos,
+            kind: DesignationKind::Cut,
+        })
+        .to_vec();
+    apply_delta(&mut app, respawn);
+    app.update();
+    seat_scenes(&mut app);
+    app.update();
+    assert_eq!(
+        material_of(&mut app, [1, 1, 1]),
+        tinted,
+        "a respawned marked pine must come back tinted"
+    );
+
+    mark(&mut app, vec![[5, 1, 1]]);
+    assert_eq!(
+        material_of(&mut app, [1, 1, 1]),
+        original,
+        "clearing the mark puts the pine's own material back"
+    );
+    assert_eq!(
+        material_of(&mut app, [5, 1, 1]),
+        tinted,
+        "the other mark stands"
+    );
+}

@@ -3059,7 +3059,7 @@ fn classify_trunk_column(
 /// The trunk extent of one column: lowest cell, highest cell, and how many cells there actually
 /// are. The third value is what makes a gap visible — without it a dug column is indistinguishable
 /// from a whole one.
-pub(crate) fn trunk_column_extent(mirror: &Mirror, x: i32, y: i32) -> Option<(i32, i32, i32)> {
+fn trunk_column_extent(mirror: &Mirror, x: i32, y: i32) -> Option<(i32, i32, i32)> {
     let mut extent: Option<(i32, i32, i32)> = None;
     for z in 0..mirror.dims().z as i32 {
         if terrain_material_at(mirror, [x, y, z]) == Some(Material::TreeTrunk) {
@@ -3664,6 +3664,148 @@ pub fn apply_dwarf_tunics(
     }
 }
 
+/// Whether a pine is tinted for a cut mark (a designation, or the live cut drag catching it).
+/// Inserted and replaced, NEVER removed: `remove_with_requires` strips render sync (see `ingest.rs`).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CutTinted(pub bool);
+
+/// A pine mesh's own material while the cut tint stands in for it, so clearing the mark can put it back.
+#[derive(Component)]
+pub struct PineOwnMaterial(Handle<StandardMaterial>);
+
+type PineMaterialQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut MeshMaterial3d<StandardMaterial>,
+        Option<&'static PineOwnMaterial>,
+    ),
+>;
+
+/// The ONE tinted clone every marked pine shares.
+#[derive(Resource)]
+pub struct CutTint(Handle<StandardMaterial>);
+
+/// The base of the tree this tree tile (trunk or crown) belongs to; `None` for anything else.
+pub(crate) fn tree_base_at(mirror: &Mirror, tile: [i32; 3]) -> Option<[i32; 3]> {
+    let [tx, ty, tz] = tile;
+    (-1..=1)
+        .flat_map(|dy| (-1..=1).map(move |dx| (tx + dx, ty + dy)))
+        .find_map(|(x, y)| {
+            let (base, top, _) = trunk_column_extent(mirror, x, y)?;
+            (base <= tz && tz <= top + 1 && is_tree(mirror, tile)).then_some([x, y, base])
+        })
+}
+
+/// Marks each `TreeMesh` whose base carries a cut designation, or which the live cut drag catches.
+pub fn sync_cut_tint_marks(
+    mut commands: Commands,
+    mirror: Res<crate::ingest::MirrorResource>,
+    drag_mode: Option<Res<DragMode>>,
+    preview: Option<Res<DragPreviewCells>>,
+    trees: Query<(BevyEntity, &TreeMesh, Option<&CutTinted>)>,
+) {
+    let mut marked: BTreeSet<[i32; 3]> = mirror
+        .0
+        .designations()
+        .iter()
+        .filter(|designation| designation.kind == DesignationKind::Cut)
+        .map(|designation| designation.pos)
+        .collect();
+    if drag_mode.is_some_and(|mode| mode.0 == Some(DesignateMode::Cut)) {
+        let cells = preview.as_deref().and_then(|cells| cells.0.as_deref());
+        marked.extend(
+            cells
+                .into_iter()
+                .flatten()
+                .filter_map(|tile| tree_base_at(&mirror.0, *tile)),
+        );
+    }
+    for (entity, tree, tinted) in &trees {
+        let want = marked.contains(&tree.0);
+        if want != tinted.is_some_and(|tinted| tinted.0) {
+            commands.entity(entity).insert(CutTinted(want));
+        }
+    }
+}
+
+/// Swaps the shared tint onto a marked pine's meshes and the pine's own material back when the mark
+/// goes, after the `apply_dwarf_tunics` pattern: armed by a scene mesh appearing under a tinted
+/// `TreeMesh` (a respawn brings a fresh scene) and by `CutTinted` changing. Handles are replaced,
+/// never components removed.
+// Every parameter is a distinct ECS partition, as in `apply_dwarf_tunics`.
+#[allow(clippy::too_many_arguments)]
+pub fn apply_cut_tint(
+    mut commands: Commands,
+    tint: Option<Res<CutTint>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut meshes: bevy::prelude::ParamSet<(NewMeshQuery, PineMaterialQuery)>,
+    changed: Query<(BevyEntity, &CutTinted), bevy::prelude::Changed<CutTinted>>,
+    tinted_of: Query<&CutTinted>,
+    parents: Query<&ChildOf>,
+    children: Query<&bevy::prelude::Children>,
+) {
+    let Some(mut materials) = materials else {
+        return;
+    };
+    let mut targets: Vec<(BevyEntity, bool)> = Vec::new();
+    for mesh in meshes.p0().iter() {
+        let mut current = mesh;
+        for _ in 0..8 {
+            if let Ok(tinted) = tinted_of.get(current) {
+                if tinted.0 {
+                    targets.push((mesh, true));
+                }
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+    }
+    for (tree, tinted) in &changed {
+        let mut stack = vec![tree];
+        while let Some(node) = stack.pop() {
+            if meshes.p1().get(node).is_ok() {
+                targets.push((node, tinted.0));
+            }
+            if let Ok(kids) = children.get(node) {
+                stack.extend(kids.iter());
+            }
+        }
+    }
+    let mut shared = tint.map(|tint| tint.0.clone());
+    for (mesh, want) in targets {
+        let mut query = meshes.p1();
+        let Ok((mut material, own)) = query.get_mut(mesh) else {
+            continue;
+        };
+        if !want {
+            if let Some(own) = own {
+                material.0 = own.0.clone();
+            }
+            continue;
+        }
+        let tint = shared.get_or_insert_with(|| {
+            // The first pine mesh's own material, cloned with its texture dropped (the texture is
+            // where the snow lives) and the foliage green as the flat colour.
+            let mut clone = materials.get(&material.0).cloned().unwrap_or_default();
+            clone.base_color_texture = None;
+            clone.base_color = crate::appearance::material_color(Material::TreeFoliage);
+            let handle = materials.add(clone);
+            commands.insert_resource(CutTint(handle.clone()));
+            handle
+        });
+        if material.0 != *tint {
+            commands
+                .entity(mesh)
+                .insert(PineOwnMaterial(material.0.clone()));
+            material.0 = tint.clone();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use client_core::Mirror;
@@ -3902,6 +4044,40 @@ mod tests {
             style([0, 0, 1]),
             hover,
             "open air in the box is the hover slab"
+        );
+    }
+
+    /// §2: while a cut drag is live, the pines its box catches are tinted already, whichever of
+    /// their cells (trunk or crown) the box covers; a box in another mode tints nothing.
+    #[test]
+    fn a_live_cut_drag_tints_the_pines_it_catches_and_no_other_mode_does() {
+        use bevy::prelude::{App, Update};
+        let dims = Dims { x: 3, y: 3, z: 5 };
+        let mut tiles = vec![Tile::Empty; 45];
+        let at = |x: i32, y: i32, z: i32| (x + y * 3 + z * 9) as usize;
+        for z in 1..=3 {
+            tiles[at(1, 1, z)] = Tile::Solid(protocol::Material::TreeTrunk);
+        }
+        tiles[at(0, 1, 2)] = Tile::Solid(protocol::Material::TreeFoliage);
+        let mut app = App::new();
+        app.insert_resource(crate::ingest::MirrorResource(world(dims, tiles)))
+            .insert_resource(DragMode(Some(DesignateMode::Cut)))
+            .insert_resource(DragPreviewCells(Some(vec![[0, 1, 2]])))
+            .add_systems(Update, sync_cut_tint_marks);
+        let tree = app.world_mut().spawn(TreeMesh([1, 1, 1])).id();
+        let tinted = |app: &App| app.world().get::<CutTinted>(tree).map(|tinted| tinted.0);
+        app.update();
+        assert_eq!(
+            tinted(&app),
+            Some(true),
+            "a crown cell in the box tints its pine"
+        );
+        app.insert_resource(DragMode(Some(DesignateMode::Dig)));
+        app.update();
+        assert_eq!(
+            tinted(&app),
+            Some(false),
+            "a dig drag over a crown tints nothing"
         );
     }
 
