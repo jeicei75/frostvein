@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.7's creation
 
 # Story 12.8: Dwarves at Work — The Cut
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -133,7 +133,7 @@ to the seat.
   - [x] Implement Task 0.3's ruling for Fast. If (a), the step at `:2649` multiplies by the tick-rate factor
     the clock already knows (`TickClock::factor`, `:459`); keep `DWARF_WALK_SNAP_CELLS` (`:644`) as is.
   - [x] Both tests GREEN; the old hauler test stays GREEN.
-- [ ] **Task 2: the Cut clip, from a live BlenderMCP seat (AC1, AC2).** Tasks 1, 3, 4 and 5 do not need it;
+- [x] **Task 2: the Cut clip, from a live BlenderMCP seat (AC1, AC2).** Tasks 1, 3, 4 and 5 do not need it;
   run them while the seat is pending.
   - [x] **2a — write the brief** `src-assets/prompts/dwarf-miner-round-20.md`, in round 19's shape
     (`dwarf-miner-round-19.md`): the "For:" header, the in-place rule, LINEAR keys at 24 fps on frames 0..24
@@ -195,7 +195,7 @@ to the seat.
   material name or `cut-tint`. A probe of this shape ran clean at creation (4 handles, per variant).
   - [x] Test: a headless app with two marked pines reports `cut-tint:2`, and the line changes when one mark
     is cleared.
-  - [ ] If Wolf reproduces the ghost at the seat (Task 7), file the line in #173. Do NOT fix #173 in this
+  - [x] (Not triggered: no ghost was reported at either seat pass.) If Wolf reproduces the ghost at the seat (Task 7), file the line in #173. Do NOT fix #173 in this
     story without a red reproduction (M2-27). If a fix is found, it gets its own task with Wolf's yes.
 - [x] **Task 6: the record.**
   - [x] `mutations/12-8.sh`, at least:
@@ -212,7 +212,7 @@ to the seat.
     Run them, and every row must be KILLED.
   - [x] README `gui` section: the Cut clip and the clip list, cut-mode pick/box/tint, the `materials=` line.
   - [x] Seat card `12-8-signoff/vehicle-card.md` in the seat's launch form (see Verification).
-- [ ] **Task 7: the live recipe, the seat (AC9), then the full gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`
+- [x] **Task 7: the live recipe, the seat (AC9), then the full gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`
   on the final HEAD.
 
 ### Art ledger
@@ -521,10 +521,34 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
   - The two new rows: "CUT_OFFSET never applied" dies at `headless.rs:6086`, and "the cut nudge never
     cleared" at `:6104` ("the nudge must clear exactly").
 - **Full gate on `f7a1649` GREEN** (`RUST_TEST_THREADS=1 scripts/gate.sh`, 3223 s), pixel guards included, with the round-20 GLB.
+- **Seat, AC9 (Wolf, 2026-10-07): "1 ok 2 ok".**
+  - Pass 1: cut-mode pointer, box and tint against the approved draft, and the `materials=` line.
+  - Pass 2: the axe chop in game with `CUT_OFFSET`, dig + haul + cut together at Normal, and Fast.
+  - His aside, "woodcutter could walk also with axe in the hand instead of switching it when
+    cutting", is parked as **#176** (enhancement, route:story). It is not in 12.8.
+  - No ghost pine was reported, so #173 stays instrument-only.
+- Issues filed: **#175** (walker below its speed when frames exceed 0.25 s), **#176** (axe in hand
+  while walking).
 - **Task 2a**: brief `src-assets/prompts/dwarf-miner-round-20.md` (`6425a40`). Tool A (re-use the
   pickaxe) or B (an axe, a 21st joint, Wolf's explicit yes) is decided at the seat.
 
 ### File List
+
+- `crates/gui/src/project.rs`, `crates/gui/src/pick.rs`, `crates/gui/src/ingest.rs`, `crates/gui/src/appearance.rs`,
+  `crates/gui/build.rs`
+- `crates/gui/tests/headless.rs`, `crates/gui/tests/pixel_guard.rs`
+- `assets/gltf/SM_VoxelDwarf_Miner01.glb` (round 20, promoted)
+- `README.md`
+- `src-assets/prompts/dwarf-miner-round-20.md`, and from Wolf's seat commit `ebe6b41`:
+  - `src-assets/prompts/dwarf-miner-round-20-report.md`;
+  - `src-assets/blender/SM_VoxelDwarf_Miner01.blend`, `cut_r20.py`, `coldrun_r20.py`, `work_r19.py`,
+    `export_dwarf.py`;
+  - `src-assets/renders/r20/` (36 files).
+- `_bmad-output/implementation-artifacts/mutations/12-8.sh` (new), and the re-pointed `12-5.sh`, `12-7.sh`,
+  `8-1-point-at-the-world.sh`
+- `_bmad-output/implementation-artifacts/12-8-signoff/draft.md`, `12-8-signoff/vehicle-card.md`
+- `_bmad-output/implementation-artifacts/12-8-dwarves-at-work-the-cut.md`, `sprint-status.yaml`, and the
+  `metrics/` ledger. Plus creation-time edits: `epics.md`, `12-7-timber.md`.
 
 ## Change Log
 
@@ -532,3 +556,4 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 | --- | --- |
 | 2026-10-06 | Created on `486095d`. Cut clip + #164 + #173 (instrument only, not reproduced) + #174 (draft-first). Task 0 open. |
 | 2026-10-07 | Task 0 ruled by Wolf: draft approved with tint (a) + slab, 10-tick swing, Fast walker scales (a), #173 instrument-only. |
+| 2026-10-07 | Task 0 ruled. Dev (Sonnet subagents, Opus orchestrating): #164 gating + Fast walker; Cut bound by name at 10 ticks; #174 pick/box/tint; #173 `materials=` line. Round 20 (Wolf's seat, axe, $21.59) promoted; `CUT_OFFSET` 0.35 m. Stamp narrowed to build inputs. AC7 test held 30 s (#175). 24/24 mutation rows KILLED; full gate GREEN on `f7a1649`. Seat: "1 ok 2 ok". Status review. |
