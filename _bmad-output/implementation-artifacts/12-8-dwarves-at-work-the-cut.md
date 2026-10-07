@@ -348,6 +348,31 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 
 ### Debug Log References
 
+- **Full gate on `4eb9e42` RED (2026-10-07, 3372 s):** one failure, the AC7 real-binary test. Nain logged
+  no clip line (`woodcutters cut [(0, 0)]`) while miners and haulers passed. Alone, debug, it passes.
+  - **Timeline, measured idle:**
+    - the wire puts Nain in `work` on the cut at 22.4 s;
+    - the gui logs `clip cut` at 26.5 s;
+    - wire work ends at 27.4 s, and the gui logs `clip walk` at 28.1 s.
+  - **Cause:** the drawn walker steps by Bevy's `Time<Virtual>` delta, capped at 0.25 s, against
+    ~0.55 s lavapipe frames. He trails until the 2.5-cell snap, so only 1.6 s of the 5 s cut was ever
+    drawn, and under the gate's load none of it. This happens below ~4 fps only; the seat never
+    sees it. Filed as **#175** (product behaviour unchanged in 12.8).
+  - **Test fix `4408542`:** the test's own client pauses the sim for 30 s once the wire shows the
+    woodcutter in `work` on a cut. The swing holds and the walker catches up; then it resumes.
+  - **Shown under load** (28 of 32 cores busy with `yes`):
+    - hold 30 s PASSES (400 s run);
+    - hold 0 s FAILS with `cut [(0, 0)]` at the woodcutter assert, the gate's failure exactly.
+- **Stamp fix `1f69475` (Wolf, "fix it now"):** `build.rs` stamps `-dirty` only for uncommitted changes
+  under `crates/`, `assets/` and the manifests. A story note or a seat video had made `launch-gui.ps1`
+  refuse a build. Verified on `gui --version`:
+  - clean tree: `4408542`;
+  - an untracked doc: `4408542`;
+  - a `crates/` edit: `4408542-dirty`.
+
+  Wolf's untracked 12.7 seat video was moved to `.bin/12-7-signoff/`.
+- **Full gate on `4408542` GREEN** (`RUST_TEST_THREADS=1 scripts/gate.sh`, 4016 s), every pixel guard included.
+
 ### Completion Notes List
 
 - **Task 1 (#164)**, Sonnet subagent, `cd9d9ca`. Pick-up is gated on the drawn body reaching his wire
