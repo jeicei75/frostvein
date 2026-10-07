@@ -19,3 +19,27 @@ old = '        protocol::Speed::Fast => 5.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        protocol::Speed::Fast => 1.0,\n'))
 PY
+
+mutation "Cut mapped back to Dig" gui a_woodcutter_on_a_cut_job_in_work_gets_the_cut_clip <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        DwarfClip::Cut\n    } else if entity.carrying.is_some() {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        DwarfClip::Dig\n    } else if entity.carrying.is_some() {\n'))
+PY
+
+mutation "Cut mapped back to Dig, seen by the real binary" gui a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon ignored <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        DwarfClip::Cut\n    } else if entity.carrying.is_some() {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        DwarfClip::Dig\n    } else if entity.carrying.is_some() {\n'))
+PY
+
+mutation "a cut swings at a dig's period" gui a_cut_swing_advances_at_half_the_rate_of_a_dig_swing <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '            DwarfClip::Cut => 10,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            DwarfClip::Cut => 5,\n'))
+PY
