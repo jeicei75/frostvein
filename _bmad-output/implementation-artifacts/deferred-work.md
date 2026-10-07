@@ -2497,3 +2497,27 @@ the story, and one of them is also issue #125.
   blind, LOW, RAN; pre-existing since story 3.2's cap; `crates/sim-core/src/lib.rs:1794`). An
   already-marked cell counts as applied, so no refusal is raised. THE ISSUE IS THE STATE: **#170**
   (route:undecided).
+
+## Deferred from: code review of 12-8-dwarves-at-work-the-cut (2026-10-07)
+
+- **AC7's real-binary test proves `clip cut` only with the sim held 30 s** (feature + acceptance + edge, LOW,
+  RAN; `crates/gui/tests/pixel_guard.rs:1084`). The un-held release run on a loaded devpod logged no
+  `clip cut` for a cut at Normal, and did log one at Fast. THE ISSUE IS THE STATE: **#175**.
+- **The pick-up and drop gates are frame-sampled** (blind + feature + acceptance, LOW;
+  `crates/gui/src/project.rs:212,231`).
+  - Pick-up keys on his current wire cell, not the item's.
+  - The drop needs a frame within 0.1 cell of the drop cell. At Fast4x, below ~4 fps, or when the
+    pursuit path cuts a corner, the stone rides to his wire cell and snaps back.
+  - Unreachable at Normal or Fast at 60 fps (a 17-tick stand against an 11-tick walk).
+- **Drag-tinted pines go snowy for one delta on release before the wire mark re-tints them** (feature +
+  acceptance, LOW; `crates/gui/src/project.rs:587`). Draft §2 says "stay tinted".
+- **Look departures from 12.8's draft that Wolf passed at the seat** (acceptance + blind, LOW;
+  `crates/gui/src/project.rs:666,1050`). The tint is flat green with no texture, trunk included; the box
+  slabs sit at the cut level, not on the ground.
+- **`gui trees: materials=` counts per label, not per handle** (acceptance, LOW, RAN;
+  `crates/gui/src/project.rs:506`). All four pine GLBs name their material `M_VoxelPine`, so a same-named
+  cross-variant swap is invisible to #173's instrument.
+- **Fast2x/Fast4x walker ratios are unpinned; no woodcutter walk-in-without-Cut test** (edge + acceptance,
+  LOW; `crates/gui/src/project.rs:250`). The Fast test passes any ratio of about 1.12 or more.
+- **`report_pine_materials` and `sync_cut_tint_marks` run every frame, unmeasured (NFR6)** (acceptance, LOW;
+  `crates/gui/src/project.rs:477,573`).

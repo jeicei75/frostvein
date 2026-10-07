@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.7's creation
 
 # Story 12.8: Dwarves at Work — The Cut
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -220,6 +220,106 @@ to the seat.
 | Round | Model | Wolf's `/cost` | Wolf's words | Verdict |
 | --- | --- | --- | --- | --- |
 | 20 (`Cut`, axe) | `claude-opus-5-5` (Claude Code + BlenderMCP, Wolf's live seat) | **$21.59** (Opus 5.5 $21.59 + Haiku 4.5 $0.001; 203 requests, API 47m 43s, wall 2h 31m) | "option B with proper axe"; "axe head is rotated to wrong way in the start (backwards) and in the end" (fixed); "when axe is high the head edge should point either straight to front or a little bit down not to left" (fixed); two hands out of reach on this rig: "finish it .. we can use this now.. have to rethink the model and rig anyway at some point" | **Accepted at the Blender seat**, one-handed: bite at 0.95 m plus a 0.35 m client nudge (`CUT_OFFSET`); 21 joints. Judged in game at the seat (Task 7). |
+
+### Review Findings
+
+Code review run 1, 2026-10-07, on `8779499` (diff `origin/main...HEAD`, 110cab4..8779499; 7 crate files plus
+README, mutation files and export scripts, 2142 lines). Four layers ran and none timed out. Blind Hunter
+(`appearance.rs`, `project.rs`) and Edge Case Hunter (`pick.rs`, `ingest.rs`, `build.rs`, `tests/`,
+mutations) ran on Sonnet with the R1 territories. The Acceptance and Feature Auditors ran on Opus over the
+whole diff. Every layer's cargo ran (1.97.1), and each built in its own target dir. Live runs:
+- The Feature Auditor ran a release `simd` + `gui --headless` for 410 s with a channel, a pile and cuts on
+  A, then B at Fast. It saw:
+  - `clips Walk, Dig, Carry, Cut`;
+  - `materials=4 [M_VoxelPine:259]`, then `materials=5 [M_VoxelPine:258, cut-tint:1]` on the mark, and back
+    to 4 on the felling (A and B);
+  - at Fast, `gui dwarf 0 clip cut` then `clip walk`, and the miners `clip dig` then `walk`.
+
+  There was no STALLED line. It also parsed the embedded GLB: 4 clips at 63 channels and 21 joints with
+  `axe`. None of the 252 channels targets the nudged armature node.
+- The Acceptance Auditor saw the same startup, materials and clip lines on its own daemon. The AC7
+  real-binary test PASSED (116.7 s, `woodcutters cut [(0,1)] walk [(0,1)]`). Six lib tests and eleven
+  headless tests passed. `check_asset.py` on the promoted GLB: 4 anims, 21 joints, exit 0.
+- The Edge layer checked that every mutation row in the directory still applies (no APPLY-FAILED). It
+  did not re-run kills.
+- The diff under `sim-core`, `simd`, `protocol`, `tui` and `client-core` is empty (AC8, standing AC 4).
+
+Not proven by this review: the look halves of AC1/3/4/5 and AC9. The record's only seat words are
+"1 ok 2 ok" (decision below). The full gate is last green on `f7a1649`; HEAD differs from it by two record
+commits only. Review cost $19.23 over 307 turns (Opus $16.53, Sonnet $2.70; subagents 75.1% of tokens).
+`reap-build-caches.sh --tmp-only --force` reclaimed 26.3 GB. No HIGH defect. Tally: 1 decision-needed, 1 patch, 7 defer, 12 dismissed. Layer and severity
+are in brackets.
+
+**Process note.** The Edge layer `exec`'d every mutation payload with `p.write_text(` stubbed out, against
+the preamble's ban and [[mutation-payload-exec-writes-tree]]. `git status` was clean afterwards, so no harm
+was done. A payload that writes any other way would have mutated the tree.
+
+- [x] [Review][Decision] **AC9's #164 judgement ("timing at Normal and at Fast") has no unambiguous verdict
+  on record** (acceptance + feature, MED; record). `12-8-signoff/vehicle-card.md` asks three questions: Q1
+  cut mode, Q2 the chop with dig, haul and cut together, Q3 "does the timing hold at Normal and at Fast?".
+  The only words recorded are "1 ok 2 ok" (`:524`), read as passes 1 and 2, so Q3 has no explicit
+  answer. The card was also never revised for pass 2: it still says Nain plays the Dig clip and does not
+  mention `CUT_OFFSET`. Options: (a) Wolf confirms Q3 was seen at both speeds, and the record says so;
+  (b) Q3 stays OPEN until a short seat look; (c) accept as covered by pass 2.
+  — RESOLVED (Wolf, 2026-10-07, option a): "yes timing is fine with all speeds". Q3 was judged at the seat
+  and AC9's #164 half is closed. The stale card text is left as the pass-1 record it was.
+- [ ] [Review][Patch] **In cut mode a TRUNK hit does not move the highlight to the pine's foot**
+  (feature + acceptance, MED; the edge layer's weak-test finding is merged in) [crates/gui/src/pick.rs:341].
+  - Draft §1 and the README both promise "point at any part of a pine, crown or trunk, and the highlight
+    sits at that pine's foot".
+  - Only foliage goes through `tree_foot`. A trunk cell returns at `:342` as itself with a side face, so a
+    sweep across a pine still hops between the foot and the trunk's side, which is #174's flicker at a
+    smaller scale. The release is already right (`cut_target` of a trunk is the base).
+  - Fix: in cut mode, route any tree tile (trunk or foliage) through `tree_foot`.
+  - Strengthen `in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree`:
+    - every cut hit that lands on the tree must equal the foot cell exactly, instead of "within the 3×3
+      column, `feet > 0`". Today a foliage fallback passes, and so does a trunk face;
+    - add rays aimed at the trunk.
+  - RED first, then re-mutate the "cut-mode crown fall-through restored" row
+    ([[strengthened-test-needs-remutation]]).
+- [x] [Review][Defer] **AC7's real-binary test proves `clip cut` only with the sim held 30 s; at Normal on
+  lavapipe the cut is not drawn** [crates/gui/tests/pixel_guard.rs:1084] (feature + acceptance + edge, LOW;
+  RAN). The Feature Auditor's un-held release run, on a box loaded by three sibling builds, logged no
+  `clip cut` for cut A at Normal and did log it at Fast. This is #175 exactly; the issue is the state.
+- [x] [Review][Defer] **The pick-up and drop gates are frame-sampled** [crates/gui/src/project.rs:212,231]
+  (blind + feature + acceptance, LOW; read).
+  - Pick-up keys on his CURRENT wire cell, not the item's.
+  - Drop needs a frame inside 0.1 cell of the drop cell. At Fast4x (0.3 cell per 60 fps frame), below
+    ~4 fps, or on a pursuit path that cuts the corner, the stone rides on to his wire cell and snaps back.
+  - Not reachable at Normal or Fast at 60 fps: a hauler stands about 17 ticks on the cell, and the walker
+    needs about 11. Visible, never stuck.
+- [x] [Review][Defer] **On release, the drag-tinted pines go snowy for one delta before the wire's Cut mark
+  re-tints them** [crates/gui/src/project.rs:587] (feature + acceptance, LOW; read; draft §2 says "stay
+  tinted"). `DragMode` clears on release, and the mark arrives at most 100 ms plus a frame later.
+- [x] [Review][Defer] **Look departures from draft §2/§3 that Wolf passed at the seat ("1 ok")**
+  [crates/gui/src/project.rs:666,1050] (acceptance + blind, LOW; record).
+  - The tint drops the atlas texture, so the whole pine, trunk included, is flat foliage green. §3(a)
+    said "keeps … voxel texture" and also "flat … green".
+  - The box slabs sit at the cut level, not "on its ground" (Task 4's wording won over the draft's).
+- [x] [Review][Defer] **#173's `materials=` line counts pines per LABEL, not per handle**
+  [crates/gui/src/project.rs:506] (acceptance, LOW; RAN, and disclosed in Task 5). All four GLBs name their
+  material `M_VoxelPine`, so a same-named cross-variant handle swap is invisible. A ghost-style flat
+  material still shows as a 5th handle or a new label.
+- [x] [Review][Defer] **Fast2x/Fast4x walker ratios have no test or mutation row; the Fast test passes any
+  ratio ≥ ~1.12, and no test walks a woodcutter in and asserts no `Cut` before arrival**
+  [crates/gui/src/project.rs:250] (edge + acceptance, LOW; read).
+- [x] [Review][Defer] **Two new per-frame systems are unmeasured (standing AC 9 / NFR6)**
+  [crates/gui/src/project.rs:477,573] (acceptance, LOW; read). `report_pine_materials` walks every
+  `MeshMaterial3d` parent chain and allocates a label per pine mesh every frame, and `sync_cut_tint_marks`
+  scans about 265 `TreeMesh`. The seat raised no fps complaint.
+
+Dismissed (12):
+- `tree_base_at` picks the wrong neighbour (blind), Ramp foliage (blind), and the tint/mark divergence on
+  ring or split trunks (acceptance). Unreachable: worldgen keeps trunks ≥ 3 apart (`worldgen.rs:313`) and
+  rings at `top-1..top` (`:342`), the same invariant as sim `tree_of`.
+- `ArmatureRest` overwritten by animation (blind): no channel targets the node, checked live in the GLB.
+- The 8-level ancestor cap (blind) and the acknowledged pop (blind).
+- The materials report is not reset on empty (blind).
+- `sim_will_keep` callers (blind): `preview_cells` is the only one.
+- Missing Cut visible only at startup (edge): AC2's design.
+- Trunkless foliage (edge): unreachable.
+- Mode switch mid-drag (feature): a contrived input.
+- Debug-vs-release simd for the AC7 test (acceptance): a preamble error, not code.
 
 ## Dev Notes
 
