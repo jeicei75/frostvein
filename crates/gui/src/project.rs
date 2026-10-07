@@ -974,7 +974,7 @@ pub fn sync_drag_preview(
 ///
 /// Dig and clear keep AC4's single-z rect at the cells the ray hit; channel and stockpile follow
 /// the ground. Both branches then drop whatever the sim would refuse, so the preview never
-/// promises a mark that cannot appear.
+/// promises a mark that cannot appear. Cut is the exception: the whole rect, so the box shows.
 fn preview_cells(
     mirror: &Mirror,
     level: i32,
@@ -1018,10 +1018,9 @@ fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
         DesignateMode::Channel | DesignateMode::Stockpile => {
             client_core::is_standable(mirror, tile)
         }
-        // Cut keeps a tile only where a tree stands: the sim marks every tree with a tile in the rect.
-        DesignateMode::Cut => crate::designate::is_tree_tile(mirror, tile),
-        // Clear removes rather than designates; there is nothing for the sim to filter.
-        DesignateMode::Clear | DesignateMode::None => true,
+        // Cut previews the WHOLE box (12.8 §2); `preview_appearance` tells the trees it will mark
+        // from the rest. Clear removes rather than designates; there is nothing for the sim to filter.
+        DesignateMode::Cut | DesignateMode::Clear | DesignateMode::None => true,
     }
 }
 
@@ -1048,8 +1047,16 @@ fn preview_appearance(
         ),
         DesignateMode::Stockpile => (slab_transform(tile, -0.46), assets.zone_mark.clone()),
         // The cut preview sits where the committed mark will: at the trunk base's floor, and it
-        // lights a foliage tile at its own level too, so the whole tree it catches reads.
-        DesignateMode::Cut => (slab_transform(tile, -0.46), assets.cut_mark.clone()),
+        // lights a foliage tile at its own level too, so the whole tree it catches reads. Every
+        // other cell of the box is a plain hover slab, so the box's size shows over open ground.
+        DesignateMode::Cut => (
+            slab_transform(tile, -0.46),
+            if crate::designate::is_tree_tile(mirror, tile) {
+                assets.cut_mark.clone()
+            } else {
+                assets.hover_highlight.clone()
+            },
+        ),
         DesignateMode::None | DesignateMode::Clear => (
             slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
             assets.hover_highlight.clone(),
@@ -3820,7 +3827,7 @@ mod tests {
     /// 12.7: the cut preview lights exactly the tree tiles the sim will catch, at the cut level.
     /// A ground drag follows the same rule the release does: one level above the ground picked.
     #[test]
-    fn the_cut_preview_lights_only_tree_tiles_at_the_cut_level() {
+    fn the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style() {
         use crate::{designate::DesignateMode, pick::Face};
         use protocol::Material::{Stone, TreeFoliage, TreeTrunk};
         let dims = Dims { x: 3, y: 1, z: 4 };
@@ -3848,8 +3855,8 @@ mod tests {
                 cell([2, 0, 0]),
                 DesignateMode::Cut
             ),
-            vec![[1, 0, 1]],
-            "empty air beside a trunk must not light"
+            vec![[0, 0, 1], [1, 0, 1], [2, 0, 1]],
+            "the whole box shows over open ground, not only the trunk"
         );
         // Dragged from a crown tile: the trunk's own level, and the foliage on it lights too.
         assert_eq!(
@@ -3861,6 +3868,40 @@ mod tests {
                 DesignateMode::Cut
             ),
             vec![[0, 0, 2], [1, 0, 2], [2, 0, 2]]
+        );
+
+        // Only the tree cells take the cut style; the rest of the box is the hover slab.
+        let mut store = Assets::<StandardMaterial>::default();
+        let (cut, hover) = (
+            store.add(StandardMaterial::default()),
+            store.add(StandardMaterial::default()),
+        );
+        let assets = ProjectionAssets {
+            cube: Handle::default(),
+            snow_cap_mesh: Handle::default(),
+            mark_mesh: Handle::default(),
+            terrain: std::array::from_fn(|_| std::array::from_fn(|_| Handle::default())),
+            dwarf: Handle::default(),
+            torch: Handle::default(),
+            campfire: Handle::default(),
+            debris: Handle::default(),
+            dig_mark: Handle::default(),
+            channel_mark: Handle::default(),
+            cut_mark: cut.clone(),
+            wood_item: Handle::default(),
+            zone_mark: Handle::default(),
+            hover_highlight: hover.clone(),
+            trees: std::array::from_fn(|_| Handle::default()),
+            dwarf_scene: Handle::default(),
+            dwarf_walk: None,
+        };
+        let style = |tile| preview_appearance(DesignateMode::Cut, &mirror, tile, 3, &assets).1;
+        assert_eq!(style([1, 0, 2]), cut, "a trunk cell is in the cut style");
+        assert_eq!(style([0, 0, 2]), cut, "a foliage cell is in the cut style");
+        assert_eq!(
+            style([0, 0, 1]),
+            hover,
+            "open air in the box is the hover slab"
         );
     }
 
