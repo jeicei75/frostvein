@@ -305,7 +305,7 @@ binary that predates your change says so.
 - `Dig` while he is in `work` on a dig or channel job, once he is drawn at his cell: ten 5-tick
   swings per 50-tick dig, timed in delivered ticks;
 - `Cut` while he is in `work` on a cut job, once drawn at his cell: five 10-tick chops per 50-tick
-  cut, timed in delivered ticks. Until the GLB carries a `Cut` clip, a cut plays `Dig`;
+  cut, timed in delivered ticks;
 - otherwise `Carry` while he carries a stone, which is drawn in his hands until he is drawn at the
   cell he drops it on;
 - otherwise `Walk`.

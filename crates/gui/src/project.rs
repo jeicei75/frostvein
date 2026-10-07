@@ -346,7 +346,7 @@ impl DwarfClips {
             DwarfClip::Walk => Some(&self.walk),
             DwarfClip::Dig => self.dig.as_ref(),
             DwarfClip::Carry => self.carry.as_ref(),
-            // NOTE: until the Cut clip is promoted a cut swings the Dig clip.
+            // NOTE: a GLB without a Cut clip (an older promotion) still swings Dig for a cut.
             DwarfClip::Cut => self.cut.as_ref().or(self.dig.as_ref()),
         }
     }

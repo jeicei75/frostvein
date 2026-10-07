@@ -1199,23 +1199,11 @@ fn a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon() {
         woodcutter.is_some(),
         "no woodcutter {woodcutters:?} logged `clip cut` followed by `clip walk`; clip lines seen: {clips:?}"
     );
-    // NOTE: the promoted GLB has no Cut clip yet, so the line reads `clip Cut ABSENT` and a cut
-    // plays Dig; once Cut is promoted only the first form can pass.
     assert!(
-        stderr.contains("clips Walk, Dig, Carry, Cut")
-            || (stderr.contains("clip Cut ABSENT")
-                && !["Walk", "Dig", "Carry"]
-                    .iter()
-                    .any(|name| stderr.contains(&format!("clip {name} ABSENT")))),
-        "the startup line must name all four clips (or only Cut ABSENT):\n{stderr}"
+        stderr.contains("clips Walk, Dig, Carry, Cut"),
+        "the startup line must name all four clips:\n{stderr}"
     );
-    // NOTE: while Cut is ABSENT from the promoted GLB the stall check names it too; that is the
-    // known absence the startup line reports above, not a new stall.
-    let cut_absent = stderr.contains("clip Cut ABSENT");
-    let stalled: Vec<&str> = stderr
-        .lines()
-        .filter(|l| l.contains("STALLED") && !(cut_absent && l.contains("the Cut clip")))
-        .collect();
+    let stalled: Vec<&str> = stderr.lines().filter(|l| l.contains("STALLED")).collect();
     assert!(
         stalled.is_empty(),
         "the dwarf animation stalled -- a clip was chosen that never played: {stalled:?}"

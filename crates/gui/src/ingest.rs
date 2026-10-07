@@ -5961,10 +5961,9 @@ mod tests {
     /// `include_bytes!` means the promoted file IS this test's subject, so promoting a dwarf
     /// exported before its clip turns this red instead of shipping a figure that cannot walk.
     #[test]
-    fn the_embedded_dwarf_carries_walk_dig_and_carry_by_name() {
+    fn the_embedded_dwarf_carries_walk_dig_carry_and_cut_by_name() {
         let names = super::dwarf_clip_summary();
-        // NOTE: Cut is not in the promoted GLB yet; this reads three names until it is promoted.
-        let missing = ["Walk", "Dig", "Carry"]
+        let missing = super::DWARF_CLIP_NAMES
             .iter()
             .filter(|wanted| !names.iter().any(|name| name == *wanted))
             .collect::<Vec<_>>();
