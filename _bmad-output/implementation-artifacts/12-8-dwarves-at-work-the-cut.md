@@ -156,15 +156,15 @@ to the seat.
       assumes every clip loops, so Cut loops. No stray action.
     - Promote to `assets/gltf/SM_VoxelDwarf_Miner01.glb` in its OWN commit, and re-run `check_asset.py` on
       the promoted file. Rebuild the gui (`include_bytes!` at `ingest.rs:421-423`).
-- [ ] **Task 3: the gui binds and plays Cut (AC1, AC2).** Add Cut beside Dig at every site:
+- [x] **Task 3: the gui binds and plays Cut (AC1, AC2).** Add Cut beside Dig at every site:
   - [x] `DwarfClip` and `label()` (`project.rs:404-418`); `DwarfClips` field, `node()`, `nodes()`
     (`:335-375`); the graph build `load("Cut")`, `present`, `take` order (`:765-786`);
   - [x] `dwarf_clip` returns `Cut` for `Work` + `Cut{..}` and drops the placeholder NOTE (`:427-445`);
   - [x] the arrival gate and the swing-phase arm treat Cut like Dig (`:510-532`, `:2481-2484`), with Task
     0.2's period; the STALLED loop gains Cut (`:2450`); `dig_yaw` already faces a cut target (`:2532-2543`);
-  - [ ] `DWARF_CLIP_NAMES` (`ingest.rs:490`) and its report and absent tests (`:5992`, `:6031-6035`), the
+  - [x] `DWARF_CLIP_NAMES` (`ingest.rs:490`) and its report and absent tests (`:5992`, `:6031-6035`), the
     `README.md:313` literal and the `clip <walk|dig|carry>` README text;
-  - [ ] rename `a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip` (`headless.rs:5859`) to `…_the_cut_clip`;
+  - [x] rename `a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip` (`headless.rs:5859`) to `…_the_cut_clip`;
     `the_embedded_dwarf_carries_walk_dig_and_carry_by_name` (`ingest.rs:5960`) covers all four;
   - [x] if Cut is missing from the GLB, Cut falls back to Dig. The startup line says `clip Cut ABSENT`, the
     same shape as the others.
@@ -197,8 +197,8 @@ to the seat.
     is cleared.
   - [ ] If Wolf reproduces the ghost at the seat (Task 7), file the line in #173. Do NOT fix #173 in this
     story without a red reproduction (M2-27). If a fix is found, it gets its own task with Wolf's yes.
-- [ ] **Task 6: the record.**
-  - [ ] `mutations/12-8.sh`, at least:
+- [x] **Task 6: the record.**
+  - [x] `mutations/12-8.sh`, at least:
     - Cut mapped back to Dig in `dwarf_clip` (killed by AC7's real-binary test and the headless test);
     - pick-up ungated;
     - Fast walker unscaled (if 0.3(a));
@@ -208,7 +208,7 @@ to the seat.
     - the materials line printing a constant.
 
     Commit the GLB BEFORE any row runs: `mutate.sh` does not back up `assets/` (`mutate.sh:71`).
-  - [ ] Re-point old rows the change breaks (12.5 rows on `dwarf_clip`, the `clips Walk, Dig, Carry` literal).
+  - [x] Re-point old rows the change breaks (12.5 rows on `dwarf_clip`, the `clips Walk, Dig, Carry` literal).
     Run them, and every row must be KILLED.
   - [x] README `gui` section: the Cut clip and the clip list, cut-mode pick/box/tint, the `materials=` line.
   - [x] Seat card `12-8-signoff/vehicle-card.md` in the seat's launch form (see Verification).
@@ -503,6 +503,23 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
   - Promoted alone in `b5a9e63`; the fast gate was green, and no test pinned the old asset.
   - **Joint count:** nothing under `crates/` pins it. The exporter's rig gate (missing/unexpected
     joints) is the pin, and the clips bind by name. No count assertion was added.
+- **After promotion** (Sonnet subagent):
+  - `0105b94` re-tightened what Task 3 loosened. `the_embedded_dwarf_carries_walk_dig_carry_and_cut_by_name`
+    checks `DWARF_CLIP_NAMES`; the AC7 test accepts only `clips Walk, Dig, Carry, Cut` and no STALLED
+    line at all.
+  - `c27e416` added **`CUT_OFFSET` = 0.35 m** (Wolf's round-20 ruling, `appearance.rs`).
+    `nudge_dwarf_for_cut` moves the GLB armature node (`SK_VoxelDwarf_Miner01_r17`, which carries the
+    `AnimationPlayer`, confirmed in the real binary) by `(0, 0, -0.35)` from its captured
+    `ArmatureRest` while the clip is Cut. The dwarf entity is never moved, so `drawn_at_cell` and the
+    walker are untouched. No clip channel targets that node. The nudge pops with no ease (NOTE).
+  - RED for `a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not`:
+    `left: Vec3(0, 0, -0.17516592) right: Vec3(0, 0, -0.5251659)`.
+  - AC7 real binary after it (debug): `woodcutters cut [(0, 1)] walk [(0, 1)]`; the startup line is
+    asserted as `clips Walk, Dig, Carry, Cut`.
+- **Final mutation run** (GLB committed first, `RUST_TEST_THREADS=1 scripts/mutate.sh`): **24/24 KILLED**.
+  That is all 17 rows of `12-8.sh` plus the seven re-pointed rows (12.5 x5, 12.7 row 16, 8.1).
+  - The two new rows: "CUT_OFFSET never applied" dies at `headless.rs:6086`, and "the cut nudge never
+    cleared" at `:6104` ("the nudge must clear exactly").
 - **Task 2a**: brief `src-assets/prompts/dwarf-miner-round-20.md` (`6425a40`). Tool A (re-use the
   pickaxe) or B (an axe, a 21st joint, Wolf's explicit yes) is decided at the seat.
 
