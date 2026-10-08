@@ -2521,3 +2521,18 @@ the story, and one of them is also issue #125.
   LOW; `crates/gui/src/project.rs:250`). The Fast test passes any ratio of about 1.12 or more.
 - **`report_pine_materials` and `sync_cut_tint_marks` run every frame, unmeasured (NFR6)** (acceptance, LOW;
   `crates/gui/src/project.rs:477,573`).
+
+## Deferred from: code review of 12-8-dwarves-at-work-the-cut, run 2 (2026-10-08)
+
+- **The Ramp-foliage clause of the cut-mode pick guard is untested** (acceptance + blind + edge, LOW, RAN;
+  `crates/gui/src/pick.rs:344`). `pine()` has no Ramp tile, so dropping `|| is_tree_foliage` survives the
+  test. `cut_target` treats `Ramp(TreeFoliage)` as non-tree (z+1 on an orphan ramp crown; pre-existing).
+  `Ramp(TreeFoliage)` would only come from the dig-ramp rule at `sim-core/src/lib.rs:1219`; reachability
+  unproven.
+- **`a_cut_drag_over_a_trunk_writes_one_designate_cut_at_the_trunks_level` no longer drags from a trunk**
+  (feature, LOW, RAN; `crates/gui/tests/headless.rs:5693`). Its precondition is checked in mode None; after
+  `5` the anchor is the foot `[1,1,1]`. The wire is unchanged (`[1,1,2]`: base == trunk level in that
+  fixture), so it stays green while its name and doc describe a path the trunk->foot patch removed.
+- **A trunk-anchored cut drag now slabs at the tree's base z, not the hit z** (feature, LOW, read;
+  `crates/gui/src/designate.rs:201`). It matches crown/foot anchors and the draft's "box at the cut level";
+  on a slope the single-level box misses uphill pines. Preview and wire agree. A seat question only.

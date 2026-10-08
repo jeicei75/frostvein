@@ -337,6 +337,84 @@ Dismissed (12):
 - Mode switch mid-drag (feature): a contrived input.
 - Debug-vs-release simd for the AC7 test (acceptance): a preamble error, not code.
 
+#### Code review run 2, 2026-10-08, on `679e55a` (diff `712cd48..679e55a`, the run-1 patch only)
+
+**Delta vs run 1:** 5 kept findings, all NEW to this diff. 1 is REWORK: the run-1 patch's test strengthening
+is half-closed. Severity: 0 HIGH, 0 MED, 5 LOW. **Stopping rule: no HIGH, so the static audit ENDS.** The next
+spend goes to the seat (trunk hover at the foot), not to a run 3.
+
+Four layers ran, none timed out, and cargo 1.97.1 ran in each layer's own target dir. `pick.rs` sits outside
+Blind's R1 territory, so Blind got the same code hunk without the spec rather than an empty share. Edge got
+`pick.rs` and the mutation rows, and the Opus auditors got the whole diff. Live runs:
+- The Feature Auditor drove the real `configure_client_app` in-process in a `/tmp` copy, with a window,
+  a camera at pitch 0.45, a TCP socket and `ButtonInput`:
+  - aim at the bare trunk `[5,5,2]`: the dig pick is `[5,5,3] East`; after `5` the pick is `[5,5,1] Top`
+    and the hover slab sits at `(5.0, 1.55, -5.0)`;
+  - a click sends `designate cut` at `[5,5,2]`;
+  - a drag from the trunk anchors at the foot and tints 1 pine.
+
+  Every hop from the cursor to the wire is WIRED. The sim hop was read only.
+- Edge and Acceptance re-applied both mutation rows by hand in `/tmp` copies: both were KILLED, and the
+  RED string reproduced exactly. Nobody ran `mutate.sh` or a payload.
+
+Not proven: the on-screen hover at the foot (the headless `--cursor` has no `PrimaryWindow`), and the
+#174 feel at trunk scale. Those are seat items.
+
+Wolf chose option 2: the two patches are LEFT AS ACTION ITEMS for a fresh-session patch pass. Story and board
+are `in-progress`. Review cost $12.73 over 244 turns (Opus $10.75, Sonnet $1.98; subagents 67.5% of tokens).
+`reap-build-caches.sh --tmp-only --force` reclaimed 52.0 GB. Tally: 0 decision-needed, 2 patch, 3 defer,
+7 dismissed.
+
+- [ ] [Review][Patch] **The `dig_trunk > 0` guard cannot fire, so the trunk half of the strengthened test
+  is unguarded** (acceptance, LOW, REWORK; RAN. A latent silent-failure trap, routed to patch under the frostvein
+  exception) [crates/gui/src/pick.rs:866].
+  - It counts DIG-mode hits on a trunk tile. Dig sees through the crown, so the 4 crown targets alone
+    produce 45 of them.
+  - With the trunk mutant applied AND both trunk targets removed, the test PASSES, and its message "or the
+    trunk half of this test is vacuous" never fires.
+  - Merged: `[60,60,3]` meets the trunk before any foliage on 0 of 40 rays, because the crown ring at z 4
+    comes first. Only `[60,60,2]` (37 of 40) exercises the fix, so the record's "adds rays at the bare
+    trunk `[60,60,2]` and `[60,60,3]`" (`:283`) overstates.
+  - Fix:
+    - count rays whose first TREE tile (foliage opaque) is a trunk, from an independent trace, and assert
+      that count > 0;
+    - drop or re-aim `[60,60,3]`;
+    - correct the record.
+    - Show the guard firing: the trunk mutant with the trunk targets removed must FAIL.
+- [ ] [Review][Patch] **`tree_foot`'s doc and parameter still say foliage only, and it now takes trunk
+  tiles** (acceptance, LOW; read; the stale half of a doc the patch updated for one case only)
+  [crates/gui/src/pick.rs:375-377].
+- [x] [Review][Defer] **The Ramp-foliage clause of the cut guard is untested** [crates/gui/src/pick.rs:344]
+  (acceptance + blind + edge, LOW; RAN) — deferred.
+  - `pine()` has no Ramp tile, so a mutant that drops `|| is_tree_foliage` survives.
+  - `cut_target` treats `Ramp(TreeFoliage)` as not-a-tree, so an orphan ramp crown gets z+1. That is
+    pre-existing.
+  - `Ramp(TreeFoliage)` only arises from the dig-ramp rule at `sim-core/src/lib.rs:1219`, and that path
+    has not been shown to be reachable.
+- [x] [Review][Defer] **`a_cut_drag_over_a_trunk_writes_one_designate_cut_at_the_trunks_level` no longer
+  drags from a trunk** [crates/gui/tests/headless.rs:5693] (feature, LOW; RAN) — deferred.
+  - Its precondition is checked in mode None. After `5`, `update_pick` re-picks the foot `[1,1,1]`, so the
+    anchor is the foot.
+  - The wire is the same, `[1,1,2]`, because the base is the trunk's own level in that fixture. The name
+    and doc describe a path the patch removed.
+- [x] [Review][Defer] **A trunk-anchored drag now slabs at the base z, not the hit z** [crates/gui/src/designate.rs:201]
+  (feature, LOW; read) — deferred, a design-consistent change.
+  - It now matches crown-anchored and foot-anchored drags, and the draft's "box at the cut level".
+  - On a slope, the single-level box misses uphill pines. Preview and wire agree. This is a seat question
+    only.
+
+Dismissed (7):
+- `tree_base_at` attributes a trunk to a neighbour (blind, ×2 with its fixture-gap twin), and stacked trunks
+  merge (edge). Unreachable: trunks are ≥ 3 apart Chebyshev (`sim-core/src/lib.rs:815`), so a trunk's 3×3
+  holds only its own column. Edge and Feature confirmed this.
+- The silent `tree_foot` fallback (blind): intentional and pre-existing. `cut_target` of a trunk tile is
+  itself.
+- A foot at `base-1` at z=0 (blind + edge): trees stand on ground.
+- The trunk return comes before the foliage skip (blind): blind's own verdict was "fine".
+- A one-frame pick lag on the mode key (feature): pre-existing, and invisible at 60 fps.
+- The story header said `in-progress` while the board said `review` (acceptance): corrected by this
+  review's status sync.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -674,3 +752,4 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 | 2026-10-07 | Task 0 ruled by Wolf: draft approved with tint (a) + slab, 10-tick swing, Fast walker scales (a), #173 instrument-only. |
 | 2026-10-07 | Task 0 ruled. Dev (Sonnet subagents, Opus orchestrating): #164 gating + Fast walker; Cut bound by name at 10 ticks; #174 pick/box/tint; #173 `materials=` line. Round 20 (Wolf's seat, axe, $21.59) promoted; `CUT_OFFSET` 0.35 m. Stamp narrowed to build inputs. AC7 test held 30 s (#175). 24/24 mutation rows KILLED; full gate GREEN on `f7a1649`. Seat: "1 ok 2 ok". Status review. |
 | 2026-10-08 | Review run 1 patch pass: in cut mode a trunk hit now resolves to the pine's foot (`ef5dfb0`). The crown test asserts the exact foot cell and adds trunk rays. RED first; 2/2 mutation rows KILLED; full gate GREEN on `ef5dfb0` (3344 s). |
+| 2026-10-08 | Review run 2 on the patch (`712cd48..679e55a`): 0 HIGH/MED; 2 LOW patches left as action items (the `dig_trunk` guard cannot fire, REWORK; `tree_foot` doc); 3 deferred. No run 3. Status in-progress. |
