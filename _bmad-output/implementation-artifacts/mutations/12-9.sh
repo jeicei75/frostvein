@@ -143,3 +143,53 @@ old = '                            .expect("every stone has a position") = landi
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                            .expect("every stone has a position") = pos;\n'))
 PY
+
+# Seat pass 1 (Tasks 11-12).
+mutation "15 a channel is worked from the target itself" sim-core a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''        JobKind::Channel => {
+            if terrain.is_standable(job.target) {
+                side_neighbours(job.target)
+                    .into_iter()
+                    .filter(|candidate| is_walkable(terrain, blocked, *candidate))
+                    .collect()
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''        JobKind::Channel => {
+            if terrain.is_standable(job.target) {
+                BTreeSet::from([job.target])
+'''))
+PY
+
+mutation "16 dig_yaw ignores a channel" gui a_channelling_miner_faces_the_target_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        | protocol::DwarfJob::Channel { target },\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "17 the blend moves a carried, unparented item" gui a_stone_the_wire_puts_in_his_hands_holds_its_cell_while_the_hauler_walks_in <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '.filter(|_| parent.is_none() && motion.is_none() && !carried.contains(&marker.0))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '.filter(|_| parent.is_none() && motion.is_none())'))
+PY
+
+mutation "18 the lift is instant" gui a_stone_picked_up_from_the_next_tile_rises_to_his_hands_over_a_lift <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        let progress = (motion.elapsed / LIFT_SECONDS).min(1.0);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let progress = 1.0_f32;\n'))
+PY
+
+mutation "19 release snaps to the cell" gui a_stone_released_onto_the_next_tile_is_set_down_over_a_lift <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                        ItemMotion {\n                            from,\n                            to,\n                            elapsed: 0.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                        ItemMotion {\n                            from: to,\n                            to,\n                            elapsed: 0.0,\n'))
+PY
