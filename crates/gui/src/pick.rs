@@ -372,10 +372,10 @@ fn first_visible_hit(
     None
 }
 
-/// The ground cell under the trunk of the tree this foliage cell belongs to: the cell whose
-/// `cut_target` is the tree's base. `None` for foliage no trunk reaches.
-fn tree_foot(mirror: &client_core::Mirror, foliage: [i32; 3]) -> Option<PickedCell> {
-    let [x, y, base] = tree_base_at(mirror, foliage)?;
+/// The ground cell under the trunk of the tree this tree tile (trunk or crown) belongs to: the
+/// cell whose `cut_target` is the tree's base. `None` for a tile no trunk reaches.
+fn tree_foot(mirror: &client_core::Mirror, tile: [i32; 3]) -> Option<PickedCell> {
+    let [x, y, base] = tree_base_at(mirror, tile)?;
     Some(PickedCell {
         tile: [x, y, base - 1],
         face: Face::Top,
