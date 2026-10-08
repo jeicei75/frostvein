@@ -530,6 +530,27 @@ on 26185a0 (above), and AC1's was re-shown to kill independently: row 1 applied,
 asserts compiled out) -> `489 ticks had two dwarves on one tile; first Some((2, ...))` at scenario.rs:2816. Restored.
 `scripts/audit-mutations.py`: 822 rows, every literal still matches.
 
+**Old tables Agent C re-pointed, RUN (orchestrator, on 036f43a).** C's re-pointing passed the audit but the rows
+had not been run. Running `3-3-the-haul-and-the-skeleton-walks.sh` and `12-1.sh` found 9 rows not killing:
+7 SURVIVED and 1 NO-COMPILE in 3-3, and 2 SURVIVED in 12-1. Agent D triaged each row against its own 26185a0 copy, run in
+a scratch worktree with that tree's `mutate.sh`:
+- **12.9 blinded 4 rows, all KILLED at 26185a0 and re-armed in `ca80219` (tests and table only, no production change):**
+  - `the pick-up leg ignores standability`: a new assert in `haul_work_positions_gate_...` covers a stone with no
+    floor beside standable ground.
+  - `the pick-up leg uses job.target instead of the live position`: the stale target in
+    `haul_execution_reads_the_stones_live_position_...` moved to a cell that shares no neighbour with the stone.
+  - `the drop does not move the stone`: re-pointed at delivery's `= landing` write. Its old anchor matched only
+    `release_claim`'s abnormal drop.
+  - 12-1 `drop search walks through rock`: a loose stone now seals the pocket in
+    `release_claim_drops_where_the_carrier_can_walk`.
+  All 4 KILLED after the fix.
+- **5 rows did not kill at 26185a0 either.** They are pre-existing dead rows, not caused by 12.9, and are left alone:
+  - 3-3 `free stockpile tiles ignore standability`, `the pick-up leg drops the free-tile gate` and
+    `every stone on a zone tile counts as stored`: SURVIVED.
+  - 3-3 `load_world accepts two dwarves carrying one item`: NO-COMPILE (E0282, the payload leaves a set's type
+    uninferrable).
+  - 12-1 `retry drop stacks a full stockpile`: SURVIVED.
+
 ### Completion Notes List
 
 - Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
@@ -613,3 +634,4 @@ asserts compiled out) -> `489 ticks had two dwarves on one tile; first Some((2, 
 | 2026-10-08 | Tasks 4-5 (Agent B): `SavedDwarf.path` saved and restored, AC7 and AC6 tests, pre-12.9 refusal test |
 | 2026-10-08 | Task 10 (Agent C): every uncarried item blocks; pick-up/drop from the next tile; pile fills inside out. AC10-AC12 tests, one re-pin, six old-rule tests updated |
 | 2026-10-08 | Tasks 6-7 (orchestrator): instrument `stone entries`; GREEN 0/0, deliberate RED (row 1) 145 shared, self-test exit 2; 26185a0 baseline 186 shared / 138 stone entries. `12-9.sh` 14/14 KILLED, kill sites recorded; AC1's own assert shown to kill in `--release` |
+| 2026-10-08 | Ran the two old tables Agent C re-pointed: 9 rows were not killing. 4 had been blinded by 12.9 and are re-armed in `ca80219` (tests only). 5 were already dead on 26185a0 and are left alone, recorded |
