@@ -2727,8 +2727,8 @@ impl DwarfHeadings {
             if let Some(rotation) = stepped {
                 self.0.insert(id, rotation);
             }
-            // 12.5 AC6: a dwarf swinging at a dig faces the tile he is digging. A channel is dug
-            // under his own feet, so it has nothing to face and keeps his heading.
+            // 12.5 AC6: a dwarf swinging at a dig faces the tile he is digging, a channel
+            // included (12.9: he works it from the next tile).
             if let Some(rotation) = dig_yaw(entity) {
                 self.2.insert(id, rotation);
             } else if let Some(rotation) = self.2.remove(&id)

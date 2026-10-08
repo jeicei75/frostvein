@@ -644,7 +644,15 @@ fn deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries() {
                         dwarf.id
                     );
                     if let Some(protocol::DwarfJob::Channel { target }) = job {
-                        assert_eq!(target, dwarf.pos, "a channel is dug under his own feet");
+                        // 12.9 AC13: he channels from the next tile, never from the target.
+                        let apart =
+                            target[0].abs_diff(dwarf.pos[0]) + target[1].abs_diff(dwarf.pos[1]);
+                        assert!(
+                            target[2] == dwarf.pos[2] && apart == 1,
+                            "a channel is worked from the next tile: miner {} at {:?}, target {target:?}",
+                            dwarf.id,
+                            dwarf.pos
+                        );
                     }
                     digging += 1;
                 }

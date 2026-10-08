@@ -675,7 +675,7 @@ a scratch worktree with that tree's `mutate.sh`:
   channel (before, the holder's tile was the only work position and the order stayed forever). It now asserts the designation is present OR the
   below tile is a Ramp (never vanished unworked). `headless.rs` `a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading`: only the
   step label changed (a channel aimed at his own cell has no direction); the name stays because mutation row 12-5 names it. No pinned figure
-  moved; AC1's bounds hold (all 51 scenario tests green). Mutation row `12-5.sh` "a digging dwarf no longer faces his target"
+  moved; AC1's bounds hold (all 51 scenario tests green). `simd/tests/serve.rs` `deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries` asserted `target == dwarf.pos` for a channel (the old rule; failed `[66,66,9]` vs `[66,65,9]`): it now asserts the target is a same-z 4-neighbour of the miner. Mutation row `12-5.sh` "a digging dwarf no longer faces his target"
   was re-pointed at the new five-line `dig_yaw` pattern and RUN alone (temp table in the scratchpad): KILLED.
 - Task 12 done (Agent E, gui only). One component, `ItemMotion { from, to, elapsed }`, and `advance_item_motion` (chained after
   `sync_dwarf_work`, paced by `Time::delta_secs()` like the walker; `LIFT_SECONDS = 0.3` serves the lift and the set-down; NOTE: a paused
