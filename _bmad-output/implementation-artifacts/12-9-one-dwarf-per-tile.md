@@ -1,0 +1,344 @@
+---
+baseline_commit: 26185a0
+model: claude-opus-5-5  # session default
+---
+
+# Story 12.9: One Dwarf per Tile
+
+Status: ready-for-dev
+
+## Story
+
+As the boss,
+I want dwarves to step around each other instead of through each other,
+so that my crew looks like bodies in a real place.
+
+## Not stacked: branch off `main`
+
+`main` is `26185a0` (PR #178, 12.8, merged), clean. Branch: `story-12-9-one-dwarf-per-tile`.
+Closes **#133**. #132 (12.3) is fixed, as the epic order requires. Epic 12's nine standing ACs
+(`epics.md`, "Standing acceptance criteria") bind this story and are not restated.
+**Wire diff: none.** **New saved state: `SavedDwarf.path`** (Task 4).
+
+## Found at creation (2026-10-08, on `26185a0`)
+
+**#133 reproduced in the sim and on the live wire.** A throwaway probe was run and deleted:
+
+- Idle crew, no orders, 3,000 ticks: two dwarves share a tile on **494** ticks (`DEFAULT_SEED`;
+  first at tick 2, dwarves 1 and 3 on `(65,63,9)`), **667** (seed 42) and **526** (seed 7451).
+- Busy crew on `DEFAULT_SEED`: a 4x7 channel `(65..68, 61..67, z9)` and a 3x3 pile `(59..61, 64..66, z9)`
+  at tick 0, run for 3,000 ticks. **332** shared ticks. This baseline sets AC1's bounds:
+  - marks: 25 → 0 by tick **1,112**;
+  - first stone on the pile at tick **217**, and the pile full (9) by ~1,000;
+  - **1,241** dwarf moves.
+- Live RED on a release `simd`, with the story's instrument (Verification): `shared ticks 186`,
+  `OCCUPANCY RED`.
+
+**The cause is by design.** Occupancy is not a movement rule (`lib.rs:1339-1340`). Three production
+systems write a dwarf's `Pos`, and none of them checks for other dwarves:
+
+- `execute_jobs`, the job step (`lib.rs:1124-1126`);
+- `settle` (`lib.rs:1266-1268`);
+- `wander` (`lib.rs:1351`).
+
+`spawn_dwarves` already places the five on distinct tiles (`candidates.swap_remove`, `lib.rs:2091`).
+
+**FR49's head-on rule, read per step, livelocks.** Hand-traced in a dead-end tunnel `x1..x6` (rock
+at `x7`, open ground west of `x1`):
+- Lower-id A is at `x5`, walking out. Higher-id B is at `x4`, walking in to `x6`.
+- A backs off to `x6`, and B steps to `x5`. A now has nowhere to go, so B backs off to `x4` and A
+  steps to `x5`. A has a free cell behind it again, so A backs off.
+- This repeats forever.
+
+"Nowhere to go" must therefore mean **no escape**: no free cell, reachable without passing the
+other dwarf, that lies off the other dwarf's remaining path. It cannot mean "no free neighbour this
+tick" (Key decisions).
+
+**`Path` is not saved** (`SavedDwarf`, `save.rs:30-45`). A loaded dwarf recomputes a fresh A* path.
+Two consequences:
+- A detour taken to avoid a dwarf is not what a fresh A* returns, so a world saved mid-detour
+  diverges after load.
+- A head-on test that reads the blocker's next step sees nothing after a load.
+
+Both break standing AC3, so the path joins `SaveState`.
+
+**#162 (stones never block) names 12.9 as one place to decide it** (its option 3). Task 0 Q3.
+
+## Acceptance Criteria
+
+1. **RED first.** A scenario test on `DEFAULT_SEED` places 12.9's channel and pile (the busy crew
+   above) and runs 3,000 ticks. It asserts that **no tick** has two dwarves on one tile. It is red
+   on `26185a0`, and the red is recorded. It also asserts the crew still works:
+   - all 25 channel marks are cleared by tick **2,500**;
+   - a stone is on the pile by tick **600**;
+   - dwarf moves are at least **600**.
+2. Spawn places the five dwarves on distinct tiles for every seed in `0..64`. This guard is green
+   on `26185a0`.
+3. **Head-on, both orientations.** Two miners meet head-on in a one-wide dead-end tunnel that opens
+   onto open ground at one end. Each holds a job whose work position lies past the other. There are
+   two fixtures:
+   - **(a)** the lower id is nearer the open end;
+   - **(b)** the lower id is nearer the dead end, and the higher id's work position is the tunnel's
+     last cell. The lower then has no escape, and the other must back off.
+
+   In each fixture, both reach their work positions and complete their jobs within a tick bound the
+   test names. No tick has them on one tile, and neither job is released.
+4. **Settle.** A dwarf falls onto a tile another dwarf stands on (overhang dug over a cave). It
+   comes to rest on a free standable tile within 3 ticks of the support's removal. No tick has two
+   dwarves on one tile.
+5. **Dig-face access.** An idle dwarf stands on the only work position of a dig at the end of a
+   one-wide dead-end tunnel. A miner holds that dig. The dig completes within a tick bound the test
+   names, and no tick has two dwarves on one tile.
+6. **Occupancy never makes a job unreachable at claim time.** A dwarf stands in the only passage to
+   a reachable job. The job is still claimed after its reaction delay and completed. Its
+   `retry_after` is never stamped.
+7. **Save → load → tick N ≡ never-saved → tick N** holds for a world saved while a dwarf follows a
+   path that a fresh A* from its position would not return (a detour or a back-off). The test
+   asserts that precondition. A pre-12.9 save is refused, per Task 0 Q2.
+8. These existing guards stay green, unchanged in intent:
+   - the walking skeleton (`scenario.rs:1036`);
+   - 12.3's `unreachable_digs_never_starve_a_reachable_one` (`scenario.rs:723`) and
+     `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on` (`scenario.rs:845`);
+   - #74's `a_dwarf_never_stands_in_a_fire` (`lib.rs:4707`);
+   - `save_load_then_tick_matches_never_saved` (`save_load.rs:10`).
+
+   Any pinned figure that moves is re-pinned, and the move is disclosed in the commit and in
+   Completion Notes.
+9. The live instrument (Task 6) reads `OCCUPANCY OK` on the fixed build and `OCCUPANCY RED` with a
+   mutation applied. #133 closes with AC1's red-then-green record.
+
+## Tasks / Subtasks
+
+- [ ] **Task 0: Wolf rules** (record each answer in the Change Log). The recommended option is first.
+  - **Q1.** In a dead end, an idle dwarf on the mover's next tile may have no free cell off the
+    mover's path (AC5's case). (a) **The two swap tiles.** This is the only swap in the story, and
+    the gui draws them passing once. (b) The mover backs out of the tunnel and the idle dwarf
+    follows. That needs multi-step state for an idle dwarf.
+  - **Q2.** Pre-12.9 saves have no `path`. (a) **Refuse them.** No `#[serde(default)]`, matching
+    identity, profession and item kind. A 12.4–12.8 save can also hold two dwarves on one tile.
+    (b) Default to an empty path.
+  - **Q3.** #162, stones never block. (a) **Not folded.** It stays its own issue: a stone that
+    blocks conflicts with picking up and dropping on a pile. (b) Fold it in.
+  - **Q4.** Seat look after the gate. (a) **Yes, about 5 minutes.** #133 was reported at the
+    seat, and back-off reads as feel. (b) No: scenario tests and the wire instrument only.
+- [ ] **Task 1: RED first (AC1, AC3, AC4, AC5).**
+  - Add the AC1 test to `crates/sim-core/tests/scenario.rs`. Put the vacuity asserts (marks cleared,
+    pile, moves) **last**, so a frozen-crew mutant dies on them and not on the occupancy assert.
+  - Add the AC3 (a)/(b), AC4 and AC5 tests. These are fixtures, so `lib.rs` `mod tests` is fine;
+    `stand_miners_at` (`lib.rs:3670`) and `insert_dig` (`:3686`) already exist.
+  - Run them on unfixed code and paste each failing assertion into the Debug Log. Each fails on its
+    shared-tile assert, because today the dwarves walk through each other.
+  - Add the AC2 guard (green now).
+- [ ] **Task 2: occupancy in every writer.**
+  - One helper answers "is this tile free of other dwarves", from a `BTreeSet<Pos>` of live dwarf
+    positions. `execute_jobs`, `settle` and `wander` each build that set once and update it as each
+    dwarf moves, in ascending `Id` order (AD-7).
+  - `wander` drops occupied candidates. Replace the NOTE at `lib.rs:1339-1340`.
+  - `settle`: if `below` holds a dwarf, the faller comes to rest on the nearest free walkable tile.
+    Use a breadth-first search from `below` over `astar_neighbours`, in the shape of
+    `release_claim`'s drop search (`lib.rs:975-997`). If no free tile exists, it stays put this tick
+    (`// NOTE:`; 12.11 owns "no dwarf on air").
+  - Add `debug_assert!` that no two dwarves share a tile, at the end of `World::step`. It turns
+    every existing scenario test into an occupancy check.
+- [ ] **Task 3: the blocked step** (`execute_jobs`, the step branch `lib.rs:1095-1134`). The
+  recommended shape is in Key decisions. When a holder's next tile holds another dwarf:
+  1. **The blocker is idle** (`CurrentJob(None)`). It steps to a free walkable neighbour that is
+     not on the holder's remaining path, in fixed `astar_neighbours` order. Its wander `cooldown`
+     becomes `STEP_REST_TICKS` and its `home` becomes the new tile. If it has no such neighbour, the
+     two swap tiles (per Q1). The holder then steps.
+  2. **The blocker holds a job.** Re-route with A* to the holder's goals, with every other dwarf's
+     tile added to `blocked`. If a path exists, store it and step.
+  3. **Head-on.** The blocker's `Path` starts with the holder's tile. Compute each side's escape.
+     The lower id yields if it has an escape; otherwise the other yields. The yielder's `Path`
+     becomes its route to the escape, and it takes the first step.
+  4. Otherwise wait. Hold position, set `JobState::Walk`, and set the wander cooldown to
+     `STEP_REST_TICKS`, so a blocked dwarf searches once per step period and not every tick.
+- [ ] **Task 4: save the path (AC7).**
+  - `SavedDwarf` gains `pub path: Vec<Pos>`, with no `#[serde(default)]` (per Q2). `to_save` writes
+    it (`lib.rs:1501`), and `from_save` inserts `Path` when it is non-empty (`lib.rs:1593-1617`).
+  - Fix the `SavedDwarf` literals at `save_load.rs:483,498` and `scenario.rs:1495,1510`.
+  - Add the AC7 test to `crates/sim-core/tests/save_load.rs`. Compare `dwarves()`, `claims()` and
+    `jobs()` on every tick. Check that `save_load_recomputes_every_path_invalidated_by_another_dig`
+    (`save_load.rs:460`) still holds.
+- [ ] **Task 5: guards (AC6, AC8).**
+  - Add the AC6 test.
+  - Run `cargo test -p sim-core` and `cargo test -p simd`. Occupancy changes how many cells `wander`
+    can choose from, so every later RNG draw moves.
+  - Re-pin a moved figure only after confirming that the move is occupancy and not a defect. Say so
+    beside the pin and in the commit.
+- [ ] **Task 6: instrument (AC9).** `12-9-signoff/occupancy_wire.py` (NEW at creation; RED recorded
+  in Verification).
+  - It reads every delta from a fresh daemon running the busy-crew orders at fast4x. It counts
+    shared ticks, and it range-checks five dwarves per delta, more than 200 moves, marks cleared and
+    a stone on the pile.
+  - Run it three times, and paste all three outputs into the Debug Log:
+    - GREEN on the fixed build;
+    - deliberate RED: apply 12-9.sh row 1 (`wander` ignores occupancy), rebuild a release `simd`, and
+      expect `OCCUPANCY RED`; then restore;
+    - instrument self-test: apply row 7 (no dwarf ever steps), rebuild, and expect exit 2,
+      `CREW DID NOT WORK`. A frozen crew shares nothing, and the instrument must not call that
+      green.
+- [ ] **Task 7: mutations.** Create `_bmad-output/implementation-artifacts/mutations/12-9.sh` (NEW).
+  Run it alone, after commit, with `RUST_TEST_THREADS=1 scripts/mutate.sh`. Read the kill line for
+  every row.
+  1. `wander` ignores occupancy → AC1.
+  2. The job step ignores occupancy → AC1, AC3.
+  3. `settle` ignores occupancy → AC4.
+  4. The per-step flip rule: the lower id yields whenever it has any free neighbour → AC3(b) times
+     out (the livelock).
+  5. The higher id never yields → AC3(b).
+  6. An idle blocker never makes way (the holder waits) → AC5.
+  7. No dwarf ever steps → AC1's vacuity asserts. This is also the instrument self-test.
+  8. `to_save` drops `path` → AC7.
+  9. Occupied tiles join claim-time `blocked` in `claim_jobs` → AC6.
+
+  `74-dwarves-path-through-fire.sh` row 2 anchors on `wander`'s `is_walkable` line, so re-point it
+  if Task 2 edits that line. `scripts/audit-mutations.py` reports rot.
+- [ ] **Task 8: record.**
+  - The PR body says `Closes #133` and nothing else for #133. A closing keyword shuts the whole
+    issue.
+  - Resolve #162 per Q3 (a comment, if not folded).
+  - Run the full gate, `RUST_TEST_THREADS=1 scripts/gate.sh`, and get it green before review.
+- [ ] **Task 9: seat look (per Q4).** Use a short vehicle card in `12-9-signoff/` in the canonical
+  launch form. Wolf drags the channel and pile and watches the crew at Normal and at Fast: no two
+  dwarves overlap, and blocked dwarves step aside or back off. Record his words.
+
+## Dev Notes
+
+### Scope guardrails (do NOT)
+
+- Do not change `claim_jobs`, its filter, or claim-time reachability (AD-12). Occupancy is a
+  step-time rule. A dwarf in a doorway at claim time would otherwise stamp a 20-tick cooldown, and
+  `components` would record a false split (12.3). AC6 and mutation 9 pin this.
+- Do not put other dwarves into `is_walkable` or `blocked_cells` globally. Those are the terrain
+  and fire rule (#74), and both A* and claim reachability read them. Add dwarf tiles only to the
+  blocked set of the step-time re-route.
+- No new pathfinder, cost function, reservation table or cross-tick cache (AD-5). Plain A* with an
+  enlarged `blocked` set is the re-route.
+- No new component or resource holding wait counters or "yielding" flags. The yield lives in the
+  saved `Path`. If a design needs more, it goes into `SaveState` with a test, and the reason goes in
+  Completion Notes.
+- No wire, `protocol`, `client-core`, `tui` or `gui` change. The tui crowd glyph
+  (`tui/src/view.rs:345-360`, `palette.rs:181`) stays: it is client rendering of whatever the wire
+  says.
+- Items do not block (#162, per Q3). Falling items and "no dwarf on air" are 12.11.
+
+### What already exists (build on it)
+
+- `is_walkable` and `blocked_cells` (`lib.rs:683-698`) are the one terrain-and-fire rule for every
+  writer. #74's `a_dwarf_never_stands_in_a_fire` (`lib.rs:4707`) tests the running world, not one
+  writer. Follow that shape for AC1.
+- `astar(terrain, blocked, from, goals)` (`lib.rs:802`) already takes a blocked set. Pass
+  `emitters ∪ other dwarves` for the re-route.
+- `release_claim`'s drop search (`lib.rs:975-997`) is the breadth-first "nearest free cell" shape
+  for `settle`. Its home reset (`lib.rs:1024-1027`) is why a displaced idle dwarf's `home` must
+  move too.
+- Step pacing: `Wander.cooldown` paces both walkers (`lib.rs:1108-1129`), and `STEP_REST_TICKS`
+  (`:42`) is the step period, 11 ticks per cell.
+- The gui's walk phase advances by ground covered (`gui/src/project.rs:390-401`), so a waiting
+  dwarf freezes mid-stride rather than walking on the spot. No gui change is needed.
+
+### Key decisions & traps
+
+- **Escape.** A dwarf's escape is the nearest tile reached by a breadth-first search over walkable
+  tiles, with every other dwarf's tile blocked, that is not on the other dwarf's remaining `Path`.
+  - Escapes are what keep the yield stable. As the yielder retreats, its escape gets nearer, and the
+    other dwarf never gains one by advancing into tiles on the yielder's path. That is why fixture
+    (b) resolves rather than flipping.
+  - Bound the search at `MAX_ASTAR_NODES`.
+  - If neither dwarf has an escape (both sealed in one pocket), both wait. Leave a `// NOTE:`.
+- **The yield is the path.** A yielder's `Path` becomes its escape route.
+  - The other dwarf then sees a non-head-on job holder ahead of it, so it waits or follows.
+  - When the yielder arrives, its path is empty, so `execute_jobs` recomputes A* to its goals
+    (`lib.rs:1100-1106`) and it resumes.
+  - `clear_paths` on any dig re-derives all of this from saved state, so no flag is needed.
+- **Process order is ascending `Id`**, and each writer updates its occupied set as dwarves move. A
+  blocker processed later in the same tick is judged by its previous-tick `Path`. That is
+  deterministic and save-exact, because `Path` is saved.
+- **Never strand a displaced idle dwarf.** `wander` only accepts tiles within `WANDER_RADIUS` of
+  `home`. If a dwarf is pushed 5 or more tiles out, it never moves again (`release_claim` NOTE,
+  `lib.rs:1014-1019`). So moving `home` with it is required.
+- **A displaced idle dwarf must not also wander in the same tick.** Its cooldown is reset, or
+  `wander` (which runs after) moves it a second cell, and it is drawn jumping.
+- **Re-pins are expected and must be disclosed.** Occupancy changes `wander`'s candidate count, so
+  the RNG draws, and with them every idle trajectory after the first avoided collision, change.
+  9.4's review graded "the record said a pin was not at risk when it had moved" as HIGH.
+- **Tick cost (NFR2).** Re-routes and escapes run only on a blocked step, at most once per step
+  period per dwarf. That is at most 5 × `MAX_ASTAR_NODES` a tick, the same order as `claim_jobs`.
+  12.3 measured ~0.16 s/tick (debug) at a full burn. Keep AC1's loop bounded by its tick numbers.
+- **Put the vacuity asserts last** (12.3 trap 1). A mutant that freezes the crew must die on "the
+  crew still works", not on the occupancy assert it trivially passes.
+
+### Verification (recipe; the RED half was run at creation on `26185a0`)
+
+```bash
+cargo build -q --release -p simd
+./target/release/simd 7491 >/dev/null 2>&1 &            # FRESH daemon, DEFAULT_SEED (camp [64,64,9])
+sleep 2
+python3 _bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py 7491 1500; echo "exit $?"
+pkill -x simd
+#   RED (observed, 26185a0, 2026-10-08):
+#     camp [64, 64, 9] channel [65, 61, 9]..[68, 67, 9] pile [59, 64, 9]..[61, 66, 9]
+#     ticks read 1479  deltas without exactly 5 dwarves 0
+#     shared ticks 186  max dwarves on one tile 2  first shared (101, {(65, 62, 9): [1, 3]})
+#     dwarf moves 551  channel marks 25 -> 0  items on the pile 9
+#     OCCUPANCY RED                                   exit 1
+#   GREEN (required): shared ticks 0, max dwarves on one tile 1, moves >= 200, marks -> 0,
+#     items on the pile > 0, OCCUPANCY OK, exit 0
+#   Deliberate RED (required): 12-9.sh row 1 applied, release simd rebuilt -> OCCUPANCY RED, exit 1
+#   Instrument self-test (required): row 7 applied -> CREW DID NOT WORK, exit 2
+```
+
+Restart the daemon before every run, because the recipe is pinned to a fresh world. Exit 0 is not a
+result; the `shared ticks` and `dwarf moves` lines are. `RUN PROVES NOTHING` (exit 2) means too few
+ticks were read, or a delta lacked five dwarves. Fix the run before reading anything else.
+
+### Project Structure Notes
+
+- `crates/sim-core/src/lib.rs`: UPDATE. Changes: `execute_jobs` blocked step; `settle`; `wander`;
+  the occupancy helper, escape and re-route; the `World::step` debug assert; `to_save`/`from_save`
+  path. Tests for AC3–AC6.
+- `crates/sim-core/src/save.rs`: UPDATE (`SavedDwarf.path`)
+- `crates/sim-core/tests/scenario.rs`: UPDATE (AC1, AC2; `SavedDwarf` literals)
+- `crates/sim-core/tests/save_load.rs`: UPDATE (AC7; `SavedDwarf` literals)
+- `_bmad-output/implementation-artifacts/mutations/12-9.sh`: NEW.
+  `mutations/74-dwarves-path-through-fire.sh`: UPDATE if re-pointed.
+- `_bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py`: NEW (at creation).
+  `12-9-signoff/vehicle-card.md`: NEW, per Q4.
+
+### Previous story intelligence
+
+- 12.3: `claim_jobs` keeps a per-call list of flooded components (`lib.rs:494`), and occupancy at
+  claim time would poison it. Keep the step and the claim apart. Its AC tests were slow while red,
+  so keep tick loops bounded by the AC numbers.
+- 12.8 (#164): the gui gates a pick-up on the drawn body reaching its wire tile. A dwarf that waits
+  keeps its wire tile, so nothing changes there. The Q1 swap is the only case that draws two bodies
+  crossing.
+- The full gate is green only at `RUST_TEST_THREADS=1` (about 55 min). Run `mutate.sh` alone.
+
+### References
+
+- `epics.md` Epic 12, Story 12.9 and the order rules ("#132 is fixed before #133"). M3 deltas:
+  "AD-5 (plain A\*) stands for FR49"; AD-7 "FR49's tie-break is by entity id".
+- PRD `prd-frostvein-2026-09-28/prd.md:111` (FR49), and `reconcile-inputs.md` §1.1 (the tie-break
+  gap and the three edge cases). `review-rubric.md:30` covers the NFR2 tick-cost watch.
+- Issues #133 and #162. Issue #74 and `mutations/74-dwarves-path-through-fire.sh` give the
+  one-rule-every-writer shape.
+- Story 12.3 (`12-3-no-dwarf-stuck-after-digging.md`): components, budgets and the bounded-test
+  discipline.
+
+## Dev Agent Record
+
+### Agent Model Used
+
+### Debug Log References
+
+### Completion Notes List
+
+### File List
+
+## Change Log
+
+| Date | Change |
+| --- | --- |
+| 2026-10-08 | Story created on `26185a0`. #133 reproduced: sim probe (494/3,000 idle ticks shared on `DEFAULT_SEED`, 332 busy) and live wire (`occupancy_wire.py`, 186 shared ticks, `OCCUPANCY RED`). The per-step head-on rule was traced to a livelock, and the escape rule replaces it. `Path` joins `SaveState`. Task 0 (Q1–Q4) is open |
