@@ -199,7 +199,7 @@ A carried item occupies no tile, which is unchanged.
     can choose from, so every later RNG draw moves.
   - Re-pin a moved figure only after confirming that the move is occupancy and not a defect. Say so
     beside the pin and in the commit.
-- [ ] **Task 10: stones block (#162, AC10–AC12). Do this after Task 5 and before Task 6.**
+- [x] **Task 10: stones block (#162, AC10–AC12). Do this after Task 5 and before Task 6.**
   - `blocked_cells` takes emitters **and every uncarried item's tile**, so A*, `wander`, claim
     reachability and the drop search all see items through the one rule (#74's shape). Every caller
     passes both. `execute_jobs` must not use a once-per-call set for items. A pick-up, a drop or a
@@ -460,6 +460,21 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
   and `wander` follows a `Path` only when the cooldown reaches 0, so a 10,000-tick rest stalls the follow.
   No real dwarf rests that long (`WANDER_REST_TICKS` is small), so it is the fixture's artefact. Cooldown 40 outlasts the claim and the test passes.
 
+**Task 10 REDs (Agent C), on the unfixed movement code (items not blocking):**
+
+- AC1+AC10 `a_busy_crew_never_shares_a_tile_and_still_works` (`scenario.rs`, new assert before the vacuity asserts):
+  `404 dwarf moves entered an item's cell; first (tick, dwarf, from, to) Some((112, 1, (67,66,9), (66,66,9)))`.
+- AC10 corridor `a_dwarf_with_a_goal_past_a_stone_in_a_corridor_goes_round_it` (`lib.rs`):
+  `the miner stood in the stone's cell at ticks [123, 124, ..., 133]`.
+- AC11 `a_hauler_picks_up_and_drops_from_the_next_tile`:
+  `tick 229: the hauler picked up from (10,20,5), not a 4-neighbour of (10,20,5)`.
+- AC12 `a_3x3_pile_fills_from_the_inside_out`: `centre filled at 1071 but edge (17,19,5) at 290`.
+- (A first AC11 draft failed with "never picked up" because `watch` returned at once on an empty job list and only dwarf 0 was
+  tracked; fixed in the test, not the code.)
+
+**Task 10 measured (green):** AC1 marks cleared t=1,205 (bound 2,500; baseline 1,112), first stone on pile t=228 (600),
+moves 1,213 (600): all hold. AC12 pile full at tick 1,257 (named bound 2,000), centre at 212. No deadlock in the AC1 crew.
+
 ### Completion Notes List
 
 - Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
@@ -496,6 +511,26 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
 - The pre-12.9 refusal test lives in `simd` (`serde_json` is simd's dependency, sim-core has none).
 - Not done (not mine): `occupancy_wire.py` shows as modified in the working tree; it was not touched here
   and is not staged.
+- Task 10 done (Agent C). `blocked_cells` now = emitters + every uncarried item's tile in claim_jobs, execute_jobs (rebuilt per
+  dwarf), wander (carried items excluded), settle, release_claim's drop search and the Task 3 helpers (their `emitters` param renamed
+  `blocked`). `PlaceStockpile` still uses emitters only (a stockpile may be placed over a loose stone). New: `pile_targets`
+  (free pile cells by BFS depth), `drop_cell` (deepest free adjacent cell, lowest Pos), `world_blocked`, `side_neighbours`.
+  `work_positions`: Dig/Cut via `is_walkable`; pick-up = walkable 4-neighbours of the item; delivery = walkable 4-neighbours of
+  the deepest free pile cells. Delivery lands the stone on `drop_cell`; release_claim keeps its own-tile drop (NOTE).
+  Two additions beyond the text, both needed for AC10: execute_jobs re-plans when a stored path's next tile became an item
+  (a delivery changes no terrain, so clear_paths never runs), and wander drops an idle exit path whose next tile became an item.
+  `settle` does not land a faller on an item cell (nearest free tile instead; with none it hangs, 12.11).
+- **Intended changes to old-rule tests (disclosed):** `haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile` (goal
+  sets are now neighbours, `blocked` carries the items); `a_haul_walks_picks_up_walks_and_drops_in_two_work_runs` (first walk
+  1 step not 2); `pickup_sets_carrying_...` (hauler stands on cell(1), not the stone); `release_claim_drops_where_the_carrier_can_walk`
+  (second pile cell now free, since a full cell walls the pocket; drop expected at pocket[1]);
+  `claimed_dwarf_settles_before_moving_from_newly_unsupported_ground` (a free landing tile added, faller does not land on the dig's stone);
+  scenario `two_deep_dig_advances_from_the_exposed_face` (a one-cell pile added and loop 500 -> 1,500: the outer stone blocks the
+  one-wide tunnel until hauled; final asserts: stone on pile and at inner).
+- **Re-pin:** scenario `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire` "full by" 2,000 -> 2,500. Measured on the
+  old and new code: old 24/24 on the pile at t=2,000, new 21 at 2,000 and 24 at ~2,250, then no further pick-up. Cause: items block
+  and deliveries go deepest-first; not a defect.
+- Results: `cargo test -p sim-core` (75+13+50+19 green), `-p simd` with RUST_TEST_THREADS=1 (23 + serve 72), `-p tui`, `-p gui`: all green, no client change.
 
 ### File List
 
@@ -505,6 +540,7 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
 - `crates/sim-core/tests/save_load.rs` (guard re-pin; AC7 test; `path` on the two `SavedDwarf` literals)
 - `crates/sim-core/src/save.rs` (`SavedDwarf.path`, no longer `Copy`)
 - `crates/simd/src/main.rs` (pre-12.9 save refusal test)
+- Task 10: `crates/sim-core/src/lib.rs` (blocking items, pile depth, drop cell, fixtures AC10 corridor / AC11 / AC12), `crates/sim-core/tests/scenario.rs` (AC10 assert, two disclosed test changes)
 
 ## Change Log
 
@@ -514,3 +550,4 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
 | 2026-10-08 | **Task 0 ruled (Wolf).** Q1 (b): no swap; the idle dwarf gets an exit `Path` and the miner backs out (AC5 and Task 3.1 amended, mutation row 10 added). Q2: refuse pre-12.9 saves ("old saves are not important"). Q3 (b): **#162 folded in**. Every uncarried item blocks, on pile cells too ("taken pile cells should be impassable"), confirmed over the rec to split it into its own story. Pick-up and drop from the next tile, pile fills inside out: AC10–AC12, Task 10, rows 11–14, instrument `stone entries`. Q4 (a): seat look. Dev mode: Sonnet 5.5 subagents |
 | 2026-10-08 | Tasks 1-3 (Agent A): RED fixtures AC1-AC5, occupancy in `execute_jobs`/`settle`/`wander`, blocked step with escape/yield, idle exit path, no swap. One re-pin (`save_load` guard 600 -> 1,000) |
 | 2026-10-08 | Tasks 4-5 (Agent B): `SavedDwarf.path` saved and restored, AC7 and AC6 tests, pre-12.9 refusal test |
+| 2026-10-08 | Task 10 (Agent C): every uncarried item blocks; pick-up/drop from the next tile; pile fills inside out. AC10-AC12 tests, one re-pin, six old-rule tests updated |

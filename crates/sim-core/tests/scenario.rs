@@ -93,7 +93,10 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
     for tick in 0..4_000 {
         world.step();
         let carrying = world.carrying();
-        if tick >= 2_000 {
+        // 12.9 Task 10 (#162) re-pin 2,000 -> 2,500: items block and a pile fills deepest-first, so
+        // the hauls take longer. Measured: 24 of 24 cells full by t~2,250 (was by t=2,000); it
+        // then stays full with no further pick-up. Cause is the intended rule, not a defect.
+        if tick >= 2_500 {
             pickups_after_full += previous
                 .iter()
                 .zip(&carrying)
@@ -112,7 +115,7 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
     assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
     assert!(
         emitter_zones.is_empty() && pickups_after_full == 0,
-        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2000: {pickups_after_full} (expected 0)"
+        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2500: {pickups_after_full} (expected 0)"
     );
     let zones = world.zones();
     let filled: BTreeSet<Pos> = world
@@ -1187,12 +1190,26 @@ fn two_deep_dig_advances_from_the_exposed_face() {
     ] {
         assert!(world.set_tile(sealed, Tile::Solid(Material::Stone)));
     }
+    // 12.9 Task 10 (#162), intended change: the outer dig's stone blocks the one-wide tunnel
+    // until it is hauled, and without a pile the dig would stop there (FR8 never-drop). So a
+    // one-cell pile stands beside the tunnel's mouth, and the inner dig now waits for the haul.
+    let pile = [-1, 1]
+        .into_iter()
+        .map(|dy| Pos {
+            y: worker.y + dy,
+            ..worker
+        })
+        .find(|cell| is_standable(&world, *cell))
+        .expect("open ground beside the worker for the pile");
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(outer, inner),
     });
 
-    for _ in 0..500 {
+    for _ in 0..1_500 {
         world.step();
         if world.tile(inner) == Some(Tile::Empty) {
             break;
@@ -1201,7 +1218,8 @@ fn two_deep_dig_advances_from_the_exposed_face() {
 
     assert_eq!(world.tile(outer), Some(Tile::Empty));
     assert_eq!(world.tile(inner), Some(Tile::Empty));
-    assert!(world.items().iter().any(|(_, pos)| *pos == outer));
+    // The outer stone was hauled out of the way (the pile is full); the inner one lies where dug.
+    assert!(world.items().iter().any(|(_, pos)| *pos == pile));
     assert!(world.items().iter().any(|(_, pos)| *pos == inner));
 }
 
@@ -2714,6 +2732,20 @@ fn a_cut_against_a_full_cap_is_refused_and_adds_no_mark() {
     );
 }
 
+fn uncarried_item_tiles(world: &World) -> BTreeSet<Pos> {
+    let carried: BTreeSet<u32> = world
+        .carrying()
+        .into_iter()
+        .filter_map(|(_, item)| item)
+        .collect();
+    world
+        .items()
+        .into_iter()
+        .filter(|(id, _)| !carried.contains(&id.0))
+        .map(|(_, pos)| pos)
+        .collect()
+}
+
 // 12.9 AC1 (#133): the busy crew of the story's Found-at-creation probe -- a 4x7 channel east of
 // the fire and a 3x3 pile west of it -- run for 3,000 ticks with no two dwarves ever on one tile.
 // Red on 26185a0 (332 shared ticks). The vacuity asserts come LAST so a mutant that freezes the
@@ -2750,10 +2782,19 @@ fn a_busy_crew_never_shares_a_tile_and_still_works() {
     let mut moves = 0_usize;
     let mut marks_cleared_at = None;
     let mut first_stone_on_pile = None;
+    // AC10: where each uncarried item lay at the end of the previous tick.
+    let mut previous_items = uncarried_item_tiles(&world);
+    let mut item_entries = Vec::new();
     for _ in 0..3_000 {
         world.step();
         let tick = world.tick();
         let now: Vec<Pos> = world.dwarves().iter().map(|(_, pos, ..)| *pos).collect();
+        for (dwarf, (after, before)) in now.iter().zip(&previous).enumerate() {
+            if after != before && previous_items.contains(after) {
+                item_entries.push((tick, dwarf, *before, *after));
+            }
+        }
+        previous_items = uncarried_item_tiles(&world);
         if now.iter().collect::<BTreeSet<_>>().len() != now.len() {
             shared_ticks.push((tick, now.clone()));
         }
@@ -2778,8 +2819,14 @@ fn a_busy_crew_never_shares_a_tile_and_still_works() {
         shared_ticks.len(),
         shared_ticks.first()
     );
-    // AC10 (Task 10, #162): "no dwarf enters a cell holding an item" goes HERE, before the
-    // vacuity asserts. Not written yet.
+    // AC10 (#162): no dwarf move lands on a tile that held an uncarried item at the end of the
+    // previous tick.
+    assert!(
+        item_entries.is_empty(),
+        "{} dwarf moves entered an item's cell; first (tick, dwarf, from, to) {:?}",
+        item_entries.len(),
+        item_entries.first()
+    );
 
     // Vacuity: the crew still works.
     assert!(
