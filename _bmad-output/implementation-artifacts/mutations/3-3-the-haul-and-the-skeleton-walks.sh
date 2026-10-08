@@ -157,11 +157,13 @@ PY
 mutation "the drop does not move the stone" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            *ecs.get_mut::<Pos>(stone)
-                .expect("every stone has a position") = drop_pos;
+# Re-pointed 2026-10-08 (12.9): a normal delivery now lands the stone at `landing` (`drop_cell`);
+# the `drop_pos` write left in `release_claim` is only the abnormal-exit drop.
+old = '''                        *ecs.get_mut::<Pos>(stone)
+                            .expect("every stone has a position") = landing;
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let _ = drop_pos;\n'))
+p.write_text(s.replace(old, '                        let _ = landing;\n'))
 PY
 
 mutation "the drop removes a designation at job.target" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'

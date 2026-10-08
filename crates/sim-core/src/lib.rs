@@ -3239,6 +3239,23 @@ mod tests {
             "a stone on unstandable ground has no work position"
         );
 
+        // 12.9: the stone's NEIGHBOURS are now the work positions, so a stone whose own floor is
+        // gone while its neighbours' floors stand is the case only the pick-up leg's own standable
+        // gate can refuse (the `sunken` stone above has no walkable neighbour either way).
+        let mut holed = flat_terrain(5, 1);
+        assert!(holed.set_tile(
+            Pos {
+                z: standing.z - 1,
+                ..standing
+            },
+            Tile::Empty
+        ));
+        let holed_blocked: BTreeSet<Pos> = reachable.values().copied().collect();
+        assert!(
+            super::work_positions(&holed, &holed_blocked, &zones, &reachable, job, None).is_empty(),
+            "a stone whose floor is gone has no work position even beside standable ground"
+        );
+
         // The pile itself holding a stored stone leaves both legs empty.
         let occupied = BTreeMap::from([(12, standing), (13, pile)]);
         assert!(
@@ -3392,8 +3409,12 @@ mod tests {
         let mut world = World::generate(42, Dims::DEFAULT);
         let cell = corridor(&mut world);
         let stone = cell(1);
-        let stale = cell(3);
+        // 12.9: the work positions are the stone's NEIGHBOURS, so a stale target two tiles from the
+        // stone (cell 3) still shared a neighbour with it (cell 2) and a pick-up from the target's
+        // neighbours looked right. Cell 4 shares none: a hauler sent there lifts the stone from
+        // two or more tiles away and the stone jumps.
         let pile = cell(4);
+        let stale = pile;
         world
             .ecs
             .spawn((super::Item(super::ItemKind::Stone), super::Id(12), stone));
@@ -3635,8 +3656,9 @@ mod tests {
         // dwarf can reach it without a ramp.
         //
         // 12.9 Task 10 (#162), intended change: items block, so a second full pile cell now
-        // WALLS the pocket (the old test searched through it). The second cell is therefore
-        // free; the intent -- the drop is where the carrier can walk -- is unchanged.
+        // WALLS the pocket (the old test searched through it). That left pocket[1] the only
+        // answer, which a search through rock finds too, so pocket[1] now holds a loose stone and
+        // the carrier is sealed in; the intent -- the drop is where the carrier can walk -- is unchanged.
         let mut world = World::generate(42, Dims::DEFAULT);
         let p = world.dwarves()[0].1;
         let pocket = [p, Pos { y: p.y + 1, ..p }, Pos { y: p.y + 2, ..p }];
@@ -3667,6 +3689,14 @@ mod tests {
             super::Id(13),
             pocket[0],
         ));
+        // 12.9: a loose stone on the pocket's second cell walls the carrier in (items block), so
+        // nothing is reachable. A search that walks through rock would still find the wall tops
+        // and the cells behind the rock; the right answer is to keep the stack on its own tile.
+        world.ecs.spawn((
+            super::Item(super::ItemKind::Stone),
+            super::Id(14),
+            pocket[1],
+        ));
         let entity = world
             .ecs
             .iter_entities()
@@ -3683,7 +3713,10 @@ mod tests {
             .find(|(id, _)| *id == super::Id(12))
             .unwrap()
             .1;
-        assert_eq!(dropped, pocket[1], "the drop must be inside the pocket");
+        assert_eq!(
+            dropped, pocket[0],
+            "walled in, the stack stays on the carrier's own tile and never leaves the pocket"
+        );
     }
 
     #[test]
