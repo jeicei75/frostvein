@@ -47,9 +47,19 @@ PY
 mutation "cut-mode crown fall-through restored" gui in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
-old = '            if cut {\n                return Some(tree_foot('
+old = '            if cut && (is_tree_tile(mirror, world) || is_tree_foliage(mirror, world)) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if false && cut {\n                return Some(tree_foot('))
+p.write_text(s.replace(old, '            if false && cut && (is_tree_tile(mirror, world) || is_tree_foliage(mirror, world)) {\n'))
+PY
+
+# Review run 1 patch: in cut mode a trunk hit reached the pick as itself with a side face. This
+# puts back exactly the pre-patch foliage-only guard.
+mutation "cut-mode trunk hit keeps its side face" gui in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
+old = '            if cut && (is_tree_tile(mirror, world) || is_tree_foliage(mirror, world)) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if cut && is_tree_foliage(mirror, world) {\n'))
 PY
 
 mutation "the box filtered back to trees" gui the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style <<'PY'

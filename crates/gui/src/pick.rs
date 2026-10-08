@@ -12,7 +12,7 @@ use protocol::EntityKind;
 
 use crate::{
     camera::CameraRig,
-    designate::DesignateMode,
+    designate::{DesignateMode, is_tree_tile},
     ingest::MirrorResource,
     project::{TerrainTile, WorldProjected, is_tree_foliage, is_visible_at_slice, tree_base_at},
     slice::SliceLevel,
@@ -338,13 +338,14 @@ fn first_visible_hit(
         let centre = cell.as_vec3();
         let world = render_to_world(centre);
         if mirror.tile(world).is_some() && is_visible_at_slice(mirror, world, level) {
+            // Cut mode only: any part of a pine, crown or trunk, is the tree, so the ray stops at
+            // its foot, where `cut_target` puts the mark. Every other mode keeps seeing the ground
+            // through the foliage.
+            if cut && (is_tree_tile(mirror, world) || is_tree_foliage(mirror, world)) {
+                return Some(tree_foot(mirror, world).unwrap_or(PickedCell { tile: world, face }));
+            }
             if !is_tree_foliage(mirror, world) {
                 return Some(PickedCell { tile: world, face });
-            }
-            // Cut mode only: a crown is the tree, so the ray stops at its foot, where `cut_target`
-            // puts the mark. Every other mode keeps seeing the ground through the foliage.
-            if cut {
-                return Some(tree_foot(mirror, world).unwrap_or(PickedCell { tile: world, face }));
             }
         }
         if next.x <= next.y && next.x <= next.z {
@@ -825,37 +826,50 @@ mod tests {
         .unwrap()
     }
 
-    /// Sweeps rays across one crown at the boot pitch. Dig mode falls through the foliage onto the
-    /// ground far behind (the flicker); cut mode stops inside the tree's 3x3 column, at its foot.
+    /// Sweeps rays across one pine, crown and bare trunk, at the boot pitch. Dig mode falls through
+    /// the foliage onto the ground far behind (the flicker); cut mode stops at the pine's foot
+    /// whichever part of it the ray meets first.
     #[test]
     fn in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree() {
         let mirror = pine();
         let mut dig_outside = 0;
-        let mut feet = 0;
+        let mut dig_trunk = 0;
         for yaw_step in 0..40 {
             let yaw = -1.0 + yaw_step as f32 * 0.05;
-            for target in [[59, 60, 5], [60, 59, 6], [61, 61, 5], [60, 61, 4]] {
+            for target in [
+                [59, 60, 5],
+                [60, 59, 6],
+                [61, 61, 5],
+                [60, 61, 4],
+                [60, 60, 2],
+                [60, 60, 3],
+            ] {
                 let (origin, direction) = ray_at(target, yaw, 0.45, 30.0);
                 let cut = first_visible_hit(origin, direction, &mirror, TOP, true)
-                    .expect("a cut ray at the crown hits something");
-                assert!(
-                    (59..=61).contains(&cut.tile[0]) && (59..=61).contains(&cut.tile[1]),
-                    "cut mode left the tree's column at yaw {yaw}, target {target:?}: {:?}",
-                    cut.tile
+                    .expect("a cut ray at the pine hits something");
+                assert_eq!(
+                    (cut.tile, cut.face),
+                    ([60, 60, 1], Face::Top),
+                    "a cut ray at the pine must sit at its foot, yaw {yaw}, target {target:?}"
                 );
-                if cut.tile == [60, 60, 1] {
-                    feet += 1;
-                    assert_eq!(crate::designate::cut_target(&mirror, cut), [60, 60, 2]);
-                }
+                assert_eq!(crate::designate::cut_target(&mirror, cut), [60, 60, 2]);
                 let dig = first_visible_hit(origin, direction, &mirror, TOP, false);
                 if dig.is_some_and(|hit| {
                     !(59..=61).contains(&hit.tile[0]) || !(59..=61).contains(&hit.tile[1])
                 }) {
                     dig_outside += 1;
                 }
+                if dig.is_some_and(|hit| {
+                    mirror.tile(hit.tile) == Some(Tile::Solid(Material::TreeTrunk))
+                }) {
+                    dig_trunk += 1;
+                }
             }
         }
-        assert!(feet > 0, "a crown hit must resolve to the pine's foot cell");
+        assert!(
+            dig_trunk > 0,
+            "some rays must meet the bare trunk, or the trunk half of this test is vacuous"
+        );
         assert!(
             dig_outside > 0,
             "dig mode must still fall through the crown"
