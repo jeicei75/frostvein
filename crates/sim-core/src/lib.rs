@@ -5332,6 +5332,46 @@ mod tests {
         assert!(trace.iter().any(|positions| positions[0].x < miner_start.x));
     }
 
+    // 12.9 AC6: occupancy is a step-time rule, never a claim-time one. An idle dwarf stands in the
+    // only passage (the one-wide tunnel) to a reachable dig. The miner still claims it once its
+    // reaction delay has passed, the job is never stamped with a retry, and it completes.
+    #[test]
+    fn a_dwarf_in_the_only_passage_does_not_make_a_reachable_job_unreachable_at_claim_time() {
+        let mut world = room_and_tunnel();
+        let (miner_start, idle_start) = (at(9, FIX_Y, FIX_Z), at(13, FIX_Y, FIX_Z));
+        crew_at(&mut world, miner_start, idle_start, &[0]);
+        insert_dig(&mut world, 0, EAST_END);
+        // Starts at tick 0, so the claim waits out the reaction delay, and the idle dwarf's wander
+        // rest outlasts it: it is still in the passage when the claim is made.
+        let idle = dwarf_entity(&world, 1);
+        world.ecs.get_mut::<super::Wander>(idle).unwrap().cooldown = 40;
+
+        let mut claimed_at = None;
+        let mut stamped = false;
+        watch(
+            &mut world,
+            1_000,
+            |world| {
+                stamped |= world.jobs().iter().any(|job| job.retry_after != 0);
+                if claimed_at.is_none() && world.claims()[0].1.is_some() {
+                    claimed_at = Some((world.tick(), world.dwarves()[1].1));
+                }
+            },
+            |world| world.jobs().is_empty(),
+        );
+        assert!(!stamped, "the job was stamped with a retry");
+        let (tick, blocker) = claimed_at.expect("the miner never claimed the dig");
+        assert!(
+            tick > 1,
+            "claimed at tick {tick}, before any reaction delay"
+        );
+        assert!(
+            (11..=16).contains(&blocker.x) && blocker.y == FIX_Y,
+            "the idle dwarf left the passage before the claim: {blocker:?}"
+        );
+        assert_eq!(world.tile(EAST_END), Some(Tile::Empty));
+    }
+
     #[test]
     fn wander_rest_is_ten_ticks() {
         let mut world = World::generate(42, Dims::DEFAULT);

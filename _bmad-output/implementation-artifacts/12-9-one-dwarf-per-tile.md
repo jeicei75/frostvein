@@ -186,14 +186,14 @@ A carried item occupies no tile, which is unchanged.
      becomes its route to the escape, and it takes the first step.
   4. Otherwise wait. Hold position, set `JobState::Walk`, and set the wander cooldown to
      `STEP_REST_TICKS`, so a blocked dwarf searches once per step period and not every tick.
-- [ ] **Task 4: save the path (AC7).**
+- [x] **Task 4: save the path (AC7).**
   - `SavedDwarf` gains `pub path: Vec<Pos>`, with no `#[serde(default)]` (per Q2). `to_save` writes
     it (`lib.rs:1501`), and `from_save` inserts `Path` when it is non-empty (`lib.rs:1593-1617`).
   - Fix the `SavedDwarf` literals at `save_load.rs:483,498` and `scenario.rs:1495,1510`.
   - Add the AC7 test to `crates/sim-core/tests/save_load.rs`. Compare `dwarves()`, `claims()` and
     `jobs()` on every tick. Check that `save_load_recomputes_every_path_invalidated_by_another_dig`
     (`save_load.rs:460`) still holds.
-- [ ] **Task 5: guards (AC6, AC8).**
+- [x] **Task 5: guards (AC6, AC8).**
   - Add the AC6 test.
   - Run `cargo test -p sim-core` and `cargo test -p simd`. Occupancy changes how many cells `wander`
     can choose from, so every later RNG draw moves.
@@ -439,6 +439,27 @@ neighbour off the miner's path, so it gets an exit `Path`; head-on, the miner ha
 the idle dwarf follows it out one or two cells per cycle ("snowplow", x=14 -> 12 -> 10), steps aside at the
 room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 306.
 
+**Task 4/5 REDs and records (Agent B):**
+
+- AC7 `save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end` (`save_load.rs`), with `from_save`
+  temporarily not inserting `Path` (restored before commit):
+  `assertion left == right failed  left: [(Id(0), (9,20,5), Walk, Lantern), (Id(1), (10,20,5), ...)]  right: [(Id(0), (10,19,5), ...), (Id(1), (10,20,5), ...)]`
+  (loaded vs never-saved, at the first compared tick after the save).
+- A FIRST AC7 fixture (head-on, dwarf 1 backing out west) was green without `Path` in the save: a loaded
+  yielder hits the same blocked step again and re-derives the same yield, so a back-off alone does not
+  need the saved path. A scan over every save tick 0..400 showed no divergence. It was dropped. The idle
+  dwarf's exit path is what the save must carry: a scan of the AC5 fixture diverged at save ticks 12-22
+  (idle dwarf at x 14, miner at x 13), and the committed test saves at the first tick the idle dwarf is at x 14.
+- Pre-12.9 refusal `loading_refuses_a_pre_12_9_save_without_dwarf_paths` (`simd/src/main.rs`): green by
+  construction (no `#[serde(default)]`); it strips `path` from every dwarf of a real save and expects
+  `load_world_from` to return `None`, with a positive control (the same save with paths loads).
+- AC6 `a_dwarf_in_the_only_passage_does_not_make_a_reachable_job_unreachable_at_claim_time` (`lib.rs`):
+  green on the code as it stands (a guard, claim-time code is untouched). With the idle dwarf's wander
+  cooldown at 10,000 the fixture timed out (`not done by tick 1000`). Not diagnosed to the line, but the
+  reading is: the exit path `resolve_blocked_step` gives the idle blocker does not reset its wander cooldown,
+  and `wander` follows a `Path` only when the cooldown reaches 0, so a 10,000-tick rest stalls the follow.
+  No real dwarf rests that long (`WANDER_REST_TICKS` is small), so it is the fixture's artefact. Cooldown 40 outlasts the claim and the test passes.
+
 ### Completion Notes List
 
 - Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
@@ -462,6 +483,17 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
   `dwarf_tiles` would have duplicated; `dwarf_tiles` spells it `.cloned()` so the audit stays clean
   (`scripts/audit-mutations.py`: 808 rows, all match).
 - The `wander` system gained `#[allow(clippy::type_complexity)]` (one query over the dwarf row, plus `Path`).
+- Tasks 4-5 done (Agent B). `SavedDwarf.path: Vec<Pos>` has no serde default (NOTE added); it is no longer
+  `Copy`. `to_save` writes every dwarf's `Path` (idle exit paths included) and `from_save` inserts `Path` when
+  non-empty. The Task 1-3 agent reported no open problem in this territory; `Path` not being saved was its
+  known gap, closed here. No existing save/load test moved, `save_load_recomputes_every_path_invalidated_by_another_dig`
+  still passes, and no figure was re-pinned in Tasks 4-5.
+- AC7's precondition ("a path a fresh A* would not return") is asserted through the public API: the idle
+  woodcutter is idle (`claims()` None) and must walk out of the dead end WEST, one cell per step, away from
+  the face, which neither A* nor a wander roll reproduces. The saved yielder's back-off is NOT a sensitive
+  case (see Debug Log): a loaded yielder re-derives it.
+- AC6 added in `lib.rs` `mod tests` (the fixtures need `ecs`).
+- The pre-12.9 refusal test lives in `simd` (`serde_json` is simd's dependency, sim-core has none).
 - Not done (not mine): `occupancy_wire.py` shows as modified in the working tree; it was not touched here
   and is not staged.
 
@@ -469,8 +501,10 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
 
 - `crates/sim-core/src/lib.rs` (occupancy in the three writers, `route_to_nearest`, `resolve_blocked_step`,
   `World::step` assert, fixtures and AC3-AC5 tests)
-- `crates/sim-core/tests/scenario.rs` (AC1, AC2)
-- `crates/sim-core/tests/save_load.rs` (guard re-pin)
+- `crates/sim-core/tests/scenario.rs` (AC1, AC2; `path` on the two `SavedDwarf` literals)
+- `crates/sim-core/tests/save_load.rs` (guard re-pin; AC7 test; `path` on the two `SavedDwarf` literals)
+- `crates/sim-core/src/save.rs` (`SavedDwarf.path`, no longer `Copy`)
+- `crates/simd/src/main.rs` (pre-12.9 save refusal test)
 
 ## Change Log
 
@@ -479,3 +513,4 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
 | 2026-10-08 | Story created on `26185a0`. #133 reproduced: sim probe (494/3,000 idle ticks shared on `DEFAULT_SEED`, 332 busy) and live wire (`occupancy_wire.py`, 186 shared ticks, `OCCUPANCY RED`). The per-step head-on rule was traced to a livelock, and the escape rule replaces it. `Path` joins `SaveState`. Task 0 (Q1–Q4) is open |
 | 2026-10-08 | **Task 0 ruled (Wolf).** Q1 (b): no swap; the idle dwarf gets an exit `Path` and the miner backs out (AC5 and Task 3.1 amended, mutation row 10 added). Q2: refuse pre-12.9 saves ("old saves are not important"). Q3 (b): **#162 folded in**. Every uncarried item blocks, on pile cells too ("taken pile cells should be impassable"), confirmed over the rec to split it into its own story. Pick-up and drop from the next tile, pile fills inside out: AC10–AC12, Task 10, rows 11–14, instrument `stone entries`. Q4 (a): seat look. Dev mode: Sonnet 5.5 subagents |
 | 2026-10-08 | Tasks 1-3 (Agent A): RED fixtures AC1-AC5, occupancy in `execute_jobs`/`settle`/`wander`, blocked step with escape/yield, idle exit path, no swap. One re-pin (`save_load` guard 600 -> 1,000) |
+| 2026-10-08 | Tasks 4-5 (Agent B): `SavedDwarf.path` saved and restored, AC7 and AC6 tests, pre-12.9 refusal test |
