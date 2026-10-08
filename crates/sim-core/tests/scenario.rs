@@ -2711,3 +2711,97 @@ fn a_cut_against_a_full_cap_is_refused_and_adds_no_mark() {
             .any(|(_, kind)| *kind == DesignationKind::Cut)
     );
 }
+
+// 12.9 AC1 (#133): the busy crew of the story's Found-at-creation probe -- a 4x7 channel east of
+// the fire and a 3x3 pile west of it -- run for 3,000 ticks with no two dwarves ever on one tile.
+// Red on 26185a0 (332 shared ticks). The vacuity asserts come LAST so a mutant that freezes the
+// crew dies on "the crew still works" and not on the occupancy assert it trivially passes.
+#[test]
+fn a_busy_crew_never_shares_a_tile_and_still_works() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let channel = rect(Pos { x: 65, y: 61, z: 9 }, Pos { x: 68, y: 67, z: 9 });
+    let pile = rect(Pos { x: 59, y: 64, z: 9 }, Pos { x: 61, y: 66, z: 9 });
+    let pile_cells: BTreeSet<Pos> = (pile.min.y..=pile.max.y)
+        .flat_map(|y| (pile.min.x..=pile.max.x).map(move |x| Pos { x, y, z: 9 }))
+        .collect();
+    assert!(
+        pile_cells.iter().all(|cell| is_standable(&world, *cell)),
+        "the pile site must be standable ground"
+    );
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: channel,
+    });
+    assert!(
+        world
+            .apply_command(SimCommand::PlaceStockpile { rect: pile })
+            .is_none()
+    );
+    assert_eq!(
+        world.designations().len(),
+        25,
+        "the channel is 25 workable marks"
+    );
+
+    let mut previous: Vec<Pos> = world.dwarves().iter().map(|(_, pos, ..)| *pos).collect();
+    let mut shared_ticks = Vec::new();
+    let mut moves = 0_usize;
+    let mut marks_cleared_at = None;
+    let mut first_stone_on_pile = None;
+    for _ in 0..3_000 {
+        world.step();
+        let tick = world.tick();
+        let now: Vec<Pos> = world.dwarves().iter().map(|(_, pos, ..)| *pos).collect();
+        if now.iter().collect::<BTreeSet<_>>().len() != now.len() {
+            shared_ticks.push((tick, now.clone()));
+        }
+        moves += now.iter().zip(&previous).filter(|(a, b)| a != b).count();
+        if marks_cleared_at.is_none() && world.designations().is_empty() {
+            marks_cleared_at = Some(tick);
+        }
+        if first_stone_on_pile.is_none()
+            && world
+                .items()
+                .iter()
+                .any(|(_, pos)| pile_cells.contains(pos))
+        {
+            first_stone_on_pile = Some(tick);
+        }
+        previous = now;
+    }
+
+    assert!(
+        shared_ticks.is_empty(),
+        "{} ticks had two dwarves on one tile; first {:?}",
+        shared_ticks.len(),
+        shared_ticks.first()
+    );
+    // AC10 (Task 10, #162): "no dwarf enters a cell holding an item" goes HERE, before the
+    // vacuity asserts. Not written yet.
+
+    // Vacuity: the crew still works.
+    assert!(
+        marks_cleared_at.is_some_and(|tick| tick <= 2_500),
+        "channel marks cleared at {marks_cleared_at:?}, bound 2500"
+    );
+    assert!(
+        first_stone_on_pile.is_some_and(|tick| tick <= 600),
+        "first stone on the pile at {first_stone_on_pile:?}, bound 600"
+    );
+    assert!(moves >= 600, "dwarf moves {moves}, bound 600");
+}
+
+// 12.9 AC2: the spawn guard, green on 26185a0 (`spawn_dwarves` draws with `swap_remove`).
+#[test]
+fn spawn_places_five_dwarves_on_distinct_tiles_for_every_small_seed() {
+    for seed in 0..64_u64 {
+        let world = World::generate(seed, Dims::DEFAULT);
+        let tiles: BTreeSet<Pos> = world.dwarves().iter().map(|(_, pos, ..)| *pos).collect();
+        assert_eq!(world.dwarves().len(), 5, "seed {seed}");
+        assert_eq!(
+            tiles.len(),
+            5,
+            "seed {seed} spawned two dwarves on one tile"
+        );
+    }
+}

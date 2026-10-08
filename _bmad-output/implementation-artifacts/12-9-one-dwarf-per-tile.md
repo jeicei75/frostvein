@@ -147,7 +147,7 @@ A carried item occupies no tile, which is unchanged.
     blocks conflicts with picking up and dropping on a pile. (b) Fold it in.
   - **Q4.** Seat look after the gate. (a) **Yes, about 5 minutes.** #133 was reported at the
     seat, and back-off reads as feel. (b) No: scenario tests and the wire instrument only.
-- [ ] **Task 1: RED first (AC1, AC3, AC4, AC5).**
+- [x] **Task 1: RED first (AC1, AC3, AC4, AC5).**
   - Add the AC1 test to `crates/sim-core/tests/scenario.rs`. Put the vacuity asserts (marks cleared,
     pile, moves) **last**, so a frozen-crew mutant dies on them and not on the occupancy assert.
   - Add the AC3 (a)/(b), AC4 and AC5 tests. These are fixtures, so `lib.rs` `mod tests` is fine;
@@ -155,7 +155,7 @@ A carried item occupies no tile, which is unchanged.
   - Run them on unfixed code and paste each failing assertion into the Debug Log. Each fails on its
     shared-tile assert, because today the dwarves walk through each other.
   - Add the AC2 guard (green now).
-- [ ] **Task 2: occupancy in every writer.**
+- [x] **Task 2: occupancy in every writer.**
   - One helper answers "is this tile free of other dwarves", from a `BTreeSet<Pos>` of live dwarf
     positions. `execute_jobs`, `settle` and `wander` each build that set once and update it as each
     dwarf moves, in ascending `Id` order (AD-7).
@@ -166,7 +166,7 @@ A carried item occupies no tile, which is unchanged.
     (`// NOTE:`; 12.11 owns "no dwarf on air").
   - Add `debug_assert!` that no two dwarves share a tile, at the end of `World::step`. It turns
     every existing scenario test into an occupancy check.
-- [ ] **Task 3: the blocked step** (`execute_jobs`, the step branch `lib.rs:1095-1134`). The
+- [x] **Task 3: the blocked step** (`execute_jobs`, the step branch `lib.rs:1095-1134`). The
   recommended shape is in Key decisions. When a holder's next tile holds another dwarf:
   1. **The blocker is idle** (`CurrentJob(None)`). It steps to a free walkable neighbour that is
      not on the holder's remaining path, in fixed `astar_neighbours` order. Its wander `cooldown`
@@ -407,9 +407,70 @@ ticks were read, or a delta lacked five dwarves. Fix the run before reading anyt
 
 ### Debug Log References
 
+**Task 1 REDs, run on the unfixed movement code (Task 2/3 not yet written), `cargo test -p sim-core`:**
+
+- AC1 `a_busy_crew_never_shares_a_tile_and_still_works` (`scenario.rs`):
+  `332 ticks had two dwarves on one tile; first Some((2, [(62,65,9), (65,63,9), (61,66,9), (65,63,9), (66,62,9)]))`.
+  332 is the story's baseline. 1.2 s in debug.
+- AC2 `spawn_places_five_dwarves_on_distinct_tiles_for_every_small_seed`: green on 26185a0, as required.
+- AC3(a) `head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_open_end` (`lib.rs`):
+  `two dwarves share a tile at tick 102: [(13,20,5), (13,20,5), ...]`.
+- AC3(b) `head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_dead_end`:
+  `two dwarves share a tile at tick 102: [(13,20,5), (13,20,5), ...]`.
+- AC4 `a_dwarf_that_falls_onto_another_comes_to_rest_on_a_free_tile`:
+  `two dwarves share a tile at tick 2: [(10,10,2), (10,10,2), ...]`.
+- AC5 `an_idle_dwarf_on_the_dig_face_follows_the_miner_out_and_the_dig_completes`:
+  `two dwarves share a tile at tick 123: [(16,20,5), (16,20,5), ...]`.
+
+All five fixtures fail on their shared-tile assert (the `watch` helper), not on a later one.
+
+**Task 2 alone (wait when the next tile is occupied, no yielding), measured before Task 3:** AC3(a), AC3(b)
+and AC5 timed out (`not done by tick 1000/1200`) and 8 existing scenario tests stalled (walking skeleton,
+every haul test): a plain wait deadlocks in any one-wide passage and on any idle dwarf standing on a work
+position. That is why Task 2 and Task 3 are one commit.
+
+**AC3(b) resolves, it does not flip.** Trace of the fixture (lower id 0 at x=14, higher id 1 at x=12, tunnel
+x 11..16, room x<=10): tick 102 head-on at x=13/12; dwarf 0 has no escape (every cell behind it is on dwarf
+1's path), dwarf 1 retreats to the room and dwarf 0 walks out, then dwarf 1 goes back in. Both digs
+complete well inside the 1,000-tick bound.
+
+**AC5 trace:** the miner at x=13 walks to x=15, finds the idle dwarf on x=16. The idle dwarf has no free
+neighbour off the miner's path, so it gets an exit `Path`; head-on, the miner has an escape and backs out;
+the idle dwarf follows it out one or two cells per cycle ("snowplow", x=14 -> 12 -> 10), steps aside at the
+room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 306.
+
 ### Completion Notes List
 
+- Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
+  (`dwarf_tiles`) and keep it current as their dwarves move, in ascending `Id`. `settle` finds the landing
+  tile with `route_to_nearest` (breadth-first, `astar_neighbours`, bounded by `MAX_ASTAR_NODES`). The same
+  helper gives the escape and the exit path. `World::step` ends in a `debug_assert!` of one dwarf per tile.
+- The blocked step is `resolve_blocked_step` (cases 1-4 as in Task 3). No swap anywhere. `wander` follows an
+  idle dwarf's `Path` at `STEP_REST_TICKS` pace, waits on an occupied tile, draws no RNG, and on arrival
+  removes `Path` and sets `home`.
+- A blocker that is idle but already has an exit `Path` starting on the holder's tile goes straight to the
+  head-on case. A case-1 sidestep removes any stale `Path` from the blocker.
+- **Re-pins.** `save_load.rs` `save_load_then_tick_matches_never_saved`: the loop guard `saved.tick() < 600`
+  became `< 1_000`. The test's corridor is one wide and a dead end, an idle dwarf wanders into it, and the
+  hauler now backs out and walks back in rather than passing through it. The pick-up now lands at tick 691
+  (the dwarf the hauler displaces is the pre-existing wanderer). Cause is occupancy, not a defect: the same
+  test's save/load comparison is unchanged and green. No other figure moved: all 50 scenario and all 72 lib
+  tests (including AC8's guards) pass unchanged, and `cargo test -p simd` is green (22 + 72).
+- `Path` is still not saved (Task 4). An idle dwarf's exit path or a yielder's path is therefore lost on
+  save/load until Task 4 lands. No existing save/load test went red on that.
+- `74-dwarves-path-through-fire.sh` row 2 anchors on `positions.copied().collect()`, which the new
+  `dwarf_tiles` would have duplicated; `dwarf_tiles` spells it `.cloned()` so the audit stays clean
+  (`scripts/audit-mutations.py`: 808 rows, all match).
+- The `wander` system gained `#[allow(clippy::type_complexity)]` (one query over the dwarf row, plus `Path`).
+- Not done (not mine): `occupancy_wire.py` shows as modified in the working tree; it was not touched here
+  and is not staged.
+
 ### File List
+
+- `crates/sim-core/src/lib.rs` (occupancy in the three writers, `route_to_nearest`, `resolve_blocked_step`,
+  `World::step` assert, fixtures and AC3-AC5 tests)
+- `crates/sim-core/tests/scenario.rs` (AC1, AC2)
+- `crates/sim-core/tests/save_load.rs` (guard re-pin)
 
 ## Change Log
 
@@ -417,3 +478,4 @@ ticks were read, or a delta lacked five dwarves. Fix the run before reading anyt
 | --- | --- |
 | 2026-10-08 | Story created on `26185a0`. #133 reproduced: sim probe (494/3,000 idle ticks shared on `DEFAULT_SEED`, 332 busy) and live wire (`occupancy_wire.py`, 186 shared ticks, `OCCUPANCY RED`). The per-step head-on rule was traced to a livelock, and the escape rule replaces it. `Path` joins `SaveState`. Task 0 (Q1–Q4) is open |
 | 2026-10-08 | **Task 0 ruled (Wolf).** Q1 (b): no swap; the idle dwarf gets an exit `Path` and the miner backs out (AC5 and Task 3.1 amended, mutation row 10 added). Q2: refuse pre-12.9 saves ("old saves are not important"). Q3 (b): **#162 folded in**. Every uncarried item blocks, on pile cells too ("taken pile cells should be impassable"), confirmed over the rec to split it into its own story. Pick-up and drop from the next tile, pile fills inside out: AC10–AC12, Task 10, rows 11–14, instrument `stone entries`. Q4 (a): seat look. Dev mode: Sonnet 5.5 subagents |
+| 2026-10-08 | Tasks 1-3 (Agent A): RED fixtures AC1-AC5, occupancy in `execute_jobs`/`settle`/`wander`, blocked step with escape/yield, idle exit path, no swap. One re-pin (`save_load` guard 600 -> 1,000) |

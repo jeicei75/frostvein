@@ -123,8 +123,13 @@ fn save_load_then_tick_matches_never_saved() {
     // AC11: the save point is a stepped CONDITION, never a magic tick count — the first tick a
     // dwarf is actually holding a stone. That covers the dig, the haul job's creation, its claim
     // and the pick-up in one, and it moves with the sim instead of going quietly vacuous.
+    //
+    // 12.9 re-pin of the guard, 600 -> 1,000: the corridor above is one wide and a dead end, and an
+    // idle dwarf wandering in it now stops the hauler (FR49, no swap). The hauler backs out, the
+    // idle dwarf follows it to the mouth and steps aside, and the hauler walks back in. The
+    // pick-up now lands at tick 691.
     while saved.carrying().iter().all(|(_, item)| item.is_none()) {
-        assert!(saved.tick() < 600, "no dwarf ever picked the stone up");
+        assert!(saved.tick() < 1_000, "no dwarf ever picked the stone up");
         saved.step();
         control.step();
         assert_eq!(saved.claims(), control.claims());
