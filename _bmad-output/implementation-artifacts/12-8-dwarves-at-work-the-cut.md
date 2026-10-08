@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.7's creation
 
 # Story 12.8: Dwarves at Work — The Cut
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -369,6 +369,9 @@ are `in-progress`. Review cost $12.73 over 244 turns (Opus $10.75, Sonnet $1.98;
 7 dismissed. Patch pass 2, 2026-10-08: both patches LANDED (`73c7d45`, `3d7f117`, mutation row `de6ff85`).
 Full gate GREEN on `de6ff85` (`RUST_TEST_THREADS=1 scripts/gate.sh`, 3431 s, pixel guards included). Status stays
 `in-progress`: the seat items above (trunk hover at the foot, the #174 feel at trunk scale) are unrun.
+**Seat, 2026-10-08, on `4f97181` (pushed `--fast`): both items PASSED.** Wolf: "1 yes it's ok 2 no does not flicker
+any more". He also saw a NEW defect: while dragging, the cut box flickers and the terrain shows through it. Wolf ruled
+that it is filed, not fixed, because 12.8's review is done: **#177** (bug, route:undecided). Status `done`.
 
 - [x] [Review][Patch] **The `dig_trunk > 0` guard cannot fire, so the trunk half of the strengthened test
   is unguarded** (acceptance, LOW, REWORK; RAN. A latent silent-failure trap, routed to patch under the frostvein
@@ -781,3 +784,4 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 | 2026-10-08 | Review run 1 patch pass: in cut mode a trunk hit now resolves to the pine's foot (`ef5dfb0`). The crown test asserts the exact foot cell and adds trunk rays. RED first; 2/2 mutation rows KILLED; full gate GREEN on `ef5dfb0` (3344 s). |
 | 2026-10-08 | Review run 2 on the patch (`712cd48..679e55a`): 0 HIGH/MED; 2 LOW patches left as action items (the `dig_trunk` guard cannot fire, REWORK; `tree_foot` doc); 3 deferred. No run 3. Status in-progress. |
 | 2026-10-08 | Review run 2 patch pass: trunk guard replaced by an independent first-tree-cell trace (`73c7d45`, 37/40 rays; `[60,60,3]` dropped, record corrected); `tree_foot` doc (`3d7f117`); new mutation row (`de6ff85`), 3/3 cut rows KILLED; full gate GREEN on `de6ff85` (3431 s). Seat items open; status in-progress. |
+| 2026-10-08 | Seat on `4f97181`: trunk hover sits at the foot, and the hover no longer flickers (Wolf). The drag box flickers with terrain showing through it: filed as #177 at Wolf's ruling, since review is done. Status done. |
