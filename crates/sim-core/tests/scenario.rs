@@ -1506,6 +1506,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
                 colour: DwarfColour::Red,
             },
             profession: Profession::Hauler,
+            path: Vec::new(),
         },
         SavedDwarf {
             id: 1,
@@ -1521,6 +1522,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
                 colour: DwarfColour::Blue,
             },
             profession: Profession::Hauler,
+            path: Vec::new(),
         },
     ];
     save.items = vec![(2, first, ItemKind::Stone), (3, second, ItemKind::Stone)];

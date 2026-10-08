@@ -499,6 +499,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
                 colour: DwarfColour::Red,
             },
             profession: Profession::Miner,
+            path: Vec::new(),
         },
         SavedDwarf {
             id: 1,
@@ -514,6 +515,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
                 colour: DwarfColour::Blue,
             },
             profession: Profession::Miner,
+            path: Vec::new(),
         },
     ];
     save.designations = vec![
@@ -580,4 +582,106 @@ fn save_orders_dwarves_by_id() {
         .collect();
 
     assert_eq!(ids, vec![0, 1, 2, 3, 4]);
+}
+
+// 12.9 AC7. A world saved while an idle dwarf follows an exit path must load and tick exactly
+// like the never-saved one. Dead-end tunnel (room x 6..=10, tunnel x 11..=16, rock at x 17): the
+// idle woodcutter 1 stands on the only work position of a dig, miner 0 is in the tunnel between it
+// and the room. The miner backs out and the idle dwarf follows it out on an exit `Path`, which no
+// fresh A* or wander roll would reproduce. A dwarf loaded without that path wanders instead.
+#[test]
+fn save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end() {
+    let dims = Dims::DEFAULT;
+    let index = |pos: Pos| {
+        pos.x as usize
+            + pos.y as usize * dims.x as usize
+            + pos.z as usize * dims.x as usize * dims.y as usize
+    };
+    let (z, row) = (5, 20);
+    let at = |x: i32, y: i32| Pos { x, y, z };
+    let mut tiles = vec![Tile::Solid(Material::Stone); (dims.x * dims.y * dims.z) as usize];
+    for x in 6..=10 {
+        for y in row - 3..=row + 3 {
+            tiles[index(at(x, y))] = Tile::Empty;
+        }
+    }
+    for x in 11..=16 {
+        tiles[index(at(x, row))] = Tile::Empty;
+    }
+    let east_end = at(17, row);
+
+    let dwarf = |id: u32, pos: Pos, name: DwarfName, colour: DwarfColour| SavedDwarf {
+        id,
+        pos,
+        state: JobState::Walk,
+        home: pos,
+        cooldown: 0,
+        current_job: None,
+        work_progress: 0,
+        carrying: None,
+        identity: Identity { name, colour },
+        profession: Profession::Miner,
+        path: Vec::new(),
+    };
+    let mut save = World::generate(42, dims).to_save();
+    save.tick = 100;
+    save.tiles = tiles;
+    save.next_id = 2;
+    save.dwarves = vec![
+        dwarf(0, at(13, row), DwarfName::Durin, DwarfColour::Red),
+        SavedDwarf {
+            profession: Profession::Woodcutter,
+            ..dwarf(1, at(16, row), DwarfName::Nori, DwarfColour::Blue)
+        },
+    ];
+    save.designations = vec![(east_end, DesignationKind::Dig)];
+    save.zones.clear();
+    save.items.clear();
+    save.jobs = [east_end]
+        .into_iter()
+        .enumerate()
+        .map(|(id, target)| Job {
+            id: JobId(id as u32),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        })
+        .collect();
+    save.next_job_id = 1;
+
+    // Save the first tick the idle dwarf is at x 14, two cells out: mid exit path.
+    let mut control = World::from_save(save);
+    while control.dwarves()[1].1.x > 14 {
+        assert!(control.tick() < 600, "the idle dwarf never got to x 14");
+        control.step();
+    }
+    let leaving = control.dwarves()[1].1;
+    assert_eq!(
+        control.claims()[1],
+        (control.dwarves()[1].0, None),
+        "dwarf 1 must be idle"
+    );
+
+    let mut loaded = World::from_save(control.to_save());
+    let mut xs = vec![leaving.x];
+    for _ in 0..400 {
+        control.step();
+        loaded.step();
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.jobs(), control.jobs());
+        let x = control.dwarves()[1].1.x;
+        if xs.last() != Some(&x) {
+            xs.push(x);
+        }
+    }
+    // Precondition: the idle dwarf kept walking WEST out of the tunnel, one cell per step and
+    // never back toward the face, which is what the saved path makes it do. (Without it the dwarf
+    // wanders on a roll, and the loaded world diverges.)
+    assert!(
+        xs[..4].windows(2).all(|pair| pair[1] == pair[0] - 1),
+        "the idle dwarf did not walk out on its exit path: {xs:?}"
+    );
+    assert!(control.jobs().is_empty(), "the dig should have completed");
 }

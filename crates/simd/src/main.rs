@@ -930,6 +930,32 @@ mod tests {
         assert!(loaded.is_none(), "lantern save reached the live world");
     }
 
+    /// 12.9 Task 0 Q2: `SavedDwarf.path` has no serde default, so a pre-12.9 save (no `path` on
+    /// its dwarves) fails to decode and is refused rather than loaded with every path empty.
+    #[test]
+    fn loading_refuses_a_pre_12_9_save_without_dwarf_paths() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-9-pre-path-save-{}.json",
+            std::process::id()
+        ));
+        let save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        let mut json = serde_json::to_value(&save).unwrap();
+        let dwarves = json["dwarves"].as_array_mut().unwrap();
+        assert!(!dwarves.is_empty());
+        for dwarf in dwarves {
+            assert!(dwarf.as_object_mut().unwrap().remove("path").is_some());
+        }
+        fs::write(&path, serde_json::to_vec(&json).unwrap()).expect("write old save fixture");
+        let old = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        // Positive control: the same save with its paths loads.
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write current save fixture");
+        let current = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(old.is_none(), "a pre-12.9 save without paths was loaded");
+        assert!(current.is_some(), "a current save must load");
+    }
+
     /// A real loopback pair: the daemon's end goes into `Client`, the peer end stands in
     /// for the client program and observes whether eviction really shut the socket.
     fn socket_pair() -> (TcpStream, TcpStream) {

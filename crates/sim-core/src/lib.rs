@@ -1790,6 +1790,10 @@ impl World {
                     carrying: carrying.0,
                     identity: *entity.get::<Identity>()?,
                     profession: *entity.get::<Profession>()?,
+                    path: entity
+                        .get::<Path>()
+                        .map(|path| path.0.clone())
+                        .unwrap_or_default(),
                 })
             })
             .collect();
@@ -1892,6 +1896,9 @@ impl World {
                     .ecs
                     .entity_mut(entity)
                     .insert(WorkProgress(dwarf.work_progress));
+            }
+            if !dwarf.path.is_empty() {
+                world.ecs.entity_mut(entity).insert(Path(dwarf.path));
             }
         }
         for (id, pos, kind) in items {
