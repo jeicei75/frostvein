@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default
 
 # Story 12.9: One Dwarf per Tile
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -303,11 +303,13 @@ A carried item occupies no tile, which is unchanged.
     - it rises, never in one frame, and arrives at `CARRY_OFFSET`;
     - set-down is never one frame, and it arrives at the cell.
   - Existing pick-up and drop gate tests stay green.
-- [ ] **Task 8: record.**
+- [x] **Task 8: record.**
   - The PR body says `Closes #133` and `Closes #162`. Both issues are whole: #162 was folded in.
   - Comment on #162 with the ruling (all items block, pile cells too) and the AC10 RED/GREEN.
+    Done: issuecomment-6066099669 (138 -> 0 stone entries).
   - Run the full gate, `RUST_TEST_THREADS=1 scripts/gate.sh`, and get it green before review.
-- [ ] **Task 9: seat look (per Q4).** Use a short vehicle card in `12-9-signoff/` in the canonical
+    Done: `GATE GREEN 3281s` on `ac99c2d`. Only the story record has changed since.
+- [x] **Task 9: seat look (per Q4).** Use a short vehicle card in `12-9-signoff/` in the canonical
   launch form. Wolf drags the channel and pile and watches the crew at Normal and at Fast: no two
   dwarves overlap, and blocked dwarves step aside or back off. Haulers pick up and drop from the
   next tile, nobody walks through a stone, and the pile fills from the centre. Record his words.
@@ -317,6 +319,9 @@ A carried item occupies no tile, which is unchanged.
   one-wide digging waits on the hauler, "maybe that's ok" (→ #180, idea); "performance variation is now big even
   when haze is off.. 20 - 180 FPS" (→ #179; the sim tick is ruled out there: release p99 34 us, max 10 ms).
   Pass 2 checks Tasks 11 and 12.
+  **Pass 2 (2026-10-08, `7d69e19`), Wolf:** channel, "1 yes"; carry, "2 better.. dwarves are still sucking the stone
+  not really picking up and also when dropping the stone slides.. but not going to tweak it now more" (-> **#181**,
+  bug, look parked; the sim side of AC14 holds, and the gui blend reads as a slide rather than a reach).
 
 ## Dev Notes
 
@@ -698,6 +703,15 @@ a scratch worktree with that tree's `mutate.sh`:
   an `ItemMotion`; `BlendQuery` gained `Option<&ItemMotion>`. No existing test moved. Mutation row `12-5.sh` "the blend writer moves a carried stone" was
   re-pointed (the filter line changed; the sabotage now drops the whole guard with `.filter(|_| true)`) and RUN alone: KILLED. `audit-mutations.py`: 822 rows
   all apply. Not run (orchestrator): gui pixel guards. No row yet pins the new hold/rise/set-down (rows 17-19 of the story's list are for the orchestrator).
+- **Summary (orchestrator, for review).** ACs 1-14 met. Wire GREEN: 0 shared ticks and 0 stone entries (baseline 186 / 138).
+  12-9.sh 19/19 KILLED; 12-5.sh 15/15 KILLED; full gate GREEN on `ac99c2d`. Seat: pass 1 → Tasks 11-12; pass 2 channel yes,
+  carry look parked as #181. **Flags for the reviewer:**
+  - (1) the AC8 guard's last assert is weaker (designation OR ramp), see above;
+  - (2) an out-of-order abnormal drop (`release_claim`) can wall in a deeper free pile cell, because `pile_targets` depth passes
+    through taken cells;
+  - (3) Agent A wrote `dwarf_tiles` with `.cloned()`, which does not match #74's sabotage anchor `positions.copied().collect()`;
+  - (4) the AC6 fixture needs an idle cooldown of 40, because an exit `Path` waits on the wander cooldown;
+  - (5) five 3-3 and 12-1 rows were already dead on 26185a0, and nothing here repairs them.
 
 ### File List
 
@@ -708,13 +722,14 @@ a scratch worktree with that tree's `mutate.sh`:
 - `crates/sim-core/src/save.rs` (`SavedDwarf.path`, no longer `Copy`)
 - `crates/simd/src/main.rs` (pre-12.9 save refusal test)
 - Task 10: `crates/sim-core/src/lib.rs` (blocking items, pile depth, drop cell, fixtures AC10 corridor / AC11 / AC12), `crates/sim-core/tests/scenario.rs` (AC10 assert, two disclosed test changes)
-- `_bmad-output/implementation-artifacts/mutations/12-9.sh` (NEW, 14 rows)
-- `_bmad-output/implementation-artifacts/mutations/12-1.sh`, `mutations/3-3-the-haul-and-the-skeleton-walks.sh` (9 rows re-pointed at the new `work_positions` / `pile_targets` lines by Agent C; the 3-3 and 12-1 tables were not re-run)
+- `_bmad-output/implementation-artifacts/mutations/12-9.sh` (NEW, rows 1-14)
+- `_bmad-output/implementation-artifacts/mutations/12-1.sh`, `mutations/3-3-the-haul-and-the-skeleton-walks.sh` (9 rows re-pointed by Agent C; both tables were then run: 4 rows re-armed by Agent D in `ca80219`, 5 were already dead on 26185a0, see Debug Log)
 - `_bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py` (`stone entries`, `STONES` verdict)
 - `_bmad-output/implementation-artifacts/12-9-signoff/vehicle-card.md` (NEW, Task 9)
 - `_bmad-output/planning-artifacts/epics.md` (Task 0 ruling note on Story 12.9)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
-- Task 11/12 (Agent E): `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/gui/src/project.rs`, `crates/gui/src/ingest.rs`, `crates/gui/tests/headless.rs`, `_bmad-output/implementation-artifacts/mutations/12-5.sh` (two rows re-pointed)
+- Task 11/12 (Agent E): `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/gui/src/project.rs`, `crates/gui/src/ingest.rs`, `crates/gui/tests/headless.rs`, `crates/simd/tests/serve.rs` (channel target is a 4-neighbour of the miner), `_bmad-output/implementation-artifacts/mutations/12-5.sh` (two rows re-pointed), `mutations/12-9.sh` (rows 15-19)
+- `_bmad-output/implementation-artifacts/12-9-one-dwarf-per-tile.md` (this record); `metrics/12-9-one-dwarf-per-tile.md` and `metrics/.session-cursors.json` (cost ledger)
 
 ## Change Log
 
@@ -731,3 +746,4 @@ a scratch worktree with that tree's `mutate.sh`:
 | 2026-10-08 | Tasks 11-12 (Agent E): channel from the next tile, `dig_yaw` Channel arm, lift and set-down (`ItemMotion`). Two 12-5 mutation rows re-pointed and run, both KILLED |
 | 2026-10-08 | Tasks 11-12 (Agent E, `d93f32d` `bfa6568` `0fccc74`). Rows 15-19 added; 12-9.sh 19/19 KILLED and 12-5.sh 15/15 KILLED on `06a235e` |
 | 2026-10-08 | Full gate green on `ac99c2d` (3,281 s) |
+| 2026-10-08 | #162 commented. Seat pass 2 (Wolf): channel yes; carry better but still reads as suction and a slide, parked as #181. Tasks 8-9 done, Status review |

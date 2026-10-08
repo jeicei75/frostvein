@@ -2594,7 +2594,7 @@ development_status:
   #     through it -> #177 (Wolf: file, review is done). -> done. PR on Wolf's yes.
   #   2026-10-06 (Wolf): #164 (work visuals trail the walker), #173 (ghost pine) and #174 (cut-mode feel)
   #     FOLDED IN; see epics.md Story 12.8. Larger than drafted; the cap is soft.
-  12-9-one-dwarf-per-tile: in-progress
+  12-9-one-dwarf-per-tile: review
   #   Created 2026-10-08 on 26185a0. #133 REPRODUCED: sim probe (494 of 3,000 idle ticks shared on DEFAULT_SEED,
   #     332 with a busy crew) and live wire (12-9-signoff/occupancy_wire.py: shared ticks 186, OCCUPANCY RED).
   #     FR49's per-step head-on rule LIVELOCKS in a dead-end tunnel (hand-traced); the story uses an escape rule.
