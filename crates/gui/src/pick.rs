@@ -828,12 +828,25 @@ mod tests {
 
     /// Sweeps rays across one pine, crown and bare trunk, at the boot pitch. Dig mode falls through
     /// the foliage onto the ground far behind (the flicker); cut mode stops at the pine's foot
-    /// whichever part of it the ray meets first.
+    /// whichever part of it the ray meets first. Only `[60,60,2]` reaches the bare trunk at this
+    /// pitch: the crown ring at z 4 covers z 3 and up.
     #[test]
     fn in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree() {
         let mirror = pine();
+        // INDEPENDENT ORACLE for the trunk half: every tree cell, foliage opaque, tested against
+        // each ray by entry distance rather than by the march.
+        let mut tree_cells = Vec::new();
+        for z in 0..DIMS.z as i32 {
+            for y in 0..DIMS.y as i32 {
+                for x in 0..DIMS.x as i32 {
+                    if crate::designate::is_tree_tile(&mirror, [x, y, z]) {
+                        tree_cells.push([x, y, z]);
+                    }
+                }
+            }
+        }
         let mut dig_outside = 0;
-        let mut dig_trunk = 0;
+        let mut trunk_first = 0;
         for yaw_step in 0..40 {
             let yaw = -1.0 + yaw_step as f32 * 0.05;
             for target in [
@@ -842,7 +855,6 @@ mod tests {
                 [61, 61, 5],
                 [60, 61, 4],
                 [60, 60, 2],
-                [60, 60, 3],
             ] {
                 let (origin, direction) = ray_at(target, yaw, 0.45, 30.0);
                 let cut = first_visible_hit(origin, direction, &mirror, TOP, true)
@@ -859,16 +871,24 @@ mod tests {
                 }) {
                     dig_outside += 1;
                 }
-                if dig.is_some_and(|hit| {
-                    mirror.tile(hit.tile) == Some(Tile::Solid(Material::TreeTrunk))
+                let first_tree = tree_cells
+                    .iter()
+                    .filter_map(|&cell| {
+                        cell_entry_distance(origin, direction, world_to_render(cell))
+                            .map(|entry| (entry, cell))
+                    })
+                    .min_by(|a, b| a.0.total_cmp(&b.0));
+                if first_tree.is_some_and(|(_, cell)| {
+                    mirror.tile(cell) == Some(Tile::Solid(Material::TreeTrunk))
                 }) {
-                    dig_trunk += 1;
+                    trunk_first += 1;
                 }
             }
         }
         assert!(
-            dig_trunk > 0,
-            "some rays must meet the bare trunk, or the trunk half of this test is vacuous"
+            trunk_first > 0,
+            "some rays must meet the bare trunk before any foliage, or the trunk half of this \
+             test is vacuous"
         );
         assert!(
             dig_outside > 0,
