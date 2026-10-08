@@ -578,6 +578,16 @@ on 26185a0 (above), and AC1's was re-shown to kill independently: row 1 applied,
 asserts compiled out) -> `489 ticks had two dwarves on one tile; first Some((2, ...))` at scenario.rs:2816. Restored.
 `scripts/audit-mutations.py`: 822 rows, every literal still matches.
 
+**Rows 15-19 and a full re-run (orchestrator, `06a235e`).** After Tasks 11 and 12, the whole `12-9.sh` (rows 1-19)
+reads **19/19 KILLED**. Each new row died on its own assert:
+- 15: `the channel miner stood on the cell it channels` (scenario.rs:953).
+- 16: the yaw assert in `a_channelling_miner_faces_the_target_cell`.
+- 17: `frame 0: the stone slid off its own cell`.
+- 18: `the first frame of the lift is the end of it`.
+- 19: `the set-down is a one-frame snap`.
+
+`12-5.sh` (Agent E re-pointed two of its rows) reads **15/15 KILLED**.
+
 **Old tables Agent C re-pointed, RUN (orchestrator, on 036f43a).** C's re-pointing passed the audit but the rows
 had not been run. Running `3-3-the-haul-and-the-skeleton-walks.sh` and `12-1.sh` found 9 rows not killing:
 7 SURVIVED and 1 NO-COMPILE in 3-3, and 2 SURVIVED in 12-1. Agent D triaged each row against its own 26185a0 copy, run in
@@ -716,3 +726,4 @@ a scratch worktree with that tree's `mutate.sh`:
 | 2026-10-08 | Ran the two old tables Agent C re-pointed: 9 rows were not killing. 4 had been blinded by 12.9 and are re-armed in `ca80219` (tests only). 5 were already dead on 26185a0 and are left alone, recorded |
 | 2026-10-08 | Seat pass 1 (Wolf): channel from the next tile → Task 11 / AC13; pick-up and drop drawn as a reach → Task 12 / AC14 (both ruled into 12.9, as recommended); self-haul idea → #180; FPS swing → #179. Rows 15–19 added |
 | 2026-10-08 | Tasks 11-12 (Agent E): channel from the next tile, `dig_yaw` Channel arm, lift and set-down (`ItemMotion`). Two 12-5 mutation rows re-pointed and run, both KILLED |
+| 2026-10-08 | Tasks 11-12 (Agent E, `d93f32d` `bfa6568` `0fccc74`). Rows 15-19 added; 12-9.sh 19/19 KILLED and 12-5.sh 15/15 KILLED on `06a235e` |

@@ -44,10 +44,20 @@ Press `+` once (Fast) and watch for another minute: the same points as (a).
 **Question 2:** does it hold at Fast? Note anything that looks like a dwarf freezing, jittering
 back and forth, or a stone landing somewhere odd.
 
+## (c) Pass 2: the seat pass 1 fixes
+
+1. Drag a small channel. **The miner stands beside the cell he channels** and faces it, not on top of it.
+   The stone lands on the channelled cell.
+2. Watch a hauler pick up and drop, at Normal and then at Fast:
+   - the stone **stays on its cell until his hands reach it**, then **rises into his hands** in about a
+     third of a second. It no longer jumps in from a cell away;
+   - logs are carried, not pushed ahead of him;
+   - at the pile, the stone is **set down onto the cell beside him**, not thrown.
+
+**Question 3:** do the channel and the carry now read right?
+
 ## Known, by design (not defects)
 
-- A **channel** miner stands on its own stone for a moment after each channel, until it walks
-  off (Wolf accepted at Task 0).
 - In a **one-wide tunnel**, digging pauses at each new stone until a hauler clears it. With no
   pile, it stops.
 - Two dwarves sealed in one pocket with no way past each other both wait.
