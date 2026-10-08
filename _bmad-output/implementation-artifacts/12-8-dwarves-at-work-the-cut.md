@@ -282,6 +282,9 @@ was done. A payload that writes any other way would have mutated the tree.
     fall-through; other modes are unchanged. The test now asserts, for every ray, `([60,60,1], Top)`
     and `cut_target == [60,60,2]`. It adds rays at the bare trunk `[60,60,2]` and `[60,60,3]`, and a
     positive count proving that dig-mode rays reach a `TreeTrunk` tile (`dig_trunk > 0`).
+    **CORRECTED by review run 2:** only `[60,60,2]` reaches the trunk first (37 of 40 rays).
+    `[60,60,3]` is covered by the crown ring at z 4 on all 40. `dig_trunk` could not fire, because
+    dig sees through the crown. Both are fixed in the run-2 patch pass below (`73c7d45`).
     - RED before the fix: `left: ([60, 60, 2], South) right: ([60, 60, 1], Top)`, yaw -1, target
       `[60, 60, 2]`.
     - Mutations (`RUST_TEST_THREADS=1 scripts/mutate.sh` on these two rows of `12-8.sh`): **2/2 KILLED**.
@@ -363,9 +366,11 @@ Not proven: the on-screen hover at the foot (the headless `--cursor` has no `Pri
 Wolf chose option 2: the two patches are LEFT AS ACTION ITEMS for a fresh-session patch pass. Story and board
 are `in-progress`. Review cost $12.73 over 244 turns (Opus $10.75, Sonnet $1.98; subagents 67.5% of tokens).
 `reap-build-caches.sh --tmp-only --force` reclaimed 52.0 GB. Tally: 0 decision-needed, 2 patch, 3 defer,
-7 dismissed.
+7 dismissed. Patch pass 2, 2026-10-08: both patches LANDED (`73c7d45`, `3d7f117`, mutation row `de6ff85`).
+Full gate GREEN on `de6ff85` (`RUST_TEST_THREADS=1 scripts/gate.sh`, 3431 s, pixel guards included). Status stays
+`in-progress`: the seat items above (trunk hover at the foot, the #174 feel at trunk scale) are unrun.
 
-- [ ] [Review][Patch] **The `dig_trunk > 0` guard cannot fire, so the trunk half of the strengthened test
+- [x] [Review][Patch] **The `dig_trunk > 0` guard cannot fire, so the trunk half of the strengthened test
   is unguarded** (acceptance, LOW, REWORK; RAN. A latent silent-failure trap, routed to patch under the frostvein
   exception) [crates/gui/src/pick.rs:866].
   - It counts DIG-mode hits on a trunk tile. Dig sees through the crown, so the 4 crown targets alone
@@ -381,9 +386,31 @@ are `in-progress`. Review cost $12.73 over 244 turns (Opus $10.75, Sonnet $1.98;
     - drop or re-aim `[60,60,3]`;
     - correct the record.
     - Show the guard firing: the trunk mutant with the trunk targets removed must FAIL.
-- [ ] [Review][Patch] **`tree_foot`'s doc and parameter still say foliage only, and it now takes trunk
+  - **LANDED `73c7d45`** (patch pass 2, 2026-10-08). `dig_trunk` is replaced by `trunk_first`. An
+    independent trace lists every tree cell once, by a scan of the world rather than the march. For
+    each ray it takes the nearest one by `cell_entry_distance`, with foliage opaque, and counts the ray
+    when that cell is a `TreeTrunk`. The assertion is `trunk_first > 0`. `[60,60,3]` is dropped,
+    because the sweep is pinned to the boot pitch, so re-aiming it is not an option. The record above
+    (`:283`) is corrected.
+    - Measured with a temporary `eprintln!`, then reverted from the commit: `trunk_first=37` on the
+      real targets. With `[60,60,2]` dropped it reads `0` and fails with "…or the trunk half of this
+      test is vacuous". That holds without the mutant AND with the trunk mutant
+      (`if cut && is_tree_foliage`) applied. This is the case run 2 RAN as a pass.
+    - Mutations: new row "cut-mode trunk target dropped" (`de6ff85`). `RUST_TEST_THREADS=1
+      scripts/mutate.sh` on the three cut-mode rows of `12-8.sh`: **3/3 KILLED**. Two of them are the
+      re-mutation of the run-1 rows ([[strengthened-test-needs-remutation]]). Exclusivity is not
+      checked.
+- [x] [Review][Patch] **`tree_foot`'s doc and parameter still say foliage only, and it now takes trunk
   tiles** (acceptance, LOW; read; the stale half of a doc the patch updated for one case only)
   [crates/gui/src/pick.rs:375-377].
+  - **LANDED `3d7f117`**. The doc now says "this tree tile (trunk or crown)", matching `tree_base_at`'s
+    own doc, and the parameter `foliage` is now `tile`. No behaviour change, so there is no test or
+    mutation.
+
+  | Item | Fix written for | Then tested | Pre-existing-state fixture |
+  | --- | --- | --- | --- |
+  | Trunk guard can fire (REWORK of run 1's test strengthening) | the vacuous world: no ray meets the trunk first, plus the run-1 trunk mutant | the real world: all targets present and the fix in place, so the guard must NOT fire (`trunk_first=37`, pass) | `pine()`, unchanged since round 1, under run 2's RAN state (trunk mutant + trunk targets removed), which the old guard passed |
+  | `tree_foot` doc | a trunk tile passed in (the run-1 call site) | n/a, doc and name only | n/a |
 - [x] [Review][Defer] **The Ramp-foliage clause of the cut guard is untested** [crates/gui/src/pick.rs:344]
   (acceptance + blind + edge, LOW; RAN) — deferred.
   - `pine()` has no Ramp tile, so a mutant that drops `|| is_tree_foliage` survives.
@@ -753,3 +780,4 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 | 2026-10-07 | Task 0 ruled. Dev (Sonnet subagents, Opus orchestrating): #164 gating + Fast walker; Cut bound by name at 10 ticks; #174 pick/box/tint; #173 `materials=` line. Round 20 (Wolf's seat, axe, $21.59) promoted; `CUT_OFFSET` 0.35 m. Stamp narrowed to build inputs. AC7 test held 30 s (#175). 24/24 mutation rows KILLED; full gate GREEN on `f7a1649`. Seat: "1 ok 2 ok". Status review. |
 | 2026-10-08 | Review run 1 patch pass: in cut mode a trunk hit now resolves to the pine's foot (`ef5dfb0`). The crown test asserts the exact foot cell and adds trunk rays. RED first; 2/2 mutation rows KILLED; full gate GREEN on `ef5dfb0` (3344 s). |
 | 2026-10-08 | Review run 2 on the patch (`712cd48..679e55a`): 0 HIGH/MED; 2 LOW patches left as action items (the `dig_trunk` guard cannot fire, REWORK; `tree_foot` doc); 3 deferred. No run 3. Status in-progress. |
+| 2026-10-08 | Review run 2 patch pass: trunk guard replaced by an independent first-tree-cell trace (`73c7d45`, 37/40 rays; `[60,60,3]` dropped, record corrected); `tree_foot` doc (`3d7f117`); new mutation row (`de6ff85`), 3/3 cut rows KILLED; full gate GREEN on `de6ff85` (3431 s). Seat items open; status in-progress. |
