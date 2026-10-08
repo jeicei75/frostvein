@@ -278,7 +278,7 @@ def pick_head():
 
 
 # ------------------------------------------------------------------- the keyer
-def key_clip(name, pose_at):
+def key_clip(name, pose_at, bones=None, located=("root", PICK)):
     """Replace action `name` with frames 0..CYCLE posed by pose_at(f), LINEAR, fake user.
 
     pose_at(f) sets every pose bone for frame f % CYCLE; frame CYCLE re-poses frame 0, so
@@ -288,7 +288,10 @@ def key_clip(name, pose_at):
     depsgraph to measure what it built (Carry pins the pickaxe to the pack off the evaluated
     hand); with an action bound that update would flush the action's values over the pose.
     Then the action is bound and the recorded values keyed, with no update in between.
+    `bones` and `located` default to this round's rig: round 20 passes its 21st joint `axe`,
+    which moves through space and so needs location keys as `root` and `pick` do.
     """
+    bones = BONES if bones is None else bones
     arm = arm_ob()
     bpy.context.view_layer.objects.active = arm
     if arm.animation_data is None:
@@ -298,7 +301,7 @@ def key_clip(name, pose_at):
     for f in range(0, CYCLE + 1):
         pose_at(f % CYCLE)
         pose = {b: (arm.pose.bones[b].rotation_quaternion.copy(),
-                    arm.pose.bones[b].location.copy()) for b in BONES}
+                    arm.pose.bones[b].location.copy()) for b in bones}
         # q and -q are one rotation but LINEAR keys between them spin the long way round.
         # A decomposed matrix (the pickaxe sling) can come back with either sign.
         if poses:
@@ -317,11 +320,11 @@ def key_clip(name, pose_at):
     sc.render.fps = FPS
     sc.frame_start, sc.frame_end = 0, CYCLE
     for f, pose in enumerate(poses):
-        for b in BONES:
+        for b in bones:
             pb = arm.pose.bones[b]
             pb.rotation_quaternion, pb.location = pose[b]
             pb.keyframe_insert("rotation_quaternion", frame=f, group=b)
-            if b in ("root", PICK):
+            if b in located:
                 pb.keyframe_insert("location", frame=f, group=b)
     curves = W.fcurves(act)
     for fc in curves:

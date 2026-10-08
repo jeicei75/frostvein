@@ -200,7 +200,7 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | LMB | select the dwarf under the cursor and follow him (with no designate mode armed) |
 | `Esc` | release the selection, or abort a designation |
 | `T` | with a dwarf selected, change his trade: miner → hauler → woodcutter → miner |
-| `1` `2` `3` `4` `5` | designate dig / channel / stockpile / clear / cut — then LMB-drag a rectangle. A cut marks every pine the drag catches, once each, at the foot of its trunk; a woodcutter fells the whole tree and leaves one log per trunk cell. `4` over a pine's foot clears its cut mark |
+| `1` `2` `3` `4` `5` | designate dig / channel / stockpile / clear / cut — then LMB-drag a rectangle. A cut marks every pine the drag catches, once each, at the foot of its trunk; a woodcutter fells the whole tree and leaves one log per trunk cell. `4` over a pine's foot clears its cut mark. In cut mode the pointer stops at the pine you point at, crown or trunk, and sits at its foot; while you drag, every cell of the box shows a hover slab and the pines it catches turn flat green. A marked pine stays flat green, with its mark slab at the foot, until it is felled or cleared |
 | `ctrl` + `S` / `ctrl` + `L` | save / load the world (the daemon writes `frostvein.save` and says `saved tick N`; a load snaps every client back). While `ctrl` is held the keyboard camera keys do nothing, so the chord never moves the view |
 | `H` | hide / show the whole HUD: fps overlay, readouts, hint |
 | `space` | pause / resume the sim |
@@ -304,16 +304,23 @@ binary that predates your change says so.
 
 - `Dig` while he is in `work` on a dig or channel job, once he is drawn at his cell: ten 5-tick
   swings per 50-tick dig, timed in delivered ticks;
+- `Cut` while he is in `work` on a cut job, once drawn at his cell: five 10-tick chops per 50-tick
+  cut, timed in delivered ticks. While it plays, the GLB's armature node (not the dwarf) is drawn 0.35 m
+  toward the trunk, because the clip is authored against bark 0.95 m ahead and he stands 1.30 m away;
 - otherwise `Carry` while he carries a stone, which is drawn in his hands until he is drawn at the
   cell he drops it on;
 - otherwise `Walk`.
 
-`Walk` and `Carry` are phase-locked to the ground he covers. While digging a dig (not a channel) he
+`Walk` and `Carry` are phase-locked to the ground he covers. While digging a dig or cutting (not a channel) he
 faces his target. Clips are bound by NAME from the embedded GLB, and the startup line says
-`clips Walk, Dig, Carry`, or `clip <Name> ABSENT` for each one missing. Every switch prints
-`gui dwarf <id> clip <walk|dig|carry>` to stderr, one line per dwarf per switch, by design. A dig
+`clips Walk, Dig, Carry, Cut`, or `clip <Name> ABSENT` for each one missing. Every switch prints
+`gui dwarf <id> clip <walk|dig|carry|cut>` to stderr, one line per dwarf per switch, by design. A dig
 is 5 s at Normal and 1 s at Fast; at Fast the drawn dwarf can trail the wire long enough to miss it
 (#164), so judge the swing at Normal.
+
+Once the trees are reported loaded the gui prints `gui trees: materials=<n> [<label>:<pines>, ...]` to stderr: `<n>`
+distinct materials on pine meshes, each with the number of pines wearing it (GLB material name, or `cut-tint` for
+a cut-marked pine), and again whenever that changes (#173's instrument).
 
 ## Test
 

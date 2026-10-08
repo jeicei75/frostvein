@@ -18,39 +18,37 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                .and_then(|(_, stone)| *stone)\n                .filter(|_| false),\n'))
 PY
 
-# Re-pointed 2026-10-05 (12.7): `dwarf_clip`'s match gained the `Cut` arm (a woodcutter in Work swings), so the quoted `matches!` is the three-arm form; the sabotage still moves the carry test ahead of it.
+# Re-pointed 2026-10-07 (12.8): `dwarf_clip` now tests Dig/Channel and Cut as separate arms, so the quoted text is that form; the sabotage still moves the carry test ahead of the Dig arm.
 mutation "Carry is preferred over Dig" gui digging_outranks_carrying_in_the_clip_choice <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '''    if entity.state == protocol::JobState::Work
+old = '''    let working = entity.state == protocol::JobState::Work;
+    if working
         && matches!(
             entity.job,
-            Some(
-                protocol::DwarfJob::Dig { .. }
-                    | protocol::DwarfJob::Channel { .. }
-                    | protocol::DwarfJob::Cut { .. }
-            )
+            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
         )
     {
         DwarfClip::Dig
+    } else if working && matches!(entity.job, Some(protocol::DwarfJob::Cut { .. })) {
+        DwarfClip::Cut
     } else if entity.carrying.is_some() {
         DwarfClip::Carry
     } else {
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''    if entity.carrying.is_some() {
+p.write_text(s.replace(old, '''    let working = entity.state == protocol::JobState::Work;
+    if entity.carrying.is_some() {
         DwarfClip::Carry
-    } else if entity.state == protocol::JobState::Work
+    } else if working
         && matches!(
             entity.job,
-            Some(
-                protocol::DwarfJob::Dig { .. }
-                    | protocol::DwarfJob::Channel { .. }
-                    | protocol::DwarfJob::Cut { .. }
-            )
+            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
         )
     {
         DwarfClip::Dig
+    } else if working && matches!(entity.job, Some(protocol::DwarfJob::Cut { .. })) {
+        DwarfClip::Cut
     } else {
 '''))
 PY
@@ -62,7 +60,7 @@ old = '    clock: Res<TickClock>,\n    mut commands: Commands,\n'
 assert s.count(old) == 1
 s = s.replace(old, '    clock: Res<TickClock>,\n    time: Res<bevy::time::Time>,\n    mut commands: Commands,\n')
 old = '''            dig.phase = ((tick.saturating_sub(dig.entered) as f32 + clock.factor())
-                / WORK_SWING_TICKS as f32)
+                / chosen.swing_ticks() as f32)
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            let _ = &clock;\n            dig.phase = (time.elapsed_secs() * 2.0)\n'))
@@ -116,9 +114,9 @@ PY
 mutation "the dig clip starts while he is still walking in" gui a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            DwarfClip::Dig if !arrived => {\n'
+old = '            swing if swing.swings() && !arrived => {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            DwarfClip::Dig if false && !arrived => {\n'))
+p.write_text(s.replace(old, '            swing if false && swing.swings() && !arrived => {\n'))
 PY
 
 mutation "the dig facing turns him while he is still walking in" gui a_dwarf_still_walking_in_does_not_swing_or_turn_until_he_is_drawn_at_his_cell <<'PY'
@@ -134,9 +132,9 @@ PY
 mutation "the stone is put down while he is still walking in" gui a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '            (None, Some(parent)) if !walking_in.contains(&parent.parent()) => {\n'
+old = 'const DROP_REACH_CELLS: f32 = 0.1;\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            (None, Some(parent)) if true || !walking_in.contains(&parent.parent()) => {\n'))
+p.write_text(s.replace(old, 'const DROP_REACH_CELLS: f32 = 1000.0;\n'))
 PY
 
 mutation "he drops the carry pose while still holding the stone" gui a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on <<'PY'
@@ -162,9 +160,9 @@ PY
 mutation "the Dig clip is never bound" gui a_miner_logs_dig_and_a_hauler_logs_carry_from_a_real_daemon ignored <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                let (walk, dig, carry) = (load("Walk"), load("Dig"), load("Carry"));\n'
+old = '                    (load("Walk"), load("Dig"), load("Carry"), load("Cut"));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                let (walk, dig, carry) = (load("Walk"), load("Dug"), load("Carry"));\n'))
+p.write_text(s.replace(old, '                    (load("Walk"), load("Dug"), load("Carry"), load("Cut"));\n'))
 PY
 
 # NOTE: AC8's deliberate RED (the bridge sends no job, judged by the real-binary AC8 test) cannot be

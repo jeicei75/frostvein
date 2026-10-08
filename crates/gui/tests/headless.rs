@@ -5203,6 +5203,43 @@ fn the_dig_phase_runs_on_delivered_ticks_and_holds_when_the_ticks_repeat() {
     assert!((after.phase - tick_factor(&app) / 5.0).abs() < 1e-5);
 }
 
+/// 12.8 Task 0.2: a cut swings once per 10 delivered ticks (5 chops in a 50-tick cut), a dig once per
+/// 5. Five ticks in, a dig has wrapped its whole swing and a cut is half way through its own.
+#[test]
+fn a_cut_swing_advances_at_half_the_rate_of_a_dig_swing() {
+    let settled_after_five_ticks = |job: protocol::DwarfJob| {
+        let mut app = headless_app(snapshot(
+            vec![Tile::Empty, Tile::Empty],
+            vec![dwarf(7, [0, 0, 0])],
+        ));
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+            100,
+        )));
+        app.update();
+        for offset in 0..4_u64 {
+            let at = working(7, [0, 0, 0], JobState::Work, Some(job), None);
+            apply_delta(&mut app, delta_at(10 + offset, Vec::new(), vec![at]));
+            app.update();
+        }
+        let at = working(7, [0, 0, 0], JobState::Work, Some(job), None);
+        apply_delta(&mut app, delta_at(14, Vec::new(), vec![at]));
+        for _ in 0..9 {
+            app.update();
+        }
+        dig_phase_of(&mut app, 7).phase
+    };
+    let dig = settled_after_five_ticks(DIG_AT_EAST);
+    let cut = settled_after_five_ticks(protocol::DwarfJob::Cut { target: [1, 0, 0] });
+    assert!(
+        !(1e-5..=1.0 - 1e-5).contains(&dig),
+        "a dig wraps at 5 ticks: {dig}"
+    );
+    assert!(
+        (cut - 0.5).abs() < 1e-5,
+        "a cut is half way at 5 ticks: {cut}"
+    );
+}
+
 fn drawn_rotation(app: &mut App, id: u32) -> bevy::prelude::Quat {
     app.world_mut()
         .query::<(&WorldProjected, &Transform)>()
@@ -5416,6 +5453,98 @@ fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
     assert_eq!(dwarf_clip_of(&mut app, 7), Walk, "and walks empty-handed");
 }
 
+/// #164 effect 1: the sim picks the stone up on the tick he reaches its cell, while the client
+/// is still walking him there; the stone must stay on the ground until his drawn body arrives.
+#[test]
+fn a_hauler_does_not_pick_up_his_stone_until_he_is_drawn_at_its_cell() {
+    use bevy::prelude::ChildOf;
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [1, 0, 0],
+        kind: protocol::ItemKind::Stone,
+    }];
+    let mut app = headless_app(start);
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let held = |app: &mut App| {
+        app.world_mut()
+            .query::<(&ProjectedItem, Option<&ChildOf>)>()
+            .iter(app.world())
+            .find(|(item, _)| item.0 == 70)
+            .map(|(_, parent)| parent.is_some())
+            .expect("the stone must be projected")
+    };
+    // One step east onto the stone's cell, and the same delta says he has picked it up.
+    let hauling = working(
+        7,
+        [1, 0, 0],
+        JobState::Walk,
+        Some(protocol::DwarfJob::Haul),
+        Some(70),
+    );
+    apply_delta(
+        &mut app,
+        Delta {
+            items: vec![Item {
+                id: 70,
+                pos: [1, 0, 0],
+                kind: protocol::ItemKind::Stone,
+            }],
+            ..delta_at(1, Vec::new(), vec![hauling])
+        },
+    );
+    app.update();
+    assert!(
+        !held(&mut app),
+        "still walking onto the stone's cell: it is not in his hands yet"
+    );
+    // One cell at 0.9 cells/s is about 1.1 s; 20 frames of 100 ms is well past it.
+    for _ in 0..20 {
+        app.update();
+    }
+    assert!(held(&mut app), "drawn at the cell: he holds it");
+}
+
+/// #164 at Fast: a whole 50-tick work run lasts one second of wall time, so the drawn walker has to
+/// keep pace with the sim speed or he reaches his cell after the work is over.
+#[test]
+fn a_dwarf_walking_in_at_fast_reaches_his_work_clip_within_the_run() {
+    use gui::project::DwarfClip::Dig;
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    // Fast delivers a tick every 20 ms.
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        20,
+    )));
+    app.update();
+    let dig_north = protocol::DwarfJob::Dig { target: [0, 2, 0] };
+    let mut reached = false;
+    for tick in 1..=50 {
+        let delta = Delta {
+            speed: Speed::Fast,
+            ..delta_at(
+                tick,
+                Vec::new(),
+                vec![working(7, [0, 1, 0], JobState::Work, Some(dig_north), None)],
+            )
+        };
+        apply_delta(&mut app, delta);
+        app.update();
+        reached |= dwarf_clip_of(&mut app, 7) == Dig;
+    }
+    assert!(reached, "never reached the Dig clip within the 50-tick run");
+}
+
 /// 12.5 AC7: while a dwarf carries a stone, it is his child at `CARRY_OFFSET`, whatever the blend
 /// does each frame; the delta that clears it puts it back on its cell.
 #[test]
@@ -5482,7 +5611,9 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
             [1, 0, 0],
         ),
     );
-    for _ in 0..4 {
+    // One cell at 0.9 cells/s is about 1.1 s: he is drawn on the stone's cell, and so holds it,
+    // only after 12 frames of 100 ms.
+    for _ in 0..20 {
         app.update();
     }
     let (held, parent) = stone(&mut app);
@@ -5854,13 +5985,13 @@ fn a_carried_log_is_drawn_at_the_log_scale() {
     assert!((dropped.translation.y - (world_to_render([1, 0, 0]).y - 0.36)).abs() < 1e-6);
 }
 
-/// 12.7 Task 0.1: a woodcutter working a cut plays the Dig clip, and only while he works it.
+/// 12.8 Task 3: a woodcutter working a cut plays the Cut clip, and only while he works it.
 #[test]
-fn a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip() {
+fn a_woodcutter_on_a_cut_job_in_work_gets_the_cut_clip() {
     use gui::project::{DwarfClip, dwarf_clip};
     let cut = protocol::DwarfJob::Cut { target: [2, 0, 0] };
     let working_cut = working(1, [0, 0, 0], JobState::Work, Some(cut), None);
-    assert_eq!(dwarf_clip(&working_cut), DwarfClip::Dig);
+    assert_eq!(dwarf_clip(&working_cut), DwarfClip::Cut);
     // Still walking to the tree: not a swing.
     let walking = working(1, [0, 0, 0], JobState::Walk, Some(cut), None);
     assert_eq!(dwarf_clip(&walking), DwarfClip::Walk);
@@ -5879,7 +6010,98 @@ fn a_woodcutter_on_a_cut_job_in_work_gets_the_dig_clip() {
         ),
     );
     app.update();
-    assert_eq!(dwarf_clip_of(&mut app, 7), DwarfClip::Dig);
+    assert_eq!(dwarf_clip_of(&mut app, 7), DwarfClip::Cut);
+}
+
+/// 12.8 Job 2: while he plays Cut the ARMATURE node (the player's entity) is drawn `CUT_OFFSET`
+/// toward the trunk and nothing else moves; the dwarf entity stays on its cell and the node
+/// returns exactly to rest when the work ends. A digger is never nudged.
+#[test]
+fn a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not() {
+    use bevy::prelude::{AnimationPlayer, ChildOf, Transform, Vec3};
+    let cut = protocol::DwarfJob::Cut { target: [2, 0, 0] };
+    let dig = protocol::DwarfJob::Dig { target: [2, 0, 0] };
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0]), dwarf(8, [1, 0, 0])],
+    ));
+    app.update();
+    // The glTF loader's `SK_` armature node, standing in: a child of the dwarf carrying the player.
+    let rest = Vec3::new(0.0, 0.0, -0.175_165_92);
+    for id in [7, 8] {
+        let dwarf_entity = app
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &WorldProjected)>()
+            .iter(app.world())
+            .find(|(_, marker)| marker.0 == id)
+            .map(|(entity, _)| entity)
+            .unwrap();
+        app.world_mut().spawn((
+            AnimationPlayer::default(),
+            Transform::from_translation(rest),
+            ChildOf(dwarf_entity),
+        ));
+    }
+    let armature = |app: &mut App, id: u32| -> Vec3 {
+        let dwarf_entity = app
+            .world_mut()
+            .query::<(bevy::prelude::Entity, &WorldProjected)>()
+            .iter(app.world())
+            .find(|(_, marker)| marker.0 == id)
+            .map(|(entity, _)| entity)
+            .unwrap();
+        app.world_mut()
+            .query::<(&AnimationPlayer, &Transform, &ChildOf)>()
+            .iter(app.world())
+            .find(|(_, _, parent)| parent.0 == dwarf_entity)
+            .map(|(_, transform, _)| transform.translation)
+            .unwrap()
+    };
+    let drawn = |app: &mut App, id: u32| -> Vec3 {
+        app.world_mut()
+            .query::<(&WorldProjected, &Transform)>()
+            .iter(app.world())
+            .find(|(marker, _)| marker.0 == id)
+            .map(|(_, transform)| transform.translation)
+            .unwrap()
+    };
+    app.update();
+    assert_eq!(armature(&mut app, 7), rest);
+    let cell = drawn(&mut app, 7);
+
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![
+                working(7, [0, 0, 0], JobState::Work, Some(cut), None),
+                working(8, [1, 0, 0], JobState::Work, Some(dig), None),
+            ],
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(
+        armature(&mut app, 7),
+        rest + Vec3::new(0.0, 0.0, -gui::appearance::CUT_OFFSET)
+    );
+    assert_eq!(armature(&mut app, 8), rest, "a digger is not nudged");
+    assert_eq!(drawn(&mut app, 7), cell, "the dwarf entity must not move");
+
+    apply_delta(
+        &mut app,
+        delta_at(
+            2,
+            Vec::new(),
+            vec![working(7, [0, 0, 0], JobState::Walk, None, None)],
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(armature(&mut app, 7), rest, "the nudge must clear exactly");
 }
 
 /// 12.7 Task 0.1: and he faces the trunk while he does it.
@@ -5913,5 +6135,234 @@ fn a_woodcutter_working_a_cut_faces_the_trunk() {
     assert!(
         drawn.dot(east).abs() > 1.0 - 1e-5,
         "a cut to his east faces east, drew {drawn:?}"
+    );
+}
+
+/// 12.8 Task 4 (§3 option a): a pine with a cut mark wears ONE shared tinted material, the mark's
+/// removal puts its own material back, and a respawn of its `TreeMesh` (the incremental path
+/// despawns and rebuilds a column whenever a tile beside it changes) does not lose the tint.
+///
+/// The GLB scene does not spawn under `MinimalPlugins`, so a mesh child stands in for it, as in the
+/// tunic test. Everything from there is the production path.
+#[test]
+fn a_cut_marked_pine_wears_the_shared_tint_and_keeps_it_across_a_respawn() {
+    use bevy::prelude::{ChildOf, Handle};
+
+    let dims = Dims { x: 8, y: 3, z: 6 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    for x in 0..8 {
+        for y in 0..3 {
+            tiles[index([x, y, 0])] = Tile::Solid(Material::Stone);
+        }
+    }
+    for z in 1..=3 {
+        tiles[index([1, 1, z])] = Tile::Solid(Material::TreeTrunk);
+        tiles[index([5, 1, z])] = Tile::Solid(Material::TreeTrunk);
+    }
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+    app.update();
+    let original = app
+        .world_mut()
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial::default());
+
+    // Stands a scene's mesh under every tree that has none yet.
+    let seat_scenes = |app: &mut App| {
+        let bare: Vec<BevyEntity> = {
+            let world = app.world_mut();
+            let trees: Vec<BevyEntity> = world
+                .query_filtered::<BevyEntity, With<gui::project::TreeMesh>>()
+                .iter(world)
+                .collect();
+            trees
+                .into_iter()
+                .filter(|tree| {
+                    world
+                        .query::<&ChildOf>()
+                        .iter(world)
+                        .all(|child_of| child_of.parent() != *tree)
+                })
+                .collect()
+        };
+        for tree in bare {
+            app.world_mut().spawn((
+                Mesh3d::default(),
+                MeshMaterial3d(original.clone()),
+                ChildOf(tree),
+            ));
+        }
+    };
+    let material_of = |app: &mut App, base: [i32; 3]| -> Handle<StandardMaterial> {
+        let world = app.world_mut();
+        let tree = world
+            .query::<(BevyEntity, &gui::project::TreeMesh)>()
+            .iter(world)
+            .find(|(_, tree)| tree.0 == base)
+            .map(|(entity, _)| entity)
+            .expect("the pine must be drawn as a mesh tree");
+        world
+            .query::<(&ChildOf, &MeshMaterial3d<StandardMaterial>)>()
+            .iter(world)
+            .find(|(child_of, _)| child_of.parent() == tree)
+            .map(|(_, material)| material.0.clone())
+            .expect("the stand-in scene mesh must carry a material")
+    };
+    let mark = |app: &mut App, marks: Vec<[i32; 3]>| {
+        let mut message = delta(Vec::new(), Vec::new());
+        message.designations = marks
+            .into_iter()
+            .map(|pos| Designation {
+                pos,
+                kind: DesignationKind::Cut,
+            })
+            .collect();
+        apply_delta(app, message);
+        app.update();
+    };
+    seat_scenes(&mut app);
+    app.update();
+    assert_eq!(
+        material_of(&mut app, [1, 1, 1]),
+        original,
+        "unmarked pines keep their own"
+    );
+
+    mark(&mut app, vec![[1, 1, 1], [5, 1, 1]]);
+    let tinted = material_of(&mut app, [1, 1, 1]);
+    assert_ne!(tinted, original, "a cut-marked pine must wear the tint");
+    assert_eq!(
+        material_of(&mut app, [5, 1, 1]),
+        tinted,
+        "every marked pine shares ONE tinted material"
+    );
+    assert_eq!(
+        app.world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(&tinted)
+            .unwrap()
+            .base_color,
+        gui::appearance::material_color(Material::TreeFoliage),
+        "the tint is the foliage green"
+    );
+
+    // Respawn the marked pine: a tile beside its column changes, so the incremental path rebuilds it.
+    // A delta carries the whole designation set, so it must restate the marks.
+    let mut respawn = delta(
+        vec![TileChange {
+            pos: [2, 1, 0],
+            tile: Tile::Empty,
+        }],
+        Vec::new(),
+    );
+    respawn.designations = ([[1, 1, 1], [5, 1, 1]])
+        .map(|pos| Designation {
+            pos,
+            kind: DesignationKind::Cut,
+        })
+        .to_vec();
+    apply_delta(&mut app, respawn);
+    app.update();
+    seat_scenes(&mut app);
+    app.update();
+    assert_eq!(
+        material_of(&mut app, [1, 1, 1]),
+        tinted,
+        "a respawned marked pine must come back tinted"
+    );
+
+    mark(&mut app, vec![[5, 1, 1]]);
+    assert_eq!(
+        material_of(&mut app, [1, 1, 1]),
+        original,
+        "clearing the mark puts the pine's own material back"
+    );
+    assert_eq!(
+        material_of(&mut app, [5, 1, 1]),
+        tinted,
+        "the other mark stands"
+    );
+}
+
+/// 12.8 Task 5 (#173's instrument): the `gui trees: materials=` line counts the distinct materials on
+/// pine meshes and the pines wearing each, so a pine on the wrong material is visible without a
+/// screenshot. It must MOVE with the marks: a line that printed a constant would pass a single read.
+#[test]
+fn the_trees_materials_line_counts_pines_per_material_and_follows_the_marks() {
+    use bevy::gltf::GltfMaterialName;
+    use bevy::prelude::ChildOf;
+
+    let dims = Dims { x: 8, y: 3, z: 6 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    for x in 0..8 {
+        for y in 0..3 {
+            tiles[index([x, y, 0])] = Tile::Solid(Material::Stone);
+        }
+    }
+    for z in 1..=3 {
+        for x in [1, 3, 5] {
+            tiles[index([x, 1, z])] = Tile::Solid(Material::TreeTrunk);
+        }
+    }
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+    app.update();
+    let original = app
+        .world_mut()
+        .resource_mut::<Assets<StandardMaterial>>()
+        .add(StandardMaterial::default());
+    // The scene's meshes carry the GLB material name; a stand-in does the same.
+    let trees: Vec<BevyEntity> = {
+        let world = app.world_mut();
+        world
+            .query_filtered::<BevyEntity, With<gui::project::TreeMesh>>()
+            .iter(world)
+            .collect()
+    };
+    assert_eq!(trees.len(), 3, "three pines are drawn as mesh trees");
+    for tree in trees {
+        app.world_mut().spawn((
+            Mesh3d::default(),
+            MeshMaterial3d(original.clone()),
+            GltfMaterialName("PineBark".to_string()),
+            ChildOf(tree),
+        ));
+    }
+    app.world_mut()
+        .resource_mut::<gui::project::TreeReportState>()
+        .reported = true;
+    let line = |app: &App| {
+        app.world()
+            .resource::<gui::project::PineMaterialsReport>()
+            .0
+            .clone()
+    };
+    let mark = |app: &mut App, marks: Vec<[i32; 3]>| {
+        let mut message = delta(Vec::new(), Vec::new());
+        message.designations = marks
+            .into_iter()
+            .map(|pos| Designation {
+                pos,
+                kind: DesignationKind::Cut,
+            })
+            .collect();
+        apply_delta(app, message);
+        app.update();
+        app.update();
+    };
+
+    app.update();
+    assert_eq!(line(&app), "gui trees: materials=1 [PineBark:3]");
+    mark(&mut app, vec![[1, 1, 1], [5, 1, 1]]);
+    assert_eq!(
+        line(&app),
+        "gui trees: materials=2 [PineBark:1, cut-tint:2]"
+    );
+    mark(&mut app, vec![[5, 1, 1]]);
+    assert_eq!(
+        line(&app),
+        "gui trees: materials=2 [PineBark:2, cut-tint:1]"
     );
 }

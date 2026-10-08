@@ -12,9 +12,9 @@ use protocol::EntityKind;
 
 use crate::{
     camera::CameraRig,
-    designate::DesignateMode,
+    designate::{DesignateMode, is_tree_tile},
     ingest::MirrorResource,
-    project::{TerrainTile, WorldProjected, is_tree_foliage, is_visible_at_slice},
+    project::{TerrainTile, WorldProjected, is_tree_foliage, is_visible_at_slice, tree_base_at},
     slice::SliceLevel,
     transform::{render_to_world, world_to_render},
 };
@@ -246,6 +246,7 @@ pub fn update_pick(
     mut picked: ResMut<PickedTile>,
     mirror: Res<MirrorResource>,
     slice: Res<SliceLevel>,
+    mode: Res<DesignateMode>,
     cameras: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     windows: Query<&Window, With<PrimaryWindow>>,
 ) {
@@ -267,6 +268,7 @@ pub fn update_pick(
                     ray.direction.as_vec3(),
                     &mirror.0,
                     slice.level(),
+                    *mode == DesignateMode::Cut,
                 )
             })
     });
@@ -277,6 +279,7 @@ fn first_visible_hit(
     direction: Vec3,
     mirror: &client_core::Mirror,
     level: i32,
+    cut: bool,
 ) -> Option<PickedCell> {
     let dims = mirror.dims();
     // AC2: `world_to_render` is the ONLY axis conversion. The two opposite world corners are
@@ -334,11 +337,16 @@ fn first_visible_hit(
     while distance <= end {
         let centre = cell.as_vec3();
         let world = render_to_world(centre);
-        if mirror.tile(world).is_some()
-            && is_visible_at_slice(mirror, world, level)
-            && !is_tree_foliage(mirror, world)
-        {
-            return Some(PickedCell { tile: world, face });
+        if mirror.tile(world).is_some() && is_visible_at_slice(mirror, world, level) {
+            // Cut mode only: any part of a pine, crown or trunk, is the tree, so the ray stops at
+            // its foot, where `cut_target` puts the mark. Every other mode keeps seeing the ground
+            // through the foliage.
+            if cut && (is_tree_tile(mirror, world) || is_tree_foliage(mirror, world)) {
+                return Some(tree_foot(mirror, world).unwrap_or(PickedCell { tile: world, face }));
+            }
+            if !is_tree_foliage(mirror, world) {
+                return Some(PickedCell { tile: world, face });
+            }
         }
         if next.x <= next.y && next.x <= next.z {
             distance = next.x;
@@ -362,6 +370,16 @@ fn first_visible_hit(
         }
     }
     None
+}
+
+/// The ground cell under the trunk of the tree this tree tile (trunk or crown) belongs to: the
+/// cell whose `cut_target` is the tree's base. `None` for a tile no trunk reaches.
+fn tree_foot(mirror: &client_core::Mirror, tile: [i32; 3]) -> Option<PickedCell> {
+    let [x, y, base] = tree_base_at(mirror, tile)?;
+    Some(PickedCell {
+        tile: [x, y, base - 1],
+        face: Face::Top,
+    })
 }
 
 fn entry_face(origin: Vec3, direction: Vec3, min: Vec3, max: Vec3, entry: f32) -> Face {
@@ -537,7 +555,8 @@ mod tests {
         })
         .unwrap();
         assert_eq!(
-            first_visible_hit(Vec3::new(-2.0, 0.0, 0.0), Vec3::X, &mirror, 0).map(|hit| hit.face),
+            first_visible_hit(Vec3::new(-2.0, 0.0, 0.0), Vec3::X, &mirror, 0, false)
+                .map(|hit| hit.face),
             Some(Face::West),
         );
     }
@@ -595,7 +614,7 @@ mod tests {
             ),
         ];
         for (label, origin, direction) in approaches {
-            let hit = first_visible_hit(origin, direction, &mirror, TOP)
+            let hit = first_visible_hit(origin, direction, &mirror, TOP, false)
                 .unwrap_or_else(|| panic!("the ray {label} must strike the pillar"));
             assert_eq!(hit.tile, target, "the ray {label} struck the wrong cell");
             assert!(
@@ -621,7 +640,7 @@ mod tests {
         let target = [5, 7, 1];
         let origin = world_to_render(target);
         for direction in [Vec3::X, -Vec3::X, Vec3::Z, -Vec3::Z] {
-            let hit = first_visible_hit(origin, direction, &mirror, TOP)
+            let hit = first_visible_hit(origin, direction, &mirror, TOP, false)
                 .expect("a ray inside a solid cell hits that cell immediately");
             assert_eq!(hit.tile, target);
             assert_ne!(
@@ -721,7 +740,8 @@ mod tests {
             let yaw = -2.1 + index as f32 * 0.27;
             let (pitch, distance) = poses[index % poses.len()];
             let (origin, direction) = ray_at(target, yaw, pitch, distance);
-            let marched = first_visible_hit(origin, direction, &mirror, TOP).map(|hit| hit.tile);
+            let marched =
+                first_visible_hit(origin, direction, &mirror, TOP, false).map(|hit| hit.tile);
             let traced = nearest_visible_cell(&mirror, origin, direction, TOP);
             assert_eq!(
                 marched, traced,
@@ -745,7 +765,7 @@ mod tests {
         // Hand-written: pillar 3 stands at x 20, y 40, solid through z 0..=2.
         let above = world_to_render([20, 40, TOP]) + Vec3::Y * 10.0;
         assert_eq!(
-            first_visible_hit(above, -Vec3::Y, &mirror, TOP).map(|hit| hit.tile),
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP, false).map(|hit| hit.tile),
             Some([20, 40, 2]),
             "the march must stop at the pillar's top tile, not run through it to the one below"
         );
@@ -757,11 +777,122 @@ mod tests {
         let [x, y] = FOLIAGE_PILLAR;
         let above = world_to_render([x, y, TOP]) + Vec3::Y * 10.0;
         assert_eq!(
-            first_visible_hit(above, -Vec3::Y, &mirror, TOP).map(|hit| hit.tile),
+            first_visible_hit(above, -Vec3::Y, &mirror, TOP, false).map(|hit| hit.tile),
             Some([x, y, 3]),
             "tree foliage is represented by a presentation mesh while picking still walks the \
              authoritative tile grid, so foliage must stay non-pickable and reveal the trunk \
              tile beneath it"
+        );
+    }
+    /// One real pine on a stone floor: trunk z 2..=5 at (60,60) with the 3x3 crown ring at z 4..=6.
+    fn pine() -> Mirror {
+        let mut tiles = vec![Tile::Empty; (DIMS.x * DIMS.y * DIMS.z) as usize];
+        let index = |[x, y, z]: [i32; 3]| {
+            (x as u32 + y as u32 * DIMS.x + z as u32 * DIMS.x * DIMS.y) as usize
+        };
+        for y in 0..DIMS.y as i32 {
+            for x in 0..DIMS.x as i32 {
+                tiles[index([x, y, 1])] = Tile::Solid(Material::Stone);
+            }
+        }
+        for z in 2..=5 {
+            tiles[index([60, 60, z])] = Tile::Solid(Material::TreeTrunk);
+        }
+        for z in 4..=6 {
+            for (dx, dy) in [
+                (-1, -1),
+                (0, -1),
+                (1, -1),
+                (-1, 0),
+                (1, 0),
+                (-1, 1),
+                (0, 1),
+                (1, 1),
+            ] {
+                tiles[index([60 + dx, 60 + dy, z])] = Tile::Solid(Material::TreeFoliage);
+            }
+        }
+        Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims: DIMS,
+            tiles,
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap()
+    }
+
+    /// Sweeps rays across one pine, crown and bare trunk, at the boot pitch. Dig mode falls through
+    /// the foliage onto the ground far behind (the flicker); cut mode stops at the pine's foot
+    /// whichever part of it the ray meets first. Only `[60,60,2]` reaches the bare trunk at this
+    /// pitch: the crown ring at z 4 covers z 3 and up.
+    #[test]
+    fn in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree() {
+        let mirror = pine();
+        // INDEPENDENT ORACLE for the trunk half: every tree cell, foliage opaque, tested against
+        // each ray by entry distance rather than by the march.
+        let mut tree_cells = Vec::new();
+        for z in 0..DIMS.z as i32 {
+            for y in 0..DIMS.y as i32 {
+                for x in 0..DIMS.x as i32 {
+                    if crate::designate::is_tree_tile(&mirror, [x, y, z]) {
+                        tree_cells.push([x, y, z]);
+                    }
+                }
+            }
+        }
+        let mut dig_outside = 0;
+        let mut trunk_first = 0;
+        for yaw_step in 0..40 {
+            let yaw = -1.0 + yaw_step as f32 * 0.05;
+            for target in [
+                [59, 60, 5],
+                [60, 59, 6],
+                [61, 61, 5],
+                [60, 61, 4],
+                [60, 60, 2],
+            ] {
+                let (origin, direction) = ray_at(target, yaw, 0.45, 30.0);
+                let cut = first_visible_hit(origin, direction, &mirror, TOP, true)
+                    .expect("a cut ray at the pine hits something");
+                assert_eq!(
+                    (cut.tile, cut.face),
+                    ([60, 60, 1], Face::Top),
+                    "a cut ray at the pine must sit at its foot, yaw {yaw}, target {target:?}"
+                );
+                assert_eq!(crate::designate::cut_target(&mirror, cut), [60, 60, 2]);
+                let dig = first_visible_hit(origin, direction, &mirror, TOP, false);
+                if dig.is_some_and(|hit| {
+                    !(59..=61).contains(&hit.tile[0]) || !(59..=61).contains(&hit.tile[1])
+                }) {
+                    dig_outside += 1;
+                }
+                let first_tree = tree_cells
+                    .iter()
+                    .filter_map(|&cell| {
+                        cell_entry_distance(origin, direction, world_to_render(cell))
+                            .map(|entry| (entry, cell))
+                    })
+                    .min_by(|a, b| a.0.total_cmp(&b.0));
+                if first_tree.is_some_and(|(_, cell)| {
+                    mirror.tile(cell) == Some(Tile::Solid(Material::TreeTrunk))
+                }) {
+                    trunk_first += 1;
+                }
+            }
+        }
+        assert!(
+            trunk_first > 0,
+            "some rays must meet the bare trunk before any foliage, or the trunk half of this \
+             test is vacuous"
+        );
+        assert!(
+            dig_outside > 0,
+            "dig mode must still fall through the crown"
         );
     }
 }

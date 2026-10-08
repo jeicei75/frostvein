@@ -487,9 +487,9 @@ pub fn dwarf_clip_label(names: &[String], wanted: &str) -> Option<String> {
 }
 
 /// The clips the gui plays, in the order the startup line names them.
-pub const DWARF_CLIP_NAMES: [&str; 3] = ["Walk", "Dig", "Carry"];
+pub const DWARF_CLIP_NAMES: [&str; 4] = ["Walk", "Dig", "Carry", "Cut"];
 
-/// The startup line's clip clause: `clips Walk, Dig, Carry`, or `clip <Name> ABSENT -- ...` for
+/// The startup line's clip clause: `clips Walk, Dig, Carry, Cut`, or `clip <Name> ABSENT -- ...` for
 /// each missing one.
 fn dwarf_clip_report(names: &[String]) -> String {
     let missing = DWARF_CLIP_NAMES
@@ -767,7 +767,8 @@ pub fn projection_systems(app: &mut App) {
     // here rather than made `Option` in the system: a resource that is genuinely missing in
     // production should fail loudly, not quietly render "cursor -" forever.
     app.init_resource::<PickedTile>();
-    app.init_resource::<crate::project::TreeReportState>();
+    app.init_resource::<crate::project::TreeReportState>()
+        .init_resource::<crate::project::PineMaterialsReport>();
     app.add_systems(Update, crate::project::report_tree_meshes_once);
     app.init_resource::<LastRefusal>()
         .init_resource::<crate::pick::SelectedDwarf>()
@@ -798,7 +799,11 @@ pub fn projection_systems(app: &mut App) {
                 // from the previous tick's movement.
                 crate::project::start_dwarf_walk,
                 crate::project::drive_dwarf_walk,
+                crate::project::nudge_dwarf_for_cut,
                 crate::project::apply_dwarf_tunics,
+                crate::project::sync_cut_tint_marks,
+                crate::project::apply_cut_tint,
+                crate::project::report_pine_materials,
             )
                 .chain()
                 .in_set(ProjectionSet),
@@ -5957,7 +5962,7 @@ mod tests {
     /// `include_bytes!` means the promoted file IS this test's subject, so promoting a dwarf
     /// exported before its clip turns this red instead of shipping a figure that cannot walk.
     #[test]
-    fn the_embedded_dwarf_carries_walk_dig_and_carry_by_name() {
+    fn the_embedded_dwarf_carries_walk_dig_carry_and_cut_by_name() {
         let names = super::dwarf_clip_summary();
         let missing = super::DWARF_CLIP_NAMES
             .iter()
@@ -5984,12 +5989,12 @@ mod tests {
     #[test]
     fn clip_names_are_read_in_array_order_from_the_json_chunk() {
         let glb = glb_with_json(
-            r#"{"asset":{"version":"2.0"},"animations":[{"name":"Carry"},{"name":"Dig"},{"name":"Walk"}]}"#,
+            r#"{"asset":{"version":"2.0"},"animations":[{"name":"Carry"},{"name":"Cut"},{"name":"Dig"},{"name":"Walk"}]}"#,
         );
-        assert_eq!(super::glb_clip_names(&glb), ["Carry", "Dig", "Walk"]);
+        assert_eq!(super::glb_clip_names(&glb), ["Carry", "Cut", "Dig", "Walk"]);
         assert_eq!(
             super::dwarf_clip_report(&super::glb_clip_names(&glb)),
-            "clips Walk, Dig, Carry"
+            "clips Walk, Dig, Carry, Cut"
         );
     }
 
@@ -6020,16 +6025,17 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_clip_is_named_absent_and_a_clipless_glb_names_all_three() {
+    fn a_missing_clip_is_named_absent_and_a_clipless_glb_names_all_four() {
         let walk_only = glb_with_json(r#"{"animations":[{"name":"Walk"}]}"#);
         let report = super::dwarf_clip_report(&super::glb_clip_names(&walk_only));
+        assert!(report.contains("clip Cut ABSENT"), "{report}");
         assert!(report.contains("clip Dig ABSENT"), "{report}");
         assert!(report.contains("clip Carry ABSENT"), "{report}");
         assert!(!report.contains("clip Walk"), "{report}");
 
         let none = glb_with_json(r#"{"asset":{"version":"2.0"}}"#);
         let report = super::dwarf_clip_report(&super::glb_clip_names(&none));
-        for name in ["Walk", "Dig", "Carry"] {
+        for name in ["Walk", "Dig", "Carry", "Cut"] {
             assert!(report.contains(&format!("clip {name} ABSENT")), "{report}");
         }
         assert!(super::glb_clip_names(b"not a glb at all, but long enough").is_empty());

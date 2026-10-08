@@ -11,9 +11,9 @@ PY
 mutation "slice visibility is removed from the march" gui picking_nothing_leaves_no_hover_for_sky_hidden_tiles_and_outside_the_window <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
-old = '            && is_visible_at_slice(mirror, world, level)\n'
+old = ' && is_visible_at_slice(mirror, world, level) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, ' {\n'))
 PY
 
 mutation "render-to-world is replaced by raw render axes" gui a_cursor_at_a_visible_tiles_independent_projection_picks_that_tile <<'PY'

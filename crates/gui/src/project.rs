@@ -21,7 +21,7 @@ use protocol::{DesignationKind, Dims, EntityKind, ItemKind, Material, Tile};
 
 use crate::{
     appearance::{
-        CARRY_OFFSET, ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE,
+        CARRY_OFFSET, CUT_OFFSET, ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE,
         WOOD_ITEM_DROP, WOOD_ITEM_SCALE, debris_color, designation_color, entity_appearance,
         flicker_scale, foliage_snow_color, hover_highlight_color, light_properties, material_color,
         rim_dissolved_color, rim_dissolved_color_at, snow_cap_color, wood_item_color, zone_color,
@@ -328,8 +328,8 @@ struct ClipNode {
 /// The dwarf's clips, wrapped in the one graph Bevy needs to play anything. One node plays at a
 /// time (no blending), so the graph is just a place to hang each clip.
 ///
-/// `Walk` is required; a GLB without it builds no graph at all. `dig` and `carry` are `None` while
-/// the promoted GLB does not carry them yet, and a dwarf whose chosen clip is absent simply holds
+/// `Walk` is required; a GLB without it builds no graph at all. `dig`, `carry` and `cut` are `None`
+/// while the promoted GLB does not carry them yet, and a dwarf whose chosen clip is absent simply holds
 /// `Walk` (see `DwarfClips::resolve`).
 #[derive(Clone)]
 struct DwarfClips {
@@ -337,6 +337,7 @@ struct DwarfClips {
     walk: ClipNode,
     dig: Option<ClipNode>,
     carry: Option<ClipNode>,
+    cut: Option<ClipNode>,
 }
 
 impl DwarfClips {
@@ -345,6 +346,8 @@ impl DwarfClips {
             DwarfClip::Walk => Some(&self.walk),
             DwarfClip::Dig => self.dig.as_ref(),
             DwarfClip::Carry => self.carry.as_ref(),
+            // NOTE: a GLB without a Cut clip (an older promotion) still swings Dig for a cut.
+            DwarfClip::Cut => self.cut.as_ref().or(self.dig.as_ref()),
         }
     }
 
@@ -368,10 +371,15 @@ impl DwarfClips {
     }
 
     fn nodes(&self) -> impl Iterator<Item = AnimationNodeIndex> {
-        [Some(&self.walk), self.dig.as_ref(), self.carry.as_ref()]
-            .into_iter()
-            .flatten()
-            .map(|clip| clip.node)
+        [
+            Some(&self.walk),
+            self.dig.as_ref(),
+            self.carry.as_ref(),
+            self.cut.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .map(|clip| clip.node)
     }
 }
 
@@ -406,6 +414,7 @@ pub enum DwarfClip {
     Walk,
     Dig,
     Carry,
+    Cut,
 }
 
 impl DwarfClip {
@@ -415,6 +424,25 @@ impl DwarfClip {
             DwarfClip::Walk => "walk",
             DwarfClip::Dig => "dig",
             DwarfClip::Carry => "carry",
+            DwarfClip::Cut => "cut",
+        }
+    }
+
+    /// Whether the clip is a work swing, timed in delivered ticks rather than ground covered.
+    fn swings(self) -> bool {
+        matches!(self, DwarfClip::Dig | DwarfClip::Cut)
+    }
+
+    /// How many ticks one swing takes: a cut is 5 chops in its 50 ticks (12.8 Task 0.2), a dig or
+    /// channel 10 swings in theirs.
+    ///
+    /// NOTE: this crate cannot import sim-core. 50 is a whole number of swings at both periods, so the
+    /// last swing ends as the work does; a `DIG_WORK_TICKS` or `CUT_WORK_TICKS` that is not a multiple
+    /// of its period would cut the last swing short.
+    fn swing_ticks(self) -> u64 {
+        match self {
+            DwarfClip::Cut => 10,
+            _ => 5,
         }
     }
 }
@@ -423,21 +451,18 @@ impl DwarfClip {
 ///
 /// Dig is tested FIRST on purpose: a dwarf can be in `work` on a dig while the wire still says he
 /// carries a stone, and he swings. `work` alone is not a dig, because a hauler's pick-up and drop
-/// are `work` runs too -- only a dig or channel job makes it a swing.
-///
-/// A woodcutter working a cut swings too. // NOTE: placeholder until 12.8's Cut clip.
+/// are `work` runs too -- only a dig, channel or cut job makes it a swing.
 pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
-    if entity.state == protocol::JobState::Work
+    let working = entity.state == protocol::JobState::Work;
+    if working
         && matches!(
             entity.job,
-            Some(
-                protocol::DwarfJob::Dig { .. }
-                    | protocol::DwarfJob::Channel { .. }
-                    | protocol::DwarfJob::Cut { .. }
-            )
+            Some(protocol::DwarfJob::Dig { .. } | protocol::DwarfJob::Channel { .. })
         )
     {
         DwarfClip::Dig
+    } else if working && matches!(entity.job, Some(protocol::DwarfJob::Cut { .. })) {
+        DwarfClip::Cut
     } else if entity.carrying.is_some() {
         DwarfClip::Carry
     } else {
@@ -445,18 +470,10 @@ pub fn dwarf_clip(entity: &protocol::Entity) -> DwarfClip {
     }
 }
 
-/// How many ticks one swing of the pick takes. A dig's work run is sim-core's `DIG_WORK_TICKS`
-/// (50, Wolf's ten swings at the 12.5 seat), and the phase wraps, so one run plays ten swings.
-///
-/// NOTE: this crate cannot import sim-core. 50 is a whole number of 5-tick swings, so the last
-/// swing ends as the tile changes; a `DIG_WORK_TICKS` that is not a multiple of this would cut
-/// the last swing short.
-const WORK_SWING_TICKS: u64 = 5;
-
 /// Where in its swing a digging dwarf is, timed in DELIVERED sim ticks (12.5 AC4).
 ///
 /// `entered` is the mirror tick of the delta on which he began this work run. `phase` is
-/// `(mirror tick - entered + TickClock::factor()) / WORK_SWING_TICKS`, wrapped to `[0, 1)`: delivered
+/// `(mirror tick - entered + TickClock::factor()) / DwarfClip::swing_ticks`, wrapped to `[0, 1)`: delivered
 /// ticks plus AD-15's blend factor. Never wall time and never a predicted tick, so a paused world
 /// (the same tick delivered again) holds the swing, and a fast one swings fast.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Default)]
@@ -488,7 +505,8 @@ pub fn sync_dwarf_work(
         .iter()
         .filter_map(|(_, _, parent)| parent.map(ChildOf::parent))
         .collect::<std::collections::BTreeSet<_>>();
-    let mut walking_in = std::collections::BTreeSet::new();
+    // Dwarves whose drawn body has not reached his wire cell yet, and where it is.
+    let mut walking_in = BTreeMap::new();
     for entity in mirror.0.entities() {
         let Some((bevy_entity, _, transform, mut clip, mut dig)) = dwarves
             .iter_mut()
@@ -504,11 +522,11 @@ pub fn sync_dwarf_work(
         // already put down is still in his hands.
         let arrived = drawn_at_cell(entity, transform.translation);
         if !arrived {
-            walking_in.insert(bevy_entity);
+            walking_in.insert(bevy_entity, transform.translation);
         }
         let still_holding = !arrived && holders.contains(&bevy_entity);
         let chosen = match dwarf_clip(entity) {
-            DwarfClip::Dig if !arrived => {
+            swing if swing.swings() && !arrived => {
                 if entity.carrying.is_some() || still_holding {
                     DwarfClip::Carry
                 } else {
@@ -518,16 +536,16 @@ pub fn sync_dwarf_work(
             DwarfClip::Walk if still_holding => DwarfClip::Carry,
             chosen => chosen,
         };
-        if chosen == DwarfClip::Dig {
+        if chosen.swings() {
             let tick = mirror.0.tick();
-            let was_digging = *clip == DwarfClip::Dig;
+            let was_digging = *clip == chosen;
             dig.entered = headings
                 .1
                 .get(&entity.id)
                 .copied()
                 .unwrap_or(if was_digging { dig.entered } else { tick });
             dig.phase = ((tick.saturating_sub(dig.entered) as f32 + clock.factor())
-                / WORK_SWING_TICKS as f32)
+                / chosen.swing_ticks() as f32)
                 .rem_euclid(1.0);
         }
         if *clip != chosen {
@@ -543,7 +561,12 @@ pub fn sync_dwarf_work(
     // item that has a parent -- so this system is the only thing that places it while it is held.
     for (item, marker, parent) in &items {
         match (carried.get(&marker.0), parent) {
-            (Some(&dwarf), parent) if parent.map(ChildOf::parent) != Some(dwarf) => {
+            // Picked up only once he is drawn at the cell: the sim lifts it the tick he reaches it,
+            // a second before his body does.
+            (Some(&dwarf), parent)
+                if parent.map(ChildOf::parent) != Some(dwarf)
+                    && !walking_in.contains_key(&dwarf) =>
+            {
                 if let Some(held) = mirror.0.items().find(|at| at.id == marker.0) {
                     commands.entity(item).insert((
                         ChildOf(dwarf),
@@ -555,10 +578,15 @@ pub fn sync_dwarf_work(
                     ));
                 }
             }
-            (None, Some(parent)) if !walking_in.contains(&parent.parent()) => {
-                // Let go, once he is drawn on the cell: unparent and snap back to the cell the
-                // wire now says it is on.
-                if let Some(at) = mirror.0.items().find(|at| at.id == marker.0) {
+            (None, Some(parent)) => {
+                // Let go, once he is drawn on the cell the wire put it on (not his own wire cell,
+                // which a dwarf already walking on has left): unparent and snap back to it.
+                if let Some(at) = mirror.0.items().find(|at| at.id == marker.0)
+                    && walking_in.get(&parent.parent()).is_none_or(|drawn| {
+                        let cell = world_to_render(at.pos);
+                        Vec2::new(drawn.x - cell.x, drawn.z - cell.z).length() <= DROP_REACH_CELLS
+                    })
+                {
                     commands.entity(item).remove::<ChildOf>().insert(
                         Transform::from_translation(item_translation(
                             at.pos,
@@ -641,6 +669,22 @@ pub const DWARF_WALK_CELLS_PER_SECOND: f32 = 0.9;
 /// Beyond this the dwarf is not walking, he has been moved -- a respawn, a slice change, a
 /// teleport in a test. Walking him there would crawl him across the map; snap instead.
 pub const DWARF_WALK_SNAP_CELLS: f32 = 2.5;
+
+/// How close his drawn body must be to the cell the wire dropped a stone on for him to let go.
+// NOTE: not exact, because a dwarf already walking on never stands on that cell at a frame
+// boundary; a tenth of a cell is invisible at the carry offset.
+const DROP_REACH_CELLS: f32 = 0.1;
+
+/// The drawn walker keeps pace with the sim: the tick rate over Normal's 10 Hz (`simd` periods).
+// NOTE: Paused keeps 1, so a trailing walker still catches up to his wire cell.
+fn walk_speed_ratio(speed: protocol::Speed) -> f32 {
+    match speed {
+        protocol::Speed::Paused | protocol::Speed::Normal => 1.0,
+        protocol::Speed::Fast => 5.0,
+        protocol::Speed::Fast2x => 10.0,
+        protocol::Speed::Fast4x => 20.0,
+    }
+}
 
 pub const TREE_SCENE_PATHS: [&str; 4] = [
     "trees/SM_VoxelPine_Tree01.glb",
@@ -763,8 +807,9 @@ pub fn setup_projection_assets(
                     let label = crate::ingest::dwarf_clip_label(&names, wanted)?;
                     Some(asset_server.load(format!("{prefix}{DWARF_SCENE_PATH}#{label}")))
                 };
-                let (walk, dig, carry) = (load("Walk"), load("Dig"), load("Carry"));
-                let present = [walk.clone(), dig.clone(), carry.clone()]
+                let (walk, dig, carry, cut) =
+                    (load("Walk"), load("Dig"), load("Carry"), load("Cut"));
+                let present = [walk.clone(), dig.clone(), carry.clone(), cut.clone()]
                     .into_iter()
                     .flatten()
                     .collect::<Vec<_>>();
@@ -776,13 +821,14 @@ pub fn setup_projection_assets(
                         clip,
                     })
                 };
-                // `present` is in Walk, Dig, Carry order, so the nodes come out in that order too.
-                let (walk, dig, carry) = (take(walk), take(dig), take(carry));
+                // `present` is in Walk, Dig, Carry, Cut order, so the nodes come out in that order too.
+                let (walk, dig, carry, cut) = (take(walk), take(dig), take(carry), take(cut));
                 walk.map(|walk| DwarfClips {
                     graph: graphs.add(graph),
                     walk,
                     dig,
                     carry,
+                    cut,
                 })
             }
             _ => None,
@@ -928,7 +974,7 @@ pub fn sync_drag_preview(
 ///
 /// Dig and clear keep AC4's single-z rect at the cells the ray hit; channel and stockpile follow
 /// the ground. Both branches then drop whatever the sim would refuse, so the preview never
-/// promises a mark that cannot appear.
+/// promises a mark that cannot appear. Cut is the exception: the whole rect, so the box shows.
 fn preview_cells(
     mirror: &Mirror,
     level: i32,
@@ -972,10 +1018,9 @@ fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
         DesignateMode::Channel | DesignateMode::Stockpile => {
             client_core::is_standable(mirror, tile)
         }
-        // Cut keeps a tile only where a tree stands: the sim marks every tree with a tile in the rect.
-        DesignateMode::Cut => crate::designate::is_tree_tile(mirror, tile),
-        // Clear removes rather than designates; there is nothing for the sim to filter.
-        DesignateMode::Clear | DesignateMode::None => true,
+        // Cut previews the WHOLE box (12.8 §2); `preview_appearance` tells the trees it will mark
+        // from the rest. Clear removes rather than designates; there is nothing for the sim to filter.
+        DesignateMode::Cut | DesignateMode::Clear | DesignateMode::None => true,
     }
 }
 
@@ -1002,8 +1047,16 @@ fn preview_appearance(
         ),
         DesignateMode::Stockpile => (slab_transform(tile, -0.46), assets.zone_mark.clone()),
         // The cut preview sits where the committed mark will: at the trunk base's floor, and it
-        // lights a foliage tile at its own level too, so the whole tree it catches reads.
-        DesignateMode::Cut => (slab_transform(tile, -0.46), assets.cut_mark.clone()),
+        // lights a foliage tile at its own level too, so the whole tree it catches reads. Every
+        // other cell of the box is a plain hover slab, so the box's size shows over open ground.
+        DesignateMode::Cut => (
+            slab_transform(tile, -0.46),
+            if crate::designate::is_tree_tile(mirror, tile) {
+                assets.cut_mark.clone()
+            } else {
+                assets.hover_highlight.clone()
+            },
+        ),
         DesignateMode::None | DesignateMode::Clear => (
             slab_transform([x, y, dig_mark_level(mirror, tile, level)], 0.54),
             assets.hover_highlight.clone(),
@@ -2446,7 +2499,11 @@ pub fn drive_dwarf_walk(
         return;
     }
     if stalled {
-        for (name, clip) in [("Dig", &walk.dig), ("Carry", &walk.carry)] {
+        for (name, clip) in [
+            ("Dig", &walk.dig),
+            ("Carry", &walk.carry),
+            ("Cut", &walk.cut),
+        ] {
             if !clip.as_ref().is_some_and(|clip| clips.contains(&clip.clip)) {
                 eprintln!("gui dwarf walk: STALLED -- the {name} clip never loaded");
             }
@@ -2477,9 +2534,9 @@ pub fn drive_dwarf_walk(
         for other in walk.nodes().filter(|other| *other != node.node) {
             player.stop(other);
         }
-        // `Walk` and `Carry` are locked to ground covered; `Dig` runs on delivered ticks.
+        // `Walk` and `Carry` are locked to ground covered; `Dig` and `Cut` run on delivered ticks.
         let phase = match clip {
-            DwarfClip::Dig => dig_phase.phase,
+            DwarfClip::Dig | DwarfClip::Cut => dig_phase.phase,
             DwarfClip::Walk | DwarfClip::Carry => walk_phase.phase(),
         };
         player
@@ -2503,6 +2560,55 @@ pub fn drive_dwarf_walk(
         eprintln!(
             "gui dwarf walk: STALLED -- no dwarf has covered any ground, so every phase is still at bind"
         );
+    }
+}
+
+/// The armature node's translation as the GLB authored it, captured the first frame the nudge
+/// sees it. The node is the `AnimationPlayer`'s entity (`SK_VoxelDwarf_Miner01_r17`).
+#[derive(Component)]
+pub struct ArmatureRest(Vec3);
+
+/// While a dwarf plays `Cut`, draw him `CUT_OFFSET` toward the trunk by moving his armature node
+/// -- never the dwarf entity, which `drawn_at_cell` and the walker own. Runs right after
+/// `drive_dwarf_walk`. Bevy local -Z is his facing, and the dwarf's scale turns metres into cells.
+///
+/// NOTE: the nudge pops, without an ease, on the frame the clip switches.
+pub fn nudge_dwarf_for_cut(
+    mut commands: Commands,
+    mut players: Query<(BevyEntity, &mut Transform, Option<&ArmatureRest>), With<AnimationPlayer>>,
+    parents: Query<&ChildOf>,
+    clips: Query<&DwarfClip>,
+) {
+    for (entity, mut transform, rest) in players.iter_mut() {
+        let mut current = entity;
+        let mut chosen = None;
+        for _ in 0..8 {
+            if let Ok(clip) = clips.get(current) {
+                chosen = Some(*clip);
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+        let Some(chosen) = chosen else {
+            continue;
+        };
+        let rest = match rest {
+            Some(rest) => rest.0,
+            None => {
+                commands
+                    .entity(entity)
+                    .insert(ArmatureRest(transform.translation));
+                transform.translation
+            }
+        };
+        transform.translation = if chosen == DwarfClip::Cut {
+            rest + Vec3::new(0.0, 0.0, -CUT_OFFSET)
+        } else {
+            rest
+        };
     }
 }
 
@@ -2533,7 +2639,6 @@ fn dig_yaw(entity: &protocol::Entity) -> Option<bevy::prelude::Quat> {
     if entity.state != protocol::JobState::Work {
         return None;
     }
-    // NOTE: placeholder until 12.8's Cut clip: a woodcutter faces the trunk like a miner faces rock.
     let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job
     else {
         return None;
@@ -2576,11 +2681,11 @@ impl DwarfHeadings {
                 // The dig ended where he stood: hold the rock-facing until his next step.
                 self.0.insert(id, rotation);
             }
-            if dwarf_clip(entity) == DwarfClip::Dig {
+            if dwarf_clip(entity).swings() {
                 // The same run continues only if he was already digging THIS job; a new job, or a
                 // run after a walk, starts a new swing at this delta's tick.
                 let continues = mirror.previous_entity(id).is_some_and(|previous| {
-                    dwarf_clip(previous) == DwarfClip::Dig && previous.job == entity.job
+                    dwarf_clip(previous).swings() && previous.job == entity.job
                 });
                 if !(continues && self.1.contains_key(&id)) {
                     self.1.insert(id, mirror.tick());
@@ -2600,7 +2705,7 @@ impl DwarfHeadings {
             .collect();
         self.1 = mirror
             .entities()
-            .filter(|entity| dwarf_clip(entity) == DwarfClip::Dig)
+            .filter(|entity| dwarf_clip(entity).swings())
             .map(|entity| (entity.id, mirror.tick()))
             .collect();
     }
@@ -2646,7 +2751,10 @@ pub fn blend_entities(
                     let drawn = if gap > DWARF_WALK_SNAP_CELLS || gap <= f32::EPSILON {
                         delivered
                     } else {
-                        let step = (DWARF_WALK_CELLS_PER_SECOND * elapsed_seconds).min(gap);
+                        let step = (DWARF_WALK_CELLS_PER_SECOND
+                            * walk_speed_ratio(mirror.speed())
+                            * elapsed_seconds)
+                            .min(gap);
                         from + remaining / gap * step
                     };
                     let travelled = (drawn - from).length();
@@ -3183,7 +3291,7 @@ const YAW_SALT: u32 = 0x5941_5721;
 /// One-shot state for `report_tree_meshes_once`.
 #[derive(Resource, Default)]
 pub struct TreeReportState {
-    reported: bool,
+    pub reported: bool,
     /// Tracked separately from `reported` ON PURPOSE. Sharing one flag gated the dwarf line on the
     /// TREES' readiness, and measured at `--z 0` and `--z 5` -- where no tree is above the cut --
     /// the dwarf line then never printed at all, though five dwarves were drawn. An instrument
@@ -3258,6 +3366,68 @@ pub fn report_tree_meshes_once(
             "gui trees: meshes={spawned} scenes_loaded={loaded} source={source} frames={}",
             state.frames
         );
+    }
+}
+
+/// The last `gui trees: materials=` line printed, so a test reads what the system said.
+#[derive(Resource, Default)]
+pub struct PineMaterialsReport(pub String);
+
+/// #173's instrument: once the trees are reported loaded, says how many distinct materials the pine
+/// meshes use and how many PINES wear each (a pine with two meshes on one material counts once),
+/// and says it again whenever that changes. A label is the GLB material name, or `cut-tint`.
+pub fn report_pine_materials(
+    state: Res<TreeReportState>,
+    mut report: ResMut<PineMaterialsReport>,
+    tint: Option<Res<CutTint>>,
+    meshes: Query<(
+        BevyEntity,
+        &MeshMaterial3d<StandardMaterial>,
+        Option<&bevy::gltf::GltfMaterialName>,
+    )>,
+    trees: Query<(), With<TreeMesh>>,
+    parents: Query<&ChildOf>,
+) {
+    if !state.reported {
+        return;
+    }
+    let mut handles = BTreeSet::new();
+    let mut wearing: BTreeSet<(BevyEntity, String)> = BTreeSet::new();
+    for (mesh, material, name) in &meshes {
+        let mut pine = mesh;
+        while !trees.contains(pine) {
+            match parents.get(pine) {
+                Ok(parent) => pine = parent.0,
+                Err(_) => break,
+            }
+        }
+        if !trees.contains(pine) {
+            continue;
+        }
+        handles.insert(material.0.id());
+        let label = if tint.as_ref().is_some_and(|tint| tint.0 == material.0) {
+            "cut-tint".to_string()
+        } else {
+            name.map_or("unnamed".to_string(), |name| name.0.clone())
+        };
+        wearing.insert((pine, label));
+    }
+    let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
+    for (_, label) in &wearing {
+        *counts.entry(label).or_default() += 1;
+    }
+    if counts.is_empty() {
+        return;
+    }
+    let labels: Vec<String> = counts.iter().map(|(l, n)| format!("{l}:{n}")).collect();
+    let line = format!(
+        "gui trees: materials={} [{}]",
+        handles.len(),
+        labels.join(", ")
+    );
+    if report.0 != line {
+        eprintln!("{line}");
+        report.0 = line;
     }
 }
 
@@ -3605,6 +3775,148 @@ pub fn apply_dwarf_tunics(
     }
 }
 
+/// Whether a pine is tinted for a cut mark (a designation, or the live cut drag catching it).
+/// Inserted and replaced, NEVER removed: `remove_with_requires` strips render sync (see `ingest.rs`).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CutTinted(pub bool);
+
+/// A pine mesh's own material while the cut tint stands in for it, so clearing the mark can put it back.
+#[derive(Component)]
+pub struct PineOwnMaterial(Handle<StandardMaterial>);
+
+type PineMaterialQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static mut MeshMaterial3d<StandardMaterial>,
+        Option<&'static PineOwnMaterial>,
+    ),
+>;
+
+/// The ONE tinted clone every marked pine shares.
+#[derive(Resource)]
+pub struct CutTint(Handle<StandardMaterial>);
+
+/// The base of the tree this tree tile (trunk or crown) belongs to; `None` for anything else.
+pub(crate) fn tree_base_at(mirror: &Mirror, tile: [i32; 3]) -> Option<[i32; 3]> {
+    let [tx, ty, tz] = tile;
+    (-1..=1)
+        .flat_map(|dy| (-1..=1).map(move |dx| (tx + dx, ty + dy)))
+        .find_map(|(x, y)| {
+            let (base, top, _) = trunk_column_extent(mirror, x, y)?;
+            (base <= tz && tz <= top + 1 && is_tree(mirror, tile)).then_some([x, y, base])
+        })
+}
+
+/// Marks each `TreeMesh` whose base carries a cut designation, or which the live cut drag catches.
+pub fn sync_cut_tint_marks(
+    mut commands: Commands,
+    mirror: Res<crate::ingest::MirrorResource>,
+    drag_mode: Option<Res<DragMode>>,
+    preview: Option<Res<DragPreviewCells>>,
+    trees: Query<(BevyEntity, &TreeMesh, Option<&CutTinted>)>,
+) {
+    let mut marked: BTreeSet<[i32; 3]> = mirror
+        .0
+        .designations()
+        .iter()
+        .filter(|designation| designation.kind == DesignationKind::Cut)
+        .map(|designation| designation.pos)
+        .collect();
+    if drag_mode.is_some_and(|mode| mode.0 == Some(DesignateMode::Cut)) {
+        let cells = preview.as_deref().and_then(|cells| cells.0.as_deref());
+        marked.extend(
+            cells
+                .into_iter()
+                .flatten()
+                .filter_map(|tile| tree_base_at(&mirror.0, *tile)),
+        );
+    }
+    for (entity, tree, tinted) in &trees {
+        let want = marked.contains(&tree.0);
+        if want != tinted.is_some_and(|tinted| tinted.0) {
+            commands.entity(entity).insert(CutTinted(want));
+        }
+    }
+}
+
+/// Swaps the shared tint onto a marked pine's meshes and the pine's own material back when the mark
+/// goes, after the `apply_dwarf_tunics` pattern: armed by a scene mesh appearing under a tinted
+/// `TreeMesh` (a respawn brings a fresh scene) and by `CutTinted` changing. Handles are replaced,
+/// never components removed.
+// Every parameter is a distinct ECS partition, as in `apply_dwarf_tunics`.
+#[allow(clippy::too_many_arguments)]
+pub fn apply_cut_tint(
+    mut commands: Commands,
+    tint: Option<Res<CutTint>>,
+    materials: Option<ResMut<Assets<StandardMaterial>>>,
+    mut meshes: bevy::prelude::ParamSet<(NewMeshQuery, PineMaterialQuery)>,
+    changed: Query<(BevyEntity, &CutTinted), bevy::prelude::Changed<CutTinted>>,
+    tinted_of: Query<&CutTinted>,
+    parents: Query<&ChildOf>,
+    children: Query<&bevy::prelude::Children>,
+) {
+    let Some(mut materials) = materials else {
+        return;
+    };
+    let mut targets: Vec<(BevyEntity, bool)> = Vec::new();
+    for mesh in meshes.p0().iter() {
+        let mut current = mesh;
+        for _ in 0..8 {
+            if let Ok(tinted) = tinted_of.get(current) {
+                if tinted.0 {
+                    targets.push((mesh, true));
+                }
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+    }
+    for (tree, tinted) in &changed {
+        let mut stack = vec![tree];
+        while let Some(node) = stack.pop() {
+            if meshes.p1().get(node).is_ok() {
+                targets.push((node, tinted.0));
+            }
+            if let Ok(kids) = children.get(node) {
+                stack.extend(kids.iter());
+            }
+        }
+    }
+    let mut shared = tint.map(|tint| tint.0.clone());
+    for (mesh, want) in targets {
+        let mut query = meshes.p1();
+        let Ok((mut material, own)) = query.get_mut(mesh) else {
+            continue;
+        };
+        if !want {
+            if let Some(own) = own {
+                material.0 = own.0.clone();
+            }
+            continue;
+        }
+        let tint = shared.get_or_insert_with(|| {
+            // The first pine mesh's own material, cloned with its texture dropped (the texture is
+            // where the snow lives) and the foliage green as the flat colour.
+            let mut clone = materials.get(&material.0).cloned().unwrap_or_default();
+            clone.base_color_texture = None;
+            clone.base_color = crate::appearance::material_color(Material::TreeFoliage);
+            let handle = materials.add(clone);
+            commands.insert_resource(CutTint(handle.clone()));
+            handle
+        });
+        if material.0 != *tint {
+            commands
+                .entity(mesh)
+                .insert(PineOwnMaterial(material.0.clone()));
+            material.0 = tint.clone();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use client_core::Mirror;
@@ -3768,7 +4080,7 @@ mod tests {
     /// 12.7: the cut preview lights exactly the tree tiles the sim will catch, at the cut level.
     /// A ground drag follows the same rule the release does: one level above the ground picked.
     #[test]
-    fn the_cut_preview_lights_only_tree_tiles_at_the_cut_level() {
+    fn the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style() {
         use crate::{designate::DesignateMode, pick::Face};
         use protocol::Material::{Stone, TreeFoliage, TreeTrunk};
         let dims = Dims { x: 3, y: 1, z: 4 };
@@ -3796,8 +4108,8 @@ mod tests {
                 cell([2, 0, 0]),
                 DesignateMode::Cut
             ),
-            vec![[1, 0, 1]],
-            "empty air beside a trunk must not light"
+            vec![[0, 0, 1], [1, 0, 1], [2, 0, 1]],
+            "the whole box shows over open ground, not only the trunk"
         );
         // Dragged from a crown tile: the trunk's own level, and the foliage on it lights too.
         assert_eq!(
@@ -3809,6 +4121,74 @@ mod tests {
                 DesignateMode::Cut
             ),
             vec![[0, 0, 2], [1, 0, 2], [2, 0, 2]]
+        );
+
+        // Only the tree cells take the cut style; the rest of the box is the hover slab.
+        let mut store = Assets::<StandardMaterial>::default();
+        let (cut, hover) = (
+            store.add(StandardMaterial::default()),
+            store.add(StandardMaterial::default()),
+        );
+        let assets = ProjectionAssets {
+            cube: Handle::default(),
+            snow_cap_mesh: Handle::default(),
+            mark_mesh: Handle::default(),
+            terrain: std::array::from_fn(|_| std::array::from_fn(|_| Handle::default())),
+            dwarf: Handle::default(),
+            torch: Handle::default(),
+            campfire: Handle::default(),
+            debris: Handle::default(),
+            dig_mark: Handle::default(),
+            channel_mark: Handle::default(),
+            cut_mark: cut.clone(),
+            wood_item: Handle::default(),
+            zone_mark: Handle::default(),
+            hover_highlight: hover.clone(),
+            trees: std::array::from_fn(|_| Handle::default()),
+            dwarf_scene: Handle::default(),
+            dwarf_walk: None,
+        };
+        let style = |tile| preview_appearance(DesignateMode::Cut, &mirror, tile, 3, &assets).1;
+        assert_eq!(style([1, 0, 2]), cut, "a trunk cell is in the cut style");
+        assert_eq!(style([0, 0, 2]), cut, "a foliage cell is in the cut style");
+        assert_eq!(
+            style([0, 0, 1]),
+            hover,
+            "open air in the box is the hover slab"
+        );
+    }
+
+    /// §2: while a cut drag is live, the pines its box catches are tinted already, whichever of
+    /// their cells (trunk or crown) the box covers; a box in another mode tints nothing.
+    #[test]
+    fn a_live_cut_drag_tints_the_pines_it_catches_and_no_other_mode_does() {
+        use bevy::prelude::{App, Update};
+        let dims = Dims { x: 3, y: 3, z: 5 };
+        let mut tiles = vec![Tile::Empty; 45];
+        let at = |x: i32, y: i32, z: i32| (x + y * 3 + z * 9) as usize;
+        for z in 1..=3 {
+            tiles[at(1, 1, z)] = Tile::Solid(protocol::Material::TreeTrunk);
+        }
+        tiles[at(0, 1, 2)] = Tile::Solid(protocol::Material::TreeFoliage);
+        let mut app = App::new();
+        app.insert_resource(crate::ingest::MirrorResource(world(dims, tiles)))
+            .insert_resource(DragMode(Some(DesignateMode::Cut)))
+            .insert_resource(DragPreviewCells(Some(vec![[0, 1, 2]])))
+            .add_systems(Update, sync_cut_tint_marks);
+        let tree = app.world_mut().spawn(TreeMesh([1, 1, 1])).id();
+        let tinted = |app: &App| app.world().get::<CutTinted>(tree).map(|tinted| tinted.0);
+        app.update();
+        assert_eq!(
+            tinted(&app),
+            Some(true),
+            "a crown cell in the box tints its pine"
+        );
+        app.insert_resource(DragMode(Some(DesignateMode::Dig)));
+        app.update();
+        assert_eq!(
+            tinted(&app),
+            Some(false),
+            "a dig drag over a crown tints nothing"
         );
     }
 
