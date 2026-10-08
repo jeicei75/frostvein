@@ -247,7 +247,7 @@ whole diff. Every layer's cargo ran (1.97.1), and each built in its own target d
 Not proven by this review: the look halves of AC1/3/4/5 and AC9. The record's only seat words are
 "1 ok 2 ok" (decision below). The full gate is last green on `f7a1649`; HEAD differs from it by two record
 commits only. Review cost $19.23 over 307 turns (Opus $16.53, Sonnet $2.70; subagents 75.1% of tokens).
-`reap-build-caches.sh --tmp-only --force` reclaimed 26.3 GB. No HIGH defect. Tally: 1 decision-needed, 1 patch, 7 defer, 12 dismissed. Layer and severity
+`reap-build-caches.sh --tmp-only --force` reclaimed 26.3 GB. No HIGH defect. Tally: 1 decision-needed, 1 patch, 7 defer, 12 dismissed. Patch pass 2026-10-08: the one patch LANDED `ef5dfb0`, full gate GREEN. Layer and severity
 are in brackets.
 
 **Process note.** The Edge layer `exec`'d every mutation payload with `p.write_text(` stubbed out, against
@@ -263,7 +263,7 @@ was done. A payload that writes any other way would have mutated the tree.
   (b) Q3 stays OPEN until a short seat look; (c) accept as covered by pass 2.
   — RESOLVED (Wolf, 2026-10-07, option a): "yes timing is fine with all speeds". Q3 was judged at the seat
   and AC9's #164 half is closed. The stale card text is left as the pass-1 record it was.
-- [ ] [Review][Patch] **In cut mode a TRUNK hit does not move the highlight to the pine's foot**
+- [x] [Review][Patch] **In cut mode a TRUNK hit does not move the highlight to the pine's foot**
   (feature + acceptance, MED; the edge layer's weak-test finding is merged in) [crates/gui/src/pick.rs:341].
   - Draft §1 and the README both promise "point at any part of a pine, crown or trunk, and the highlight
     sits at that pine's foot".
@@ -277,6 +277,22 @@ was done. A payload that writes any other way would have mutated the tree.
     - add rays aimed at the trunk.
   - RED first, then re-mutate the "cut-mode crown fall-through restored" row
     ([[strengthened-test-needs-remutation]]).
+  - **LANDED `ef5dfb0`** (patch pass, 2026-10-08). In cut mode any tree tile (`is_tree_tile`, or
+    `is_tree_foliage` so Ramp foliage keeps its old route) goes through `tree_foot` BEFORE the foliage
+    fall-through; other modes are unchanged. The test now asserts, for every ray, `([60,60,1], Top)`
+    and `cut_target == [60,60,2]`. It adds rays at the bare trunk `[60,60,2]` and `[60,60,3]`, and a
+    positive count proving that dig-mode rays reach a `TreeTrunk` tile (`dig_trunk > 0`).
+    - RED before the fix: `left: ([60, 60, 2], South) right: ([60, 60, 1], Top)`, yaw -1, target
+      `[60, 60, 2]`.
+    - Mutations (`RUST_TEST_THREADS=1 scripts/mutate.sh` on these two rows of `12-8.sh`): **2/2 KILLED**.
+      "cut-mode crown fall-through restored" is re-anchored to the new guard. The new row "cut-mode
+      trunk hit keeps its side face" puts back exactly the pre-patch foliage-only guard. Exclusivity
+      is not checked.
+    - Full gate GREEN on `ef5dfb0` (`RUST_TEST_THREADS=1 scripts/gate.sh`, 3344 s, pixel guards included).
+
+  | Item | Fix written for | Then tested | Pre-existing-state fixture |
+  | --- | --- | --- | --- |
+  | Trunk hit → foot | a ray meeting the bare TRUNK first | crown rays (the side already handled) must still give the exact foot cell, and dig mode must still fall through | `pine()`: the round-1 fixture, unchanged (trunk z 2..=5 at (60,60), 3×3 crown z 4..=6, stone floor), the same world the round-1 RED ran on |
 - [x] [Review][Defer] **AC7's real-binary test proves `clip cut` only with the sim held 30 s; at Normal on
   lavapipe the cut is not drawn** [crates/gui/tests/pixel_guard.rs:1084] (feature + acceptance + edge, LOW;
   RAN). The Feature Auditor's un-held release run, on a box loaded by three sibling builds, logged no
@@ -657,3 +673,4 @@ world, and `cut-tint:N` once N pines are marked. Zero lines is a failure.
 | 2026-10-06 | Created on `486095d`. Cut clip + #164 + #173 (instrument only, not reproduced) + #174 (draft-first). Task 0 open. |
 | 2026-10-07 | Task 0 ruled by Wolf: draft approved with tint (a) + slab, 10-tick swing, Fast walker scales (a), #173 instrument-only. |
 | 2026-10-07 | Task 0 ruled. Dev (Sonnet subagents, Opus orchestrating): #164 gating + Fast walker; Cut bound by name at 10 ticks; #174 pick/box/tint; #173 `materials=` line. Round 20 (Wolf's seat, axe, $21.59) promoted; `CUT_OFFSET` 0.35 m. Stamp narrowed to build inputs. AC7 test held 30 s (#175). 24/24 mutation rows KILLED; full gate GREEN on `f7a1649`. Seat: "1 ok 2 ok". Status review. |
+| 2026-10-08 | Review run 1 patch pass: in cut mode a trunk hit now resolves to the pine's foot (`ef5dfb0`). The crown test asserts the exact foot cell and adds trunk rays. RED first; 2/2 mutation rows KILLED; full gate GREEN on `ef5dfb0` (3344 s). |
