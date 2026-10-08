@@ -62,6 +62,16 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            if cut && is_tree_foliage(mirror, world) {\n'))
 PY
 
+# Review run 2 patch: the trunk half's guard must fire when no ray meets the bare trunk first.
+# Drops the only trunk-first target; the trace then counts 0.
+mutation "cut-mode trunk target dropped" gui in_cut_mode_a_ray_through_a_crown_resolves_to_that_tree <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/pick.rs'); s = p.read_text()
+old = '                [60, 60, 2],\n            ] {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            ] {\n'))
+PY
+
 mutation "the box filtered back to trees" gui the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
