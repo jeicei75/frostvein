@@ -226,7 +226,7 @@ A carried item occupies no tile, which is unchanged.
     tests. Each intended change is disclosed beside the pin and in the commit (Task 5's rule).
   - If AC1's bounds (2,500 / 600 / 600) stop holding because of blocking items, **STOP and report**
     with the measured figures. Do not loosen them.
-- [ ] **Task 6: instrument (AC9).** `12-9-signoff/occupancy_wire.py` (NEW at creation; RED recorded
+- [x] **Task 6: instrument (AC9).** `12-9-signoff/occupancy_wire.py` (NEW at creation; RED recorded
   in Verification).
   - It reads every delta from a fresh daemon running the busy-crew orders at fast4x. It counts
     shared ticks, and it range-checks five dwarves per delta, more than 200 moves, marks cleared and
@@ -240,7 +240,7 @@ A carried item occupies no tile, which is unchanged.
     - instrument self-test: apply row 7 (no dwarf ever steps), rebuild, and expect exit 2,
       `CREW DID NOT WORK`. A frozen crew shares nothing, and the instrument must not call that
       green.
-- [ ] **Task 7: mutations.** Create `_bmad-output/implementation-artifacts/mutations/12-9.sh` (NEW).
+- [x] **Task 7: mutations.** Create `_bmad-output/implementation-artifacts/mutations/12-9.sh` (NEW).
   Run it alone, after commit, with `RUST_TEST_THREADS=1 scripts/mutate.sh`. Read the kill line for
   every row.
   1. `wander` ignores occupancy → AC1.
@@ -405,6 +405,9 @@ ticks were read, or a delta lacked five dwarves. Fix the run before reading anyt
 
 ### Agent Model Used
 
+Sonnet 5.5 subagents x3, one at a time on one tree (A: Tasks 1-3, B: Tasks 4-5, C: Task 10); Opus 5.5 orchestrator
+(Tasks 0, 6, 7, 9; verified each phase, wrote the mutation table and ran every mutation and instrument run).
+
 ### Debug Log References
 
 **Task 1 REDs, run on the unfixed movement code (Task 2/3 not yet written), `cargo test -p sim-core`:**
@@ -475,6 +478,58 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
 **Task 10 measured (green):** AC1 marks cleared t=1,205 (bound 2,500; baseline 1,112), first stone on pile t=228 (600),
 moves 1,213 (600): all hold. AC12 pile full at tick 1,257 (named bound 2,000), centre at 212. No deadlock in the AC1 crew.
 
+**Task 6, the wire instrument (orchestrator).** The instrument gained a `stone entries` count (AC10 on the wire) and a
+second verdict line, `STONES OK|RED`, committed `1569c93`. Every run used a fresh release `simd 7491`, DEFAULT_SEED, 1,500 ticks:
+
+```
+26185a0 (scratch worktree, the RED for both rules):
+  ticks read 1479  deltas without exactly 5 dwarves 0
+  shared ticks 186  max dwarves on one tile 2  first shared (101, {(65, 62, 9): [1, 3]})
+  dwarf moves 551  channel marks 25 -> 0  items on the pile 9
+  stone entries 138  first entry (156, {1: (65, 63, 9)})
+  OCCUPANCY RED / STONES RED   exit 1
+GREEN, 1569c93:
+  ticks read 1479  deltas without exactly 5 dwarves 0
+  shared ticks 0  max dwarves on one tile 1  first shared None
+  dwarf moves 544  channel marks 25 -> 0  items on the pile 9
+  stone entries 0  first entry None
+  OCCUPANCY OK / STONES OK   exit 0
+DELIBERATE RED, 12-9.sh row 1 (wander ignores occupancy) applied, release simd rebuilt:
+  shared ticks 145  max dwarves on one tile 2  first shared (101, {(65, 62, 9): [1, 3]})
+  dwarf moves 549  channel marks 25 -> 0  items on the pile 9  stone entries 0
+  OCCUPANCY RED / STONES OK   exit 1
+SELF-TEST, row 7 (no dwarf ever steps) applied, rebuilt:
+  shared ticks 0  dwarf moves 2  channel marks 25 -> 25  items on the pile 0  stone entries 0
+  CREW DID NOT WORK -- a frozen crew shares no tile; this is not a green   exit 2
+```
+The source was restored after each mutation, and a clean release `simd` was rebuilt afterwards.
+
+**Task 7, mutations (orchestrator).** `mutations/12-9.sh`, 14 rows, committed `1569c93` before the run.
+`RUST_TEST_THREADS=1 scripts/mutate.sh` was run alone: **14/14 KILLED**. The kill site of each row was read from
+its panic line:
+
+| Row | Test | Dies on |
+| --- | --- | --- |
+| 1 wander ignores occupancy | AC1 | the `World::step` one-dwarf-per-tile `debug_assert!` (lib.rs:2041) |
+| 2 the job step ignores occupancy | AC3(a) | the `World::step` `debug_assert!` |
+| 3 settle ignores occupancy | AC4 | the `World::step` `debug_assert!` |
+| 4 per-step flip rule | AC3(b) | `watch`'s `not done by tick` bound: the livelock |
+| 5 higher id never yields | AC3(b) | `not done by tick` |
+| 6 idle blocker never makes way | AC5 | `not done by tick` |
+| 7 no dwarf ever steps | AC1 | the vacuity assert `channel marks cleared ... bound 2500` (scenario.rs:2832), not the occupancy assert |
+| 8 to_save drops path | AC7 | the per-tick `assert_eq` (save_load.rs:671) |
+| 9 dwarf tiles join claim-time blocked | AC6 | `not done by tick` |
+| 10 idle blocker swaps tiles | AC5 | `watch`'s no-swap assert |
+| 11 blocked_cells ignores items | AC10 corridor | its stood-in-the-stone assert (lib.rs:5566) |
+| 12 pick-up stands on the item | AC11 | `not done by tick` (the item tile is blocked, so the pick-up is unreachable) |
+| 13 shallowest pile cell first | AC12 | `not done by tick` (the centre is walled in, so the pile never fills) |
+| 14 drop at the hauler's own tile | AC11 | `the stone must land on the pile cell` |
+
+**Trap 1 for rows 1-3:** the `debug_assert!` pre-empts each test's own shared-tile assert. Those asserts were RED
+on 26185a0 (above), and AC1's was re-shown to kill independently: row 1 applied, `cargo test --release` (debug
+asserts compiled out) -> `489 ticks had two dwarves on one tile; first Some((2, ...))` at scenario.rs:2816. Restored.
+`scripts/audit-mutations.py`: 822 rows, every literal still matches.
+
 ### Completion Notes List
 
 - Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
@@ -541,6 +596,12 @@ moves 1,213 (600): all hold. AC12 pile full at tick 1,257 (named bound 2,000), c
 - `crates/sim-core/src/save.rs` (`SavedDwarf.path`, no longer `Copy`)
 - `crates/simd/src/main.rs` (pre-12.9 save refusal test)
 - Task 10: `crates/sim-core/src/lib.rs` (blocking items, pile depth, drop cell, fixtures AC10 corridor / AC11 / AC12), `crates/sim-core/tests/scenario.rs` (AC10 assert, two disclosed test changes)
+- `_bmad-output/implementation-artifacts/mutations/12-9.sh` (NEW, 14 rows)
+- `_bmad-output/implementation-artifacts/mutations/12-1.sh`, `mutations/3-3-the-haul-and-the-skeleton-walks.sh` (9 rows re-pointed at the new `work_positions` / `pile_targets` lines by Agent C; the 3-3 and 12-1 tables were not re-run)
+- `_bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py` (`stone entries`, `STONES` verdict)
+- `_bmad-output/implementation-artifacts/12-9-signoff/vehicle-card.md` (NEW, Task 9)
+- `_bmad-output/planning-artifacts/epics.md` (Task 0 ruling note on Story 12.9)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
@@ -551,3 +612,4 @@ moves 1,213 (600): all hold. AC12 pile full at tick 1,257 (named bound 2,000), c
 | 2026-10-08 | Tasks 1-3 (Agent A): RED fixtures AC1-AC5, occupancy in `execute_jobs`/`settle`/`wander`, blocked step with escape/yield, idle exit path, no swap. One re-pin (`save_load` guard 600 -> 1,000) |
 | 2026-10-08 | Tasks 4-5 (Agent B): `SavedDwarf.path` saved and restored, AC7 and AC6 tests, pre-12.9 refusal test |
 | 2026-10-08 | Task 10 (Agent C): every uncarried item blocks; pick-up/drop from the next tile; pile fills inside out. AC10-AC12 tests, one re-pin, six old-rule tests updated |
+| 2026-10-08 | Tasks 6-7 (orchestrator): instrument `stone entries`; GREEN 0/0, deliberate RED (row 1) 145 shared, self-test exit 2; 26185a0 baseline 186 shared / 138 stone entries. `12-9.sh` 14/14 KILLED, kill sites recorded; AC1's own assert shown to kill in `--release` |
