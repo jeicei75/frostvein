@@ -620,6 +620,9 @@ a scratch worktree with that tree's `mutate.sh`:
   (`Vec3(0.0, 0.705, -0.58)` == `CARRY_OFFSET` in frame 1). `a_stone_released_onto_the_next_tile_is_set_down_over_a_lift`:
   `the set-down is a one-frame snap` (`Vec3(1.0, -0.3, 0.0)` on the cell in frame 1).
 
+- **Full gate on `ac99c2d`** (`RUST_TEST_THREADS=1 scripts/gate.sh`): `GATE GREEN 3281s`. cargo test 250 s,
+  pixel guards 2,994 s, the three no-sim-core-edge probes ok, mutation tables still apply.
+
 ### Completion Notes List
 
 - Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
@@ -727,3 +730,4 @@ a scratch worktree with that tree's `mutate.sh`:
 | 2026-10-08 | Seat pass 1 (Wolf): channel from the next tile → Task 11 / AC13; pick-up and drop drawn as a reach → Task 12 / AC14 (both ruled into 12.9, as recommended); self-haul idea → #180; FPS swing → #179. Rows 15–19 added |
 | 2026-10-08 | Tasks 11-12 (Agent E): channel from the next tile, `dig_yaw` Channel arm, lift and set-down (`ItemMotion`). Two 12-5 mutation rows re-pointed and run, both KILLED |
 | 2026-10-08 | Tasks 11-12 (Agent E, `d93f32d` `bfa6568` `0fccc74`). Rows 15-19 added; 12-9.sh 19/19 KILLED and 12-5.sh 15/15 KILLED on `06a235e` |
+| 2026-10-08 | Full gate green on `ac99c2d` (3,281 s) |
