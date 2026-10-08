@@ -130,6 +130,18 @@ A carried item occupies no tile, which is unchanged.
     all nine cells, the centre included, within a tick bound the test names. The test asserts the
     centre's fill tick is earlier than every edge cell's.
 
+**From Wolf's seat pass 1 (2026-10-08, ACs 13–14 added):**
+
+13. **Channel from the next tile.** A channel's work positions are the walkable same-z 4-neighbours of a standable
+    target, like a dig's. The miner never stands on the cell it channels. The stone lands on the target cell.
+    In the gui, a channelling miner faces the target cell.
+14. **Pick-up and drop are drawn as a reach, not a jump** (gui only):
+    - an item the wire has just put in a hauler's hands stays drawn on its own cell until the gui parents it, and it
+      never slides along with the hauler's wire tile;
+    - once parented it rises from its cell to the hands over a short lift, about 0.3 s;
+    - when released it moves from the hands down to its new cell over a short set-down, about 0.3 s. It never
+      appears on the cell in one frame.
+
 ## Tasks / Subtasks
 
 - [x] **Task 0: Wolf rules** (record each answer in the Change Log). The recommended option is first.
@@ -259,9 +271,38 @@ A carried item occupies no tile, which is unchanged.
   12. Haul pick-up's work position is the item's own tile (the old rule) → AC11.
   13. Delivery picks the shallowest free pile cell → AC12.
   14. Delivery drops at the hauler's own tile → AC11.
+  15. Channel works from the target itself (the old rule) → AC13 (sim).
+  16. `dig_yaw` ignores Channel → AC13 (gui).
+  17. `blend_entities` moves a carried, unparented item → AC14 hold.
+  18. The lift is instant (`LIFT_SECONDS` to 0, or the jump restored) → AC14 rise.
+  19. Release snaps to the cell → AC14 set-down.
 
   `74-dwarves-path-through-fire.sh` row 2 anchors on `wander`'s `is_walkable` line, so re-point it
   if Task 2 edits that line. `scripts/audit-mutations.py` reports rot.
+- [ ] **Task 11: channel from the next tile (AC13).** `work_positions` Channel uses the same rule as Dig and Cut
+  (`side_neighbours(target)` filtered by `is_walkable`), still only for a standable target. The stone still spawns
+  at `job.target`, which the miner no longer stands on. Remove the "channel miner stands in its own stone" NOTE.
+  gui `dig_yaw` also takes `DwarfJob::Channel { target }`; fix its doc ("`None` for a channel"). RED first: a sim
+  test that the channel holder works from a 4-neighbour and never stands on the target, and a gui test that a
+  channelling miner gets the yaw toward the target. 12.3's
+  `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on` (an AC8 guard) assumes the worker
+  stands ON the target. Keep its intent: remove the support under the tile the worker actually stands on.
+  Disclose the change.
+- [ ] **Task 12: lift and set-down (AC14, gui only, `crates/gui/src/project.rs`).**
+  - `blend_entities` does not move an unparented item that the wire says is carried. It stays where it was
+    drawn.
+  - `sync_dwarf_work` parents it as today, then lifts it from its drawn position to `CARRY_OFFSET` over
+    `LIFT_SECONDS`.
+  - Release moves it from its drawn position to `item_translation(...)` over `LIFT_SECONDS`.
+    `blend_entities` skips an item mid set-down.
+  - One small presentation component holds the motion: start, end and elapsed. That is animation state, not
+    game logic.
+  - Pace it with the same frame time the walker uses. NOTE that a paused world still finishes a lift.
+  - Tests are headless gui tests over a mirror:
+    - the item holds its cell while the hauler walks in;
+    - it rises, never in one frame, and arrives at `CARRY_OFFSET`;
+    - set-down is never one frame, and it arrives at the cell.
+  - Existing pick-up and drop gate tests stay green.
 - [ ] **Task 8: record.**
   - The PR body says `Closes #133` and `Closes #162`. Both issues are whole: #162 was folded in.
   - Comment on #162 with the ruling (all items block, pile cells too) and the AC10 RED/GREEN.
@@ -270,6 +311,12 @@ A carried item occupies no tile, which is unchanged.
   launch form. Wolf drags the channel and pile and watches the crew at Normal and at Fast: no two
   dwarves overlap, and blocked dwarves step aside or back off. Haulers pick up and drop from the
   next tile, nobody walks through a stone, and the pile fills from the centre. Record his words.
+  **Pass 1 (2026-10-08), Wolf:** "when channeling dwarf channels directly under not next block" (→ Task 11);
+  "sometimes dwarves are sucking stones from bit too far away and before starting to carry and throwing them,
+  sometimes logs are pushed before dwarf instead of carrying (well it's kind of funny actually)" (→ Task 12);
+  one-wide digging waits on the hauler, "maybe that's ok" (→ #180, idea); "performance variation is now big even
+  when haze is off.. 20 - 180 FPS" (→ #179; the sim tick is ruled out there: release p99 34 us, max 10 ms).
+  Pass 2 checks Tasks 11 and 12.
 
 ## Dev Notes
 
@@ -292,9 +339,10 @@ A carried item occupies no tile, which is unchanged.
 - **Items DO block (#162, folded at Q3), dwarves do NOT join `blocked_cells`.** An uncarried item
   is world state, static within a system call, so it belongs in the terrain-and-fire rule. A dwarf
   moves within the call, so it does not. Falling items and "no dwarf on air" stay in 12.11.
-- No gui change. Its pick-up and drop gates key on the hauler's own wire cell
-  (`gui/src/project.rs:520-530`), which still holds when the item is one tile away. If a gui test
-  goes red, STOP and report; do not patch the client.
+- Before seat pass 1: no gui change. Its pick-up and drop gates key on the hauler's own wire cell
+  (`gui/src/project.rs:520-530`), which still holds when the item is one tile away. **The seat
+  disproved the look:** the items jump a cell. Task 12 (Wolf, 2026-10-08) is the one gui change, and it is
+  presentation only. Task 11 adds one `dig_yaw` arm. No other client change.
 
 ### What already exists (build on it)
 
@@ -635,3 +683,4 @@ a scratch worktree with that tree's `mutate.sh`:
 | 2026-10-08 | Task 10 (Agent C): every uncarried item blocks; pick-up/drop from the next tile; pile fills inside out. AC10-AC12 tests, one re-pin, six old-rule tests updated |
 | 2026-10-08 | Tasks 6-7 (orchestrator): instrument `stone entries`; GREEN 0/0, deliberate RED (row 1) 145 shared, self-test exit 2; 26185a0 baseline 186 shared / 138 stone entries. `12-9.sh` 14/14 KILLED, kill sites recorded; AC1's own assert shown to kill in `--release` |
 | 2026-10-08 | Ran the two old tables Agent C re-pointed: 9 rows were not killing. 4 had been blinded by 12.9 and are re-armed in `ca80219` (tests only). 5 were already dead on 26185a0 and are left alone, recorded |
+| 2026-10-08 | Seat pass 1 (Wolf): channel from the next tile → Task 11 / AC13; pick-up and drop drawn as a reach → Task 12 / AC14 (both ruled into 12.9, as recommended); self-haul idea → #180; FPS swing → #179. Rows 15–19 added |
