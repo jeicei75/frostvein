@@ -866,18 +866,26 @@ fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
         kind: DesignationKind::Channel,
         rect: rect(t, t),
     });
-    let holder = loop {
+    // 12.9 AC13: the worker stands beside the target, so the support removed is the one under HIS
+    // tile (the target's own support stays).
+    let (holder, stand) = loop {
         assert!(world.tick() < 200, "the channel was never worked");
         world.step();
-        if let Some((id, _, JobState::Work, _)) = world
-            .dwarves()
-            .into_iter()
-            .find(|(_, pos, state, _)| *pos == t && *state == JobState::Work)
-        {
-            break id;
+        if let Some((id, pos, ..)) = world.dwarves().into_iter().find(|(_, pos, state, _)| {
+            *state == JobState::Work
+                && pos.z == t.z
+                && pos.x.abs_diff(t.x) + pos.y.abs_diff(t.y) == 1
+        }) {
+            break (id, pos);
         }
     };
-    assert!(world.set_tile(below, Tile::Empty));
+    assert!(world.set_tile(
+        Pos {
+            z: stand.z - 1,
+            ..stand
+        },
+        Tile::Empty
+    ));
 
     let reachable = Pos {
         x: 45,
@@ -918,10 +926,49 @@ fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
         world.step();
     }
     assert_eq!(world.tile(reachable), Some(Tile::Empty));
+    // 12.9 AC13: the target keeps its own support and has other neighbours, so another miner may
+    // finish the channel from one of them. What must never happen is the order vanishing unworked.
     assert!(
         world
             .designations()
             .contains(&(t, DesignationKind::Channel))
+            || matches!(world.tile(below), Some(Tile::Ramp(_))),
+        "the channel order vanished without being worked"
+    );
+}
+
+/// AC13 (12.9 seat pass 1): a channel is worked from a walkable same-z 4-neighbour of the target,
+/// never from the target itself, and the stone still lands on the target.
+#[test]
+fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target() {
+    let (mut world, holder, _, job) = channel_held_by_a_miner();
+    let t = job.target;
+    let mut worked_from = None;
+    for _ in 0..600 {
+        let (_, pos, state, _) = world
+            .dwarves()
+            .into_iter()
+            .find(|(id, ..)| *id == holder)
+            .unwrap();
+        assert_ne!(pos, t, "the channel miner stood on the cell it channels");
+        if state == JobState::Work {
+            worked_from = Some(pos);
+        }
+        if world.tile(Pos { z: t.z - 1, ..t }) != Some(Tile::Solid(Material::Stone))
+            && !world
+                .designations()
+                .contains(&(t, DesignationKind::Channel))
+        {
+            break;
+        }
+        world.step();
+    }
+    let from = worked_from.expect("the channel was never worked");
+    assert_eq!(from.z, t.z);
+    assert_eq!(from.x.abs_diff(t.x) + from.y.abs_diff(t.y), 1);
+    assert!(
+        world.items().iter().any(|(_, pos)| *pos == t),
+        "the stone did not land on the channelled cell"
     );
 }
 

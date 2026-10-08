@@ -279,7 +279,7 @@ A carried item occupies no tile, which is unchanged.
 
   `74-dwarves-path-through-fire.sh` row 2 anchors on `wander`'s `is_walkable` line, so re-point it
   if Task 2 edits that line. `scripts/audit-mutations.py` reports rot.
-- [ ] **Task 11: channel from the next tile (AC13).** `work_positions` Channel uses the same rule as Dig and Cut
+- [x] **Task 11: channel from the next tile (AC13).** `work_positions` Channel uses the same rule as Dig and Cut
   (`side_neighbours(target)` filtered by `is_walkable`), still only for a standable target. The stone still spawns
   at `job.target`, which the miner no longer stands on. Remove the "channel miner stands in its own stone" NOTE.
   gui `dig_yaw` also takes `DwarfJob::Channel { target }`; fix its doc ("`None` for a channel"). RED first: a sim
@@ -599,6 +599,11 @@ a scratch worktree with that tree's `mutate.sh`:
     uninferrable).
   - 12-1 `retry drop stacks a full stockpile`: SURVIVED.
 
+- **Task 11 RED (Agent E).** `a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target` (scenario.rs, AC13 sim):
+  `assertion left != right failed: the channel miner stood on the cell it channels (left == right == Pos { x: 63, y: 65, z: 9 })`.
+  `a_channelling_miner_faces_the_target_cell` (gui headless.rs, AC13 gui): `a channelling miner faces his target (east), drew
+  Quat(0.0, 0.70710677, 0.0, 0.70710677)` (west: `dig_yaw` ignored Channel).
+
 ### Completion Notes List
 
 - Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
@@ -655,6 +660,17 @@ a scratch worktree with that tree's `mutate.sh`:
   old and new code: old 24/24 on the pile at t=2,000, new 21 at 2,000 and 24 at ~2,250, then no further pick-up. Cause: items block
   and deliveries go deepest-first; not a defect.
 - Results: `cargo test -p sim-core` (75+13+50+19 green), `-p simd` with RUST_TEST_THREADS=1 (23 + serve 72), `-p tui`, `-p gui`: all green, no client change.
+- Task 11 done (Agent E). `work_positions` Channel = walkable same-z 4-neighbours of a standable target; the NOTE about standing in
+  its own stone is gone. `dig_yaw` takes `DwarfJob::Channel`. **Intended changes to old-rule tests (disclosed):** the two `lib.rs`
+  channel unit tests (`execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone`, `..._removes_a_channel_job_when_the_support_is_already_a_ramp`)
+  now put the target beside dwarf 0 (they stood him on it). AC8 guard `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on`
+  now finds the Work-state dwarf on a 4-neighbour of the target and removes the support under HIS tile; the "lets go within 2 ticks" asserts are
+  unchanged. Its last assert changed: the target keeps its own support and other neighbours stay walkable, so another miner can now finish the
+  channel (before, the holder's tile was the only work position and the order stayed forever). It now asserts the designation is present OR the
+  below tile is a Ramp (never vanished unworked). `headless.rs` `a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading`: only the
+  step label changed (a channel aimed at his own cell has no direction); the name stays because mutation row 12-5 names it. No pinned figure
+  moved; AC1's bounds hold (all 51 scenario tests green). Mutation row `12-5.sh` "a digging dwarf no longer faces his target"
+  was re-pointed at the new five-line `dig_yaw` pattern and RUN alone (temp table in the scratchpad): KILLED.
 
 ### File List
 

@@ -2633,13 +2633,17 @@ pub struct DwarfHeadings(
     // first, then dig) -- until then he is still walking in and keeps his walking heading.
     std::collections::BTreeMap<u32, bevy::prelude::Quat>,
 );
-/// The yaw toward the tile a dwarf is digging, while he works a DIG or a CUT. `None` for a
-/// channel (dug under his own feet) and for anything that is not digging.
+/// The yaw toward the tile a dwarf is digging, while he works a DIG, a CUT or a CHANNEL (12.9: he
+/// works it from the next tile). `None` for anything that is not digging.
 fn dig_yaw(entity: &protocol::Entity) -> Option<bevy::prelude::Quat> {
     if entity.state != protocol::JobState::Work {
         return None;
     }
-    let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job
+    let Some(
+        protocol::DwarfJob::Dig { target }
+        | protocol::DwarfJob::Cut { target }
+        | protocol::DwarfJob::Channel { target },
+    ) = entity.job
     else {
         return None;
     };

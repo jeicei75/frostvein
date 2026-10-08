@@ -999,12 +999,14 @@ fn work_positions(
             .into_iter()
             .filter(|candidate| is_walkable(terrain, blocked, *candidate))
             .collect(),
-        // NOTE: the miner stands on the target and its stone spawns there, so it stands in its
-        // own stone until it walks off (Wolf accepted). A target already holding an item is
-        // unreachable (blocked) and its job retries.
+        // A channel works from the next tile too, and its stone spawns on the target. A target that
+        // is not standable has no work position and its job retries.
         JobKind::Channel => {
             if terrain.is_standable(job.target) {
-                BTreeSet::from([job.target])
+                side_neighbours(job.target)
+                    .into_iter()
+                    .filter(|candidate| is_walkable(terrain, blocked, *candidate))
+                    .collect()
             } else {
                 BTreeSet::new()
             }
@@ -4804,7 +4806,12 @@ mod tests {
     #[test]
     fn execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone() {
         let mut world = World::generate(42, Dims::DEFAULT);
-        let target = world.dwarves()[0].1;
+        // 12.9 AC13: the miner works from the next tile, so the target is the cell beside him.
+        let stand = world.dwarves()[0].1;
+        let target = Pos {
+            x: stand.x + 1,
+            ..stand
+        };
         let below = Pos {
             z: target.z - 1,
             ..target
@@ -4850,7 +4857,12 @@ mod tests {
     #[test]
     fn execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp() {
         let mut world = World::generate(42, Dims::DEFAULT);
-        let target = world.dwarves()[0].1;
+        // 12.9 AC13: the miner works from the next tile, so the target is the cell beside him.
+        let stand = world.dwarves()[0].1;
+        let target = Pos {
+            x: stand.x + 1,
+            ..stand
+        };
         let below = Pos {
             z: target.z - 1,
             ..target

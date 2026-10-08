@@ -5288,7 +5288,7 @@ fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
         2,
         working(7, [0, 1, 0], JobState::Work, Some(channel), None),
         west,
-        "a channel keeps his heading",
+        "a channel aimed at his own cell has no direction and keeps his heading",
     );
     let dig_east = protocol::DwarfJob::Dig { target: [1, 1, 0] };
     step(
@@ -5304,6 +5304,49 @@ fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
         dwarf(7, [0, 2, 0]),
         north,
         "his next step resumes walking facing",
+    );
+}
+
+/// 12.9 AC13: a channel is worked from the next tile, so a channelling miner faces the target cell
+/// like a digging one does.
+#[test]
+fn a_channelling_miner_faces_the_target_cell() {
+    use bevy::prelude::Quat;
+    use std::f32::consts::FRAC_PI_2;
+    let west = Quat::from_rotation_y(FRAC_PI_2);
+    let east = Quat::from_rotation_y(-FRAC_PI_2);
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    // He steps west to [0,1,0] and channels the cell to his east.
+    let channel_east = protocol::DwarfJob::Channel { target: [1, 1, 0] };
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![working(
+                7,
+                [0, 1, 0],
+                JobState::Work,
+                Some(channel_east),
+                None,
+            )],
+        ),
+    );
+    for _ in 0..20 {
+        app.update();
+    }
+    let drawn = drawn_rotation(&mut app, 7);
+    assert!(
+        drawn.dot(east).abs() > 1.0 - 1e-5,
+        "a channelling miner faces his target (east), drew {drawn:?}, not west {west:?}"
     );
 }
 
