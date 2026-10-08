@@ -2668,6 +2668,11 @@ So that my crew looks like bodies in a real place.
 **Given** the story lands after #132's fix,
 **Then** 12.3's test and the walking-skeleton scenario test stay green. #133 closes.
 
+NOTE (Wolf, 2026-10-08, 12.9 Task 0): **#162 FOLDED IN.** Every uncarried stone or log blocks its cell,
+on a stockpile cell too. Haulers pick up and drop from the next tile, and a pile fills from the inside
+out. A dead-end idle blocker is never swapped: the mover backs out and the idle dwarf follows. #162
+closes with 12.9.
+
 ### Story 12.10: Ore in the Rock
 
 As the boss,

@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default
 
 # Story 12.9: One Dwarf per Tile
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -16,7 +16,7 @@ so that my crew looks like bodies in a real place.
 ## Not stacked: branch off `main`
 
 `main` is `26185a0` (PR #178, 12.8, merged), clean. Branch: `story-12-9-one-dwarf-per-tile`.
-Closes **#133**. #132 (12.3) is fixed, as the epic order requires. Epic 12's nine standing ACs
+Closes **#133** and **#162** (folded in at Task 0, Wolf 2026-10-08). #132 (12.3) is fixed, as the epic order requires. Epic 12's nine standing ACs
 (`epics.md`, "Standing acceptance criteria") bind this story and are not restated.
 **Wire diff: none.** **New saved state: `SavedDwarf.path`** (Task 4).
 
@@ -62,7 +62,8 @@ Two consequences:
 
 Both break standing AC3, so the path joins `SaveState`.
 
-**#162 (stones never block) names 12.9 as one place to decide it** (its option 3). Task 0 Q3.
+**#162 (stones never block) names 12.9 as one place to decide it** (its option 3). Task 0 Q3:
+**folded in, and every uncarried item blocks, on a pile cell too** (Wolf). See "Stones block" below.
 
 ## Acceptance Criteria
 
@@ -86,9 +87,14 @@ Both break standing AC3, so the path joins `SaveState`.
 4. **Settle.** A dwarf falls onto a tile another dwarf stands on (overhang dug over a cave). It
    comes to rest on a free standable tile within 3 ticks of the support's removal. No tick has two
    dwarves on one tile.
-5. **Dig-face access.** An idle dwarf stands on the only work position of a dig at the end of a
-   one-wide dead-end tunnel. A miner holds that dig. The dig completes within a tick bound the test
-   names, and no tick has two dwarves on one tile.
+5. **Dig-face access (amended at Task 0, Q1(b)).** An idle dwarf stands on the only work position
+   of a dig at the end of a one-wide dead-end tunnel. A miner holds that dig and stands in the
+   tunnel between the idle dwarf and the open end. The miner backs out, and the idle dwarf follows
+   it out. The dig then completes within a tick bound the test names. The test asserts:
+   - no tick has two dwarves on one tile;
+   - **no tick has two dwarves swap tiles** (A from `a` to `b` while B goes from `b` to `a`);
+   - the idle dwarf ends on a tile off the miner's route, with `home` equal to that tile and no
+     `Path`.
 6. **Occupancy never makes a job unreachable at claim time.** A dwarf stands in the only passage to
    a reachable job. The job is still claimed after its reaction delay and completed. Its
    `retry_after` is never stamped.
@@ -105,11 +111,31 @@ Both break standing AC3, so the path joins `SaveState`.
    Any pinned figure that moves is re-pinned, and the move is disclosed in the commit and in
    Completion Notes.
 9. The live instrument (Task 6) reads `OCCUPANCY OK` on the fixed build and `OCCUPANCY RED` with a
-   mutation applied. #133 closes with AC1's red-then-green record.
+   mutation applied. It also reads `stone entries 0` on the fixed build. #133 and #162 close with
+   AC1's and AC10's red-then-green records.
+
+**Stones block (#162, ACs 10–12 added at Task 0).** "Item" below means an uncarried stone or log.
+A carried item occupies no tile, which is unchanged.
+
+10. **No dwarf enters a cell holding an item.** In AC1's busy run, no dwarf move from `a` to `b`
+    between two ticks lands on a `b` that held an item at the end of the earlier tick. The test is
+    red on `26185a0`, and the red is recorded. A fixture also places one item in a one-wide
+    corridor that has a way round. A dwarf with a goal past the item takes the way round and never
+    enters the item's cell.
+11. **Pick up and drop from the next tile.** In a haul fixture:
+    - at the pick-up tick, the hauler stands on a 4-neighbour (same z) of the item, never on it;
+    - at the delivery tick, the hauler stands on a 4-neighbour of the pile cell the item lands on,
+      never on that cell.
+12. **The pile fills from the inside out.** A 3×3 pile with at least 9 reachable loose items fills
+    all nine cells, the centre included, within a tick bound the test names. The test asserts the
+    centre's fill tick is earlier than every edge cell's.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf rules** (record each answer in the Change Log). The recommended option is first.
+- [x] **Task 0: Wolf rules** (record each answer in the Change Log). The recommended option is first.
+  **RULED 2026-10-08:** Q1 **(b)**, over the rec. Q2: "old saves are not important", so **(a) refuse**.
+  Q3 **(b) fold in**, and after the consequences were laid out: "taken pile cells should be
+  impassable" too, fold confirmed over a new-story rec. Q4 **(a)**. Dev mode: Sonnet subagents.
   - **Q1.** In a dead end, an idle dwarf on the mover's next tile may have no free cell off the
     mover's path (AC5's case). (a) **The two swap tiles.** This is the only swap in the story, and
     the gui draws them passing once. (b) The mover backs out of the tunnel and the idle dwarf
@@ -144,8 +170,15 @@ Both break standing AC3, so the path joins `SaveState`.
   recommended shape is in Key decisions. When a holder's next tile holds another dwarf:
   1. **The blocker is idle** (`CurrentJob(None)`). It steps to a free walkable neighbour that is
      not on the holder's remaining path, in fixed `astar_neighbours` order. Its wander `cooldown`
-     becomes `STEP_REST_TICKS` and its `home` becomes the new tile. If it has no such neighbour, the
-     two swap tiles (per Q1). The holder then steps.
+     becomes `STEP_REST_TICKS` and its `home` becomes the new tile. The holder then steps.
+     **If it has no such neighbour (Q1(b), no swap):** the idle dwarf gets an exit `Path`, which is
+     an A* route to the nearest walkable tile off the holder's remaining path. The holder's tile
+     counts as passable for that search, and every other dwarf blocks. Its first step is now the
+     holder's tile, so this is case 3, head-on. The idle dwarf has no escape, because the holder
+     blocks the only way out, so the holder yields and backs out. `wander` follows a dwarf's `Path`
+     when it has one: at `STEP_REST_TICKS` pace, waiting when the next tile is occupied, with no
+     RNG draw. When the path runs out, `wander` removes `Path` and sets `home` to the tile reached.
+     `clear_paths` dropping the exit path is fine: the next blocked step re-derives it.
   2. **The blocker holds a job.** Re-route with A* to the holder's goals, with every other dwarf's
      tile added to `blocked`. If a path exists, store it and step.
   3. **Head-on.** The blocker's `Path` starts with the holder's tile. Compute each side's escape.
@@ -166,11 +199,40 @@ Both break standing AC3, so the path joins `SaveState`.
     can choose from, so every later RNG draw moves.
   - Re-pin a moved figure only after confirming that the move is occupancy and not a defect. Say so
     beside the pin and in the commit.
+- [ ] **Task 10: stones block (#162, AC10–AC12). Do this after Task 5 and before Task 6.**
+  - `blocked_cells` takes emitters **and every uncarried item's tile**, so A*, `wander`, claim
+    reachability and the drop search all see items through the one rule (#74's shape). Every caller
+    passes both. `execute_jobs` must not use a once-per-call set for items. A pick-up, a drop or a
+    spawn changes them mid-loop, so it rebuilds them per dwarf (`uncarried_stones` already is).
+  - `work_positions`:
+    - Dig and Cut: filter neighbours with `is_walkable`, not `is_standable`.
+    - Haul pick-up: the walkable same-z 4-neighbours of the item's tile. The item's tile must still
+      be standable, as today.
+    - Haul delivery: the walkable same-z 4-neighbours of the **deepest** free pile cells. Depth is
+      the breadth-first layer from the walkable non-pile cells around the zone. Pile cells it never
+      reaches are not delivery targets (`// NOTE:`).
+  - Delivery drops the item onto the deepest free pile cell 4-adjacent to the hauler, lowest `Pos`
+    on a tie. This is the same rule `work_positions` used, from one helper, so the two cannot
+    disagree. `release_claim` keeps its abnormal-exit drop at the dwarf's own tile. Add a `// NOTE:`
+    that the dwarf stands in the item until it walks off, which is rare.
+  - Spawn sites are unchanged: a dig's stone goes in the dug cell, logs at the trunk base, and a
+    channel's stone on the target. A channel miner stands in its own stone until it walks off
+    (`// NOTE:`; Wolf accepted). A one-wide tunnel waits at each stone until it is hauled, and
+    without a pile it stops (`// NOTE:`, FR8 never-drop).
+  - Write the AC10 occupancy-of-items assert into the AC1 test, before the vacuity asserts. Write
+    the AC10 corridor fixture and the AC11 and AC12 fixtures RED first, and paste the failing asserts.
+  - Expect re-pins from the old rule, such as
+    `haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile` and the release-claim drop
+    tests. Each intended change is disclosed beside the pin and in the commit (Task 5's rule).
+  - If AC1's bounds (2,500 / 600 / 600) stop holding because of blocking items, **STOP and report**
+    with the measured figures. Do not loosen them.
 - [ ] **Task 6: instrument (AC9).** `12-9-signoff/occupancy_wire.py` (NEW at creation; RED recorded
   in Verification).
   - It reads every delta from a fresh daemon running the busy-crew orders at fast4x. It counts
     shared ticks, and it range-checks five dwarves per delta, more than 200 moves, marks cleared and
-    a stone on the pile.
+    a stone on the pile. **Also count `stone entries`** (AC10 on the wire): a dwarf whose tile changed
+    onto a tile that held an uncarried item in the previous delta (the wire's `carrying` says which
+    items are held). Green needs `stone entries 0`; record the 26185a0 figure as its RED.
   - Run it three times, and paste all three outputs into the Debug Log:
     - GREEN on the fixed build;
     - deliberate RED: apply 12-9.sh row 1 (`wander` ignores occupancy), rebuild a release `simd`, and
@@ -191,17 +253,23 @@ Both break standing AC3, so the path joins `SaveState`.
   7. No dwarf ever steps → AC1's vacuity asserts. This is also the instrument self-test.
   8. `to_save` drops `path` → AC7.
   9. Occupied tiles join claim-time `blocked` in `claim_jobs` → AC6.
+  10. An idle blocker with no free neighbour swaps tiles with the holder (the old Q1(a)) → AC5's
+      no-swap assert.
+  11. `blocked_cells` ignores items → AC10.
+  12. Haul pick-up's work position is the item's own tile (the old rule) → AC11.
+  13. Delivery picks the shallowest free pile cell → AC12.
+  14. Delivery drops at the hauler's own tile → AC11.
 
   `74-dwarves-path-through-fire.sh` row 2 anchors on `wander`'s `is_walkable` line, so re-point it
   if Task 2 edits that line. `scripts/audit-mutations.py` reports rot.
 - [ ] **Task 8: record.**
-  - The PR body says `Closes #133` and nothing else for #133. A closing keyword shuts the whole
-    issue.
-  - Resolve #162 per Q3 (a comment, if not folded).
+  - The PR body says `Closes #133` and `Closes #162`. Both issues are whole: #162 was folded in.
+  - Comment on #162 with the ruling (all items block, pile cells too) and the AC10 RED/GREEN.
   - Run the full gate, `RUST_TEST_THREADS=1 scripts/gate.sh`, and get it green before review.
 - [ ] **Task 9: seat look (per Q4).** Use a short vehicle card in `12-9-signoff/` in the canonical
   launch form. Wolf drags the channel and pile and watches the crew at Normal and at Fast: no two
-  dwarves overlap, and blocked dwarves step aside or back off. Record his words.
+  dwarves overlap, and blocked dwarves step aside or back off. Haulers pick up and drop from the
+  next tile, nobody walks through a stone, and the pile fills from the centre. Record his words.
 
 ## Dev Notes
 
@@ -221,7 +289,12 @@ Both break standing AC3, so the path joins `SaveState`.
 - No wire, `protocol`, `client-core`, `tui` or `gui` change. The tui crowd glyph
   (`tui/src/view.rs:345-360`, `palette.rs:181`) stays: it is client rendering of whatever the wire
   says.
-- Items do not block (#162, per Q3). Falling items and "no dwarf on air" are 12.11.
+- **Items DO block (#162, folded at Q3), dwarves do NOT join `blocked_cells`.** An uncarried item
+  is world state, static within a system call, so it belongs in the terrain-and-fire rule. A dwarf
+  moves within the call, so it does not. Falling items and "no dwarf on air" stay in 12.11.
+- No gui change. Its pick-up and drop gates key on the hauler's own wire cell
+  (`gui/src/project.rs:520-530`), which still holds when the item is one tile away. If a gui test
+  goes red, STOP and report; do not patch the client.
 
 ### What already exists (build on it)
 
@@ -298,7 +371,8 @@ ticks were read, or a delta lacked five dwarves. Fix the run before reading anyt
 - `crates/sim-core/src/lib.rs`: UPDATE. Changes: `execute_jobs` blocked step; `settle`; `wander`;
   the occupancy helper, escape and re-route; the `World::step` debug assert; `to_save`/`from_save`
   path. Tests for AC3–AC6.
-- `crates/sim-core/src/save.rs`: UPDATE (`SavedDwarf.path`)
+- `crates/sim-core/src/save.rs`: UPDATE (`SavedDwarf.path`). No new saved state for #162:
+  item positions are already saved, and blocking is derived from them.
 - `crates/sim-core/tests/scenario.rs`: UPDATE (AC1, AC2; `SavedDwarf` literals)
 - `crates/sim-core/tests/save_load.rs`: UPDATE (AC7; `SavedDwarf` literals)
 - `_bmad-output/implementation-artifacts/mutations/12-9.sh`: NEW.
@@ -342,3 +416,4 @@ ticks were read, or a delta lacked five dwarves. Fix the run before reading anyt
 | Date | Change |
 | --- | --- |
 | 2026-10-08 | Story created on `26185a0`. #133 reproduced: sim probe (494/3,000 idle ticks shared on `DEFAULT_SEED`, 332 busy) and live wire (`occupancy_wire.py`, 186 shared ticks, `OCCUPANCY RED`). The per-step head-on rule was traced to a livelock, and the escape rule replaces it. `Path` joins `SaveState`. Task 0 (Q1–Q4) is open |
+| 2026-10-08 | **Task 0 ruled (Wolf).** Q1 (b): no swap; the idle dwarf gets an exit `Path` and the miner backs out (AC5 and Task 3.1 amended, mutation row 10 added). Q2: refuse pre-12.9 saves ("old saves are not important"). Q3 (b): **#162 folded in**. Every uncarried item blocks, on pile cells too ("taken pile cells should be impassable"), confirmed over the rec to split it into its own story. Pick-up and drop from the next tile, pile fills inside out: AC10–AC12, Task 10, rows 11–14, instrument `stone entries`. Q4 (a): seat look. Dev mode: Sonnet 5.5 subagents |
