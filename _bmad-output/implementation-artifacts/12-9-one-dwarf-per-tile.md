@@ -288,7 +288,7 @@ A carried item occupies no tile, which is unchanged.
   `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on` (an AC8 guard) assumes the worker
   stands ON the target. Keep its intent: remove the support under the tile the worker actually stands on.
   Disclose the change.
-- [ ] **Task 12: lift and set-down (AC14, gui only, `crates/gui/src/project.rs`).**
+- [x] **Task 12: lift and set-down (AC14, gui only, `crates/gui/src/project.rs`).**
   - `blend_entities` does not move an unparented item that the wire says is carried. It stays where it was
     drawn.
   - `sync_dwarf_work` parents it as today, then lifts it from its drawn position to `CARRY_OFFSET` over
@@ -604,6 +604,12 @@ a scratch worktree with that tree's `mutate.sh`:
   `a_channelling_miner_faces_the_target_cell` (gui headless.rs, AC13 gui): `a channelling miner faces his target (east), drew
   Quat(0.0, 0.70710677, 0.0, 0.70710677)` (west: `dig_yaw` ignored Channel).
 
+- **Task 12 RED (Agent E, gui `headless.rs`, AC14).** `a_stone_the_wire_puts_in_his_hands_holds_its_cell_while_the_hauler_walks_in`:
+  `frame 0: the stone slid off its own cell, left Vec3(1.0, -0.3, 0.0) right Vec3(2.0, -0.3, 0.0)`.
+  `a_stone_picked_up_from_the_next_tile_rises_to_his_hands_over_a_lift`: `the first frame of the lift is the end of it`
+  (`Vec3(0.0, 0.705, -0.58)` == `CARRY_OFFSET` in frame 1). `a_stone_released_onto_the_next_tile_is_set_down_over_a_lift`:
+  `the set-down is a one-frame snap` (`Vec3(1.0, -0.3, 0.0)` on the cell in frame 1).
+
 ### Completion Notes List
 
 - Tasks 1-3 done. `execute_jobs`, `settle` and `wander` each build a `BTreeSet<Pos>` of dwarf tiles once
@@ -671,6 +677,14 @@ a scratch worktree with that tree's `mutate.sh`:
   step label changed (a channel aimed at his own cell has no direction); the name stays because mutation row 12-5 names it. No pinned figure
   moved; AC1's bounds hold (all 51 scenario tests green). Mutation row `12-5.sh` "a digging dwarf no longer faces his target"
   was re-pointed at the new five-line `dig_yaw` pattern and RUN alone (temp table in the scratchpad): KILLED.
+- Task 12 done (Agent E, gui only). One component, `ItemMotion { from, to, elapsed }`, and `advance_item_motion` (chained after
+  `sync_dwarf_work`, paced by `Time::delta_secs()` like the walker; `LIFT_SECONDS = 0.3` serves the lift and the set-down; NOTE: a paused
+  world still finishes one). `sync_dwarf_work` parents as before but starts the child at the stone's drawn position in the dwarf's local space and
+  lifts it to `CARRY_OFFSET`; on release it unparents and sets down from the hands (dwarf transform applied to the local translation) to
+  `item_translation(...)`. `blend_entities` now skips an unparented item that any entity carries (the wire moved it to the hauler's tile) and one with
+  an `ItemMotion`; `BlendQuery` gained `Option<&ItemMotion>`. No existing test moved. Mutation row `12-5.sh` "the blend writer moves a carried stone" was
+  re-pointed (the filter line changed; the sabotage now drops the whole guard with `.filter(|_| true)`) and RUN alone: KILLED. `audit-mutations.py`: 822 rows
+  all apply. Not run (orchestrator): gui pixel guards. No row yet pins the new hold/rise/set-down (rows 17-19 of the story's list are for the orchestrator).
 
 ### File List
 
@@ -687,6 +701,7 @@ a scratch worktree with that tree's `mutate.sh`:
 - `_bmad-output/implementation-artifacts/12-9-signoff/vehicle-card.md` (NEW, Task 9)
 - `_bmad-output/planning-artifacts/epics.md` (Task 0 ruling note on Story 12.9)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- Task 11/12 (Agent E): `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/gui/src/project.rs`, `crates/gui/src/ingest.rs`, `crates/gui/tests/headless.rs`, `_bmad-output/implementation-artifacts/mutations/12-5.sh` (two rows re-pointed)
 
 ## Change Log
 
@@ -700,3 +715,4 @@ a scratch worktree with that tree's `mutate.sh`:
 | 2026-10-08 | Tasks 6-7 (orchestrator): instrument `stone entries`; GREEN 0/0, deliberate RED (row 1) 145 shared, self-test exit 2; 26185a0 baseline 186 shared / 138 stone entries. `12-9.sh` 14/14 KILLED, kill sites recorded; AC1's own assert shown to kill in `--release` |
 | 2026-10-08 | Ran the two old tables Agent C re-pointed: 9 rows were not killing. 4 had been blinded by 12.9 and are re-armed in `ca80219` (tests only). 5 were already dead on 26185a0 and are left alone, recorded |
 | 2026-10-08 | Seat pass 1 (Wolf): channel from the next tile → Task 11 / AC13; pick-up and drop drawn as a reach → Task 12 / AC14 (both ruled into 12.9, as recommended); self-haul idea → #180; FPS swing → #179. Rows 15–19 added |
+| 2026-10-08 | Tasks 11-12 (Agent E): channel from the next tile, `dig_yaw` Channel arm, lift and set-down (`ItemMotion`). Two 12-5 mutation rows re-pointed and run, both KILLED |

@@ -78,10 +78,10 @@ PY
 mutation "the blend writer moves a carried stone" gui a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-# Re-pointed 2026-10-05 (12.7): the blend's item map now holds the whole item (kind and stack), so the binding is `item`, not `position`.
-old = '        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none()) {\n'
+# Re-pointed 2026-10-08 (12.9 AC14): the blend's item arm now also skips a wire-carried item and one mid set-down, and rustfmt puts the filter on its own line. The sabotage drops the whole guard, so a parented stone is moved to its cell again.
+old = '            .filter(|_| parent.is_none() && motion.is_none() && !carried.contains(&marker.0))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none() || true) {\n'))
+p.write_text(s.replace(old, '            .filter(|_| true)\n'))
 PY
 
 mutation "clips are bound by index again" gui each_clip_binds_the_label_of_its_own_name_in_export_order <<'PY'
