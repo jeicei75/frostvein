@@ -217,3 +217,12 @@ old = '            if let Some(tile) = dwarf.path.iter().find(|tile| !in_bounds(
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            if let Some(tile) = dwarf.path.iter().find(|_| false) {\n'))
 PY
+
+# #183: the idle blocker keeps its stale exit path when neither side of a head-on can escape.
+mutation "22 a stuck head-on keeps the stale exit path" sim-core a_head_on_with_no_escape_drops_the_idle_blockers_stale_path <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            if idle {\n                ecs.entity_mut(blocker).remove::<Path>();\n            }\n            return false;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            return false;\n'))
+PY

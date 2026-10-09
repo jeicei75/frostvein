@@ -1292,7 +1292,15 @@ fn resolve_blocked_step(
         (Some(_), Some(_)) => holder_id < blocker_id,
         (Some(_), None) => true,
         (None, Some(_)) => false,
-        (None, None) => return false,
+        // Both wait. An idle blocker's exit `Path` is dropped (#183): it was derived when the
+        // holder stood elsewhere and can lead back through the holder, so keeping it would hold
+        // the idle dwarf still forever. The next blocked step derives a fresh one.
+        (None, None) => {
+            if idle {
+                ecs.entity_mut(blocker).remove::<Path>();
+            }
+            return false;
+        }
     };
     if holder_yields {
         *path = holder_escape.expect("checked above");
@@ -5412,6 +5420,46 @@ mod tests {
         assert!(
             trace.iter().any(|positions| positions[1].x < 12),
             "the higher id never backed out of the tunnel"
+        );
+    }
+
+    // 12.9 review #183: a head-on where neither side has an escape. The idle blocker's exit `Path`
+    // still starts on the holder's tile, so it would keep the head-on forever. Both wait, and the
+    // blocker's stale `Path` is dropped so the next blocked step derives a fresh one.
+    // NOTE: the review's five-dwarf chain fixture still livelocks with this fix (filed apart).
+    #[test]
+    fn a_head_on_with_no_escape_drops_the_idle_blockers_stale_path() {
+        let mut world = room_and_tunnel();
+        let spots = [16, 15, 14, 13, 12].map(|x| at(x, FIX_Y, FIX_Z));
+        stand_miners_at(&mut world, spots);
+        set_profession(&mut world, 1, super::Profession::Woodcutter);
+        let (holder, blocker) = (spots[0], spots[1]);
+        let entity = dwarf_entity(&world, 1);
+        assert_eq!(world.ecs.get::<super::CurrentJob>(entity).unwrap().0, None);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert(super::Path(vec![holder]));
+        let mut occupied: BTreeSet<Pos> = spots.into_iter().collect();
+        let mut path = vec![blocker];
+
+        let step = super::resolve_blocked_step(
+            &mut world.ecs,
+            &BTreeSet::new(),
+            &mut occupied,
+            (super::Id(0), holder),
+            &mut path,
+            &BTreeSet::new(),
+        );
+
+        // Both wait: nobody moved and the holder kept its path.
+        assert!(!step);
+        assert_eq!(path, vec![blocker]);
+        assert_eq!(occupied, spots.into_iter().collect());
+        assert_eq!(*world.ecs.get::<Pos>(entity).unwrap(), blocker);
+        assert!(
+            world.ecs.get::<super::Path>(entity).is_none(),
+            "the idle blocker kept its stale exit path"
         );
     }
 
