@@ -2536,3 +2536,37 @@ the story, and one of them is also issue #125.
 - **A trunk-anchored cut drag now slabs at the tree's base z, not the hit z** (feature, LOW, read;
   `crates/gui/src/designate.rs:201`). It matches crown/foot anchors and the draft's "box at the cut level";
   on a slope the single-level box misses uphill pines. Preview and wire agree. A seat question only.
+
+## Deferred from: code review of 12-9-one-dwarf-per-tile (2026-10-09)
+
+- **AC10 can break within one tick** (feature, LOW, RAN; `crates/sim-core/src/lib.rs:1664`).
+  - What happens: a hauler lifts a stone in `execute_jobs`, then `wander` moves an idle dwarf onto that cell in the same tick
+    (seed 5, 6x10, t834). The gui keeps the stone drawn on its cell until it is parented, so the dwarf is drawn walking into it.
+  - Risk: the live instrument would read STONES RED if this hit the story's recipe.
+- **Job holders stall up to ~65 ticks behind a blocker** (feature, LOW, RAN; `lib.rs:1695`). Measured 64/65/57/52 on seeds
+  1/6/15/11, against ≤11 at base. An idle dwarf's exit `Path` waits on its wander cooldown, and the holder re-checks once
+  per step period.
+- **Tick-cost spikes** (feature + blind, LOW, RAN; `lib.rs:1204`). The release max is 9-17.6 ms in 8/28 runs, against ≤0.41 ms
+  at base; p99 is 30-156 µs. That is inside NFR2's fast4x budget. Likely cause: a blocked re-route or escape exhausting
+  `MAX_ASTAR_NODES`. Relevant to #179.
+- **A sidestep or yield can move a blocker a second cell in one tick** (blind, LOW, read; `lib.rs:1240,1303`).
+- **gui lift takes `from` as world space when the item is still another dwarf's child** (blind, LOW, read;
+  `crates/gui/src/project.rs`, `sync_dwarf_work`). This is a two-carrier hand-off in one frame.
+- **The `serve.rs` channel-from-the-next-tile assert may never run** (edge, LOW, read; `crates/simd/tests/serve.rs:646`). The
+  test returns once dig, haul and carry are seen, without requiring a channel Work delta.
+- **The AC8 channel guard passes only through its Ramp branch** (edge + acceptance, LOW, RAN; `crates/sim-core/tests/scenario.rs`,
+  `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on`). Another miner finishes the channel.
+- **The AC7 precondition is asserted indirectly** (edge + acceptance, LOW, RAN; `crates/sim-core/tests/save_load.rs`). The test
+  checks three west steps, not `!to_save().dwarves[1].path.is_empty()`. Row 8 kills it on the equality assert.
+- **The campfire re-pin comment says full by ~2,250; measured 2,149** (acceptance, LOW, RAN; `crates/sim-core/tests/scenario.rs`,
+  `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire`).
+- **AC1's "stone on the pile" counts a carried stone** (acceptance, LOW, RAN; `scenario.rs`,
+  `a_busy_crew_never_shares_a_tile_and_still_works`). The carried stone is counted at 184; the first loose one lands at 201.
+  `occupancy_wire.py`'s `on_pile` has the same shape.
+- **`dwarf_tiles` spells `.cloned()` to avoid #74 row 3's `.copied()` anchor, with no comment** (acceptance, LOW, read;
+  `crates/sim-core/src/lib.rs`).
+- **Five 3-3 and 12-1 mutation rows were already dead on `26185a0`** (acceptance, LOW, RAN; pre-existing).
+  - 3-3: `free stockpile tiles ignore standability`, `the pick-up leg drops the free-tile gate` and `every stone on a zone tile
+    counts as stored` SURVIVED; `load_world accepts two dwarves carrying one item` is NO-COMPILE.
+  - 12-1: `retry drop stacks a full stockpile` SURVIVED.
+  - These rows read as coverage they do not give; the reviewer recommends an issue.

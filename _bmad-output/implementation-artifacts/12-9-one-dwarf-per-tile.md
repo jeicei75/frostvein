@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default
 
 # Story 12.9: One Dwarf per Tile
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -322,6 +322,120 @@ A carried item occupies no tile, which is unchanged.
   **Pass 2 (2026-10-08, `7d69e19`), Wolf:** channel, "1 yes"; carry, "2 better.. dwarves are still sucking the stone
   not really picking up and also when dropping the stone slides.. but not going to tweak it now more" (-> **#181**,
   bug, look parked; the sim side of AC14 holds, and the gui blend reads as a slide rather than a reach).
+
+### Review Findings
+
+Code review run 1, 2026-10-09, on `34b6783` (diff `origin/main...HEAD`, `26185a0..34b6783`, 20 files, +2,933/-185).
+This was a fresh session. Four layers ran and none timed out. All ran cargo 1.97.1, each in its own `/tmp/review-<layer>`
+target dir with `CARGO_BUILD_JOBS=6`.
+- Blind Hunter (Sonnet) took sim-core `src` plus gui `project.rs`.
+- Edge Case Hunter (Sonnet) took simd, gui `ingest.rs`, every `tests/`, the mutation tables and `occupancy_wire.py`.
+- The Acceptance and Feature Auditors (Opus) took the whole diff.
+
+| Layer | Findings | Severity | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 5 | 2 MED, 3 LOW | sim-core suite; probes in a copy (delivery or channel onto a dwarf, chain deadlock, save round-trip at 20 cut ticks) |
+| Edge Case Hunter | 5 | 5 LOW | sim-core, simd, five gui tests one at a time, `audit-mutations.py` (827 rows match), live instrument, row 8 in a copy (KILLED) |
+| Acceptance Auditor | 11 | 2 MED, 9 LOW | every suite, fmt and clippy, REDs reproduced on 26185a0, instrument GREEN, row 1 RED, row 7 exit 2 |
+| Feature Auditor | 6 | 2 HIGH, 4 LOW | 30 release runs; a multi-seed probe at HEAD and on base; live big-channel and trench runs; save, refused-save and bad-path live |
+
+Convergences:
+- stones landing on dwarves: blind + feature;
+- unvalidated `path` on load: acceptance + feature;
+- AC7 precondition: edge + acceptance;
+- AC8 guard: edge + acceptance;
+- tick cost: blind + feature.
+
+The orchestrator reproduced D1, P1 and P2 itself. Probe sources were checked byte-identical to HEAD and `26185a0`.
+
+The live wire stays green on the story recipe. Three independent runs read `shared 0, stone entries 0, OCCUPANCY OK / STONES
+OK`. **That green does not cover D1:** the instrument counts dwarves moving onto items, not items landing on dwarves.
+Not proven live: the AC13 facing and the AC14 lift/set-down look (seat; #181 parked) and the back-off feel (Task 9).
+
+Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
+
+- [ ] [Review][Patch] (decision resolved) **HIGH: stones land on dwarves; a caged dwarf never moves again and the channel never finishes (#182)**
+  (feature + blind) — Since AC13 a channel target is no longer the miner's own tile. `execute_jobs` still spawns the stone
+  at `job.target` (`lib.rs:1553`) with no occupancy check. Delivery's `drop_cell(pile_targets(..))` (`lib.rs:731-770,
+  1467`) never consults dwarves either. A dwarf ends up standing inside a stone. If its other neighbours are stones, fire,
+  trunk or air, `wander` has no candidate. Once the pile is full nobody hauls those stones, so the dwarf stays caged and its
+  channel mark has no work position left.
+
+  Multi-seed release probe, seeds 0..16, 4x7 and 6x10 channels, 4,000 ticks, 28 runs with a pile:
+
+  | | HEAD | `26185a0` |
+  | --- | --- | --- |
+  | Runs with marks unfinished | 9/28 | 0/28 |
+  | Runs with a dwarf frozen ≥2,251 ticks | 8/28 | 0/28 (longest still ≤60) |
+
+  Live on DEFAULT_SEED with a 6x10 channel: stone 30 spawned under idle dwarf 0 at t1371, and the dwarf did not move
+  again. Two sub-modes sit beside the cage:
+  - (i) a delivery seals a dwarf in a dead end whose only exit is a pile cell (seed 13);
+  - (ii) in 3 of the 9 runs, a mark is walled in by its own unhauled stones once the pile is full, with no dwarf caged.
+    This is the #180 / FR8 never-drop shape already ruled for a one-wide tunnel.
+
+  **RULED 2026-10-09 (Wolf): option 2, fix in 12.9's patch pass, now a patch:**
+  - A delivery's `drop_cell` skips dwarf-occupied pile cells; the hauler holds and retries next tick. No claim-time change
+    (AD-12).
+  - A completing channel first steps any dwarf off its target with the case-1 sidestep. If it cannot, the miner holds at
+    Work and retries.
+  - **Prevent (i):** a delivery refuses a cell whose filling would wall a dwarf in. This is a connectivity check per drop.
+  - `occupancy_wire.py` gains an `items landed on a dwarf` count, and green needs 0.
+  - A scenario test over the probe's seeds asserts no dwarf freezes.
+  - (ii) stays the ruled #180 / FR8 shape and gets a `// NOTE:`.
+- [ ] [Review][Patch] **MED: head-on with no escape on either side waits forever when the idle blocker follows a stale exit
+  `Path` (#183)** (blind) [crates/sim-core/src/lib.rs:1295] — Drop the idle blocker's `Path` in the `(None, None)` arm so
+  the next blocked step re-derives it. RED: the probe's chain fixture (`done=None` after 40,000 ticks; mirrored layout 370).
+- [ ] [Review][Patch] **MED: a walled-in deepest free pile cell stops the whole pile (#184; this is record flag 2, and the
+  record understated it)** (acceptance) [crates/sim-core/src/lib.rs:731] — Layer depth through free cells only. RED: centre
+  free, four edge-middles taken, one loose stone gives `delivered=None, retry_after 3118`; the control delivers at t312. Also
+  correct the #162 comment's "never walled out of the empty middle".
+- [ ] [Review][Patch] **MED: the new saved `SavedDwarf.path` is not validated on load** (acceptance + feature)
+  [crates/simd/src/main.rs:344] — `load_world_from` range-checks every other saved position, but not `path`. A save with
+  `path=[(9000,9000,9000)]` loads, and the dwarf stands off the map, on the wire. `wander` follows a path with no adjacency
+  check (`lib.rs:1707`). Bounds-check every path tile, the same way `pos` and `home` are checked.
+- [ ] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` reports a malformed delta as RED** (edge)
+  [_bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py:111] — Empty `entities` makes `max()` raise, and a
+  missing `items` or `designations` raises `KeyError`. The traceback exits 1, the same code as RED; it should exit 2, RUN
+  PROVES NOTHING.
+- [ ] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` accepts tick gaps** (edge)
+  [_bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py:135] — Only `limit // 2` ticks are required, and gaps
+  after the first delta are never counted, so a shared tick between two read deltas is invisible. Count the gaps after the
+  first tick, print them, and treat any gap as RUN PROVES NOTHING. Runs read 1,479 and 1,435 of 1,500 ticks.
+- [ ] [Review][Patch] **LOW: record corrections** (acceptance) — AC8 wants each re-pin disclosed in the commit, and
+  `5b17f72`, `d93f32d` and `0fccc74` are subject-only. Disclose them in the patch commit body and the PR body. Correct
+  these record lines:
+  - flag 4 is false: the AC6 fixture passes at cooldown 0 and 10, and only 10,000 stalls;
+  - the AC10 sim RED on `26185a0` was never run there. It is `shared=332 item_entries=329`, and the occupancy assert fires
+    first;
+  - AC1 at HEAD reads 1,223 / 184 / 1,199, not the Task 10 figures;
+  - the #74 anchor is row **3**, not row 2;
+  - "the sim side of AC14" should read "AC14's headless tests"; AC14 is gui-only.
+- [x] [Review][Defer] AC10 can break within one tick: a hauler lifts a stone in `execute_jobs` and `wander` moves an idle
+  dwarf onto that cell in the same tick (seed 5, t834). The gui draws it walking into the stone (feature)
+  [crates/sim-core/src/lib.rs:1664] — deferred, 1/28 runs, cosmetic
+- [x] [Review][Defer] Job holders now stall up to ~65 ticks behind a blocker (≤11 at base). An exit `Path` waits on the
+  wander cooldown (feature; record flag 4) [crates/sim-core/src/lib.rs:1695] — deferred, reads as hesitation, not stranding
+- [x] [Review][Defer] Tick-cost spikes: max 9–17.6 ms in 8/28 runs vs ≤0.41 ms at base. p99 30–156 µs, inside NFR2's fast4x
+  budget (feature + blind) [crates/sim-core/src/lib.rs:1204] — deferred, within budget; relevant to #179
+- [x] [Review][Defer] A sidestep or yield can move a blocker a second cell in the tick it already moved (blind)
+  [crates/sim-core/src/lib.rs:1240] — deferred, unverified one-tick jump
+- [x] [Review][Defer] gui lift takes `from` as world space when the item is still another dwarf's child (two-carrier hand-off
+  in one frame) (blind) [crates/gui/src/project.rs] — deferred, rare, unverified
+- [x] [Review][Defer] The `serve.rs` channel-from-the-next-tile assert may never run: the test returns before requiring a
+  channel Work delta (edge) [crates/simd/tests/serve.rs:646] — deferred, the sim test covers AC13
+- [x] [Review][Defer] The AC8 channel guard passes only through its Ramp branch now; another miner finishes the channel
+  (edge + acceptance, flag 1) [crates/sim-core/tests/scenario.rs] — deferred, intent holds
+- [x] [Review][Defer] The AC7 precondition is asserted indirectly (three west steps), not as `!path.is_empty()` at save (edge +
+  acceptance) [crates/sim-core/tests/save_load.rs] — deferred, row 8 kills it
+- [x] [Review][Defer] The campfire re-pin comment says full by ~2,250; measured 2,149 (acceptance)
+  [crates/sim-core/tests/scenario.rs] — deferred, the bound holds
+- [x] [Review][Defer] AC1's "stone on the pile" counts a carried stone: 184 carried vs 201 loose (acceptance)
+  [crates/sim-core/tests/scenario.rs] — deferred, both far inside 600
+- [x] [Review][Defer] `dwarf_tiles` spells `.cloned()` to dodge #74 row 3's anchor, uncommented (acceptance, flag 3)
+  [crates/sim-core/src/lib.rs] — deferred, a cleanup would show as BROKEN in the audit, loudly
+- [x] [Review][Defer] Five 3-3 and 12-1 mutation rows were already dead on `26185a0`; two spot-checked SURVIVED there
+  (acceptance, flag 5) [_bmad-output/implementation-artifacts/mutations/] — deferred, pre-existing
 
 ## Dev Notes
 

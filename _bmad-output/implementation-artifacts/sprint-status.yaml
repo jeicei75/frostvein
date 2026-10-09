@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-08
+# last_updated: 2026-10-09
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-08
+last_updated: 2026-10-09
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2594,7 +2594,7 @@ development_status:
   #     through it -> #177 (Wolf: file, review is done). -> done. PR on Wolf's yes.
   #   2026-10-06 (Wolf): #164 (work visuals trail the walker), #173 (ghost pine) and #174 (cut-mode feel)
   #     FOLDED IN; see epics.md Story 12.8. Larger than drafted; the cap is soft.
-  12-9-one-dwarf-per-tile: review
+  12-9-one-dwarf-per-tile: in-progress
   #   Created 2026-10-08 on 26185a0. #133 REPRODUCED: sim probe (494 of 3,000 idle ticks shared on DEFAULT_SEED,
   #     332 with a busy crew) and live wire (12-9-signoff/occupancy_wire.py: shared ticks 186, OCCUPANCY RED).
   #     FR49's per-step head-on rule LIVELOCKS in a dead-end tunnel (hand-traced); the story uses an escape rule.
@@ -2603,6 +2603,11 @@ development_status:
   #   2026-10-08 Task 0 RULED (Wolf): Q1 (b) no swap, the miner backs out and the idle dwarf follows; Q2 refuse old
   #     saves; Q3 #162 FOLDED IN: every uncarried item blocks, pile cells too (AC10-12, Task 10); Q4 seat look.
   #     Larger than drafted; the cap is soft. Dev: Sonnet 5.5 subagents.
+  #   2026-10-09 code review run 1 on 34b6783 (4 layers, none timed out): 1 HIGH (#182 stones land on dwarves,
+  #     9/28 probe runs leave marks unfinished vs 0/28 on 26185a0), 3 MED (#183 head-on stale exit path, #184 walled
+  #     pile stops, unvalidated saved path), 3 LOW patches (instrument x2, record). Wolf ruled #182 option 2 (fix in
+  #     12.9 incl. the pocket-seal check). 7 patches LEFT AS ACTION ITEMS for a fresh /bmad-review-patch, 12 defer.
+  #     -> in-progress.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
