@@ -2913,23 +2913,43 @@ fn spawn_places_five_dwarves_on_distinct_tiles_for_every_small_seed() {
 // the fire and a 3x3 pile near it, 4,000 ticks each. On 34b6783 a channel stone spawned under a
 // dwarf, or a delivery walled one into a dead end, and the dwarf never moved again: 8 of 28 runs
 // ended with a dwarf still for >= 2,251 ticks (longest still on 26185a0: <= 60). No stone lands on
-// a dwarf, and every dwarf still for long is one of the known one-level islands (#186).
+// a dwarf, every dwarf still for long is one of the known one-level islands (#186), and the runs
+// that leave marks are the pinned ones.
 #[test]
 fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     const TICKS: u64 = 4_000;
-    // NOTE: mode (ii) of #182 (a mark walled in by its own unhauled stones once the pile is full)
-    // is the ruled #180 / FR8 never-drop shape. It leaves marks unfinished but cages nobody, so
-    // this asserts on stillness, not on marks.
     const STILL_BOUND: u64 = 500;
     // (seed, channel width, dwarf). An idle dwarf whose every same-level neighbour is a stone,
     // rock, a drop or another dwarf: `wander` is same-z only, so it stands until a job routes it
     // out over a ramp. No stone is on it and A* still reaches it, so it is not walled in (#186).
-    // 12.9 review run 2 re-pin: "never under any dwarf" moved the runs: (6, 6, 0), (12, 6, 4)
-    // and (13, 6, 2) are gone and (16, 4, 0) is new, an idle dwarf between foliage, two loose
-    // stones and a drop.
+    // 12.9 review run 2 re-pin: every dwarf over the bound is listed now, not the longest per run.
+    // "Never under any dwarf" moved the runs: (6, 6, 0), (12, 6, 4) and (13, 6, 2) are gone and
+    // (16, 4, 0) is new, an idle dwarf between foliage, two loose stones and a drop.
     const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 3] = [(10, 4, 2), (10, 6, 3), (16, 4, 0)];
+    // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
+    // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
+    // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
+    // by unhauled stones with no work position left (#182 mode ii, the ruled #180 / FR8
+    // never-drop shape). Base `26185a0` left no 4-wide run unfinished.
+    const UNFINISHED: [(u64, i32, usize); 14] = [
+        (2, 6, 2),
+        (4, 6, 1),
+        (5, 4, 1),
+        (6, 6, 2),
+        (7, 4, 1),
+        (9, 6, 2),
+        (10, 4, 1),
+        (10, 6, 6),
+        (11, 6, 3),
+        (12, 6, 1),
+        (13, 4, 1),
+        (13, 6, 3),
+        (15, 6, 2),
+        (16, 6, 3),
+    ];
     let mut runs = 0;
     let mut frozen = Vec::new();
+    let mut unfinished = Vec::new();
     let mut landed = Vec::new();
     let mut worked = 0;
     for seed in 0..=16_u64 {
@@ -3012,14 +3032,14 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
                 loose_before = loose_now;
                 previous = now;
             }
-            if let Some((dwarf, still)) = longest
-                .iter()
-                .copied()
-                .enumerate()
-                .max_by_key(|(_, still)| *still)
-                .filter(|(_, still)| *still >= STILL_BOUND)
-            {
-                frozen.push((seed, width, dwarf, still, previous[dwarf]));
+            for (dwarf, still) in longest.iter().copied().enumerate() {
+                if still >= STILL_BOUND {
+                    frozen.push((seed, width, dwarf, still, previous[dwarf]));
+                }
+            }
+            let marks_left = world.designations().len();
+            if marks_left > 0 {
+                unfinished.push((seed, width, marks_left));
             }
             let on_pile = world.items().iter().any(|(_, p)| {
                 (pile.min.x..=pile.max.x).contains(&p.x) && (pile.min.y..=pile.max.y).contains(&p.y)
@@ -3041,6 +3061,10 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
         ONE_LEVEL_ISLANDS,
         "runs with a dwarf still for >= {STILL_BOUND} ticks; (seed, channel width, dwarf, longest \
          still, final tile): {frozen:?}"
+    );
+    assert_eq!(
+        unfinished, UNFINISHED,
+        "runs with marks left after {TICKS} ticks; (seed, channel width, marks left)"
     );
     // Vacuity: every run with a pile site really ran (the review's own pile search found 28, this
     // one 32), and in every one the crew worked.
