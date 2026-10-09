@@ -2608,6 +2608,11 @@ development_status:
   #     pile stops, unvalidated saved path), 3 LOW patches (instrument x2, record). Wolf ruled #182 option 2 (fix in
   #     12.9 incl. the pocket-seal check). 7 patches LEFT AS ACTION ITEMS for a fresh /bmad-review-patch, 12 defer.
   #     -> in-progress.
+  #   2026-10-09 run-1 patch pass LANDED (local, unpushed): 6dbdafe 0f8a5b2 f5cfd32 48ac6b0 c9311f1 0b8322d aa94a5d.
+  #     Wolf: #182 option 1 (let go, wall-in check on channel spawn), #183 option 1. 6/7 patches closed (record
+  #     corrections waits on the PR body). Rows 22-28 KILLED; wire GREEN 0 landings; full gate GREEN aa94a5d 3654 s.
+  #     Residuals filed #185 (chain livelock), #186 (one-level islands, 5 frozen in the sweep). Seat open: AC13,
+  #     AC14 lift (#181), back-off feel, let-go/sidestep unseen. -> in-progress.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog

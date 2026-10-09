@@ -355,7 +355,7 @@ Not proven live: the AC13 facing and the AC14 lift/set-down look (seat; #181 par
 
 Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
 
-- [ ] [Review][Patch] (decision resolved) **HIGH: stones land on dwarves; a caged dwarf never moves again and the channel never finishes (#182)**
+- [x] [Review][Patch] (decision resolved) **HIGH: stones land on dwarves; a caged dwarf never moves again and the channel never finishes (#182)**
   (feature + blind) — Since AC13 a channel target is no longer the miner's own tile. `execute_jobs` still spawns the stone
   at `job.target` (`lib.rs:1553`) with no occupancy check. Delivery's `drop_cell(pile_targets(..))` (`lib.rs:731-770,
   1467`) never consults dwarves either. A dwarf ends up standing inside a stone. If its other neighbours are stones, fire,
@@ -384,25 +384,52 @@ Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
   - `occupancy_wire.py` gains an `items landed on a dwarf` count, and green needs 0.
   - A scenario test over the probe's seeds asserts no dwarf freezes.
   - (ii) stays the ruled #180 / FR8 shape and gets a `// NOTE:`.
-- [ ] [Review][Patch] **MED: head-on with no escape on either side waits forever when the idle blocker follows a stale exit
+
+  **Landed** in `0b8322d` and `aa94a5d`. Wolf ruled option 1 (2026-10-09): chase the shapes, then fall back to landing what
+  holds. As ruled, the fix was worse than HEAD on the sweep: 28 of 32 runs had a frozen dwarf. Two changes from the ruled
+  form fixed that:
+  - a refused worker or hauler LETS GO (`retry_claim`) instead of holding;
+  - the wall-in check is "a dwarf, the filler included, is left in a piece smaller than the largest".
+
+  The abnormal drop is guarded too. Results:
+  - Sweep: 0 landings over 32 runs.
+  - Frozen runs: 9 (as found), 5 after the fix. All 5 are one-level islands: wander is same-z only, A* still reaches the
+    dwarf, and no stone is on it. They're pinned by name and filed as **#186**.
+  - Live wire: GREEN, with landings 0. A deliberate RED (row 25) reads 6 landings.
+  - Rows 23–28 KILLED.
+
+  The "no dwarf freezes" sub-bullet is met except for #186.
+- [x] [Review][Patch] **MED: head-on with no escape on either side waits forever when the idle blocker follows a stale exit
   `Path` (#183)** (blind) [crates/sim-core/src/lib.rs:1295] — Drop the idle blocker's `Path` in the `(None, None)` arm so
   the next blocked step re-derives it. RED: the probe's chain fixture (`done=None` after 40,000 ticks; mirrored layout 370).
-- [ ] [Review][Patch] **MED: a walled-in deepest free pile cell stops the whole pile (#184; this is record flag 2, and the
+
+  **Landed** in `c9311f1`, with a mechanism test (`a_head_on_with_no_escape_drops_the_idle_blockers_stale_path`) and row 22
+  KILLED. The chain fixture still fails with the drop in place: it is a livelock, because tunnel-homed idle dwarves wander back
+  and the miner (id 0) always yields. Wolf ruled option 1: land the drop and file the chain as **#185**.
+- [x] [Review][Patch] **MED: a walled-in deepest free pile cell stops the whole pile (#184; this is record flag 2, and the
   record understated it)** (acceptance) [crates/sim-core/src/lib.rs:731] — Layer depth through free cells only. RED: centre
   free, four edge-middles taken, one loose stone gives `delivered=None, retry_after 3118`; the control delivers at t312. Also
   correct the #162 comment's "never walled out of the empty middle".
-- [ ] [Review][Patch] **MED: the new saved `SavedDwarf.path` is not validated on load** (acceptance + feature)
+
+  **Landed** in `6dbdafe`. `a_walled_in_free_cell_does_not_stop_the_pile` (delivers at t312), row 20 KILLED, and four old
+  rows re-pointed (all KILLED). The #162 comment was edited in place (Wolf: edit).
+- [x] [Review][Patch] **MED: the new saved `SavedDwarf.path` is not validated on load** (acceptance + feature)
   [crates/simd/src/main.rs:344] — `load_world_from` range-checks every other saved position, but not `path`. A save with
   `path=[(9000,9000,9000)]` loads, and the dwarf stands off the map, on the wire. `wander` follows a path with no adjacency
   check (`lib.rs:1707`). Bounds-check every path tile, the same way `pos` and `home` are checked.
-- [ ] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` reports a malformed delta as RED** (edge)
+
+  **Landed** in `0f8a5b2`. RED first; an in-bounds control loads. Row 21 KILLED.
+- [x] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` reports a malformed delta as RED** (edge)
   [_bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py:111] — Empty `entities` makes `max()` raise, and a
   missing `items` or `designations` raises `KeyError`. The traceback exits 1, the same code as RED; it should exit 2, RUN
   PROVES NOTHING.
-- [ ] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` accepts tick gaps** (edge)
+- [x] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` accepts tick gaps** (edge)
   [_bmad-output/implementation-artifacts/12-9-signoff/occupancy_wire.py:135] — Only `limit // 2` ticks are required, and gaps
   after the first delta are never counted, so a shared tick between two read deltas is invisible. Count the gaps after the
   first tick, print them, and treat any gap as RUN PROVES NOTHING. Runs read 1,479 and 1,435 of 1,500 ticks.
+
+  **Both LOWs landed** in `f5cfd32`, together with the `items landed on a dwarf` count. A fake-daemon self-test covered
+  empty entities, a missing `items` key and a skipped tick: each exits 2.
 - [ ] [Review][Patch] **LOW: record corrections** (acceptance) — AC8 wants each re-pin disclosed in the commit, and
   `5b17f72`, `d93f32d` and `0fccc74` are subject-only. Disclose them in the patch commit body and the PR body. Correct
   these record lines:
@@ -412,6 +439,9 @@ Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
   - AC1 at HEAD reads 1,223 / 184 / 1,199, not the Task 10 figures;
   - the #74 anchor is row **3**, not row 2;
   - "the sim side of AC14" should read "AC14's headless tests"; AC14 is gui-only.
+
+  **Record lines corrected, and the re-pins disclosed in the `48ac6b0` commit body. Left unchecked:** the PR body
+  disclosure waits for the PR.
 - [x] [Review][Defer] AC10 can break within one tick: a hauler lifts a stone in `execute_jobs` and `wander` moves an idle
   dwarf onto that cell in the same tick (seed 5, t834). The gui draws it walking into the stone (feature)
   [crates/sim-core/src/lib.rs:1664] — deferred, 1/28 runs, cosmetic
@@ -528,6 +558,13 @@ pkill -x simd
 #     items on the pile > 0, OCCUPANCY OK, exit 0
 #   Deliberate RED (required): 12-9.sh row 1 applied, release simd rebuilt -> OCCUPANCY RED, exit 1
 #   Instrument self-test (required): row 7 applied -> CREW DID NOT WORK, exit 2
+#   Review patch pass (0b8322d/aa94a5d, 2026-10-09). The instrument now also counts items landing on a dwarf (#182):
+#     GREEN: ticks read 1479, shared 0, moves 433, marks 25 -> 0, items on the pile 8, stone entries 0,
+#       items landed on a dwarf 0, tick gaps 0, OCCUPANCY OK, STONES OK, exit 0
+#     Before the fix (6dbdafe): items landed on a dwarf 8, first (192, {12: (65, 62, 9)}), STONES RED, exit 1
+#     Deliberate RED (required): 12-9.sh row 25 applied, release simd rebuilt -> items landed on a dwarf 6,
+#       first (192, {12: (65, 62, 9)}), STONES RED, exit 1
+#   GREEN now also requires items landed on a dwarf 0 and tick gaps 0. A malformed delta or any tick gap exits 2.
 ```
 
 Restart the daemon before every run, because the recipe is pinned to a fresh world. Exit 0 is not a
@@ -869,3 +906,4 @@ a scratch worktree with that tree's `mutate.sh`:
 | 2026-10-08 | Tasks 11-12 (Agent E, `d93f32d` `bfa6568` `0fccc74`). Rows 15-19 added; 12-9.sh 19/19 KILLED and 12-5.sh 15/15 KILLED on `06a235e` |
 | 2026-10-08 | Full gate green on `ac99c2d` (3,281 s) |
 | 2026-10-08 | #162 commented. Seat pass 2 (Wolf): channel yes; carry better but still reads as suction and a slide, parked as #181. Tasks 8-9 done, Status review |
+| 2026-10-09 | Review run 1 patch pass (fresh session, Wolf ruled #182 option 1 let-go and #183 option 1): `6dbdafe` `0f8a5b2` `f5cfd32` `48ac6b0` `c9311f1` `0b8322d` `aa94a5d`. 6 of 7 patches closed; record corrections waits on the PR-body disclosure. Rows 22-28 KILLED (27 via its own corridor test). Sweep: 0 landings, 32/32 runs worked, 5 one-level islands frozen as #186; chain livelock filed #185. Live wire GREEN on `aa94a5d` (0 shared, 0 stone entries, 0 landings), deliberate RED row 25 = 6 landings. Full gate green on `aa94a5d` (3,654 s). Seat items still open, Status in-progress |
