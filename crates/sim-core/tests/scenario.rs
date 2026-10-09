@@ -113,9 +113,15 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         );
     }
     assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
+    // 12.9 review run 2 re-pin (Wolf: land "never under any dwarf", file the jam, pin it): a
+    // let-go stone now lands beside its hauler, and this seed jams (#189). Idle dwarf 2 stands on
+    // the last free pile cell, boxed in, and the hauler beside it picks up and lets go every ~6
+    // ticks forever. Was: 0 pick-ups after t=2500, 24 of 24 cells. Fixing #189 turns this red; then
+    // restore those two figures.
     assert!(
-        emitter_zones.is_empty() && pickups_after_full == 0,
-        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2500: {pickups_after_full} (expected 0)"
+        emitter_zones.is_empty() && pickups_after_full == 80,
+        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2500: {pickups_after_full} (pinned \
+         80, the #189 jam)"
     );
     let zones = world.zones();
     let filled: BTreeSet<Pos> = world
@@ -126,8 +132,9 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         .collect();
     assert_eq!(
         filled.len(),
-        zones.len(),
-        "the pile must fill, or every other assertion here holds with nothing hauled"
+        zones.len() - 1,
+        "the pile fills but for the #189 jam's cell, or every other assertion here holds with \
+         nothing hauled"
     );
 }
 
@@ -2917,8 +2924,10 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // (seed, channel width, dwarf). An idle dwarf whose every same-level neighbour is a stone,
     // rock, a drop or another dwarf: `wander` is same-z only, so it stands until a job routes it
     // out over a ramp. No stone is on it and A* still reaches it, so it is not walled in (#186).
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 5] =
-        [(6, 6, 0), (10, 4, 2), (10, 6, 3), (12, 6, 4), (13, 6, 2)];
+    // 12.9 review run 2 re-pin: "never under any dwarf" moved the runs: (6, 6, 0), (12, 6, 4)
+    // and (13, 6, 2) are gone and (16, 4, 0) is new, an idle dwarf between foliage, two loose
+    // stones and a drop.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 3] = [(10, 4, 2), (10, 6, 3), (16, 4, 0)];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut landed = Vec::new();
@@ -2962,7 +2971,7 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
             );
             let marks = world.designations().len();
 
-            // Loose items by id, and who carries what (item -> dwarf).
+            // Loose items by id.
             let loose = |world: &World| -> BTreeMap<u32, Pos> {
                 let carried: BTreeSet<u32> = world
                     .carrying()
@@ -2976,19 +2985,10 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
                     .map(|(id, pos)| (id.0, pos))
                     .collect()
             };
-            let carriers = |world: &World| -> BTreeMap<u32, usize> {
-                world
-                    .carrying()
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(dwarf, (_, item))| Some(((*item)?, dwarf)))
-                    .collect()
-            };
             let mut last_move = [0_u64; 5];
             let mut longest = [0_u64; 5];
             let mut previous: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
             let mut loose_before = loose(&world);
-            let mut carriers_before = carriers(&world);
             for _ in 0..TICKS {
                 world.step();
                 let now: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
@@ -2998,21 +2998,18 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
                     }
                     longest[dwarf] = longest[dwarf].max(world.tick() - last_move[dwarf]);
                 }
-                // A stone placed this tick (spawned, delivered or dropped) onto a dwarf. The one
-                // exception is an abnormal drop on the dropper's own tile (`release_claim`).
+                // A stone placed this tick (spawned, delivered or dropped) onto a dwarf, the
+                // dropper's own tile included (12.9 review run 2, Wolf: never under any dwarf).
                 let loose_now = loose(&world);
                 for (item, pos) in &loose_now {
                     if loose_before.get(item) == Some(pos) {
                         continue;
                     }
-                    if let Some(dwarf) = now.iter().position(|p| p == pos)
-                        && carriers_before.get(item) != Some(&dwarf)
-                    {
+                    if let Some(dwarf) = now.iter().position(|p| p == pos) {
                         landed.push((seed, width, world.tick(), *item, dwarf));
                     }
                 }
                 loose_before = loose_now;
-                carriers_before = carriers(&world);
                 previous = now;
             }
             if let Some((dwarf, still)) = longest

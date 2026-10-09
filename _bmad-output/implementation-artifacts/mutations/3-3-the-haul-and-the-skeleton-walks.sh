@@ -210,8 +210,10 @@ assert old in s
 p.write_text(s.replace(old, '            execute_jobs,\n            carry_items,\n            settle,\n            wander,\n'))
 PY
 
-mutation "release_claim does not drop the carried stone" sim-core release_claim_drops_the_carried_stone_at_the_dwarfs_tile <<'PY'
+mutation "release_claim does not drop the carried stone" sim-core release_claim_drops_the_carried_stone_beside_the_dwarf <<'PY'
 import pathlib
+# Re-pointed 2026-10-09 (12.9 review run 2, never under any dwarf): the test was renamed from
+# `release_claim_drops_the_carried_stone_at_the_dwarfs_tile`; the stone now lands beside the dwarf.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 start = '        let dropped_at = ecs.get::<Pos>(entity).copied();\n'
 end = '        if let Some(mut carrying) = ecs.get_mut::<Carrying>(entity) {\n'

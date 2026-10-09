@@ -781,8 +781,9 @@ fn drop_cell(
 /// off a pocket nobody stands in is allowed.
 ///
 /// NOTE: a piece is measured up to `MAX_ASTAR_NODES` tiles, so two pieces past that both read as
-/// the world and neither walls anybody in. A dwarf standing ON `cell` (an abnormal drop) is in no
-/// piece; it walks into whichever one it steps to.
+/// the world and neither walls anybody in. No caller fills a cell a dwarf stands on (every drop
+/// refuses a dwarf's tile, and a channel's occupant steps aside first), except the walled-in
+/// carrier's last-resort drop in `release_claim`.
 fn walls_in_a_dwarf(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -1160,13 +1161,11 @@ fn item_entity(ecs: &EcsWorld, item: u32) -> Option<Entity> {
 }
 
 fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
-    // A dwarf that stops holding a job stops carrying its stone, and drops it where it stands
-    // unless that would stack stones on a stockpile cell or wall a dwarf in (#182); then on the
-    // nearest tile it can walk to that does neither and holds no other dwarf. A normal delivery
+    // A dwarf that stops holding a job stops carrying its stone, and drops it on the nearest tile
+    // it can walk to that is not a taken stockpile cell, holds no dwarf (the carrier included) and
+    // walls no dwarf in (#182; 12.9 review run 2, Wolf: never under any dwarf). A normal delivery
     // never gets here with the stone still in hand: `execute_jobs` lands it on the pile cell
     // beside the hauler first, or lets go when every one is refused.
-    // NOTE: this abnormal-exit drop is at the dwarf's own tile, so the dwarf stands in the item
-    // until it walks off. That is rare (a retry, a cancel, a vanished job, a refused delivery).
     // Doing it here is what keeps every abnormal exit — a vanished job, a retry, a cancel, a
     // retire — from welding a stone to an idle dwarf.
     if let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) {
@@ -1183,36 +1182,33 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
             let terrain = ecs.resource::<Terrain>();
             let refused = |cell: Pos| {
                 occupied.contains(&cell)
-                    || (cell != pos && dwarves.contains(&cell))
+                    || dwarves.contains(&cell)
                     || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
             };
-            let drop_pos = if refused(pos) {
-                // Breadth-first over the tiles the carrier can walk to, so the drop is never
-                // behind a wall or on a level it cannot reach.
-                let mut seen = BTreeSet::from([pos]);
-                let mut frontier = BTreeSet::from([pos]);
-                let mut nearest = None;
-                while !frontier.is_empty() && nearest.is_none() {
-                    let mut next = BTreeSet::new();
-                    for cell in frontier {
-                        if !refused(cell) {
-                            nearest = Some(cell);
-                            break;
-                        }
-                        for candidate in astar_neighbours(terrain, &blocked, cell) {
-                            if seen.insert(candidate) {
-                                next.insert(candidate);
-                            }
+            // Breadth-first over the tiles the carrier can walk to, so the drop is never behind a
+            // wall or on a level it cannot reach. The carrier's own tile is always refused.
+            let mut seen = BTreeSet::from([pos]);
+            let mut frontier = BTreeSet::from([pos]);
+            let mut nearest = None;
+            while !frontier.is_empty() && nearest.is_none() {
+                let mut next = BTreeSet::new();
+                for cell in frontier {
+                    if !refused(cell) {
+                        nearest = Some(cell);
+                        break;
+                    }
+                    for candidate in astar_neighbours(terrain, &blocked, cell) {
+                        if seen.insert(candidate) {
+                            next.insert(candidate);
                         }
                     }
-                    frontier = next;
                 }
-                // NOTE: a carrier whose whole reachable ground is refused keeps the stone on its
-                // own tile rather than stop the sim.
-                nearest.unwrap_or(pos)
-            } else {
-                pos
-            };
+                frontier = next;
+            }
+            // NOTE: the one exception to "never under a dwarf" (Wolf, 12.9 review run 2): a
+            // carrier whose whole reachable ground is refused keeps the stone on its own tile
+            // rather than stop the sim, since an idle dwarf carries nothing (AC10).
+            let drop_pos = nearest.unwrap_or(pos);
             *ecs.get_mut::<Pos>(stone)
                 .expect("every stone has a position") = drop_pos;
         }
@@ -3721,8 +3717,10 @@ mod tests {
         assert_ne!(start, below);
     }
 
+    // 12.9 review run 2 (Wolf, option 2): a let-go never drops under any dwarf, the carrier
+    // included. Re-pinned from "at the dwarf's tile": the stone now lands on a neighbour.
     #[test]
-    fn release_claim_drops_the_carried_stone_at_the_dwarfs_tile() {
+    fn release_claim_drops_the_carried_stone_beside_the_dwarf() {
         let mut world = World::generate(42, Dims::DEFAULT);
         let dwarf_pos = world.dwarves()[0].1;
         let far_away = Pos { x: 0, y: 0, z: 1 };
@@ -3748,11 +3746,19 @@ mod tests {
 
         super::release_claim(&mut world.ecs, entity);
 
+        let dropped = world.items()[0].1;
         assert_eq!(
-            world.items(),
-            vec![(super::Id(12), dwarf_pos)],
-            "an abnormal exit must leave a loose stone where the dwarf stood"
+            world.items().len(),
+            1,
+            "an abnormal exit must leave one loose stone"
         );
+        assert_ne!(dropped, dwarf_pos, "a let-go never drops under the carrier");
+        assert_eq!(
+            dwarf_pos.x.abs_diff(dropped.x) + dwarf_pos.y.abs_diff(dropped.y),
+            1,
+            "the stone lands on the nearest tile, a neighbour, on the carrier's level"
+        );
+        assert_eq!(dropped.z, dwarf_pos.z);
         assert_eq!(world.carrying()[0], (super::Id(0), None));
         assert_eq!(world.claims()[0].1, None);
         assert_eq!(world.dwarves()[0].2, JobState::Idle);

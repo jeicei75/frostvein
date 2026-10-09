@@ -271,9 +271,10 @@ PY
 mutation "27 the abnormal drop ignores dwarves" sim-core release_claim_never_drops_where_the_stone_walls_a_dwarf_in <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    || (cell != pos && dwarves.contains(&cell))\n                    || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'
+# Re-pointed 2026-10-09 (12.9 review run 2, never under any dwarf): the carrier's own tile is no longer exempt.
+old = '                    || dwarves.contains(&cell)\n                    || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    || (cell != pos && dwarves.contains(&cell) && false)\n                    || (walls_in_a_dwarf(terrain, &blocked, &dwarves, cell) && false)\n'))
+p.write_text(s.replace(old, '                    || (dwarves.contains(&cell) && false)\n                    || (walls_in_a_dwarf(terrain, &blocked, &dwarves, cell) && false)\n'))
 PY
 
 # #182: a channel's stone may wall a dwarf in (the miner sealing itself, seed 10's first shape).
