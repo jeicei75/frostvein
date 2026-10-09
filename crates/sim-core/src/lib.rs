@@ -3846,6 +3846,52 @@ mod tests {
         );
     }
 
+    // 12.9 review #182: an abnormal drop never walls a dwarf in. A one-wide corridor in rock, six
+    // cells long: an idle dwarf at the dead end, the carrier beside it. A stone on the carrier's
+    // own tile would seal the idle dwarf in; c0 holds a dwarf; a stone on c2 would leave both
+    // dwarves in the smaller piece. c3 is the nearest tile that does none of those.
+    #[test]
+    fn release_claim_never_drops_where_the_stone_walls_a_dwarf_in() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let p = world.dwarves()[0].1;
+        let corridor = [0, 1, 2, 3, 4, 5].map(|dx| Pos { x: p.x + dx, ..p });
+        for x in p.x - 1..=p.x + 6 {
+            for y in p.y - 1..=p.y + 1 {
+                let cell = Pos { x, y, ..p };
+                let below = Pos { z: p.z - 1, ..cell };
+                if corridor.contains(&cell) {
+                    world.set_tile(cell, Tile::Empty);
+                    world.set_tile(below, Tile::Solid(Material::Stone));
+                } else {
+                    world.set_tile(cell, Tile::Solid(Material::Stone));
+                }
+            }
+        }
+        let carrier = dwarf_entity(&world, 0);
+        *world.ecs.get_mut::<Pos>(carrier).unwrap() = corridor[1];
+        *world.ecs.get_mut::<Pos>(dwarf_entity(&world, 1)).unwrap() = corridor[0];
+        world.ecs.spawn((
+            super::Item(super::ItemKind::Stone),
+            super::Id(12),
+            Pos { x: 0, y: 0, z: 1 },
+        ));
+        world.ecs.get_mut::<super::Carrying>(carrier).unwrap().0 = Some(12);
+
+        super::release_claim(&mut world.ecs, carrier);
+
+        let dropped = world
+            .items()
+            .into_iter()
+            .find(|(id, _)| *id == super::Id(12))
+            .unwrap()
+            .1;
+        assert_eq!(
+            dropped, corridor[3],
+            "the stone lands on the nearest tile that walls nobody in"
+        );
+        assert_eq!(world.carrying()[0], (super::Id(0), None));
+    }
+
     #[test]
     fn reaction_delay_table_is_pinned() {
         let expected = [

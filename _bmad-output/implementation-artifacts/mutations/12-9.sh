@@ -266,7 +266,7 @@ p.write_text(s.replace(old, '                        *ecs.get_mut::<JobState>(en
 PY
 
 # #182: the abnormal drop lands on other dwarves and walls dwarves in again.
-mutation "27 the abnormal drop ignores dwarves" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+mutation "27 the abnormal drop ignores dwarves" sim-core release_claim_never_drops_where_the_stone_walls_a_dwarf_in <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '                    || (cell != pos && dwarves.contains(&cell))\n                    || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'
