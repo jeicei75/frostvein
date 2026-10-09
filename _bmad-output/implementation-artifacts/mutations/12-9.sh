@@ -209,3 +209,11 @@ assert s.count(old) == 1
 s = s.replace(old, '        }\n    }\n    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));\n    depth\n}\n')
 p.write_text(s)
 PY
+
+mutation "21 a saved path tile is not bounds-checked" simd loading_refuses_a_dwarf_path_tile_outside_the_map <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if let Some(tile) = dwarf.path.iter().find(|tile| !in_bounds(**tile)) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if let Some(tile) = dwarf.path.iter().find(|_| false) {\n'))
+PY

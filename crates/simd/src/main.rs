@@ -601,6 +601,18 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                     save.dims.z
                 );
             }
+            if let Some(tile) = dwarf.path.iter().find(|tile| !in_bounds(**tile)) {
+                bail!(
+                    "save dwarf {} path tile {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    tile.x,
+                    tile.y,
+                    tile.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
         }
         for (id, ..) in &save.items {
             if !seen_ids.insert(*id) {
@@ -954,6 +966,38 @@ mod tests {
 
         assert!(old.is_none(), "a pre-12.9 save without paths was loaded");
         assert!(current.is_some(), "a current save must load");
+    }
+
+    /// 12.9 review: `SavedDwarf.path` is range-checked like every other saved position. A path
+    /// tile off the map was loaded, and `wander` walked the dwarf onto it, off the map on the wire.
+    #[test]
+    fn loading_refuses_a_dwarf_path_tile_outside_the_map() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-9-path-bounds-save-{}.json",
+            std::process::id()
+        ));
+        let mut save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        // Positive control: an in-bounds, non-empty path (the dwarf's own tile and its home) loads.
+        save.dwarves[0].path = vec![save.dwarves[0].pos, save.dwarves[0].home];
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write in-bounds save fixture");
+        let in_bounds = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        save.dwarves[0].path.push(sim_core::Pos {
+            x: 9000,
+            y: 9000,
+            z: 9000,
+        });
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write off-map save fixture");
+        let off_map = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(
+            in_bounds.is_some(),
+            "a save with an in-bounds path must load"
+        );
+        assert!(
+            off_map.is_none(),
+            "a save with an off-map path tile was loaded"
+        );
     }
 
     /// A real loopback pair: the daemon's end goes into `Client`, the peer end stands in
