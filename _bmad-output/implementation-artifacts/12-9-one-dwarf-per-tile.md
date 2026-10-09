@@ -468,6 +468,139 @@ Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
 - [x] [Review][Defer] Five 3-3 and 12-1 mutation rows were already dead on `26185a0`; two spot-checked SURVIVED there
   (acceptance, flag 5) [_bmad-output/implementation-artifacts/mutations/] — deferred, pre-existing
 
+#### Review run 2 (2026-10-09, diff `2a10797..02e313c`, the run-1 patch pass)
+
+This run used a fresh session. Diff: 11 files, +736/−72 (code: 3 files, +490/−33). Four layers ran and none timed out. Each ran
+cargo 1.97.1 in its own `/tmp/review-<layer>` target dir with `CARGO_BUILD_JOBS=6`.
+- Blind Hunter (Sonnet) took sim-core `src`.
+- Edge Case Hunter (Sonnet) took simd, `scenario.rs`, `occupancy_wire.py` and the mutation tables.
+- The Acceptance and Feature Auditors (Opus) took the whole diff.
+
+**Delta against run 1:**
+- **NEW:** 17 findings: 1 HIGH, 3 MED, 13 LOW. 3 were dismissed and 14 survive: 2 decisions, 5 patches and 7 deferred.
+- **REWORK:** #182 is HALF-CLOSED.
+  - 0 landings on another dwarf: verified, RED on old.
+  - But a refused completion now loops forever (D1).
+  - A let-go drops its stone under the hauler, and the instrument would call that RED (D2).
+- **Closed:** #183, #184, the path bounds-check and both instrument LOWs. Each new test is RED on the pre-patch code (the acceptance
+  auditor ran each against `2a10797` with only the test hunks applied).
+- **Stopping rule:** there is a HIGH among the new findings, so another round is authorised after the patches.
+
+| Layer | Findings | Severity (layer's own) | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 6 | 1 MED, 2 LOW-MED, 3 LOW | sim-core suite; a `release_claim` own-tile probe in a copy |
+| Edge Case Hunter | 8 | 3 MED, 5 LOW | scenario + simd suites; live wire (0 landings); 10 fake-daemon inputs; every row 20-28 and the re-pointed rows in a copy |
+| Acceptance Auditor | 9 (3 positive) | 2 MED, 4 LOW | all suites, fmt, clippy; 5 new tests RED on `2a10797`; AC1/AC10 on `26185a0`; live wire 1,500 and 3,000 ticks |
+| Feature Auditor | 4 | 1 HIGH, 1 MED, 2 LOW | 60-run release probe on HEAD, `2a10797` and `26185a0`; an instrumented trace; live wire 1,500 and 4,000 ticks |
+
+Convergences:
+- the own-tile let-go drop: all four layers;
+- tick cost: blind + acceptance + feature;
+- the sweep pin hides freezes: edge + acceptance;
+- the sidestep moves a working dwarf, and work positions ignore refusal: blind + feature (folded into D1).
+
+The orchestrator read the Feature Auditor's per-seed rows across all three revisions and confirmed D1's 4x7 regression.
+
+Filed at discovery: **#187** (D1) and **#188** (campfire).
+
+Not proven live:
+- AC13 facing and the AC14 lift/set-down (seat);
+- the back-off feel;
+- how a sidestep, a let-go and the D1 loop look;
+- a stone on the campfire.
+
+The live wire is GREEN on the default recipe, which never lets go: 0 own-tile drops at 1,500 and 4,000 ticks.
+
+Review cost: $16.16 over 316 turns; the 4 subagents were 73.6% of tokens. The run reaped 20.0 GB of `/tmp` caches (12.4 GB
+reclaimed).
+
+- [ ] [Review][Patch] (decision resolved) **HIGH: a refused channel completion loops forever; the let-go changes nothing (#187)** (feature;
+  blind 4 and 6 fold in) [crates/sim-core/src/lib.rs:1652-1670] — The worker returns to the same refusal every ~116-144 ticks
+  until the run ends. A mark never finishes. The dwarves keep moving, so the sweep's `STILL_BOUND` stays green. Three shapes:
+  - (a) no aside tile: an idle dwarf homed on the target in a dead end whose only exit is the miner's work tile (seeds 21/6,
+    2/6, 19/6);
+  - (b) `step_aside` takes the FIRST free neighbour, a one-tile pocket the wall-in check then refuses (seed 5/4: 3 marks left,
+    base 0). It also shoves a dwarf that is working its own job;
+  - (c) the miner's work tile is a pocket only the target opens. `release_claim` re-homes the miner there and
+    `work_positions` picks it again, although (68,67) is valid (seed 22/6; seed 29/4 finishes at t2765 vs 1,253 on base).
+  
+  | Channel size | HEAD | `2a10797` | base |
+  | --- | --- | --- | --- |
+  | 4x7 runs unfinished, seeds 0..16 | 5/16 | 3/16 | 0/16 |
+  | 4x7 mean finish | 1,351 | 1,293 | 1,173 |
+  
+  Landings on another dwarf: 0 / 330 / 1,200, so HEAD still beats `2a10797`.
+
+  **RULED 2026-10-09 (Wolf): option 1, fix all three shapes in 12.9:**
+  - (b) `step_aside` picks the aside tile WITH the wall-in check, not the first free neighbour.
+  - (c) `work_positions` skips a work tile the fill would seal.
+  - (a) when the occupant has no tile aside, it leaves by an exit `Path` instead of the miner letting go.
+  - The sweep pins each run's marks left, so a loop goes red.
+  - Same time-box as #182: land what holds, keep the rest on #187.
+- [ ] [Review][Patch] (decision resolved) **MED: a let-go drops its stone under the hauler, and the instrument and the sweep disagree on whether
+  that is a landing** (blind + edge + acceptance + feature) [crates/sim-core/src/lib.rs:1160-1168;
+  12-9-signoff/occupancy_wire.py:133] — `release_claim`'s `refused` exempts the carrier's own tile, so a let-go or abnormal
+  drop lands at the hauler's feet.
+  - The sweep exempts that (`carriers_before`); `occupancy_wire.py` counts it, so it reads STONES RED.
+  - Probe: 51 own-tile drops in 42 of 60 runs; 32 over the sweep's 32 runs.
+  - The default wire recipe never lets go, which is the only reason the wire is green.
+  - Related (blind 2): `walls_in_a_dwarf` never tests a dwarf standing ON the cell, so a carrier can seal itself in with its
+    own drop by stepping into the smaller side.
+
+  **RULED 2026-10-09 (Wolf): option 2, never drop under any dwarf.**
+  - `release_claim`'s `refused` stops exempting the carrier's own tile. A let-go or abnormal drop sets the stone on the nearest
+    reachable tile that is allowed: not a taken pile cell, not under any dwarf, and walls nobody in. The carrier is included.
+  - `occupancy_wire.py` stays strict.
+  - The sweep's `carriers_before` exemption goes.
+  - The `release_claim` NOTE ("the dwarf stands in the item until it walks off") is replaced.
+  - Tests pinning an own-tile drop are re-pinned, and each re-pin is disclosed in the commit body.
+- [ ] [Review][Patch] **MED: the per-drop wall-in check made tick cost materially worse** (feature + blind + acceptance)
+  [crates/sim-core/src/lib.rs:765-776, 1160-1191]
+  - `drop_cell` runs `refused` before the target filter, so `walls_in_a_dwarf` runs on all four neighbours of the hauler, pile
+    or not (50-109 calls against ~10 deliveries).
+  - Each call clones `blocked` and floods up to 50,000 tiles.
+  - The 60-run probe: 37 runs with a tick over 10 ms (`2a10797`: 15); max 25.0 ms, the whole fast4x budget. Run 1's deferral
+    measured 9-17.6 ms in 8/28.
+  - Fix: filter to targets first, then re-measure max and p99 on the probe. If the max still exceeds the budget, it rejoins
+    the tick-cost deferral and #179 with the number.
+- [ ] [Review][Patch] **MED: the #182 sweep cannot see the defects it exists for** (edge + acceptance + feature)
+  [crates/sim-core/tests/scenario.rs:3020-3045]
+  - `max_by_key` keeps only the longest-still dwarf per run. Seed 12/6 has two frozen dwarves (0 and 4) and dwarf 0 is
+    invisible, so a new cage in a pinned run is hidden.
+  - No assert covers marks left, so D1's loops pass.
+  - Fix: pin every dwarf over `STILL_BOUND`, and pin each run's marks left (after D1's ruling), so a new loop goes red.
+- [ ] [Review][Patch] **LOW (process): the run-1 patch pass emitted no per-item closure table** (acceptance)
+  [12-9-one-dwarf-per-tile.md, Review Findings] — The substance holds: every new test is RED on `2a10797` (acceptance, RAN). Write
+  the table, one row per item: side written for, side tested, and the named fixture or row.
+- [ ] [Review][Patch] **LOW: the `48ac6b0` re-pin disclosure is incomplete** (acceptance) — Missing:
+  - `5b17f72`'s `lib.rs` pin moves: `release_claim_drops_where_the_carrier_can_walk` `pocket[2]`→`pocket[1]`, the settle
+    landing, and the six old-rule tests;
+  - `d93f32d`'s two channel unit-test targets and the `headless.rs` step label.
+  
+  Fold them into the pending PR-body disclosure.
+- [ ] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` exits 1 (RED) on a connection reset** (edge)
+  [12-9-signoff/occupancy_wire.py, :37-38, socket loop] — An uncaught `ConnectionResetError` gives a traceback and exit 1. Treat it as
+  RUN PROVES NOTHING, exit 2, as run 1 did for malformed deltas.
+- [x] [Review][Defer] A saved `path` tile is bounds-checked but not checked for adjacency or walkability; `wander` can step a
+  dwarf into rock from a hand-edited save (edge) [crates/simd/src/main.rs:604] — deferred, matches the ruling (as `pos`/`home`);
+  corrupted saves only
+- [x] [Review][Defer] The sweep's "crew worked" check is satisfiable by a channel stone on an overlapping pile cell (edge)
+  [crates/sim-core/tests/scenario.rs:~439] — deferred, vacuity guard only
+- [x] [Review][Defer] Any exit 2 masks a RED in `occupancy_wire.py` (the counts still print) (edge) — deferred, by design
+- [x] [Review][Defer] `occupancy_wire.py` cannot see an item under a dwarf in the first delta or from tick 0 (edge) —
+  deferred, no writer does that
+- [x] [Review][Defer] `walls_in_a_dwarf` treats equal-sized pieces as no wall-in (`< largest`), so two dwarves in two equal
+  pockets can both be sealed (blind) [crates/sim-core/src/lib.rs:812] — deferred, unobserved
+- [x] [Review][Defer] The abnormal-drop BFS has no node bound and calls `walls_in_a_dwarf` per cell (blind + acceptance)
+  [crates/sim-core/src/lib.rs:1163-1188] — deferred, the "nowhere" fallback fired 0 times in 60 runs; revisit with the tick-cost patch
+- [x] [Review][Defer] A channel mark on the campfire tile now completes: stone on the camp tile, fire over a ramp (feature)
+  — deferred to **#188** (AC13, round-1 code; needs a ruling)
+
+Dismissed (3):
+- #186's framing undersells it. The issue's own table lists the stones, and Wolf ruled to file it.
+- `retry_after` stamped at completion is the recorded let-go deviation.
+- The 12-1 `retry drop stacks a full stockpile` row SURVIVES. That is already deferred in run 1, pre-existing.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)

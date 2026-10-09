@@ -2570,3 +2570,20 @@ the story, and one of them is also issue #125.
     counts as stored` SURVIVED; `load_world accepts two dwarves carrying one item` is NO-COMPILE.
   - 12-1: `retry drop stacks a full stockpile` SURVIVED.
   - These rows read as coverage they do not give; the reviewer recommends an issue.
+
+## Deferred from: code review of 12-9-one-dwarf-per-tile, run 2 (2026-10-09)
+
+Diff `2a10797..02e313c`, the run-1 patch pass. Four layers, none timed out.
+
+- **A saved `path` tile is only bounds-checked** (edge, LOW, read; `crates/simd/src/main.rs:604`). Adjacency and walkability are
+  not checked, so a hand-edited save can make `wander` step a dwarf into rock. Matches the run-1 ruling (checked like `pos`/`home`).
+- **The #182 sweep's "crew worked" check is satisfiable without a haul** (edge, LOW, read; `crates/sim-core/tests/scenario.rs`
+  ~:439). `on_pile` counts any item in the pile rect, and the pile may overlap the channel.
+- **Any exit 2 in `occupancy_wire.py` masks a RED** (edge, LOW, RAN on a fake daemon). The counts still print above it.
+- **`occupancy_wire.py` cannot see an item under a dwarf in the first delta, or one there from tick 0** (edge, LOW, read).
+- **`walls_in_a_dwarf` treats equal-sized pieces as no wall-in** (blind, LOW, read; `crates/sim-core/src/lib.rs:812`,
+  `piece.len() < largest`). Two dwarves in two equal pockets can both be sealed.
+- **The abnormal-drop BFS in `release_claim` has no node bound and runs `walls_in_a_dwarf` per visited cell** (blind +
+  acceptance, LOW, read; `lib.rs:1160-1191`). The "nowhere" fallback fired 0 times in 60 probe runs.
+- **A channel mark on the campfire tile now completes** (feature, LOW, RAN): stone on the camp tile, `Ramp(Snow)` under the
+  fire (seed 0, 6x10). AC13 round-1 code. **Issue #188** holds the state.

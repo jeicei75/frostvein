@@ -2613,6 +2613,11 @@ development_status:
   #     corrections waits on the PR body). Rows 22-28 KILLED; wire GREEN 0 landings; full gate GREEN aa94a5d 3654 s.
   #     Residuals filed #185 (chain livelock), #186 (one-level islands, 5 frozen in the sweep). Seat open: AC13,
   #     AC14 lift (#181), back-off feel, let-go/sidestep unseen. -> in-progress.
+  #   2026-10-09 code review run 2 on 2a10797..02e313c (4 layers, none timed out): #182 HALF-CLOSED -> 1 HIGH #187
+  #     (refused channel completion loops forever; 4x7 unfinished 5/16 vs 0/16 on 26185a0), 3 MED (let-go drops under
+  #     the hauler, tick cost max 25 ms, sweep pin blind), 3 LOW; #188 campfire channelled (deferred). Wolf ruled #187
+  #     option 1 (fix all 3 shapes), let-go option 2 (never drop under any dwarf). 7 patches LEFT AS ACTION ITEMS for
+  #     a fresh /bmad-review-patch; HIGH found -> run 3 authorised after. 7 defer. -> in-progress.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
