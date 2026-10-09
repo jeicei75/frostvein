@@ -11,9 +11,15 @@ PY
 mutation "old save haul goals include emitters" sim-core an_old_save_zone_on_an_emitter_is_no_haul_goal <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));\n'
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if terrain.is_standable(cell)\n            && side_neighbours(cell)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    depth.retain(|cell, _| terrain.is_standable(*cell));\n'))
+s = s.replace(old, new)
+old, new = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n', '            if zones.contains(&n) && terrain.is_standable(n) && !depth.contains_key(&n) {\n'
+assert s.count(old) == 1
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "daemon discards stockpile refusal" simd the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells <<'PY'
@@ -97,9 +103,12 @@ PY
 mutation "campfire pile never fills" sim-core a_stockpile_around_the_campfire_never_zones_or_receives_the_fire <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));\n'
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if false\n            && side_neighbours(cell)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    depth.retain(|_, _| false);\n'))
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "tui refusal never clears" tui a_refusal_stays_until_this_client_sends_a_world_command <<'PY'

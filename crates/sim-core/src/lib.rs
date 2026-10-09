@@ -723,8 +723,9 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
 /// non-pile cells around the zone (a cell touching one is depth 1). Deep cells fill first, so a
-/// pile fills from the inside out and no hauler ever walls in a free cell. Taken cells (an item
-/// lies on them) are impassable but still carry the layers inward.
+/// pile fills from the inside out. The layers run through FREE cells only (#184): a free cell
+/// walled in by taken ones (an item lies on them) is no target, so it cannot hold the deepest
+/// layer and stop every delivery to the cells a hauler can still reach.
 ///
 /// NOTE: a pile cell this never reaches (no walkable non-pile ground around its part of the zone)
 /// is not a target; such a zone takes no deliveries. Cells are joined by same-z 4-neighbours only.
@@ -736,7 +737,7 @@ fn pile_targets(
     let mut depth: BTreeMap<Pos, u32> = BTreeMap::new();
     let mut queue = VecDeque::new();
     for &cell in zones {
-        if terrain.is_standable(cell)
+        if is_walkable(terrain, blocked, cell)
             && side_neighbours(cell)
                 .iter()
                 .any(|n| !zones.contains(n) && is_walkable(terrain, blocked, *n))
@@ -748,13 +749,12 @@ fn pile_targets(
     while let Some(cell) = queue.pop_front() {
         let deeper = depth[&cell] + 1;
         for n in side_neighbours(cell) {
-            if zones.contains(&n) && terrain.is_standable(n) && !depth.contains_key(&n) {
+            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {
                 depth.insert(n, deeper);
                 queue.push_back(n);
             }
         }
     }
-    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));
     depth
 }
 
@@ -5726,6 +5726,56 @@ mod tests {
                 filled_at[&centre]
             );
         }
+    }
+
+    // 12.9 review #184: stones already lie on the four edge-middles of a 3x3 pile (a pile placed
+    // over loose stones, or `release_claim`'s abnormal drop), so the free centre is walled in and
+    // only the four corners can be reached. The pile still takes the next stone, on a corner.
+    #[test]
+    fn a_walled_in_free_cell_does_not_stop_the_pile() {
+        // Measured: the corner delivery lands at tick 312 (the clock starts at 100).
+        const DELIVERY_BOUND: u64 = 1_000;
+        let mut world = haul_room(at(8, 20, FIX_Z));
+        let pile: BTreeSet<Pos> = (17..=19)
+            .flat_map(|x| (19..=21).map(move |y| at(x, y, FIX_Z)))
+            .collect();
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .extend(pile.iter().copied());
+        let edges = [
+            at(17, 20, FIX_Z),
+            at(19, 20, FIX_Z),
+            at(18, 19, FIX_Z),
+            at(18, 21, FIX_Z),
+        ];
+        for (k, edge) in edges.into_iter().enumerate() {
+            spawn_stone(&mut world, 200 + k as u32, edge);
+        }
+        spawn_stone(&mut world, 100, at(10, 20, FIX_Z));
+
+        watch(
+            &mut world,
+            DELIVERY_BOUND,
+            |_| {},
+            |world| {
+                loose_item_tiles(world)
+                    .get(&100)
+                    .is_some_and(|pos| pile.contains(pos))
+            },
+        );
+        let landed = loose_item_tiles(&world)[&100];
+        let corners = [
+            at(17, 19, FIX_Z),
+            at(19, 19, FIX_Z),
+            at(17, 21, FIX_Z),
+            at(19, 21, FIX_Z),
+        ];
+        assert!(
+            corners.contains(&landed),
+            "the stone landed on {landed:?}, not a reachable corner"
+        );
     }
 
     #[test]

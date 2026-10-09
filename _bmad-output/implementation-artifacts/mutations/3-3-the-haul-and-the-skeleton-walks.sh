@@ -89,17 +89,29 @@ PY
 mutation "free stockpile tiles ignore standability" sim-core a_stockpile_tile_whose_floor_is_gone_is_never_a_delivery_target <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if terrain.is_standable(cell)\n            && side_neighbours(cell)'
-assert old in s
-p.write_text(s.replace(old, '        if side_neighbours(cell)'))
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if !blocked.contains(&cell)\n            && side_neighbours(cell)'
+assert s.count(old) == 1
+s = s.replace(old, new)
+old, new = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n', '            if zones.contains(&n) && !blocked.contains(&n) && !depth.contains_key(&n) {\n'
+assert s.count(old) == 1
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "free stockpile tiles ignore stored stones" sim-core a_full_stockpile_parks_the_haul_job_until_a_free_tile_appears <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));\n'
-assert old in s
-p.write_text(s.replace(old, '    depth.retain(|cell, _| terrain.is_standable(*cell));\n'))
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if terrain.is_standable(cell)\n            && side_neighbours(cell)'
+assert s.count(old) == 1
+s = s.replace(old, new)
+old, new = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n', '            if zones.contains(&n) && terrain.is_standable(n) && !depth.contains_key(&n) {\n'
+assert s.count(old) == 1
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "the pick-up leg drops the free-tile gate" sim-core a_full_stockpile_parks_the_haul_job_until_a_free_tile_appears <<'PY'

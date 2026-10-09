@@ -193,3 +193,19 @@ old = '                        ItemMotion {\n                            from,\n
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                        ItemMotion {\n                            from: to,\n                            to,\n                            elapsed: 0.0,\n'))
 PY
+
+# ---- 12.9 review patch pass (run 1 findings) ----
+
+# #184: depth layered through taken cells again (the shape on 34b6783), so a walled-in free centre
+# holds the deepest layer and every delivery waits on it.
+mutation "20 pile depth runs through taken cells" sim-core a_walled_in_free_cell_does_not_stop_the_pile <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n'
+assert s.count(old) == 1
+s = s.replace(old, '            if zones.contains(&n) && terrain.is_standable(n) && !depth.contains_key(&n) {\n')
+old = '        }\n    }\n    depth\n}\n'
+assert s.count(old) == 1
+s = s.replace(old, '        }\n    }\n    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));\n    depth\n}\n')
+p.write_text(s)
+PY
