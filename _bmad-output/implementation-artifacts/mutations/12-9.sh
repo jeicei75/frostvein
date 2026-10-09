@@ -232,18 +232,20 @@ PY
 mutation "23 a delivery ignores who stands on the pile" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        .filter(|cell| !refused(*cell))\n'
+# Re-pointed 2026-10-09 (12.9 review run 2, tick cost): `drop_cell` filters to pile cells first.
+old = '        .filter(|(_, Reverse(cell))| !refused(*cell))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .filter(|cell| { let _ = &refused; let _ = cell; true })\n'))
+p.write_text(s.replace(old, '        .filter(|(_, Reverse(cell))| { let _ = &refused; let _ = cell; true })\n'))
 PY
 
 # #182: no fill is ever refused for walling a dwarf in.
 mutation "24 filling a cell never walls a dwarf in" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        .any(|piece| piece.len() < largest && piece.iter().any(|tile| dwarves.contains(tile)))\n'
+# Re-pointed 2026-10-09 (12.9 review run 2, tick cost): `walls_in_a_dwarf` is a lockstep flood now.
+old = '        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .any(|piece| piece.len() < largest && piece.iter().any(|tile| dwarves.contains(tile)) && false)\n'))
+p.write_text(s.replace(old, '        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)) && false)\n'))
 PY
 
 # #182: a completing channel spawns its stone on the dwarf standing on its target.

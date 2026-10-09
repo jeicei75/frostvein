@@ -762,6 +762,7 @@ fn pile_targets(
 /// lowest `Pos` on a tie. `work_positions` sends a hauler to the neighbours of the deepest free
 /// cells and the drop reads this, so they cannot disagree. A cell `refused` takes (a dwarf stands
 /// on it, or filling it walls a dwarf in; #182) is skipped, and the next deepest one is used.
+/// `refused` is asked about pile cells only: it can flood the map.
 fn drop_cell(
     targets: &BTreeMap<Pos, u32>,
     from: Pos,
@@ -769,8 +770,8 @@ fn drop_cell(
 ) -> Option<Pos> {
     side_neighbours(from)
         .into_iter()
-        .filter(|cell| !refused(*cell))
         .filter_map(|cell| Some((*targets.get(&cell)?, Reverse(cell))))
+        .filter(|(_, Reverse(cell))| !refused(*cell))
         .max()
         .map(|(_, Reverse(cell))| cell)
 }
@@ -790,43 +791,63 @@ fn walls_in_a_dwarf(
 ) -> bool {
     let mut closed = blocked.clone();
     closed.insert(cell);
-    let sides = astar_neighbours(terrain, &closed, cell);
-    let Some((&anchor, rest)) = sides.split_first() else {
-        return false;
-    };
-    if rest
-        .iter()
-        .all(|side| route_to_nearest(terrain, &closed, *side, |tile| tile == anchor).is_some())
-    {
-        return false;
-    }
+    // One breadth-first flood per side of `cell`, run in lockstep and merged where two meet. A
+    // flood that runs dry is a whole piece; the search stops once one flood is left running and it
+    // is larger than every finished piece. So a check costs about the size of the pockets, not of
+    // the world (12.9 review run 2: flooding the world per call made it the tick's main cost).
+    let mut floods: Vec<(BTreeSet<Pos>, VecDeque<Pos>)> = astar_neighbours(terrain, &closed, cell)
+        .into_iter()
+        .map(|side| (BTreeSet::from([side]), VecDeque::from([side])))
+        .collect();
     let mut pieces: Vec<BTreeSet<Pos>> = Vec::new();
-    for side in sides {
-        if !pieces.iter().any(|piece| piece.contains(&side)) {
-            pieces.push(piece_of(terrain, &closed, side));
+    loop {
+        let largest_piece = pieces.iter().map(BTreeSet::len).max().unwrap_or(0);
+        let running = floods
+            .iter()
+            .filter(|(seen, _)| seen.len() < MAX_ASTAR_NODES)
+            .count();
+        if running == 0 || (floods.len() == 1 && floods[0].0.len() > largest_piece) {
+            break;
+        }
+        let mut i = 0;
+        while i < floods.len() {
+            if floods[i].0.len() >= MAX_ASTAR_NODES {
+                i += 1;
+                continue;
+            }
+            let Some(tile) = floods[i].1.pop_front() else {
+                pieces.push(floods.remove(i).0);
+                continue;
+            };
+            for next in astar_neighbours(terrain, &closed, tile) {
+                match floods.iter().position(|(seen, _)| seen.contains(&next)) {
+                    Some(j) if j != i => {
+                        let (seen, queue) = floods.remove(j);
+                        if j < i {
+                            i -= 1;
+                        }
+                        floods[i].0.extend(seen);
+                        floods[i].1.extend(queue);
+                    }
+                    Some(_) => {}
+                    None => {
+                        floods[i].0.insert(next);
+                        floods[i].1.push_back(next);
+                    }
+                }
+            }
+            i += 1;
         }
     }
-    let largest = pieces.iter().map(BTreeSet::len).max().unwrap_or(0);
+    let largest = floods
+        .iter()
+        .map(|(seen, _)| seen.len())
+        .chain(pieces.iter().map(BTreeSet::len))
+        .max()
+        .unwrap_or(0);
     pieces
         .iter()
-        .any(|piece| piece.len() < largest && piece.iter().any(|tile| dwarves.contains(tile)))
-}
-
-/// Every tile walkable from `from`, up to `MAX_ASTAR_NODES` of them.
-fn piece_of(terrain: &Terrain, closed: &BTreeSet<Pos>, from: Pos) -> BTreeSet<Pos> {
-    let mut piece = BTreeSet::from([from]);
-    let mut queue = VecDeque::from([from]);
-    while let Some(cell) = queue.pop_front() {
-        for next in astar_neighbours(terrain, closed, cell) {
-            if piece.len() >= MAX_ASTAR_NODES {
-                return piece;
-            }
-            if piece.insert(next) {
-                queue.push_back(next);
-            }
-        }
-    }
-    piece
+        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)))
 }
 
 fn astar_neighbours(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos) -> Vec<Pos> {
