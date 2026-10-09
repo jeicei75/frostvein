@@ -2901,3 +2901,155 @@ fn spawn_places_five_dwarves_on_distinct_tiles_for_every_small_seed() {
         );
     }
 }
+
+// 12.9 review #182: the review's multi-seed probe. Seeds 0..=16, a 4x7 and a 6x10 channel beside
+// the fire and a 3x3 pile near it, 4,000 ticks each. On 34b6783 a channel stone spawned under a
+// dwarf, or a delivery walled one into a dead end, and the dwarf never moved again: 8 of 28 runs
+// ended with a dwarf still for >= 2,251 ticks (longest still on 26185a0: <= 60). No stone lands on
+// a dwarf, and every dwarf still for long is one of the known one-level islands (#186).
+#[test]
+fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+    const TICKS: u64 = 4_000;
+    // NOTE: mode (ii) of #182 (a mark walled in by its own unhauled stones once the pile is full)
+    // is the ruled #180 / FR8 never-drop shape. It leaves marks unfinished but cages nobody, so
+    // this asserts on stillness, not on marks.
+    const STILL_BOUND: u64 = 500;
+    // (seed, channel width, dwarf). An idle dwarf whose every same-level neighbour is a stone,
+    // rock, a drop or another dwarf: `wander` is same-z only, so it stands until a job routes it
+    // out over a ramp. No stone is on it and A* still reaches it, so it is not walled in (#186).
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 5] =
+        [(6, 6, 0), (10, 4, 2), (10, 6, 3), (12, 6, 4), (13, 6, 2)];
+    let mut runs = 0;
+    let mut frozen = Vec::new();
+    let mut landed = Vec::new();
+    let mut worked = 0;
+    for seed in 0..=16_u64 {
+        for (west, south, east, north) in [(1, -3, 4, 3), (-1, -5, 4, 4)] {
+            let mut world = World::generate(seed, Dims::DEFAULT);
+            let camp = world.camp_origin();
+            let at = |dx: i32, dy: i32| Pos {
+                x: camp.x + dx,
+                y: camp.y + dy,
+                z: camp.z,
+            };
+            let channel = rect(at(west, south), at(east, north));
+            let width = channel.max.x - channel.min.x + 1;
+            // The pile search of `occupancy_wire.py`. It may overlap the channel; this search
+            // reproduces the review's seed 5 cage and seed 13 dead end tile for tile.
+            let pile = (3..12).find_map(|r| {
+                [(-r - 2, 0), (0, r), (0, -r - 2)]
+                    .into_iter()
+                    .map(|(dx, dy)| rect(at(dx, dy), at(dx + 2, dy + 2)))
+                    .find(|pile| {
+                        (pile.min.x..=pile.max.x).all(|x| {
+                            (pile.min.y..=pile.max.y).all(|y| {
+                                let cell = Pos { x, y, z: camp.z };
+                                is_standable(&world, cell)
+                            })
+                        })
+                    })
+            });
+            let Some(pile) = pile else { continue };
+            runs += 1;
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: channel,
+            });
+            assert!(
+                world
+                    .apply_command(SimCommand::PlaceStockpile { rect: pile })
+                    .is_none()
+            );
+            let marks = world.designations().len();
+
+            // Loose items by id, and who carries what (item -> dwarf).
+            let loose = |world: &World| -> BTreeMap<u32, Pos> {
+                let carried: BTreeSet<u32> = world
+                    .carrying()
+                    .iter()
+                    .filter_map(|(_, item)| *item)
+                    .collect();
+                world
+                    .items()
+                    .into_iter()
+                    .filter(|(id, _)| !carried.contains(&id.0))
+                    .map(|(id, pos)| (id.0, pos))
+                    .collect()
+            };
+            let carriers = |world: &World| -> BTreeMap<u32, usize> {
+                world
+                    .carrying()
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(dwarf, (_, item))| Some(((*item)?, dwarf)))
+                    .collect()
+            };
+            let mut last_move = [0_u64; 5];
+            let mut longest = [0_u64; 5];
+            let mut previous: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
+            let mut loose_before = loose(&world);
+            let mut carriers_before = carriers(&world);
+            for _ in 0..TICKS {
+                world.step();
+                let now: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
+                for dwarf in 0..5 {
+                    if now[dwarf] != previous[dwarf] {
+                        last_move[dwarf] = world.tick();
+                    }
+                    longest[dwarf] = longest[dwarf].max(world.tick() - last_move[dwarf]);
+                }
+                // A stone placed this tick (spawned, delivered or dropped) onto a dwarf. The one
+                // exception is an abnormal drop on the dropper's own tile (`release_claim`).
+                let loose_now = loose(&world);
+                for (item, pos) in &loose_now {
+                    if loose_before.get(item) == Some(pos) {
+                        continue;
+                    }
+                    if let Some(dwarf) = now.iter().position(|p| p == pos)
+                        && carriers_before.get(item) != Some(&dwarf)
+                    {
+                        landed.push((seed, width, world.tick(), *item, dwarf));
+                    }
+                }
+                loose_before = loose_now;
+                carriers_before = carriers(&world);
+                previous = now;
+            }
+            if let Some((dwarf, still)) = longest
+                .iter()
+                .copied()
+                .enumerate()
+                .max_by_key(|(_, still)| *still)
+                .filter(|(_, still)| *still >= STILL_BOUND)
+            {
+                frozen.push((seed, width, dwarf, still, previous[dwarf]));
+            }
+            let on_pile = world.items().iter().any(|(_, p)| {
+                (pile.min.x..=pile.max.x).contains(&p.x) && (pile.min.y..=pile.max.y).contains(&p.y)
+            });
+            if world.designations().len() < marks && on_pile {
+                worked += 1;
+            }
+        }
+    }
+    assert!(
+        landed.is_empty(),
+        "stones landed on a dwarf; (seed, channel width, tick, item, dwarf): {landed:?}"
+    );
+    assert_eq!(
+        frozen
+            .iter()
+            .map(|(seed, width, dwarf, ..)| (*seed, *width, *dwarf))
+            .collect::<Vec<_>>(),
+        ONE_LEVEL_ISLANDS,
+        "runs with a dwarf still for >= {STILL_BOUND} ticks; (seed, channel width, dwarf, longest \
+         still, final tile): {frozen:?}"
+    );
+    // Vacuity: every run with a pile site really ran (the review's own pile search found 28, this
+    // one 32), and in every one the crew worked.
+    assert_eq!(runs, 32, "runs with a pile");
+    assert_eq!(
+        worked, runs,
+        "runs where marks cleared and a stone reached the pile"
+    );
+}

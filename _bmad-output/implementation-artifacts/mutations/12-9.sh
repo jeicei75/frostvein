@@ -226,3 +226,59 @@ old = '            if idle {\n                ecs.entity_mut(blocker).remove::<P
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            return false;\n'))
 PY
+
+# #182: a delivery lands on the deepest pile cell even when a dwarf stands on it, or filling it
+# walls one in.
+mutation "23 a delivery ignores who stands on the pile" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        .filter(|cell| !refused(*cell))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .filter(|cell| { let _ = &refused; let _ = cell; true })\n'))
+PY
+
+# #182: no fill is ever refused for walling a dwarf in.
+mutation "24 filling a cell never walls a dwarf in" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        .any(|piece| piece.len() < largest && piece.iter().any(|tile| dwarves.contains(tile)))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .any(|piece| piece.len() < largest && piece.iter().any(|tile| dwarves.contains(tile)) && false)\n'))
+PY
+
+# #182: a completing channel spawns its stone on the dwarf standing on its target.
+mutation "25 a channel stone spawns under its occupant" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        if occupied.contains(&job.target) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if occupied.contains(&job.target) && false {\n'))
+PY
+
+# #182: a refused delivery holds at Work (the ruled first form), which deadlocks a hauler standing
+# on the occupant's only way out.
+mutation "26 a refused delivery holds instead of letting go" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                        retry_claim(ecs, entity, job.id);\n                        continue;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                        *ecs.get_mut::<JobState>(entity).expect("every dwarf has a job state") = JobState::Work;\n                        continue;\n'))
+PY
+
+# #182: the abnormal drop lands on other dwarves and walls dwarves in again.
+mutation "27 the abnormal drop ignores dwarves" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    || (cell != pos && dwarves.contains(&cell))\n                    || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    || (cell != pos && dwarves.contains(&cell) && false)\n                    || (walls_in_a_dwarf(terrain, &blocked, &dwarves, cell) && false)\n'))
+PY
+
+# #182: a channel's stone may wall a dwarf in (the miner sealing itself, seed 10's first shape).
+mutation "28 a channel stone may wall a dwarf in" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) && false {\n'))
+PY
