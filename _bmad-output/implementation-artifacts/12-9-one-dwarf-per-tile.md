@@ -321,7 +321,8 @@ A carried item occupies no tile, which is unchanged.
   Pass 2 checks Tasks 11 and 12.
   **Pass 2 (2026-10-08, `7d69e19`), Wolf:** channel, "1 yes"; carry, "2 better.. dwarves are still sucking the stone
   not really picking up and also when dropping the stone slides.. but not going to tweak it now more" (-> **#181**,
-  bug, look parked; the sim side of AC14 holds, and the gui blend reads as a slide rather than a reach).
+  bug, look parked; AC14's headless tests hold (corrected at review run 1: this said "the sim side of AC14", and AC14 is
+  gui-only), and the gui blend reads as a slide rather than a reach).
 
 ### Review Findings
 
@@ -629,11 +630,15 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
   reading is: the exit path `resolve_blocked_step` gives the idle blocker does not reset its wander cooldown,
   and `wander` follows a `Path` only when the cooldown reaches 0, so a 10,000-tick rest stalls the follow.
   No real dwarf rests that long (`WANDER_REST_TICKS` is small), so it is the fixture's artefact. Cooldown 40 outlasts the claim and the test passes.
+  **Corrected at review run 1:** the fixture does not NEED 40. It passes at cooldown 0 and at 10; only 10,000 stalls.
 
 **Task 10 REDs (Agent C), on the unfixed movement code (items not blocking):**
 
 - AC1+AC10 `a_busy_crew_never_shares_a_tile_and_still_works` (`scenario.rs`, new assert before the vacuity asserts):
   `404 dwarf moves entered an item's cell; first (tick, dwarf, from, to) Some((112, 1, (67,66,9), (66,66,9)))`.
+  **Corrected at review run 1:** that RED is on 12.9's occupancy code with items not blocking, NOT on `26185a0` as AC10
+  asks; it was never run there. On `26185a0` the test reads `shared=332 item_entries=329`, and the occupancy assert fires
+  first.
 - AC10 corridor `a_dwarf_with_a_goal_past_a_stone_in_a_corridor_goes_round_it` (`lib.rs`):
   `the miner stood in the stone's cell at ticks [123, 124, ..., 133]`.
 - AC11 `a_hauler_picks_up_and_drops_from_the_next_tile`:
@@ -644,6 +649,8 @@ room mouth (case 1, no `Path`), and the miner walks back in. Dig done at tick 30
 
 **Task 10 measured (green):** AC1 marks cleared t=1,205 (bound 2,500; baseline 1,112), first stone on pile t=228 (600),
 moves 1,213 (600): all hold. AC12 pile full at tick 1,257 (named bound 2,000), centre at 212. No deadlock in the AC1 crew.
+**Corrected at review run 1:** AC1 at `34b6783` (after Tasks 11-12) reads marks cleared 1,223, first stone 184, moves 1,199,
+not the Task 10 figures above. All still inside 2,500 / 600 / 600.
 
 **Task 6, the wire instrument (orchestrator).** The instrument gained a `stone entries` count (AC10 on the wire) and a
 second verdict line, `STONES OK|RED`, committed `1569c93`. Every run used a fresh release `simd 7491`, DEFAULT_SEED, 1,500 ticks:
@@ -761,7 +768,7 @@ a scratch worktree with that tree's `mutate.sh`:
   tests (including AC8's guards) pass unchanged, and `cargo test -p simd` is green (22 + 72).
 - `Path` is still not saved (Task 4). An idle dwarf's exit path or a yielder's path is therefore lost on
   save/load until Task 4 lands. No existing save/load test went red on that.
-- `74-dwarves-path-through-fire.sh` row 2 anchors on `positions.copied().collect()`, which the new
+- `74-dwarves-path-through-fire.sh` row 3 (corrected at review run 1; this said row 2) anchors on `positions.copied().collect()`, which the new
   `dwarf_tiles` would have duplicated; `dwarf_tiles` spells it `.cloned()` so the audit stays clean
   (`scripts/audit-mutations.py`: 808 rows, all match).
 - The `wander` system gained `#[allow(clippy::type_complexity)]` (one query over the dwarf row, plus `Path`).
@@ -824,7 +831,8 @@ a scratch worktree with that tree's `mutate.sh`:
   - (2) an out-of-order abnormal drop (`release_claim`) can wall in a deeper free pile cell, because `pile_targets` depth passes
     through taken cells;
   - (3) Agent A wrote `dwarf_tiles` with `.cloned()`, which does not match #74's sabotage anchor `positions.copied().collect()`;
-  - (4) the AC6 fixture needs an idle cooldown of 40, because an exit `Path` waits on the wander cooldown;
+  - (4) ~~the AC6 fixture needs an idle cooldown of 40~~ FALSE (review run 1): it passes at cooldown 0 and 10; only 10,000
+    stalls, because an exit `Path` waits on the wander cooldown;
   - (5) five 3-3 and 12-1 rows were already dead on 26185a0, and nothing here repairs them.
 
 ### File List
