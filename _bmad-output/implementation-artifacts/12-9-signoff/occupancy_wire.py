@@ -15,10 +15,14 @@ On every distinct tick it groups the dwarf entities by `pos` and counts:
   - channel marks cleared and stones on the pile (the crew still works, not just walks);
   - stone entries (#162, AC10, added at Task 0): a dwarf whose tile changed ONTO a tile that held an
     uncarried item (one no dwarf's `carrying` names) in the previous delta. Every item blocks.
-Every delta must carry exactly five dwarves, or the run proves nothing and says so.
+  - items landed on a dwarf (12.9 review, #182): an uncarried item that is new, moved, or was
+    carried in the previous delta, and now lies on a tile a dwarf stands on. A stone ENTRY is a
+    dwarf moving onto an item; this is the other direction, an item placed onto a dwarf.
+Every delta must carry exactly five dwarves, every tick after the first must be read (a gap can
+hide a shared tick), and every delta must parse, or the run proves nothing and says so (exit 2).
 
-It prints the counts, the first shared tile and the first stone entry, then one verdict line per
-rule: OCCUPANCY OK/RED and STONES OK/RED. Exit 1 if either is RED.
+It prints the counts, the first shared tile, the first stone entry and the first landing, then one
+verdict line per rule: OCCUPANCY OK/RED and STONES OK/RED. Exit 1 if either is RED.
 
 Observed at creation (2026-10-08, main 26185a0, release simd, fast4x): see the story's
 Verification section. Exit 0 alone is not a result: read the counts.
@@ -87,22 +91,35 @@ on_pile = 0
 stone_entries = 0
 first_entry = None
 last_items = set()
+landings = 0
+first_landing = None
+last_item_pos = {}  # uncarried item id -> pos, previous delta
+gaps = 0
 for line in f:
-    msg = json.loads(line)
-    if msg.get("type") != "delta":
-        continue
-    tick = msg["tick"]
+    try:
+        msg = json.loads(line)
+        if msg.get("type") != "delta":
+            continue
+        tick = msg["tick"]
+        dwarves = {e["id"]: tuple(e["pos"]) for e in msg["entities"] if e["kind"] == "dwarf"}
+        carried = {e.get("carrying") for e in msg["entities"] if e["kind"] == "dwarf"} - {None}
+        items = {i["id"]: tuple(i["pos"]) for i in msg["items"] if i["id"] not in carried}
+        marks = sum(1 for d in msg["designations"] if d["kind"] == "channel")
+    except (ValueError, KeyError, TypeError) as err:
+        print(f"RUN PROVES NOTHING -- malformed delta ({type(err).__name__}: {err})")
+        sys.exit(2)
     if tick in seen_ticks:
         continue  # paused or repeated iteration: same tick, same state
+    if seen_ticks and tick != max(seen_ticks) + 1:
+        gaps += max(tick - max(seen_ticks) - 1, 1)
     seen_ticks.add(tick)
-    dwarves = {e["id"]: tuple(e["pos"]) for e in msg["entities"] if e["kind"] == "dwarf"}
     if len(dwarves) != 5:
         bad_counts += 1
     by_tile = defaultdict(list)
     for dwarf, pos in dwarves.items():
         by_tile[pos].append(dwarf)
     crowded = {pos: ids for pos, ids in by_tile.items() if len(ids) > 1}
-    max_per_tile = max(max_per_tile, max(len(ids) for ids in by_tile.values()))
+    max_per_tile = max(max_per_tile, max((len(ids) for ids in by_tile.values()), default=0))
     if crowded:
         shared_ticks += 1
         first_shared = first_shared or (tick, crowded)
@@ -113,10 +130,16 @@ for line in f:
         if entered:
             stone_entries += len(entered)
             first_entry = first_entry or (tick, entered)
+    if last is not None:
+        dwarf_tiles = set(dwarves.values())
+        landed = {item: pos for item, pos in items.items()
+                  if last_item_pos.get(item) != pos and pos in dwarf_tiles}
+        if landed:
+            landings += len(landed)
+            first_landing = first_landing or (tick, landed)
     last = dwarves
-    carried = {e.get("carrying") for e in msg["entities"] if e["kind"] == "dwarf"} - {None}
-    last_items = {tuple(i["pos"]) for i in msg["items"] if i["id"] not in carried}
-    marks = sum(1 for d in msg["designations"] if d["kind"] == "channel")
+    last_item_pos = items
+    last_items = set(items.values())
     peak_marks = max(peak_marks, marks)
     on_pile = sum(1 for i in msg["items"] if tuple(i["pos"]) in pile_cells)
     if tick >= limit:
@@ -126,12 +149,14 @@ print(f"ticks read {len(seen_ticks)}  deltas without exactly 5 dwarves {bad_coun
 print(f"shared ticks {shared_ticks}  max dwarves on one tile {max_per_tile}  first shared {first_shared}")
 print(f"dwarf moves {moves}  channel marks {peak_marks} -> {marks}  items on the pile {on_pile}")
 print(f"stone entries {stone_entries}  first entry {first_entry}")
-if len(seen_ticks) < limit // 2 or bad_counts:
-    print("RUN PROVES NOTHING -- too few ticks read, or a delta without five dwarves")
+print(f"items landed on a dwarf {landings}  first landing {first_landing}")
+print(f"tick gaps after the first delta {gaps}")
+if len(seen_ticks) < limit // 2 or bad_counts or gaps:
+    print("RUN PROVES NOTHING -- too few ticks read, a tick gap, or a delta without five dwarves")
     sys.exit(2)
 if moves < 200 or marks >= peak_marks or on_pile == 0:
     print("CREW DID NOT WORK -- a frozen crew shares no tile; this is not a green")
     sys.exit(2)
 print("OCCUPANCY OK" if shared_ticks == 0 else "OCCUPANCY RED")
-print("STONES OK" if stone_entries == 0 else "STONES RED")
-sys.exit(0 if shared_ticks == 0 and stone_entries == 0 else 1)
+print("STONES OK" if stone_entries == 0 and landings == 0 else "STONES RED")
+sys.exit(0 if shared_ticks == 0 and stone_entries == 0 and landings == 0 else 1)
