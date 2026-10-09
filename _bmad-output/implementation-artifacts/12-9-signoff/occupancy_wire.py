@@ -19,7 +19,8 @@ On every distinct tick it groups the dwarf entities by `pos` and counts:
     carried in the previous delta, and now lies on a tile a dwarf stands on. A stone ENTRY is a
     dwarf moving onto an item; this is the other direction, an item placed onto a dwarf.
 Every delta must carry exactly five dwarves, every tick after the first must be read (a gap can
-hide a shared tick), and every delta must parse, or the run proves nothing and says so (exit 2).
+hide a shared tick), every delta must parse, and the connection must hold, or the run proves
+nothing and says so (exit 2).
 
 It prints the counts, the first shared tile, the first stone entry and the first landing, then one
 verdict line per rule: OCCUPANCY OK/RED and STONES OK/RED. Exit 1 if either is RED.
@@ -34,9 +35,27 @@ from collections import defaultdict
 
 port = int(sys.argv[1])
 limit = int(sys.argv[2]) if len(sys.argv) > 2 else 1500
-sock = socket.create_connection(("127.0.0.1", port))
-f = sock.makefile()
-snap = json.loads(f.readline())
+
+
+def connection_lost(err):
+    # A dropped connection is no reading at all, so it must not exit 1 like a RED.
+    print(f"RUN PROVES NOTHING -- connection lost ({type(err).__name__}: {err})")
+    sys.exit(2)
+
+
+def lines(f):
+    try:
+        yield from f
+    except ConnectionError as err:
+        connection_lost(err)
+
+
+try:
+    sock = socket.create_connection(("127.0.0.1", port))
+    f = sock.makefile()
+    snap = json.loads(f.readline())
+except ConnectionError as err:
+    connection_lost(err)
 dx, dy = snap["dims"]["x"], snap["dims"]["y"]
 tiles = snap["tiles"]
 
@@ -70,7 +89,10 @@ pile_cells = {
 
 
 def send(obj):
-    sock.sendall((json.dumps(obj) + "\n").encode())
+    try:
+        sock.sendall((json.dumps(obj) + "\n").encode())
+    except ConnectionError as err:
+        connection_lost(err)
 
 
 send({"type": "designate", "kind": "channel", "rect": channel})
@@ -95,7 +117,7 @@ landings = 0
 first_landing = None
 last_item_pos = {}  # uncarried item id -> pos, previous delta
 gaps = 0
-for line in f:
+for line in lines(f):
     try:
         msg = json.loads(line)
         if msg.get("type") != "delta":
