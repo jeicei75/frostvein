@@ -2632,7 +2632,7 @@ development_status:
   #     exit 2; four fake-daemon cases both sides, live recipe green) ac66787 (comment) 8fe4b46 (row 31 text, run-2 re-pin
   #     list). 6/6 closed, no new mutation rows. Full gate GREEN 8fe4b46 3508 s. Audit ended at run 3; next: push +
   #     seat pass (AC13, AC14 lift, back-off feel, let-go beside its hauler, #189 jam, #187 loop). -> in-progress.
-  #   2026-10-10 pushed 4c6642a; seat pass 3 (Wolf): "ok works now". -> done. PR on Wolf's yes.
+  #   2026-10-10 pushed 4c6642a; seat pass 3 (Wolf): "ok works now". -> done. PR #190 opened (a03af91).
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
