@@ -285,3 +285,41 @@ old = '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupie
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) && false {\n'))
 PY
+
+# 12.9 review run 2: a let-go drops at the carrier's own tile again (the carrier exempt).
+mutation "29 a let-go drops under its carrier" sim-core release_claim_drops_the_carried_stone_beside_the_dwarf <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    || dwarves.contains(&cell)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    || (cell != pos && dwarves.contains(&cell))\n'))
+PY
+
+# 12.9 review run 2: the same sabotage, read by the sweep now that its own-tile exemption is gone.
+mutation "30 the sweep exempts a drop under its carrier" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    || dwarves.contains(&cell)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    || (cell != pos && dwarves.contains(&cell))\n'))
+PY
+
+# 12.9 review run 2 (tick cost): the lockstep wall-in floods never merge where they meet, so one
+# piece splits between them and a dwarf in the smaller share reads as walled in.
+mutation "31 wall-in floods never merge" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    Some(j) if j != i => {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    Some(j) if j != i && false => {\n'))
+PY
+
+# 12.9 review run 2: a new refusal loop. Some channel completions are refused forever; the
+# miners keep moving, so only the sweep's marks-left pin can see it.
+mutation "32 a channel completion is refused forever" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) || (job.target.x + job.target.y) % 13 == 0 {\n'))
+PY

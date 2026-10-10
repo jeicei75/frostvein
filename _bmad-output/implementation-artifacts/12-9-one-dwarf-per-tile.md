@@ -442,6 +442,16 @@ Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
 
   **Record lines corrected, and the re-pins disclosed in the `48ac6b0` commit body. Left unchecked:** the PR body
   disclosure waits for the PR.
+
+  **Pending PR-body disclosure** (completed by run 2's LOW, which found `48ac6b0` incomplete). The PR body must list every
+  re-pin:
+  - `5b17f72`: the scenario re-pins named in `48ac6b0`. Also its `lib.rs` pin moves:
+    - `release_claim_drops_where_the_carrier_can_walk` moves from `pocket[2]` to `pocket[1]`;
+    - the settle landing;
+    - the six old-rule tests.
+  - `d93f32d`: the two channel unit-test targets and the `headless.rs` step label.
+  - `0fccc74`: as named in `48ac6b0`.
+  - The run-2 patch pass's own re-pins, which are disclosed in their commit bodies.
 - [x] [Review][Defer] AC10 can break within one tick: a hauler lifts a stone in `execute_jobs` and `wander` moves an idle
   dwarf onto that cell in the same tick (seed 5, t834). The gui draws it walking into the stone (feature)
   [crates/sim-core/src/lib.rs:1664] — deferred, 1/28 runs, cosmetic
@@ -467,6 +477,17 @@ Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
   [crates/sim-core/src/lib.rs] — deferred, a cleanup would show as BROKEN in the audit, loudly
 - [x] [Review][Defer] Five 3-3 and 12-1 mutation rows were already dead on `26185a0`; two spot-checked SURVIVED there
   (acceptance, flag 5) [_bmad-output/implementation-artifacts/mutations/] — deferred, pre-existing
+
+**Run-1 patch pass closure table** (written in the run-2 patch pass; run 2 flagged it as missing). The "old side" column was
+supplied by run 2's Acceptance Auditor, who ran each new test against `2a10797` with only the test hunks applied. All five were RED.
+
+| Item | Side written for | Side tested | Pre-existing-state fixture | Rework |
+| --- | --- | --- | --- | --- |
+| #182 stones on dwarves (`0b8322d`, `aa94a5d`) | the drop and spawn sites: no stone onto a dwarf, no wall-in | the old world: the sweep is RED on `2a10797` (landings, cages) | `no_dwarf_is_caged_by_stones_over_the_probe_seeds` (generated worlds, seeds 0..=16; the review's seed 5 cage and seed 13 dead end tile for tile); `release_claim_never_drops_where_the_stone_walls_a_dwarf_in` (rock corridor); rows 23-28 | no; run 2 found it HALF-CLOSED (#187 loops, own-tile let-go) |
+| #183 stale exit `Path` (`c9311f1`) | the `(None, None)` head-on arm | an idle blocker still holding an exit `Path` derived before the holder moved, RED on `2a10797` | `a_head_on_with_no_escape_drops_the_idle_blockers_stale_path`; row 22 | no |
+| #184 walled-in free pile cell (`6dbdafe`) | `pile_targets` layering | the review's own state (centre free, four edge-middles taken, one loose stone), `delivered=None` on `2a10797` | `a_walled_in_free_cell_does_not_stop_the_pile`; row 20; four re-pointed rows | no |
+| saved `path` bounds (`0f8a5b2`) | `load_world_from` | a save the old loader accepted: `path=[(9000,9000,9000)]`; an in-bounds control still loads | `loading_refuses_a_dwarf_path_tile_outside_the_map`; row 21 | no |
+| `occupancy_wire.py` malformed delta and tick gaps (`f5cfd32`) | the instrument's exits | NEW side only: fake daemon with empty `entities`, missing `items` and a skipped tick, each exit 2. The old script was not run against them. | fake-daemon self-test (scratch, not committed) | no |
 
 #### Review run 2 (2026-10-09, diff `2a10797..02e313c`, the run-1 patch pass)
 
@@ -514,7 +535,7 @@ The live wire is GREEN on the default recipe, which never lets go: 0 own-tile dr
 Review cost: $16.16 over 316 turns; the 4 subagents were 73.6% of tokens. The run reaped 20.0 GB of `/tmp` caches (12.4 GB
 reclaimed).
 
-- [ ] [Review][Patch] (decision resolved) **HIGH: a refused channel completion loops forever; the let-go changes nothing (#187)** (feature;
+- [x] [Review][Patch] (decision resolved; **superseded by ruling, not landed**) **HIGH: a refused channel completion loops forever; the let-go changes nothing (#187)** (feature;
   blind 4 and 6 fold in) [crates/sim-core/src/lib.rs:1652-1670] — The worker returns to the same refusal every ~116-144 ticks
   until the run ends. A mark never finishes. The dwarves keep moving, so the sweep's `STILL_BOUND` stays green. Three shapes:
   - (a) no aside tile: an idle dwarf homed on the target in a dead end whose only exit is the miner's work tile (seeds 21/6,
@@ -537,7 +558,18 @@ reclaimed).
   - (a) when the occupant has no tile aside, it leaves by an exit `Path` instead of the miner letting go.
   - The sweep pins each run's marks left, so a loop goes red.
   - Same time-box as #182: land what holds, keep the rest on #187.
-- [ ] [Review][Patch] (decision resolved) **MED: a let-go drops its stone under the hauler, and the instrument and the sweep disagree on whether
+
+  **Built, measured, and DROPPED (Wolf, 2026-10-09, in the patch pass).** (a), (b) and (c) were each built on top of the let-go
+  and tick-cost patches and ablated on 56 runs (seeds 0..=29, both channel sizes, 4,000 ticks). None moved the sweep: marks left
+  51 on `c203ea6`, 49 with the let-go alone, 49 with (b), 51 with (c), 54 with (a) as well; 4x7 unfinished 5/16, 4/16, 5/16,
+  5/16, 5/16. (c) put p99 tick time at ~1.3 ms against 56 µs. (a) cannot land as ruled: when the occupant's only exit is the
+  miner's work tile, a miner that holds at Work leaves it waiting forever (no swap, Q1b), so it was built as "exit `Path`
+  through the miner's tile, and the miner lets go". The remaining loops are a fourth shape: a second miner on the target walking
+  to its own mark through the first miner's work tile, which lets go and re-claims the same job from the same tile ~20 ticks
+  later (seed 15/4, every 72 ticks). **Ruled: drop (a), (b), (c); #187 stays open**, with the ablation table and the fourth shape
+  posted there. The one bullet that landed is the sweep's marks-left pin (`c75def6`): 14 of 32 runs leave marks and each is a
+  named red, so the loops stay visible until #187 is fixed.
+- [x] [Review][Patch] (decision resolved) **MED: a let-go drops its stone under the hauler, and the instrument and the sweep disagree on whether
   that is a landing** (blind + edge + acceptance + feature) [crates/sim-core/src/lib.rs:1160-1168;
   12-9-signoff/occupancy_wire.py:133] — `release_claim`'s `refused` exempts the carrier's own tile, so a let-go or abnormal
   drop lands at the hauler's feet.
@@ -554,7 +586,17 @@ reclaimed).
   - The sweep's `carriers_before` exemption goes.
   - The `release_claim` NOTE ("the dwarf stands in the item until it walks off") is replaced.
   - Tests pinning an own-tile drop are re-pinned, and each re-pin is disclosed in the commit body.
-- [ ] [Review][Patch] **MED: the per-drop wall-in check made tick cost materially worse** (feature + blind + acceptance)
+
+  **Landed `a0633aa`.** `refused` takes every dwarf's tile; the drop searches for the nearest reachable tile that is not a taken
+  pile cell, holds no dwarf and walls nobody in. One exception, ruled in the pass (Wolf): a carrier whose whole reachable ground
+  is refused keeps the stone on its own tile, since an idle dwarf carries nothing (AC10); the NOTE names it and
+  `release_claim_drops_where_the_carrier_can_walk` pins it, the wire instrument stays strict. The sweep's `carriers_before`
+  exemption is gone. Landings over the 56-run ablation probe: 48 on `c203ea6`, 0 with this. Re-pins disclosed in the body:
+  `release_claim_drops_the_carried_stone_at_the_dwarfs_tile` renamed `..._beside_the_dwarf`; the campfire test now JAMS on
+  `DEFAULT_SEED` (a hauler picks up and lets go every ~6 ticks beside an idle dwarf boxed in on the last free pile cell), filed
+  as **#189** and pinned there by Wolf's ruling (pile 23/24, 80 pick-ups after t=2500); the sweep's islands 5 -> 3. Rows 29, 30
+  KILLED; the re-pointed 27 and the 12-1 / 3-3 rows below.
+- [x] [Review][Patch] **MED: the per-drop wall-in check made tick cost materially worse** (feature + blind + acceptance)
   [crates/sim-core/src/lib.rs:765-776, 1160-1191]
   - `drop_cell` runs `refused` before the target filter, so `walls_in_a_dwarf` runs on all four neighbours of the hauler, pile
     or not (50-109 calls against ~10 deliveries).
@@ -563,24 +605,50 @@ reclaimed).
     measured 9-17.6 ms in 8/28.
   - Fix: filter to targets first, then re-measure max and p99 on the probe. If the max still exceeds the budget, it rejoins
     the tick-cost deferral and #179 with the number.
-- [ ] [Review][Patch] **MED: the #182 sweep cannot see the defects it exists for** (edge + acceptance + feature)
+
+  **Landed `e3bac69`.** `drop_cell` filters to pile cells before it asks `refused`, and `walls_in_a_dwarf` floods one side at a
+  time in lockstep, merging floods that meet and stopping once one flood is left and larger than every finished piece, so a
+  check costs about the size of the pockets (`piece_of` had no other caller and goes). Same outcome: on the 56-run ablation probe
+  every per-run result line is identical to `c203ea6`. Re-measured unloaded on the sweep's 32 runs (seeds 0..=16, 4x7 and
+  6x10, 4,000 ticks, release, `world.step()` timed):
+
+  | | `c203ea6` | HEAD (`c75def6`) |
+  | --- | --- | --- |
+  | max tick | 18.49 ms | 8.54 ms |
+  | p99 / p99.9 | 36 / 135 µs | 34 / 111 µs |
+  | runs with a tick over 10 ms | 1/32 | 0/32 |
+  | mean | 17 µs | 14 µs |
+
+  A ~8 ms single-tick spike remains in 12 of 32 runs on both sides (24 on `c203ea6`), so it predates the wall-in check; the max
+  still exceeds the 5 ms fast4x period and stays with the run-1 tick-cost deferral and #179 with that number. Rows 23, 24
+  (re-pointed) and 31 KILLED.
+- [x] [Review][Patch] **MED: the #182 sweep cannot see the defects it exists for** (edge + acceptance + feature)
   [crates/sim-core/tests/scenario.rs:3020-3045]
   - `max_by_key` keeps only the longest-still dwarf per run. Seed 12/6 has two frozen dwarves (0 and 4) and dwarf 0 is
     invisible, so a new cage in a pinned run is hidden.
   - No assert covers marks left, so D1's loops pass.
   - Fix: pin every dwarf over `STILL_BOUND`, and pin each run's marks left (after D1's ruling), so a new loop goes red.
-- [ ] [Review][Patch] **LOW (process): the run-1 patch pass emitted no per-item closure table** (acceptance)
+
+  **Landed `c75def6`.** Every dwarf still for >= `STILL_BOUND` is listed (3 at this tip, all #186 islands), and each run's marks
+  left are pinned (14 runs, every one with the pile full: #187's loops and #182 mode ii). Old side: at `c203ea6` the new sweep is
+  RED and names seed 12/6's second frozen dwarf. Row 32 kills on the frozen pin first; re-mutated with that pin stubbed it dies
+  on the marks-left pin, so both pins are shown to bite.
+- [x] [Review][Patch] **LOW (process): the run-1 patch pass emitted no per-item closure table** (acceptance)
   [12-9-one-dwarf-per-tile.md, Review Findings] — The substance holds: every new test is RED on `2a10797` (acceptance, RAN). Write
   the table, one row per item: side written for, side tested, and the named fixture or row.
-- [ ] [Review][Patch] **LOW: the `48ac6b0` re-pin disclosure is incomplete** (acceptance) — Missing:
+  **Written:** "Run-1 patch pass closure table" above, five rows, old side from this run's Acceptance Auditor.
+- [x] [Review][Patch] **LOW: the `48ac6b0` re-pin disclosure is incomplete** (acceptance) — Missing:
   - `5b17f72`'s `lib.rs` pin moves: `release_claim_drops_where_the_carrier_can_walk` `pocket[2]`→`pocket[1]`, the settle
     landing, and the six old-rule tests;
   - `d93f32d`'s two channel unit-test targets and the `headless.rs` step label.
   
   Fold them into the pending PR-body disclosure.
-- [ ] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` exits 1 (RED) on a connection reset** (edge)
+  **Folded:** the "Pending PR-body disclosure" list above now names every re-pin, run-2's own included.
+- [x] [Review][Patch] **LOW (silent-failure exception): `occupancy_wire.py` exits 1 (RED) on a connection reset** (edge)
   [12-9-signoff/occupancy_wire.py, :37-38, socket loop] — An uncaught `ConnectionResetError` gives a traceback and exit 1. Treat it as
   RUN PROVES NOTHING, exit 2, as run 1 did for malformed deltas.
+  **Landed `f8a0060`.** Every read and send exits 2 on a lost connection. Both sides: a fake daemon that resets the socket
+  before the snapshot and after three deltas gives exit 1 (traceback) on the old script and exit 2 on this one, both cases.
 - [x] [Review][Defer] A saved `path` tile is bounds-checked but not checked for adjacency or walkability; `wander` can step a
   dwarf into rock from a hand-edited save (edge) [crates/simd/src/main.rs:604] — deferred, matches the ruling (as `pos`/`home`);
   corrupted saves only
@@ -600,6 +668,40 @@ Dismissed (3):
 - #186's framing undersells it. The issue's own table lists the stones, and Wolf ruled to file it.
 - `retry_after` stamped at completion is the recorded let-go deviation.
 - The 12-1 `retry drop stacks a full stockpile` row SURVIVES. That is already deferred in run 1, pre-existing.
+
+**Run-2 patch pass closure table** (2026-10-09/10, two sessions: the first was stopped for shutdown after the four commits; the
+second re-ran the unrun rows, re-timed on a quiet machine and wrote this). Diff `c203ea6..c75def6`, 4 commits, all LOCAL and unpushed.
+
+| Item | Side written for | Side tested | Pre-existing-state fixture | Rework |
+| --- | --- | --- | --- | --- |
+| #187 refusal loops (HIGH) | not landed: (a), (b), (c) built, ablated on 56 runs, DROPPED by ruling | the ablation itself is the old-side test: each stage against `c203ea6`'s per-run lines, no gain | the sweep's `UNFINISHED` pin (14 runs) names every loop as a known red | REWORK of #182 (half-closed in run 1); stays open on #187 |
+| let-go under the hauler (`a0633aa`) | the drop site: `refused` takes every dwarf's tile | the old world: the sweep without its `carriers_before` exemption reads 32 own-tile drops over 32 runs on the pre-patch code (run 2's acceptance figure) and the ablation probe 48 landings on `c203ea6`, 0 after | `no_dwarf_is_caged_by_stones_over_the_probe_seeds` (landed includes the carrier's tile); `release_claim_drops_the_carried_stone_beside_the_dwarf`; `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire` (now the #189 pin); rows 29, 30; re-pointed 27 and 12-1 x3, 3-3 x1 | REWORK of #182 |
+| tick cost (`e3bac69`) | the cost: `drop_cell` filter order, lockstep flood | the outcome side: every per-run line identical to `c203ea6` on 56 runs; then the cost on a quiet machine, 32 runs, max 18.49 -> 8.54 ms, over-10 ms runs 1 -> 0 | the sweep (outcome); the scratch tick probe (cost, not committed); rows 23, 24, 31 | no |
+| sweep blind (`c75def6`) | the pin: every still dwarf, marks left per run | the old code: at `c203ea6` the new sweep is RED and lists seed 12/6's second frozen dwarf, which the old `max_by_key` hid | `no_dwarf_is_caged_by_stones_over_the_probe_seeds`; row 32 (see its re-mutation note below) | no |
+| run-1 closure table (LOW) | record | n/a | the table above, old side from run 2's acceptance auditor | no |
+| `48ac6b0` disclosure (LOW) | record | n/a | the "Pending PR-body disclosure" list | no |
+| wire reset (`f8a0060`) | the instrument's exits | NEW and OLD: a fake daemon resetting before the snapshot and after three deltas, old script exit 1 both, new exit 2 both | fake daemon (scratch, not committed) | no |
+
+Mutation rows for this pass, run with `scripts/mutate.sh` on `c75def6` (rows 23, 24, 27, 29, 30 in the first session; 31, 32 and the
+four re-pointed rows in the second):
+
+| Row | Test | Result | Dies on |
+| --- | --- | --- | --- |
+| 23 a delivery ignores who stands on the pile (re-pointed) | sweep | KILLED | |
+| 24 filling a cell never walls a dwarf in (re-pointed) | sweep | KILLED | |
+| 27 the abnormal drop ignores dwarves (re-pointed) | `release_claim_never_drops_where_the_stone_walls_a_dwarf_in` | KILLED | |
+| 29 a let-go drops under its carrier | `release_claim_drops_the_carried_stone_beside_the_dwarf` | KILLED | |
+| 30 the sweep exempts a drop under its carrier | sweep | KILLED | |
+| 31 wall-in floods never merge | sweep | KILLED | the frozen-dwarf pin (every refusal freezes someone), 381 s |
+| 32 a channel completion is refused forever | sweep | KILLED | the frozen-dwarf pin, NOT the marks-left pin it was written for: a miner refused forever stands still ≥500 ticks. Re-mutated in a scratch worktree at `c75def6` with the frozen assert stubbed: the test dies on the marks-left pin (`scenario.rs:3064`, 14 pinned runs vs the sabotaged set), so the pin kills on its own |
+| 12-1 retry drop stacks a full stockpile (re-pointed) | `a_full_stockpile_never_stacks_uncarried_stones` | SURVIVED | pre-existing: already dead on `26185a0`, deferred in run 1, dismissed in run 2 |
+| 12-1 release drop stacks an occupied stockpile (re-pointed) | `release_claim_avoids_an_occupied_stockpile_cell` | KILLED | |
+| 12-1 drop search walks through rock (re-pointed) | `release_claim_drops_where_the_carrier_can_walk` | KILLED | |
+| 3-3 release_claim does not drop the carried stone (re-pointed) | `release_claim_drops_the_carried_stone_beside_the_dwarf` | KILLED | |
+
+Not proven live (unchanged from run 2, no gate here touches them): AC13 facing and the AC14 lift/set-down, the back-off feel,
+how a sidestep, a let-go and a #187 loop look, a stone on the campfire (#188). The seat builds from the PUSHED tip, and nothing
+from this pass is pushed.
 
 ## Dev Notes
 
@@ -1039,4 +1141,5 @@ a scratch worktree with that tree's `mutate.sh`:
 | 2026-10-08 | Tasks 11-12 (Agent E, `d93f32d` `bfa6568` `0fccc74`). Rows 15-19 added; 12-9.sh 19/19 KILLED and 12-5.sh 15/15 KILLED on `06a235e` |
 | 2026-10-08 | Full gate green on `ac99c2d` (3,281 s) |
 | 2026-10-08 | #162 commented. Seat pass 2 (Wolf): channel yes; carry better but still reads as suction and a slide, parked as #181. Tasks 8-9 done, Status review |
+| 2026-10-09/10 | Review run 2 patch pass (two sessions, `c203ea6..c75def6`, local): `f8a0060` wire exit 2 on a lost connection; `e3bac69` lockstep wall-in check and `drop_cell` filter order (56-run outcome identical, max tick 18.5 -> 8.5 ms, 0/32 runs over 10 ms); `a0633aa` never drop under any dwarf (48 -> 0 landings; campfire jam filed **#189** and pinned, Wolf); `c75def6` sweep pins every still dwarf and marks left per run (14 runs). **#187 (a)(b)(c) built, ablated on 56 runs, DROPPED by ruling** (no gain, (c) 20x p99); the ablation and the fourth loop shape posted on #187, which stays open. 6 of 7 patches closed, the HIGH closed by ruling. Rows 23, 24, 27, 29-32 KILLED (32 re-mutated for its marks-left pin), 12-1 x2 and 3-3 x1 re-pointed KILLED, 12-1 `retry drop` SURVIVES (pre-existing). Full gate not yet run at this row. Status in-progress |
 | 2026-10-09 | Review run 1 patch pass (fresh session, Wolf ruled #182 option 1 let-go and #183 option 1): `6dbdafe` `0f8a5b2` `f5cfd32` `48ac6b0` `c9311f1` `0b8322d` `aa94a5d`. 6 of 7 patches closed; record corrections waits on the PR-body disclosure. Rows 22-28 KILLED (27 via its own corridor test). Sweep: 0 landings, 32/32 runs worked, 5 one-level islands frozen as #186; chain livelock filed #185. Live wire GREEN on `aa94a5d` (0 shared, 0 stone entries, 0 landings), deliberate RED row 25 = 6 landings. Full gate green on `aa94a5d` (3,654 s). Seat items still open, Status in-progress |

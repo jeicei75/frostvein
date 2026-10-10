@@ -2618,6 +2618,12 @@ development_status:
   #     the hauler, tick cost max 25 ms, sweep pin blind), 3 LOW; #188 campfire channelled (deferred). Wolf ruled #187
   #     option 1 (fix all 3 shapes), let-go option 2 (never drop under any dwarf). 7 patches LEFT AS ACTION ITEMS for
   #     a fresh /bmad-review-patch; HIGH found -> run 3 authorised after. 7 defer. -> in-progress.
+  #   2026-10-09/10 run-2 patch pass LANDED (local, unpushed, c203ea6..c75def6): f8a0060 e3bac69 a0633aa c75def6.
+  #     #187 (a)(b)(c) built, ablated on 56 runs and DROPPED by Wolf's ruling (no gain); #187 stays open with the
+  #     table posted. Let-go never under any dwarf (48 -> 0 landings); campfire jam filed #189 and pinned (Wolf).
+  #     Tick cost max 18.5 -> 8.5 ms, 0/32 runs over 10 ms. Sweep pins marks left (14 runs). 6/7 patches closed,
+  #     the HIGH by ruling. Rows 29-32 + re-pointed KILLED (12-1 retry drop SURVIVES, pre-existing). Full gate
+  #     pending; round-3 review offered after it. Seat items unchanged. -> in-progress.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
