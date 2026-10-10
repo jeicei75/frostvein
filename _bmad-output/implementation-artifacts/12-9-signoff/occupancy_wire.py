@@ -19,8 +19,9 @@ On every distinct tick it groups the dwarf entities by `pos` and counts:
     carried in the previous delta, and now lies on a tile a dwarf stands on. A stone ENTRY is a
     dwarf moving onto an item; this is the other direction, an item placed onto a dwarf.
 Every delta must carry exactly five dwarves, every tick after the first must be read (a gap can
-hide a shared tick), every delta must parse, and the connection must hold, or the run proves
-nothing and says so (exit 2).
+hide a shared tick), every delta must parse, and the connection must hold and reach TICKS (a
+daemon that closes cleanly or goes silent short of it is not a reading), or the run proves nothing
+and says so (exit 2).
 
 It prints the counts, the first shared tile, the first stone entry and the first landing, then one
 verdict line per rule: OCCUPANCY OK/RED and STONES OK/RED. Exit 1 if either is RED.
@@ -37,6 +38,10 @@ port = int(sys.argv[1])
 limit = int(sys.argv[2]) if len(sys.argv) > 2 else 1500
 
 
+# 12.9 review run 3: a stalled daemon must end the run, not block it until an external kill.
+LOST = (ConnectionError, TimeoutError)
+
+
 def connection_lost(err):
     # A dropped connection is no reading at all, so it must not exit 1 like a RED.
     print(f"RUN PROVES NOTHING -- connection lost ({type(err).__name__}: {err})")
@@ -46,15 +51,15 @@ def connection_lost(err):
 def lines(f):
     try:
         yield from f
-    except ConnectionError as err:
+    except LOST as err:
         connection_lost(err)
 
 
 try:
-    sock = socket.create_connection(("127.0.0.1", port))
+    sock = socket.create_connection(("127.0.0.1", port), timeout=30)
     f = sock.makefile()
-    snap = json.loads(f.readline())
-except ConnectionError as err:
+    snap = json.loads(f.readline())  # EOF here is an empty line: a ValueError, not a ConnectionError
+except LOST + (ValueError,) as err:
     connection_lost(err)
 dx, dy = snap["dims"]["x"], snap["dims"]["y"]
 tiles = snap["tiles"]
@@ -91,7 +96,7 @@ pile_cells = {
 def send(obj):
     try:
         sock.sendall((json.dumps(obj) + "\n").encode())
-    except ConnectionError as err:
+    except LOST as err:
         connection_lost(err)
 
 
@@ -173,8 +178,10 @@ print(f"dwarf moves {moves}  channel marks {peak_marks} -> {marks}  items on the
 print(f"stone entries {stone_entries}  first entry {first_entry}")
 print(f"items landed on a dwarf {landings}  first landing {first_landing}")
 print(f"tick gaps after the first delta {gaps}")
-if len(seen_ticks) < limit // 2 or bad_counts or gaps:
-    print("RUN PROVES NOTHING -- too few ticks read, a tick gap, or a delta without five dwarves")
+# 12.9 review run 3: a clean EOF ends the loop below `limit`, so require the limit tick itself.
+if not seen_ticks or max(seen_ticks) < limit or len(seen_ticks) < limit // 2 or bad_counts or gaps:
+    print("RUN PROVES NOTHING -- stopped short of the last tick, too few ticks read, a tick gap, or a "
+          "delta without five dwarves")
     sys.exit(2)
 if moves < 200 or marks >= peak_marks or on_pile == 0:
     print("CREW DID NOT WORK -- a frozen crew shares no tile; this is not a green")
