@@ -2587,3 +2587,29 @@ Diff `2a10797..02e313c`, the run-1 patch pass. Four layers, none timed out.
   acceptance, LOW, read; `lib.rs:1160-1191`). The "nowhere" fallback fired 0 times in 60 probe runs.
 - **A channel mark on the campfire tile now completes** (feature, LOW, RAN): stone on the camp tile, `Ramp(Snow)` under the
   fire (seed 0, 6x10). AC13 round-1 code. **Issue #188** holds the state.
+
+## Deferred from: code review of 12-9-one-dwarf-per-tile, run 3 (2026-10-10)
+
+Diff `c203ea6..c75def6`, the run-2 patch pass. Round 3 found no HIGH, so it ends the audit; the next spend is the seat.
+
+- **Equal-sized split pockets cage two dwarves** (blind, MED, RAN; `lib.rs:851` `piece.len() < largest`, and the drop
+  search at `:1191`). 5-cell corridor, carrier at c0 and a dwarf at c4: the stone drops at c2, a 2|2 split that neither
+  side calls a wall-in; a 3-cell corridor gives 1|1. The rule is the run-2 deferral (old and new flood agree on 120,075
+  fuzz inputs); new only in that the nearest-tile search reaches such a tile deliberately. Unobserved in 88 real runs.
+- **The remaining fast4x breach is one `astar_with_budget` call inside `execute_jobs`** (feature, MED, RAN; pre-existing).
+  HEAD: 12 of 32 sweep runs over 5 ms, max 8.99-9.20 ms; max A* call 8.9-9.1 ms vs max wall-in call 0.19 ms; old side A*
+  8.56-8.91 ms. Under load 8 runs crossed 10 ms (max 11.3). The run-1 tick-cost deferral with its cause named; posted on #179.
+- **The `release_claim` drop search has no node cap** (blind, LOW; `lib.rs:1191-1206`). The run-2 deferral, revisited as it
+  asked: drops land at most 2 tiles from the carrier over 35 sweep and 12,103 command let-gos; the own-tile fallback fired 0
+  times. No observed cost.
+- **The sweep's marks pin is keyed by (seed, width, count)** (edge, LOW, read; `scenario.rs:2934`). A #187 loop swapped for a
+  #182 mode-ii mark at the same count stays green. Any count change is loud.
+- **The frozen pin reads "ever still 500 ticks", not "still at the end", and cannot tell caged from idle** (edge, LOW, read;
+  `scenario.rs:3056`). Per-dwarf keying is correct; only the #186 comment separates the two.
+- **Load never checks for an item under a dwarf** (feature, LOW, read; `lib.rs:2160`). A save from the pushed tip `34b6783`,
+  whose channel stones landed under dwarves, loads with the stone in place, invisible to the wire's first delta. Explicit Load
+  only; matches the run-2 saved-path ruling.
+- **The let-go can set the carrier's own stone on its last same-level exit and strand it** (feature, MED, RAN; `lib.rs:1183-1212`).
+  Seed 16/4 dwarf 0: let-go at t932 lands east, foliage west, a pile stone north, nothing standable south; still for 3,069
+  ticks. 6 of 12,103 forced let-gos on `c75def6`, 0 of 6,594 on `c203ea6`. **Ruled 2026-10-10 (Wolf): fold into #186 and
+  defer**; the measurement is posted there and the sweep pins (16,4,0).

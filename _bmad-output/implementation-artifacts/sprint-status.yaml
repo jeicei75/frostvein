@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-09
+last_updated: 2026-10-10
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2624,6 +2624,10 @@ development_status:
   #     Tick cost max 18.5 -> 8.5 ms, 0/32 runs over 10 ms. Sweep pins marks left (14 runs). 6/7 patches closed,
   #     the HIGH by ruling. Rows 29-32 + re-pointed KILLED (12-1 retry drop SURVIVES, pre-existing). Full gate
   #     GREEN on c75def6 (3599 s). Round-3 review offered (HIGH in run 2). Seat items unchanged. -> in-progress.
+  #   2026-10-10 code review run 3 on c203ea6..c75def6 (4 layers, none timed out): 0 HIGH, 4 MED, 9 LOW; no REWORK, every
+  #     run-2 closure row HOLDS (RED on old). 1 decision (let-go self-island, 6/12,103 forced let-gos) RULED: fold into #186,
+  #     defer. 6 patches LEFT AS ACTION ITEMS (3 wire-instrument exits: clean EOF reads green, no timeout, snapshot EOF
+  #     traceback; 3 LOW record/comment). 7 defer. Stopping rule: no HIGH -> audit ENDS, next spend is the seat. -> in-progress.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog

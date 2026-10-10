@@ -703,6 +703,111 @@ Not proven live (unchanged from run 2, no gate here touches them): AC13 facing a
 how a sidestep, a let-go and a #187 loop look, a stone on the campfire (#188). The seat builds from the PUSHED tip, and nothing
 from this pass is pushed.
 
+#### Review run 3 (2026-10-10, diff `c203ea6..c75def6`, the run-2 patch pass)
+
+This run used a fresh session. Diff: 6 files, +204/−123 (code: `lib.rs` 163 and `scenario.rs` 89 lines changed; the wire
+instrument and three mutation tables). Four layers ran and none timed out. Each ran cargo 1.97.1 in its own
+`/tmp/review-<layer>` target dir with `CARGO_BUILD_JOBS=6`, and tested the old side from a `git archive` export of `c203ea6`.
+- Blind Hunter (Sonnet) took `lib.rs`.
+- Edge Case Hunter (Sonnet) took `scenario.rs`, `occupancy_wire.py` and the mutation tables.
+- The Acceptance and Feature Auditors (Opus) took the whole diff and audited the run-2 closure table.
+
+**Delta against run 2:**
+- **NEW:** 17 findings, 4 dismissed, 13 survive: 1 decision (ruled: defer to #186), 6 patches, 7 deferred. Severity: 0 HIGH, 4 MED, 9 LOW. Of the
+  13, 8 are new in this diff (2 MED: the let-go self-island, the wire's clean-EOF green) and 5 are pre-existing.
+- **REWORK:** none. Every code-checkable closure row HOLDS (acceptance, RAN): `a0633aa`'s renamed unit test, the campfire pin
+  and the sweep are RED on `c203ea6` with only the test hunks applied (32 landings, 6 frozen incl. (12,6,0), 15 unfinished vs
+  14 pinned) and green on HEAD; `e3bac69` gives per-run outcome lines identical to `c203ea6` on all 32 sweep runs (acceptance
+  and feature, independently); #187 (a)(b)(c) are absent from `lib.rs`. The tick-cost table and the 56-run figures are scratch
+  claims and were not re-run; the feature auditor's own 32-run probe reproduces them (landings 32 -> 0, stills 3, marks 14/32,
+  wall-in time 375.7 -> 4.7 ms, max tick 18.4 -> 9.0-9.2 ms on a machine shared with three layers). `f8a0060` holds for the
+  reset it was written for; the edge hunter's fake daemon found the two ADJACENT exits it does not cover (EOF, hang), below.
+- **Stopping rule:** no HIGH among the new findings, so **this round ends the audit**. The next spend is the live gate: push
+  and the seat pass (AC13, AC14, the back-off feel, a let-go beside its hauler, the #189 jam, a #187 loop).
+
+| Layer | Findings | Severity (layer's own) | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 2 | 1 MED, 1 LOW | lib suite (80 pass); differential fuzz of the lockstep flood vs the old `piece_of` flood, 120,000 random + 75 over-cap cases, 0 disagreements; corridor `release_claim` probes |
+| Edge Case Hunter | 7 (1 no-defect) | 2 MED, 4 LOW | the sweep (66.5 s); 9 fake-daemon cases; live wire 1,500 ticks (OK/OK, landed 0); every payload of 12-9, 12-1, 3-3 applied in a copy; row 32 re-mutated with the frozen assert stubbed (RED on marks-left) |
+| Acceptance Auditor | 3 (+9 positive) | 3 LOW | full sim-core suite, fmt, clippy; old side with test hunks only; `e3bac69` export; rows 29, 31 in a copy; live wire 1,500 ticks |
+| Feature Auditor | 5 (+2 positive) | 3 MED, 2 LOW | instrumented 32-run probe x3 on HEAD, x3 on `c203ea6`, x1 on `e3bac69`; 12,103 command let-gos; campfire and island probes; live wire 3,000 ticks on HEAD and on `c203ea6` |
+
+Convergences: the campfire jam (#189) and the wire recipe's blindness to a let-go: acceptance + feature; the row-31 mechanism:
+acceptance alone, against the record. Nothing converged across hunters; the blind hunter's two findings were run-2 deferrals.
+
+Not proven live (unchanged): AC13 facing and the AC14 lift/set-down, the back-off feel, how a let-go, a sidestep, a #187 loop
+and the #189 jam look, a stone on the campfire (#188). The live wire is GREEN on the default recipe on both `c203ea6` and HEAD,
+so it cannot tell the let-go patch from the old code; the sweep and the probes carry that evidence.
+
+Review cost: $26.89 over 301 turns; the 4 subagents were 76.1% of tokens (blind 84.6k / 4.1 min, edge 85.9k / 4.8 min,
+acceptance 140.6k / 19.4 min, feature 168.4k / 13.4 min). The run reaped 21.1 GB of `/tmp` caches (13.7 GB reclaimed).
+
+- [x] [Review][Defer] **MED: the let-go can set the carrier's own stone on its last same-level exit, and the dwarf then
+  stands still until a job routes it out (a new #186 instance, caused by `a0633aa`)** (feature)
+  [crates/sim-core/src/lib.rs:1183-1212] — Seed 16/4, dwarf 0 at (95,69,16) lets go of item 19 at t932; the stone lands on
+  its east neighbour (96,69). West is foliage, north a stored pile stone (item 18, delivered by dwarf 2 at t895), south not
+  standable. Still from t931 to t4000. `walls_in_a_dwarf` passes it (A* reaches it over a ramp); `wander` is same-z only. On
+  `c203ea6` the stone went under the dwarf and the run had no still dwarf. 6 of 12,103 command let-gos on HEAD leave the
+  carrier with no free same-level neighbour, 0 of 6,594 on the old code. The sweep keeps it green by pinning (16,4,0) in
+  `ONE_LEVEL_ISLANDS` as "two loose stones": one is its own let-go, the other a pile stone. Options: (1) fold into #186
+  (posted there) and defer; (2) patch in 12.9: the let-go also refuses a tile that leaves the carrier with no free same-level
+  neighbour (a `side_neighbours` check on the carrier's tile, cheap; the ruled fallback stays); (3) patch (2) for every dwarf
+  beside the drop, not only the carrier.
+  **RULED 2026-10-10 (Wolf): option 1, fold into #186 and defer** — the measurement is posted there, the sweep pins
+  (16,4,0), and 12.9 does not touch the let-go again; 6 of 12,103 forced let-gos, none in the sweep's own 35.
+- [ ] [Review][Patch] **MED (silent-failure exception): `occupancy_wire.py` exits 0 and prints OCCUPANCY OK / STONES OK when
+  the daemon closes cleanly after half the ticks** (edge) [12-9-signoff/occupancy_wire.py:167-176] — A clean EOF after 800 of
+  1,500 ticks (fake daemon) ends the loop below `limit`; the only guard is `len(seen_ticks) < limit // 2`, so 750-1,499 ticks
+  read as a green. Fix: after the loop, exit 2 unless `max(seen_ticks) >= limit`. A healthy run reaches the limit tick (1,479
+  ticks read of 1,500 means it started at ~21, not that it stopped short).
+- [ ] [Review][Patch] **MED (silent-failure exception): no socket timeout, so a stalled daemon leaves the instrument with no
+  exit at all** (edge; pre-existing) [12-9-signoff/occupancy_wire.py:54] — A fake that went silent after tick 800 blocked the
+  script until an external `timeout` killed it (exit 124). Fix: `create_connection(..., timeout=30)` and catch `TimeoutError`
+  beside `ConnectionError` in `lines`, `send` and the snapshot read.
+- [ ] [Review][Patch] **LOW: EOF before the snapshot gives a `JSONDecodeError` traceback and exit 1, which reads as RED** (edge)
+  [12-9-signoff/occupancy_wire.py:56] — `json.loads("")` is a `ValueError`, not a `ConnectionError`. Fix: catch `ValueError`
+  there too, as connection lost (exit 2).
+- [ ] [Review][Patch] **LOW (record): row 31's "dies on" mechanism is wrong** (acceptance) [12-9-one-dwarf-per-tile.md, the
+  row-31 line of the run-2 mutation table] — With floods never merging, the sweep is KILLED on the frozen pin with `left: []`
+  against the three pinned islands: nobody freezes, the islands VANISH. "Every refusal freezes someone" is not what happens.
+  Verdict holds, the text does not.
+- [ ] [Review][Patch] **LOW: a stale comment in the campfire test contradicts the pin 20 lines below it** (acceptance)
+  [crates/sim-core/tests/scenario.rs:96-98] — "24 of 24 cells full by t~2,250 … no further pick-up" is the pre-#189 reading;
+  the pin now says 23/24 and 80 pick-ups. Strike the old sentence.
+- [ ] [Review][Patch] **LOW (record): the "Pending PR-body disclosure" list does not enumerate run-2's own re-pins**
+  (acceptance) [12-9-one-dwarf-per-tile.md:454] — Its last bullet points at the commit bodies. List them: the rename to
+  `..._beside_the_dwarf`, the campfire pin 0 -> 80 pick-ups and 24 -> 23 cells, islands 5 -> 3 (three gone, (16,4,0) new),
+  rows 23, 24, 27, 29-32 and the re-pointed 12-1 x3 / 3-3 x1.
+- [x] [Review][Defer] **MED: equal-sized split pockets cage two dwarves; `walls_in_a_dwarf` lets it through and the drop
+  search now reaches such a tile deliberately** (blind) [crates/sim-core/src/lib.rs:851, 1191] — 5-cell corridor, carrier at
+  c0 and a dwarf at c4: the stone drops at c2, a 2|2 split, neither piece `< largest`, both caged; a 3-cell corridor gives 1|1.
+  Old and new flood agree on all 120,075 fuzz inputs, so the rule is pre-existing (run-2 deferral); new only in that the
+  nearest-tile search picks the tile instead of falling back to the carrier's own. Unobserved in 88 real runs — deferred,
+  pre-existing, unobserved in play; now has a synthetic reproduction
+- [x] [Review][Defer] **MED: the fast4x breach that remains is one `astar_with_budget` call inside `execute_jobs`, not the
+  wall-in check** (feature; pre-existing) [crates/sim-core/src/lib.rs, `execute_jobs`] — HEAD: 12 of 32 runs have a tick over
+  5 ms, max 8.99-9.20 ms; max A* call 8.9-9.1 ms, max wall-in call 0.19 ms; old side A* 8.56-8.91 ms. Under load (a debug
+  sweep compiling beside it) 8 runs crossed 10 ms (max 11.3). Posted on #179 — deferred, pre-existing; the run-1 tick-cost
+  deferral with its cause named
+- [x] [Review][Defer] The `release_claim` drop search has no node cap (blind; the run-2 deferral, revisited as it asked)
+  [crates/sim-core/src/lib.rs:1191-1206] — measured this round: let-go drops land at most 2 tiles from the carrier over 35
+  sweep let-gos and 12,103 command let-gos, and the own-tile fallback fired 0 times — deferred, no observed cost
+- [x] [Review][Defer] The sweep's marks pin is keyed by (seed, width, count): a #187 loop swapped for a #182 mode-ii mark at
+  the same count stays green (edge) [crates/sim-core/tests/scenario.rs:2934] — deferred, reading only, any count change is
+  loud
+- [x] [Review][Defer] The frozen pin reads "ever still 500 ticks", not "still at the end", and cannot tell caged from idle
+  (edge) [crates/sim-core/tests/scenario.rs:3056] — deferred, per-dwarf keying is correct and the #186 comment separates them
+- [x] [Review][Defer] Load never checks for an item under a dwarf, so a save from the pushed tip `34b6783` (whose channel
+  stones landed under dwarves) loads with the stone in place, invisible to the wire's first delta (feature; pre-existing)
+  [crates/sim-core/src/lib.rs:2160] — deferred, explicit Load only, matches the run-2 saved-path ruling
+
+Dismissed (4):
+- The sweep's "crew worked" vacuity guard is weak: the run-2 deferral, unchanged.
+- The landing check's `carriers_before` exemption is gone and nothing else exempts the carrier: no defect, confirmed.
+- The campfire layout jams visibly (80 pick-ups after t2500 vs 0 on `c203ea6`): #189, filed and pinned by ruling. The "every
+  ~6 ticks" comment was measured true by the acceptance auditor (let-go and pick-up alternate ~6 ticks apart).
+- The wire's default recipe cannot tell `a0633aa` from `c203ea6` (0 landings on both): recorded in run 2.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
