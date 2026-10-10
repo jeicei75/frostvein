@@ -94,8 +94,7 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         world.step();
         let carrying = world.carrying();
         // 12.9 Task 10 (#162) re-pin 2,000 -> 2,500: items block and a pile fills deepest-first, so
-        // the hauls take longer. Measured: 24 of 24 cells full by t~2,250 (was by t=2,000); it
-        // then stays full with no further pick-up. Cause is the intended rule, not a defect.
+        // the hauls take longer. The pin below says what happens after t=2,500.
         if tick >= 2_500 {
             pickups_after_full += previous
                 .iter()
