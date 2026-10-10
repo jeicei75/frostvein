@@ -763,29 +763,41 @@ acceptance 140.6k / 19.4 min, feature 168.4k / 13.4 min). The run reaped 21.1 GB
   beside the drop, not only the carrier.
   **RULED 2026-10-10 (Wolf): option 1, fold into #186 and defer** — the measurement is posted there, the sweep pins
   (16,4,0), and 12.9 does not touch the let-go again; 6 of 12,103 forced let-gos, none in the sweep's own 35.
-- [ ] [Review][Patch] **MED (silent-failure exception): `occupancy_wire.py` exits 0 and prints OCCUPANCY OK / STONES OK when
+- [x] [Review][Patch] **MED (silent-failure exception): `occupancy_wire.py` exits 0 and prints OCCUPANCY OK / STONES OK when
   the daemon closes cleanly after half the ticks** (edge) [12-9-signoff/occupancy_wire.py:167-176] — A clean EOF after 800 of
   1,500 ticks (fake daemon) ends the loop below `limit`; the only guard is `len(seen_ticks) < limit // 2`, so 750-1,499 ticks
   read as a green. Fix: after the loop, exit 2 unless `max(seen_ticks) >= limit`. A healthy run reaches the limit tick (1,479
   ticks read of 1,500 means it started at ~21, not that it stopped short).
-- [ ] [Review][Patch] **MED (silent-failure exception): no socket timeout, so a stalled daemon leaves the instrument with no
+  **Landed `3b6f0ca`.** The post-loop guard requires `max(seen_ticks) >= limit`. Both sides: a fake daemon (scratch) that
+  closes cleanly after tick 800 gives exit 0 with OCCUPANCY OK / STONES OK on `c75def6`'s script and exit 2 on this one; a
+  fake that streams to 1,500 still exits 0; the live recipe on a fresh release `simd` reads 1,479 ticks and exits 0.
+- [x] [Review][Patch] **MED (silent-failure exception): no socket timeout, so a stalled daemon leaves the instrument with no
   exit at all** (edge; pre-existing) [12-9-signoff/occupancy_wire.py:54] — A fake that went silent after tick 800 blocked the
   script until an external `timeout` killed it (exit 124). Fix: `create_connection(..., timeout=30)` and catch `TimeoutError`
   beside `ConnectionError` in `lines`, `send` and the snapshot read.
-- [ ] [Review][Patch] **LOW: EOF before the snapshot gives a `JSONDecodeError` traceback and exit 1, which reads as RED** (edge)
+  **Landed `3b6f0ca`.** `create_connection(..., timeout=30)`; `LOST = (ConnectionError, TimeoutError)` is caught at all
+  three sites. Both sides: the fake daemon silent after tick 800 holds the old script until `timeout 45` kills it (exit 124);
+  this one prints `connection lost (TimeoutError)` and exits 2 after 30 s.
+- [x] [Review][Patch] **LOW: EOF before the snapshot gives a `JSONDecodeError` traceback and exit 1, which reads as RED** (edge)
   [12-9-signoff/occupancy_wire.py:56] — `json.loads("")` is a `ValueError`, not a `ConnectionError`. Fix: catch `ValueError`
   there too, as connection lost (exit 2).
-- [ ] [Review][Patch] **LOW (record): row 31's "dies on" mechanism is wrong** (acceptance) [12-9-one-dwarf-per-tile.md, the
+  **Landed `3b6f0ca`.** Both sides: the fake daemon that closes before the snapshot gives a `JSONDecodeError` traceback and
+  exit 1 on the old script, `connection lost (JSONDecodeError)` and exit 2 on this one.
+- [x] [Review][Patch] **LOW (record): row 31's "dies on" mechanism is wrong** (acceptance) [12-9-one-dwarf-per-tile.md, the
   row-31 line of the run-2 mutation table] — With floods never merging, the sweep is KILLED on the frozen pin with `left: []`
   against the three pinned islands: nobody freezes, the islands VANISH. "Every refusal freezes someone" is not what happens.
   Verdict holds, the text does not.
-- [ ] [Review][Patch] **LOW: a stale comment in the campfire test contradicts the pin 20 lines below it** (acceptance)
+  **Corrected `8fe4b46`:** the row-31 "dies on" cell now says nobody freezes and the pinned islands vanish (`left: []`).
+- [x] [Review][Patch] **LOW: a stale comment in the campfire test contradicts the pin 20 lines below it** (acceptance)
   [crates/sim-core/tests/scenario.rs:96-98] — "24 of 24 cells full by t~2,250 … no further pick-up" is the pre-#189 reading;
   the pin now says 23/24 and 80 pick-ups. Strike the old sentence.
-- [ ] [Review][Patch] **LOW (record): the "Pending PR-body disclosure" list does not enumerate run-2's own re-pins**
+  **Landed `ac66787`.** Comment only; the sentence is struck and the comment points at the pin below.
+- [x] [Review][Patch] **LOW (record): the "Pending PR-body disclosure" list does not enumerate run-2's own re-pins**
   (acceptance) [12-9-one-dwarf-per-tile.md:454] — Its last bullet points at the commit bodies. List them: the rename to
   `..._beside_the_dwarf`, the campfire pin 0 -> 80 pick-ups and 24 -> 23 cells, islands 5 -> 3 (three gone, (16,4,0) new),
   rows 23, 24, 27, 29-32 and the re-pointed 12-1 x3 / 3-3 x1.
+  **Listed `8fe4b46`:** the "Pending PR-body disclosure" list enumerates them per commit (`a0633aa`, `e3bac69`, `c75def6`),
+  checked against the commit bodies.
 - [x] [Review][Defer] **MED: equal-sized split pockets cage two dwarves; `walls_in_a_dwarf` lets it through and the drop
   search now reaches such a tile deliberately** (blind) [crates/sim-core/src/lib.rs:851, 1191] — 5-cell corridor, carrier at
   c0 and a dwarf at c4: the stone drops at c2, a 2|2 split, neither piece `< largest`, both caged; a 3-cell corridor gives 1|1.
@@ -815,6 +827,19 @@ Dismissed (4):
 - The campfire layout jams visibly (80 pick-ups after t2500 vs 0 on `c203ea6`): #189, filed and pinned by ruling. The "every
   ~6 ticks" comment was measured true by the acceptance auditor (let-go and pick-up alternate ~6 ticks apart).
 - The wire's default recipe cannot tell `a0633aa` from `c203ea6` (0 landings on both): recorded in run 2.
+
+**Run-3 patch pass closure table** (2026-10-10, fresh session). Diff `a7c0865..8fe4b46`, 3 commits, all LOCAL and unpushed.
+No Rust behaviour changed (one comment), so there are no new mutation rows; the fake daemon is the instrument's mutation: four
+cases, each shown RED (wrong exit) on `c75def6`'s script and right on `3b6f0ca`.
+
+| Item | Side written for | Side tested | Pre-existing-state fixture | Rework |
+| --- | --- | --- | --- | --- |
+| wire short run (MED, `3b6f0ca`) | the post-loop guard | OLD and NEW: fake daemon, clean EOF after tick 800 of 1,500: old exit 0 + OCCUPANCY OK, new exit 2; NEW happy path: fake to 1,500 exit 0, live release `simd` 1,479 ticks exit 0 | fake daemon `fake_simd.py eof 800` (scratch, not committed) | no |
+| wire stall (MED, `3b6f0ca`) | the socket timeout | OLD and NEW: fake daemon silent after tick 800, socket open: old exit 124 under `timeout 45`, new `TimeoutError` exit 2 at 30 s | `fake_simd.py hang 800` | no |
+| wire empty snapshot (LOW, `3b6f0ca`) | the snapshot read's except | OLD and NEW: fake daemon closing before the snapshot: old `JSONDecodeError` traceback exit 1, new exit 2 | `fake_simd.py empty` | no |
+| row-31 mechanism (LOW, `8fe4b46`) | record | n/a | the run-2 mutation table | no |
+| campfire comment (LOW, `ac66787`) | record (a comment) | n/a: fmt, clippy, the campfire test unchanged | the #189 pin 20 lines below | no |
+| run-2 re-pin disclosure (LOW, `8fe4b46`) | record | n/a: checked against the `a0633aa`, `e3bac69`, `c75def6` commit bodies | the "Pending PR-body disclosure" list | no |
 
 ## Dev Notes
 
@@ -1242,6 +1267,7 @@ a scratch worktree with that tree's `mutate.sh`:
 
 | Date | Change |
 | --- | --- |
+| 2026-10-10 | Review run 3 patch pass (fresh session, `a7c0865..8fe4b46`, local, unpushed): `3b6f0ca` wire exit 2 on a short run (`max(seen_ticks) >= limit`), a 30 s socket timeout and an empty snapshot (four fake-daemon cases, old script wrong on three, live recipe green); `ac66787` campfire comment struck; `8fe4b46` row 31 mechanism and the run-2 re-pin list. 6 of 6 patches closed, closure table written, no new mutation rows (no Rust behaviour changed). Full gate GREEN on `8fe4b46` (`RUST_TEST_THREADS=1`, 3,508 s, pixel guards 3,077 s). The audit ended at run 3; next is push + the seat pass. Status in-progress |
 | 2026-10-08 | Story created on `26185a0`. #133 reproduced: sim probe (494/3,000 idle ticks shared on `DEFAULT_SEED`, 332 busy) and live wire (`occupancy_wire.py`, 186 shared ticks, `OCCUPANCY RED`). The per-step head-on rule was traced to a livelock, and the escape rule replaces it. `Path` joins `SaveState`. Task 0 (Q1–Q4) is open |
 | 2026-10-08 | **Task 0 ruled (Wolf).** Q1 (b): no swap; the idle dwarf gets an exit `Path` and the miner backs out (AC5 and Task 3.1 amended, mutation row 10 added). Q2: refuse pre-12.9 saves ("old saves are not important"). Q3 (b): **#162 folded in**. Every uncarried item blocks, on pile cells too ("taken pile cells should be impassable"), confirmed over the rec to split it into its own story. Pick-up and drop from the next tile, pile fills inside out: AC10–AC12, Task 10, rows 11–14, instrument `stone entries`. Q4 (a): seat look. Dev mode: Sonnet 5.5 subagents |
 | 2026-10-08 | Tasks 1-3 (Agent A): RED fixtures AC1-AC5, occupancy in `execute_jobs`/`settle`/`wander`, blocked step with escape/yield, idle exit path, no swap. One re-pin (`save_load` guard 600 -> 1,000) |

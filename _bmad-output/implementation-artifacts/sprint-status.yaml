@@ -2628,6 +2628,10 @@ development_status:
   #     run-2 closure row HOLDS (RED on old). 1 decision (let-go self-island, 6/12,103 forced let-gos) RULED: fold into #186,
   #     defer. 6 patches LEFT AS ACTION ITEMS (3 wire-instrument exits: clean EOF reads green, no timeout, snapshot EOF
   #     traceback; 3 LOW record/comment). 7 defer. Stopping rule: no HIGH -> audit ENDS, next spend is the seat. -> in-progress.
+  #   2026-10-10 run-3 patch pass LANDED (local, unpushed): 3b6f0ca (wire: short run, 30 s timeout, empty snapshot ->
+  #     exit 2; four fake-daemon cases both sides, live recipe green) ac66787 (comment) 8fe4b46 (row 31 text, run-2 re-pin
+  #     list). 6/6 closed, no new mutation rows. Full gate GREEN 8fe4b46 3508 s. Audit ended at run 3; next: push +
+  #     seat pass (AC13, AC14 lift, back-off feel, let-go beside its hauler, #189 jam, #187 loop). -> in-progress.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
