@@ -2623,7 +2623,7 @@ development_status:
   #     table posted. Let-go never under any dwarf (48 -> 0 landings); campfire jam filed #189 and pinned (Wolf).
   #     Tick cost max 18.5 -> 8.5 ms, 0/32 runs over 10 ms. Sweep pins marks left (14 runs). 6/7 patches closed,
   #     the HIGH by ruling. Rows 29-32 + re-pointed KILLED (12-1 retry drop SURVIVES, pre-existing). Full gate
-  #     pending; round-3 review offered after it. Seat items unchanged. -> in-progress.
+  #     GREEN on c75def6 (3599 s). Round-3 review offered (HIGH in run 2). Seat items unchanged. -> in-progress.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
