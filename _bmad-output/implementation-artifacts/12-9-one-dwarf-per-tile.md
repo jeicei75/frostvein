@@ -451,7 +451,15 @@ Three issues filed at discovery: **#182** (D1), **#183** (P1), **#184** (P2).
     - the six old-rule tests.
   - `d93f32d`: the two channel unit-test targets and the `headless.rs` step label.
   - `0fccc74`: as named in `48ac6b0`.
-  - The run-2 patch pass's own re-pins, which are disclosed in their commit bodies.
+  - The run-2 patch pass's own re-pins (enumerated by run 3's LOW; the commit bodies carry the detail):
+    - `a0633aa`: `release_claim_drops_the_carried_stone_at_the_dwarfs_tile` renamed `..._beside_the_dwarf` (asserts a
+      same-level neighbour, not the dwarf's tile); the campfire pin 0 -> 80 pick-ups after t=2500 and 24 -> 23 of 24
+      cells (the #189 jam); one-level islands 5 -> 3: (6,6,0), (12,6,4), (13,6,2) gone, (16,4,0) new (#186);
+      rows 29, 30 added, row 27 and 12-1 x3 (`retry drop stacks a full stockpile`, `release drop stacks an occupied
+      stockpile`, `drop search walks through rock`) and 3-3 x1 (`release_claim does not drop the carried stone`)
+      re-pointed at the new `release_claim`;
+    - `e3bac69`: rows 23, 24 re-pointed at the lockstep flood, row 31 added;
+    - `c75def6`: the sweep pins every still dwarf and the marks left per run (14 runs), row 32 added.
 - [x] [Review][Defer] AC10 can break within one tick: a hauler lifts a stone in `execute_jobs` and `wander` moves an idle
   dwarf onto that cell in the same tick (seed 5, t834). The gui draws it walking into the stone (feature)
   [crates/sim-core/src/lib.rs:1664] — deferred, 1/28 runs, cosmetic
@@ -692,7 +700,7 @@ four re-pointed rows in the second):
 | 27 the abnormal drop ignores dwarves (re-pointed) | `release_claim_never_drops_where_the_stone_walls_a_dwarf_in` | KILLED | |
 | 29 a let-go drops under its carrier | `release_claim_drops_the_carried_stone_beside_the_dwarf` | KILLED | |
 | 30 the sweep exempts a drop under its carrier | sweep | KILLED | |
-| 31 wall-in floods never merge | sweep | KILLED | the frozen-dwarf pin (every refusal freezes someone), 381 s |
+| 31 wall-in floods never merge | sweep | KILLED | the frozen-dwarf pin with `left: []` against the three pinned islands: with floods never merging nobody freezes, the islands VANISH (run 3 corrected the mechanism; the verdict holds), 381 s |
 | 32 a channel completion is refused forever | sweep | KILLED | the frozen-dwarf pin, NOT the marks-left pin it was written for: a miner refused forever stands still ≥500 ticks. Re-mutated in a scratch worktree at `c75def6` with the frozen assert stubbed: the test dies on the marks-left pin (`scenario.rs:3064`, 14 pinned runs vs the sabotaged set), so the pin kills on its own |
 | 12-1 retry drop stacks a full stockpile (re-pointed) | `a_full_stockpile_never_stacks_uncarried_stones` | SURVIVED | pre-existing: already dead on `26185a0`, deferred in run 1, dismissed in run 2 |
 | 12-1 release drop stacks an occupied stockpile (re-pointed) | `release_claim_avoids_an_occupied_stockpile_cell` | KILLED | |
