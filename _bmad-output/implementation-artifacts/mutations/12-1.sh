@@ -11,9 +11,15 @@ PY
 mutation "old save haul goals include emitters" sim-core an_old_save_zone_on_an_emitter_is_no_haul_goal <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))\n'
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if terrain.is_standable(cell)\n            && side_neighbours(cell)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                .filter(|pos| terrain.is_standable(*pos) && !stored.contains(pos))\n'))
+s = s.replace(old, new)
+old, new = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n', '            if zones.contains(&n) && terrain.is_standable(n) && !depth.contains_key(&n) {\n'
+assert s.count(old) == 1
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "daemon discards stockpile refusal" simd the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells <<'PY'
@@ -43,17 +49,21 @@ PY
 mutation "retry drop stacks a full stockpile" sim-core a_full_stockpile_never_stacks_uncarried_stones <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            let drop_pos = if occupied.contains(&pos) {\n'
+# Re-pointed 2026-10-09 (12.9 review run 2, never under any dwarf): the search now always runs (the carrier's own
+# tile is refused), so the sabotage skips its answer and drops on the carrier's own tile again.
+old = '            let drop_pos = nearest.unwrap_or(pos);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let drop_pos = if false {\n'))
+p.write_text(s.replace(old, '            let drop_pos = pos;\n'))
 PY
 
 mutation "release drop stacks an occupied stockpile" sim-core release_claim_avoids_an_occupied_stockpile_cell <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            let drop_pos = if occupied.contains(&pos) {\n'
+# Re-pointed 2026-10-09 (12.9 review run 2, never under any dwarf): the search now always runs (the carrier's own
+# tile is refused), so the sabotage skips its answer and drops on the carrier's own tile again.
+old = '            let drop_pos = nearest.unwrap_or(pos);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let drop_pos = if false {\n'))
+p.write_text(s.replace(old, '            let drop_pos = pos;\n'))
 PY
 
 mutation "tui draws stored stones grey" tui a_stone_on_a_stockpile_cell_draws_in_the_stockpile_colour <<'PY'
@@ -87,19 +97,24 @@ PY
 mutation "drop search walks through rock" sim-core release_claim_drops_where_the_carrier_can_walk <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-check = '                        if !occupied.contains(&cell) {\n'
-walk = '                        for candidate in astar_neighbours(terrain, &blocked, cell) {\n'
+# Re-pointed 2026-10-09 (12.9 review run 2, never under any dwarf): the search loop is no longer
+# inside `if refused(pos)`, one indentation level out.
+check = '                    if !refused(cell) {\n'
+walk = '                    for candidate in astar_neighbours(terrain, &blocked, cell) {\n'
 assert s.count(check) == 1 and s.count(walk) == 1
-s = s.replace(check, '                        if is_walkable(terrain, &blocked, cell) && !occupied.contains(&cell) {\n')
-p.write_text(s.replace(walk, '                        for candidate in [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1)].map(|(dx, dy, dz)| Pos { x: cell.x + dx, y: cell.y + dy, z: cell.z + dz }).into_iter().filter(|candidate| terrain.tile(*candidate).is_some()) {\n'))
+s = s.replace(check, '                    if is_walkable(terrain, &blocked, cell) && !refused(cell) {\n')
+p.write_text(s.replace(walk, '                    for candidate in [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1)].map(|(dx, dy, dz)| Pos { x: cell.x + dx, y: cell.y + dy, z: cell.z + dz }).into_iter().filter(|candidate| terrain.tile(*candidate).is_some()) {\n'))
 PY
 
 mutation "campfire pile never fills" sim-core a_stockpile_around_the_campfire_never_zones_or_receives_the_fire <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))\n'
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if false\n            && side_neighbours(cell)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                .filter(|_| false)\n'))
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "tui refusal never clears" tui a_refusal_stays_until_this_client_sends_a_world_command <<'PY'

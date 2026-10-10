@@ -93,7 +93,9 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
     for tick in 0..4_000 {
         world.step();
         let carrying = world.carrying();
-        if tick >= 2_000 {
+        // 12.9 Task 10 (#162) re-pin 2,000 -> 2,500: items block and a pile fills deepest-first, so
+        // the hauls take longer. The pin below says what happens after t=2,500.
+        if tick >= 2_500 {
             pickups_after_full += previous
                 .iter()
                 .zip(&carrying)
@@ -110,9 +112,15 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         );
     }
     assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
+    // 12.9 review run 2 re-pin (Wolf: land "never under any dwarf", file the jam, pin it): a
+    // let-go stone now lands beside its hauler, and this seed jams (#189). Idle dwarf 2 stands on
+    // the last free pile cell, boxed in, and the hauler beside it picks up and lets go every ~6
+    // ticks forever. Was: 0 pick-ups after t=2500, 24 of 24 cells. Fixing #189 turns this red; then
+    // restore those two figures.
     assert!(
-        emitter_zones.is_empty() && pickups_after_full == 0,
-        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2000: {pickups_after_full} (expected 0)"
+        emitter_zones.is_empty() && pickups_after_full == 80,
+        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2500: {pickups_after_full} (pinned \
+         80, the #189 jam)"
     );
     let zones = world.zones();
     let filled: BTreeSet<Pos> = world
@@ -123,8 +131,9 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         .collect();
     assert_eq!(
         filled.len(),
-        zones.len(),
-        "the pile must fill, or every other assertion here holds with nothing hauled"
+        zones.len() - 1,
+        "the pile fills but for the #189 jam's cell, or every other assertion here holds with \
+         nothing hauled"
     );
 }
 
@@ -863,18 +872,26 @@ fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
         kind: DesignationKind::Channel,
         rect: rect(t, t),
     });
-    let holder = loop {
+    // 12.9 AC13: the worker stands beside the target, so the support removed is the one under HIS
+    // tile (the target's own support stays).
+    let (holder, stand) = loop {
         assert!(world.tick() < 200, "the channel was never worked");
         world.step();
-        if let Some((id, _, JobState::Work, _)) = world
-            .dwarves()
-            .into_iter()
-            .find(|(_, pos, state, _)| *pos == t && *state == JobState::Work)
-        {
-            break id;
+        if let Some((id, pos, ..)) = world.dwarves().into_iter().find(|(_, pos, state, _)| {
+            *state == JobState::Work
+                && pos.z == t.z
+                && pos.x.abs_diff(t.x) + pos.y.abs_diff(t.y) == 1
+        }) {
+            break (id, pos);
         }
     };
-    assert!(world.set_tile(below, Tile::Empty));
+    assert!(world.set_tile(
+        Pos {
+            z: stand.z - 1,
+            ..stand
+        },
+        Tile::Empty
+    ));
 
     let reachable = Pos {
         x: 45,
@@ -915,10 +932,49 @@ fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
         world.step();
     }
     assert_eq!(world.tile(reachable), Some(Tile::Empty));
+    // 12.9 AC13: the target keeps its own support and has other neighbours, so another miner may
+    // finish the channel from one of them. What must never happen is the order vanishing unworked.
     assert!(
         world
             .designations()
             .contains(&(t, DesignationKind::Channel))
+            || matches!(world.tile(below), Some(Tile::Ramp(_))),
+        "the channel order vanished without being worked"
+    );
+}
+
+/// AC13 (12.9 seat pass 1): a channel is worked from a walkable same-z 4-neighbour of the target,
+/// never from the target itself, and the stone still lands on the target.
+#[test]
+fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target() {
+    let (mut world, holder, _, job) = channel_held_by_a_miner();
+    let t = job.target;
+    let mut worked_from = None;
+    for _ in 0..600 {
+        let (_, pos, state, _) = world
+            .dwarves()
+            .into_iter()
+            .find(|(id, ..)| *id == holder)
+            .unwrap();
+        assert_ne!(pos, t, "the channel miner stood on the cell it channels");
+        if state == JobState::Work {
+            worked_from = Some(pos);
+        }
+        if world.tile(Pos { z: t.z - 1, ..t }) != Some(Tile::Solid(Material::Stone))
+            && !world
+                .designations()
+                .contains(&(t, DesignationKind::Channel))
+        {
+            break;
+        }
+        world.step();
+    }
+    let from = worked_from.expect("the channel was never worked");
+    assert_eq!(from.z, t.z);
+    assert_eq!(from.x.abs_diff(t.x) + from.y.abs_diff(t.y), 1);
+    assert!(
+        world.items().iter().any(|(_, pos)| *pos == t),
+        "the stone did not land on the channelled cell"
     );
 }
 
@@ -1187,12 +1243,26 @@ fn two_deep_dig_advances_from_the_exposed_face() {
     ] {
         assert!(world.set_tile(sealed, Tile::Solid(Material::Stone)));
     }
+    // 12.9 Task 10 (#162), intended change: the outer dig's stone blocks the one-wide tunnel
+    // until it is hauled, and without a pile the dig would stop there (FR8 never-drop). So a
+    // one-cell pile stands beside the tunnel's mouth, and the inner dig now waits for the haul.
+    let pile = [-1, 1]
+        .into_iter()
+        .map(|dy| Pos {
+            y: worker.y + dy,
+            ..worker
+        })
+        .find(|cell| is_standable(&world, *cell))
+        .expect("open ground beside the worker for the pile");
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
         rect: rect(outer, inner),
     });
 
-    for _ in 0..500 {
+    for _ in 0..1_500 {
         world.step();
         if world.tile(inner) == Some(Tile::Empty) {
             break;
@@ -1201,7 +1271,8 @@ fn two_deep_dig_advances_from_the_exposed_face() {
 
     assert_eq!(world.tile(outer), Some(Tile::Empty));
     assert_eq!(world.tile(inner), Some(Tile::Empty));
-    assert!(world.items().iter().any(|(_, pos)| *pos == outer));
+    // The outer stone was hauled out of the way (the pile is full); the inner one lies where dug.
+    assert!(world.items().iter().any(|(_, pos)| *pos == pile));
     assert!(world.items().iter().any(|(_, pos)| *pos == inner));
 }
 
@@ -1506,6 +1577,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
                 colour: DwarfColour::Red,
             },
             profession: Profession::Hauler,
+            path: Vec::new(),
         },
         SavedDwarf {
             id: 1,
@@ -1521,6 +1593,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
                 colour: DwarfColour::Blue,
             },
             profession: Profession::Hauler,
+            path: Vec::new(),
         },
     ];
     save.items = vec![(2, first, ItemKind::Stone), (3, second, ItemKind::Stone)];
@@ -2709,5 +2782,294 @@ fn a_cut_against_a_full_cap_is_refused_and_adds_no_mark() {
             .designations()
             .iter()
             .any(|(_, kind)| *kind == DesignationKind::Cut)
+    );
+}
+
+fn uncarried_item_tiles(world: &World) -> BTreeSet<Pos> {
+    let carried: BTreeSet<u32> = world
+        .carrying()
+        .into_iter()
+        .filter_map(|(_, item)| item)
+        .collect();
+    world
+        .items()
+        .into_iter()
+        .filter(|(id, _)| !carried.contains(&id.0))
+        .map(|(_, pos)| pos)
+        .collect()
+}
+
+// 12.9 AC1 (#133): the busy crew of the story's Found-at-creation probe -- a 4x7 channel east of
+// the fire and a 3x3 pile west of it -- run for 3,000 ticks with no two dwarves ever on one tile.
+// Red on 26185a0 (332 shared ticks). The vacuity asserts come LAST so a mutant that freezes the
+// crew dies on "the crew still works" and not on the occupancy assert it trivially passes.
+#[test]
+fn a_busy_crew_never_shares_a_tile_and_still_works() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let channel = rect(Pos { x: 65, y: 61, z: 9 }, Pos { x: 68, y: 67, z: 9 });
+    let pile = rect(Pos { x: 59, y: 64, z: 9 }, Pos { x: 61, y: 66, z: 9 });
+    let pile_cells: BTreeSet<Pos> = (pile.min.y..=pile.max.y)
+        .flat_map(|y| (pile.min.x..=pile.max.x).map(move |x| Pos { x, y, z: 9 }))
+        .collect();
+    assert!(
+        pile_cells.iter().all(|cell| is_standable(&world, *cell)),
+        "the pile site must be standable ground"
+    );
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: channel,
+    });
+    assert!(
+        world
+            .apply_command(SimCommand::PlaceStockpile { rect: pile })
+            .is_none()
+    );
+    assert_eq!(
+        world.designations().len(),
+        25,
+        "the channel is 25 workable marks"
+    );
+
+    let mut previous: Vec<Pos> = world.dwarves().iter().map(|(_, pos, ..)| *pos).collect();
+    let mut shared_ticks = Vec::new();
+    let mut moves = 0_usize;
+    let mut marks_cleared_at = None;
+    let mut first_stone_on_pile = None;
+    // AC10: where each uncarried item lay at the end of the previous tick.
+    let mut previous_items = uncarried_item_tiles(&world);
+    let mut item_entries = Vec::new();
+    for _ in 0..3_000 {
+        world.step();
+        let tick = world.tick();
+        let now: Vec<Pos> = world.dwarves().iter().map(|(_, pos, ..)| *pos).collect();
+        for (dwarf, (after, before)) in now.iter().zip(&previous).enumerate() {
+            if after != before && previous_items.contains(after) {
+                item_entries.push((tick, dwarf, *before, *after));
+            }
+        }
+        previous_items = uncarried_item_tiles(&world);
+        if now.iter().collect::<BTreeSet<_>>().len() != now.len() {
+            shared_ticks.push((tick, now.clone()));
+        }
+        moves += now.iter().zip(&previous).filter(|(a, b)| a != b).count();
+        if marks_cleared_at.is_none() && world.designations().is_empty() {
+            marks_cleared_at = Some(tick);
+        }
+        if first_stone_on_pile.is_none()
+            && world
+                .items()
+                .iter()
+                .any(|(_, pos)| pile_cells.contains(pos))
+        {
+            first_stone_on_pile = Some(tick);
+        }
+        previous = now;
+    }
+
+    assert!(
+        shared_ticks.is_empty(),
+        "{} ticks had two dwarves on one tile; first {:?}",
+        shared_ticks.len(),
+        shared_ticks.first()
+    );
+    // AC10 (#162): no dwarf move lands on a tile that held an uncarried item at the end of the
+    // previous tick.
+    assert!(
+        item_entries.is_empty(),
+        "{} dwarf moves entered an item's cell; first (tick, dwarf, from, to) {:?}",
+        item_entries.len(),
+        item_entries.first()
+    );
+
+    // Vacuity: the crew still works.
+    assert!(
+        marks_cleared_at.is_some_and(|tick| tick <= 2_500),
+        "channel marks cleared at {marks_cleared_at:?}, bound 2500"
+    );
+    assert!(
+        first_stone_on_pile.is_some_and(|tick| tick <= 600),
+        "first stone on the pile at {first_stone_on_pile:?}, bound 600"
+    );
+    assert!(moves >= 600, "dwarf moves {moves}, bound 600");
+}
+
+// 12.9 AC2: the spawn guard, green on 26185a0 (`spawn_dwarves` draws with `swap_remove`).
+#[test]
+fn spawn_places_five_dwarves_on_distinct_tiles_for_every_small_seed() {
+    for seed in 0..64_u64 {
+        let world = World::generate(seed, Dims::DEFAULT);
+        let tiles: BTreeSet<Pos> = world.dwarves().iter().map(|(_, pos, ..)| *pos).collect();
+        assert_eq!(world.dwarves().len(), 5, "seed {seed}");
+        assert_eq!(
+            tiles.len(),
+            5,
+            "seed {seed} spawned two dwarves on one tile"
+        );
+    }
+}
+
+// 12.9 review #182: the review's multi-seed probe. Seeds 0..=16, a 4x7 and a 6x10 channel beside
+// the fire and a 3x3 pile near it, 4,000 ticks each. On 34b6783 a channel stone spawned under a
+// dwarf, or a delivery walled one into a dead end, and the dwarf never moved again: 8 of 28 runs
+// ended with a dwarf still for >= 2,251 ticks (longest still on 26185a0: <= 60). No stone lands on
+// a dwarf, every dwarf still for long is one of the known one-level islands (#186), and the runs
+// that leave marks are the pinned ones.
+#[test]
+fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+    const TICKS: u64 = 4_000;
+    const STILL_BOUND: u64 = 500;
+    // (seed, channel width, dwarf). An idle dwarf whose every same-level neighbour is a stone,
+    // rock, a drop or another dwarf: `wander` is same-z only, so it stands until a job routes it
+    // out over a ramp. No stone is on it and A* still reaches it, so it is not walled in (#186).
+    // 12.9 review run 2 re-pin: every dwarf over the bound is listed now, not the longest per run.
+    // "Never under any dwarf" moved the runs: (6, 6, 0), (12, 6, 4) and (13, 6, 2) are gone and
+    // (16, 4, 0) is new, an idle dwarf between foliage, two loose stones and a drop.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 3] = [(10, 4, 2), (10, 6, 3), (16, 4, 0)];
+    // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
+    // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
+    // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
+    // by unhauled stones with no work position left (#182 mode ii, the ruled #180 / FR8
+    // never-drop shape). Base `26185a0` left no 4-wide run unfinished.
+    const UNFINISHED: [(u64, i32, usize); 14] = [
+        (2, 6, 2),
+        (4, 6, 1),
+        (5, 4, 1),
+        (6, 6, 2),
+        (7, 4, 1),
+        (9, 6, 2),
+        (10, 4, 1),
+        (10, 6, 6),
+        (11, 6, 3),
+        (12, 6, 1),
+        (13, 4, 1),
+        (13, 6, 3),
+        (15, 6, 2),
+        (16, 6, 3),
+    ];
+    let mut runs = 0;
+    let mut frozen = Vec::new();
+    let mut unfinished = Vec::new();
+    let mut landed = Vec::new();
+    let mut worked = 0;
+    for seed in 0..=16_u64 {
+        for (west, south, east, north) in [(1, -3, 4, 3), (-1, -5, 4, 4)] {
+            let mut world = World::generate(seed, Dims::DEFAULT);
+            let camp = world.camp_origin();
+            let at = |dx: i32, dy: i32| Pos {
+                x: camp.x + dx,
+                y: camp.y + dy,
+                z: camp.z,
+            };
+            let channel = rect(at(west, south), at(east, north));
+            let width = channel.max.x - channel.min.x + 1;
+            // The pile search of `occupancy_wire.py`. It may overlap the channel; this search
+            // reproduces the review's seed 5 cage and seed 13 dead end tile for tile.
+            let pile = (3..12).find_map(|r| {
+                [(-r - 2, 0), (0, r), (0, -r - 2)]
+                    .into_iter()
+                    .map(|(dx, dy)| rect(at(dx, dy), at(dx + 2, dy + 2)))
+                    .find(|pile| {
+                        (pile.min.x..=pile.max.x).all(|x| {
+                            (pile.min.y..=pile.max.y).all(|y| {
+                                let cell = Pos { x, y, z: camp.z };
+                                is_standable(&world, cell)
+                            })
+                        })
+                    })
+            });
+            let Some(pile) = pile else { continue };
+            runs += 1;
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: channel,
+            });
+            assert!(
+                world
+                    .apply_command(SimCommand::PlaceStockpile { rect: pile })
+                    .is_none()
+            );
+            let marks = world.designations().len();
+
+            // Loose items by id.
+            let loose = |world: &World| -> BTreeMap<u32, Pos> {
+                let carried: BTreeSet<u32> = world
+                    .carrying()
+                    .iter()
+                    .filter_map(|(_, item)| *item)
+                    .collect();
+                world
+                    .items()
+                    .into_iter()
+                    .filter(|(id, _)| !carried.contains(&id.0))
+                    .map(|(id, pos)| (id.0, pos))
+                    .collect()
+            };
+            let mut last_move = [0_u64; 5];
+            let mut longest = [0_u64; 5];
+            let mut previous: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
+            let mut loose_before = loose(&world);
+            for _ in 0..TICKS {
+                world.step();
+                let now: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
+                for dwarf in 0..5 {
+                    if now[dwarf] != previous[dwarf] {
+                        last_move[dwarf] = world.tick();
+                    }
+                    longest[dwarf] = longest[dwarf].max(world.tick() - last_move[dwarf]);
+                }
+                // A stone placed this tick (spawned, delivered or dropped) onto a dwarf, the
+                // dropper's own tile included (12.9 review run 2, Wolf: never under any dwarf).
+                let loose_now = loose(&world);
+                for (item, pos) in &loose_now {
+                    if loose_before.get(item) == Some(pos) {
+                        continue;
+                    }
+                    if let Some(dwarf) = now.iter().position(|p| p == pos) {
+                        landed.push((seed, width, world.tick(), *item, dwarf));
+                    }
+                }
+                loose_before = loose_now;
+                previous = now;
+            }
+            for (dwarf, still) in longest.iter().copied().enumerate() {
+                if still >= STILL_BOUND {
+                    frozen.push((seed, width, dwarf, still, previous[dwarf]));
+                }
+            }
+            let marks_left = world.designations().len();
+            if marks_left > 0 {
+                unfinished.push((seed, width, marks_left));
+            }
+            let on_pile = world.items().iter().any(|(_, p)| {
+                (pile.min.x..=pile.max.x).contains(&p.x) && (pile.min.y..=pile.max.y).contains(&p.y)
+            });
+            if world.designations().len() < marks && on_pile {
+                worked += 1;
+            }
+        }
+    }
+    assert!(
+        landed.is_empty(),
+        "stones landed on a dwarf; (seed, channel width, tick, item, dwarf): {landed:?}"
+    );
+    assert_eq!(
+        frozen
+            .iter()
+            .map(|(seed, width, dwarf, ..)| (*seed, *width, *dwarf))
+            .collect::<Vec<_>>(),
+        ONE_LEVEL_ISLANDS,
+        "runs with a dwarf still for >= {STILL_BOUND} ticks; (seed, channel width, dwarf, longest \
+         still, final tile): {frozen:?}"
+    );
+    assert_eq!(
+        unfinished, UNFINISHED,
+        "runs with marks left after {TICKS} ticks; (seed, channel width, marks left)"
+    );
+    // Vacuity: every run with a pile site really ran (the review's own pile search found 28, this
+    // one 32), and in every one the crew worked.
+    assert_eq!(runs, 32, "runs with a pile");
+    assert_eq!(
+        worked, runs,
+        "runs where marks cleared and a stone reached the pile"
     );
 }

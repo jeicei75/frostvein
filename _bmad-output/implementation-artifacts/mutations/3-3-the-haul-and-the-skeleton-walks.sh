@@ -89,23 +89,35 @@ PY
 mutation "free stockpile tiles ignore standability" sim-core a_stockpile_tile_whose_floor_is_gone_is_never_a_delivery_target <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))\n'
-assert old in s
-p.write_text(s.replace(old, '                .filter(|pos| !stored.contains(pos))\n'))
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if !blocked.contains(&cell)\n            && side_neighbours(cell)'
+assert s.count(old) == 1
+s = s.replace(old, new)
+old, new = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n', '            if zones.contains(&n) && !blocked.contains(&n) && !depth.contains_key(&n) {\n'
+assert s.count(old) == 1
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "free stockpile tiles ignore stored stones" sim-core a_full_stockpile_parks_the_haul_job_until_a_free_tile_appears <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                .filter(|pos| is_walkable(terrain, blocked, *pos) && !stored.contains(pos))\n'
-assert old in s
-p.write_text(s.replace(old, '                .filter(|pos| is_walkable(terrain, blocked, *pos))\n'))
+# Re-pointed at 12.9 review patch #184: depth now runs through free cells only, so the
+# free-cell filter is the seed and propagation tests, not a final retain.
+old, new = '        if is_walkable(terrain, blocked, cell)\n            && side_neighbours(cell)', '        if terrain.is_standable(cell)\n            && side_neighbours(cell)'
+assert s.count(old) == 1
+s = s.replace(old, new)
+old, new = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n', '            if zones.contains(&n) && terrain.is_standable(n) && !depth.contains_key(&n) {\n'
+assert s.count(old) == 1
+s = s.replace(old, new)
+p.write_text(s)
 PY
 
 mutation "the pick-up leg drops the free-tile gate" sim-core a_full_stockpile_parks_the_haul_job_until_a_free_tile_appears <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                Some(pos) if !free.is_empty() && terrain.is_standable(*pos) => {\n'
+old = '                Some(pos) if !targets.is_empty() && terrain.is_standable(*pos) => {\n'
 assert old in s
 p.write_text(s.replace(old, '                Some(pos) if terrain.is_standable(*pos) => {\n'))
 PY
@@ -113,32 +125,18 @@ PY
 mutation "the pick-up leg uses job.target instead of the live position" sim-core haul_execution_reads_the_stones_live_position_not_the_jobs_target <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            match items.get(&item) {
-                Some(pos) if !free.is_empty() && terrain.is_standable(*pos) => {
-                    BTreeSet::from([*pos])
-                }
-                _ => BTreeSet::new(),
-            }'''
+old = '            match items.get(&item) {\n'
 assert old in s
-new = '''            match Some(&job.target) {
-                Some(pos) if !free.is_empty() && terrain.is_standable(*pos) => {
-                    BTreeSet::from([*pos])
-                }
-                _ => BTreeSet::new(),
-            }'''
+new = '            match Some(&job.target) {\n'
 p.write_text(s.replace(old, new))
 PY
 
 mutation "a carrying dwarf is sent to the stone's tile, not the pile" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            if carrying.is_some() {
-                return free;
-            }'''
+old = '            if carrying.is_some() {\n'
 assert old in s
-new = '''            if carrying.is_some() {
-                return BTreeSet::from([job.target]);
-            }'''
+new = '            if carrying.is_some() {\n                return BTreeSet::from([job.target]);\n'
 p.write_text(s.replace(old, new))
 PY
 
@@ -171,21 +169,23 @@ PY
 mutation "the drop does not move the stone" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            *ecs.get_mut::<Pos>(stone)
-                .expect("every stone has a position") = drop_pos;
+# Re-pointed 2026-10-08 (12.9): a normal delivery now lands the stone at `landing` (`drop_cell`);
+# the `drop_pos` write left in `release_claim` is only the abnormal-exit drop.
+old = '''                        *ecs.get_mut::<Pos>(stone)
+                            .expect("every stone has a position") = landing;
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let _ = drop_pos;\n'))
+p.write_text(s.replace(old, '                        let _ = landing;\n'))
 PY
 
 mutation "the drop removes a designation at job.target" sim-core a_haul_walks_picks_up_walks_and_drops_in_two_work_runs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                Some(_) => {
-                    ecs.resource_mut::<Jobs>().remove(job.id);
+old = '''                    ecs.resource_mut::<Jobs>().remove(job.id);
+                    release_claim(ecs, entity);
 '''
-assert old in s
-p.write_text(s.replace(old, old + '                    ecs.resource_mut::<Designations>().0.remove(&job.target);\n'))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    ecs.resource_mut::<Designations>().0.remove(&job.target);\n' + old))
 PY
 
 mutation "carry_items is not in the schedule" sim-core a_carried_stone_tracks_its_carrier_every_tick_including_a_settle_fall <<'PY'
@@ -210,8 +210,10 @@ assert old in s
 p.write_text(s.replace(old, '            execute_jobs,\n            carry_items,\n            settle,\n            wander,\n'))
 PY
 
-mutation "release_claim does not drop the carried stone" sim-core release_claim_drops_the_carried_stone_at_the_dwarfs_tile <<'PY'
+mutation "release_claim does not drop the carried stone" sim-core release_claim_drops_the_carried_stone_beside_the_dwarf <<'PY'
 import pathlib
+# Re-pointed 2026-10-09 (12.9 review run 2, never under any dwarf): the test was renamed from
+# `release_claim_drops_the_carried_stone_at_the_dwarfs_tile`; the stone now lands beside the dwarf.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 start = '        let dropped_at = ecs.get::<Pos>(entity).copied();\n'
 end = '        if let Some(mut carrying) = ecs.get_mut::<Carrying>(entity) {\n'
@@ -382,9 +384,9 @@ PY
 mutation "the pick-up leg ignores standability" sim-core haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                Some(pos) if !free.is_empty() && terrain.is_standable(*pos) => {\n'
+old = '                Some(pos) if !targets.is_empty() && terrain.is_standable(*pos) => {\n'
 assert old in s
-p.write_text(s.replace(old, '                Some(pos) if !free.is_empty() => {\n'))
+p.write_text(s.replace(old, '                Some(pos) if !targets.is_empty() => {\n'))
 PY
 
 mutation "pickup does not spend the path" sim-core pickup_sets_carrying_resets_the_work_counter_and_spends_the_path <<'PY'

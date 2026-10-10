@@ -26,7 +26,7 @@ pub struct SaveState {
     pub emitters: Vec<(u32, Pos, LightKind)>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SavedDwarf {
     pub id: u32,
     pub pos: Pos,
@@ -42,4 +42,8 @@ pub struct SavedDwarf {
     // NOTE: deliberately no `#[serde(default)]`, like `identity`: a save from before professions
     // existed fails to decode, and simd logs and refuses the load. There is no migration.
     pub profession: Profession,
+    // NOTE: deliberately no `#[serde(default)]`, like `identity`: a pre-12.9 save fails to decode
+    // and simd logs and refuses the load. There is no migration. Every dwarf's path is saved, an
+    // idle dwarf's exit path included, so a detour or back-off survives a load.
+    pub path: Vec<Pos>,
 }

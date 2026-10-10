@@ -108,6 +108,7 @@ pub type BlendQuery<'w, 's> = Query<
         &'static mut Transform,
         Option<&'static mut WalkPhase>,
         Option<&'static ChildOf>,
+        Option<&'static ItemMotion>,
     ),
     Without<TerrainTile>,
 >;
@@ -482,6 +483,38 @@ pub struct DigPhase {
     pub phase: f32,
 }
 
+/// How long a stone takes to rise from its cell to a hauler's hands, and to come down again (12.9
+/// AC14, seat pass 1). Paced with the frame time the walker uses, so NOTE a paused world still
+/// finishes a lift.
+const LIFT_SECONDS: f32 = 0.3;
+
+/// A stone moving between its cell and a hauler's hands. Presentation only: `from` and `to` are in
+/// the stone's own space (the dwarf's local space while held, world space on the ground) and
+/// `advance_item_motion` is the only writer of its translation while this is present.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct ItemMotion {
+    from: Vec3,
+    to: Vec3,
+    elapsed: f32,
+}
+
+/// Moves every stone mid-lift or mid-set-down along its path, and drops the motion on arrival.
+pub fn advance_item_motion(
+    time: Res<bevy::time::Time>,
+    mut commands: Commands,
+    mut moving: Query<(BevyEntity, &mut Transform, &mut ItemMotion)>,
+) {
+    for (entity, mut transform, mut motion) in &mut moving {
+        motion.elapsed += time.delta_secs();
+        let progress = (motion.elapsed / LIFT_SECONDS).min(1.0);
+        transform.translation = motion.from.lerp(motion.to, progress);
+        if progress >= 1.0 {
+            transform.translation = motion.to;
+            commands.entity(entity).remove::<ItemMotion>();
+        }
+    }
+}
+
 /// Sets each dwarf's clip and swing phase from the mirror. Runs after the blend (it reads the
 /// blend's clock factor) and before `drive_dwarf_walk`, so a delta's clip plays the frame it lands.
 pub fn sync_dwarf_work(
@@ -496,14 +529,14 @@ pub fn sync_dwarf_work(
         &mut DwarfClip,
         &mut DigPhase,
     )>,
-    items: Query<(BevyEntity, &WorldProjected, Option<&ChildOf>), With<ProjectedItem>>,
+    items: Query<(BevyEntity, &WorldProjected, &Transform, Option<&ChildOf>), With<ProjectedItem>>,
 ) {
     let mut carried = BTreeMap::new();
     // Who is holding a stone right now, as drawn -- which can outlast the wire's `carrying` by
     // the second it takes his body to reach the cell he drops it on.
     let holders = items
         .iter()
-        .filter_map(|(_, _, parent)| parent.map(ChildOf::parent))
+        .filter_map(|(_, _, _, parent)| parent.map(ChildOf::parent))
         .collect::<std::collections::BTreeSet<_>>();
     // Dwarves whose drawn body has not reached his wire cell yet, and where it is.
     let mut walking_in = BTreeMap::new();
@@ -559,42 +592,61 @@ pub fn sync_dwarf_work(
     // 12.5 AC7: a carried stone is drawn held, as a child of the dwarf. Both of its translation
     // writers skip it -- the spawn in `reconcile` only runs once, and `blend_entities` skips any
     // item that has a parent -- so this system is the only thing that places it while it is held.
-    for (item, marker, parent) in &items {
+    for (item, marker, drawn, parent) in &items {
         match (carried.get(&marker.0), parent) {
             // Picked up only once he is drawn at the cell: the sim lifts it the tick he reaches it,
-            // a second before his body does.
+            // a second before his body does. It then rises from where it is drawn to his hands.
             (Some(&dwarf), parent)
                 if parent.map(ChildOf::parent) != Some(dwarf)
                     && !walking_in.contains_key(&dwarf) =>
             {
-                if let Some(held) = mirror.0.items().find(|at| at.id == marker.0) {
+                if let (Some(held), Ok((_, _, dwarf_at, ..))) = (
+                    mirror.0.items().find(|at| at.id == marker.0),
+                    dwarves.get(dwarf),
+                ) {
+                    // The dwarf entity is scaled by `METRES_TO_CELLS` and a child inherits it,
+                    // so the item's own scale is divided by it to stay its per-kind scale
+                    // DRAWN.
+                    let from = dwarf_at
+                        .compute_affine()
+                        .inverse()
+                        .transform_point3(drawn.translation);
                     commands.entity(item).insert((
                         ChildOf(dwarf),
-                        // The dwarf entity is scaled by `METRES_TO_CELLS` and a child inherits it,
-                        // so the item's own scale is divided by it to stay its per-kind scale
-                        // DRAWN.
-                        Transform::from_translation(CARRY_OFFSET)
+                        Transform::from_translation(from)
                             .with_scale(item_scale(held.kind) / METRES_TO_CELLS),
+                        ItemMotion {
+                            from,
+                            to: CARRY_OFFSET,
+                            elapsed: 0.0,
+                        },
                     ));
                 }
             }
             (None, Some(parent)) => {
                 // Let go, once he is drawn on the cell the wire put it on (not his own wire cell,
-                // which a dwarf already walking on has left): unparent and snap back to it.
+                // which a dwarf already walking on has left): unparent and set it down from his
+                // hands onto the cell.
                 if let Some(at) = mirror.0.items().find(|at| at.id == marker.0)
                     && walking_in.get(&parent.parent()).is_none_or(|drawn| {
                         let cell = world_to_render(at.pos);
                         Vec2::new(drawn.x - cell.x, drawn.z - cell.z).length() <= DROP_REACH_CELLS
                     })
                 {
-                    commands.entity(item).remove::<ChildOf>().insert(
-                        Transform::from_translation(item_translation(
-                            at.pos,
-                            at.kind,
-                            item_stacks(&mirror.0)[&at.id],
-                        ))
-                        .with_scale(item_scale(at.kind)),
-                    );
+                    let to = item_translation(at.pos, at.kind, item_stacks(&mirror.0)[&at.id]);
+                    let from = dwarves
+                        .get(parent.parent())
+                        .map_or(to, |(_, _, dwarf_at, ..)| {
+                            dwarf_at.transform_point(drawn.translation)
+                        });
+                    commands.entity(item).remove::<ChildOf>().insert((
+                        Transform::from_translation(from).with_scale(item_scale(at.kind)),
+                        ItemMotion {
+                            from,
+                            to,
+                            elapsed: 0.0,
+                        },
+                    ));
                 }
             }
             _ => {}
@@ -2633,13 +2685,17 @@ pub struct DwarfHeadings(
     // first, then dig) -- until then he is still walking in and keeps his walking heading.
     std::collections::BTreeMap<u32, bevy::prelude::Quat>,
 );
-/// The yaw toward the tile a dwarf is digging, while he works a DIG or a CUT. `None` for a
-/// channel (dug under his own feet) and for anything that is not digging.
+/// The yaw toward the tile a dwarf is digging, while he works a DIG, a CUT or a CHANNEL (12.9: he
+/// works it from the next tile). `None` for anything that is not digging.
 fn dig_yaw(entity: &protocol::Entity) -> Option<bevy::prelude::Quat> {
     if entity.state != protocol::JobState::Work {
         return None;
     }
-    let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job
+    let Some(
+        protocol::DwarfJob::Dig { target }
+        | protocol::DwarfJob::Cut { target }
+        | protocol::DwarfJob::Channel { target },
+    ) = entity.job
     else {
         return None;
     };
@@ -2671,8 +2727,8 @@ impl DwarfHeadings {
             if let Some(rotation) = stepped {
                 self.0.insert(id, rotation);
             }
-            // 12.5 AC6: a dwarf swinging at a dig faces the tile he is digging. A channel is dug
-            // under his own feet, so it has nothing to face and keeps his heading.
+            // 12.5 AC6: a dwarf swinging at a dig faces the tile he is digging, a channel
+            // included (12.9: he works it from the next tile).
             if let Some(rotation) = dig_yaw(entity) {
                 self.2.insert(id, rotation);
             } else if let Some(rotation) = self.2.remove(&id)
@@ -2728,7 +2784,11 @@ pub fn blend_entities(
         .map(|item| (item.id, item))
         .collect::<std::collections::BTreeMap<_, _>>();
     let stacks = item_stacks(mirror);
-    for (marker, mut transform, walk_phase, parent) in projected.iter_mut() {
+    let carried = entities
+        .values()
+        .filter_map(|entity| entity.carrying)
+        .collect::<std::collections::BTreeSet<_>>();
+    for (marker, mut transform, walk_phase, parent, motion) in projected.iter_mut() {
         if let Some(entity) = entities.get(&marker.0) {
             let previous = mirror
                 .previous_entity(marker.0)
@@ -2782,8 +2842,14 @@ pub fn blend_entities(
             {
                 transform.rotation = *rotation;
             }
-        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none()) {
-            // A carried item has a parent and is placed by `sync_dwarf_work`, not here.
+        } else if let Some(item) = items
+            .get(&marker.0)
+            .filter(|_| parent.is_none() && motion.is_none() && !carried.contains(&marker.0))
+        {
+            // A carried item has a parent and is placed by `sync_dwarf_work`, not here. So is one
+            // the wire says is carried but that is not parented yet (the hauler is still walking
+            // in: its wire position is the hauler's tile, and following it would slide the stone),
+            // and one mid set-down (`ItemMotion`).
             //
             // Items have no previous wire state; snapping is the only wire-true presentation.
             // Must go through `item_translation` for the same reason the spawn does: this is the

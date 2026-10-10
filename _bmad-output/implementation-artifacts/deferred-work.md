@@ -2536,3 +2536,80 @@ the story, and one of them is also issue #125.
 - **A trunk-anchored cut drag now slabs at the tree's base z, not the hit z** (feature, LOW, read;
   `crates/gui/src/designate.rs:201`). It matches crown/foot anchors and the draft's "box at the cut level";
   on a slope the single-level box misses uphill pines. Preview and wire agree. A seat question only.
+
+## Deferred from: code review of 12-9-one-dwarf-per-tile (2026-10-09)
+
+- **AC10 can break within one tick** (feature, LOW, RAN; `crates/sim-core/src/lib.rs:1664`).
+  - What happens: a hauler lifts a stone in `execute_jobs`, then `wander` moves an idle dwarf onto that cell in the same tick
+    (seed 5, 6x10, t834). The gui keeps the stone drawn on its cell until it is parented, so the dwarf is drawn walking into it.
+  - Risk: the live instrument would read STONES RED if this hit the story's recipe.
+- **Job holders stall up to ~65 ticks behind a blocker** (feature, LOW, RAN; `lib.rs:1695`). Measured 64/65/57/52 on seeds
+  1/6/15/11, against ≤11 at base. An idle dwarf's exit `Path` waits on its wander cooldown, and the holder re-checks once
+  per step period.
+- **Tick-cost spikes** (feature + blind, LOW, RAN; `lib.rs:1204`). The release max is 9-17.6 ms in 8/28 runs, against ≤0.41 ms
+  at base; p99 is 30-156 µs. That is inside NFR2's fast4x budget. Likely cause: a blocked re-route or escape exhausting
+  `MAX_ASTAR_NODES`. Relevant to #179.
+- **A sidestep or yield can move a blocker a second cell in one tick** (blind, LOW, read; `lib.rs:1240,1303`).
+- **gui lift takes `from` as world space when the item is still another dwarf's child** (blind, LOW, read;
+  `crates/gui/src/project.rs`, `sync_dwarf_work`). This is a two-carrier hand-off in one frame.
+- **The `serve.rs` channel-from-the-next-tile assert may never run** (edge, LOW, read; `crates/simd/tests/serve.rs:646`). The
+  test returns once dig, haul and carry are seen, without requiring a channel Work delta.
+- **The AC8 channel guard passes only through its Ramp branch** (edge + acceptance, LOW, RAN; `crates/sim-core/tests/scenario.rs`,
+  `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on`). Another miner finishes the channel.
+- **The AC7 precondition is asserted indirectly** (edge + acceptance, LOW, RAN; `crates/sim-core/tests/save_load.rs`). The test
+  checks three west steps, not `!to_save().dwarves[1].path.is_empty()`. Row 8 kills it on the equality assert.
+- **The campfire re-pin comment says full by ~2,250; measured 2,149** (acceptance, LOW, RAN; `crates/sim-core/tests/scenario.rs`,
+  `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire`).
+- **AC1's "stone on the pile" counts a carried stone** (acceptance, LOW, RAN; `scenario.rs`,
+  `a_busy_crew_never_shares_a_tile_and_still_works`). The carried stone is counted at 184; the first loose one lands at 201.
+  `occupancy_wire.py`'s `on_pile` has the same shape.
+- **`dwarf_tiles` spells `.cloned()` to avoid #74 row 3's `.copied()` anchor, with no comment** (acceptance, LOW, read;
+  `crates/sim-core/src/lib.rs`).
+- **Five 3-3 and 12-1 mutation rows were already dead on `26185a0`** (acceptance, LOW, RAN; pre-existing).
+  - 3-3: `free stockpile tiles ignore standability`, `the pick-up leg drops the free-tile gate` and `every stone on a zone tile
+    counts as stored` SURVIVED; `load_world accepts two dwarves carrying one item` is NO-COMPILE.
+  - 12-1: `retry drop stacks a full stockpile` SURVIVED.
+  - These rows read as coverage they do not give; the reviewer recommends an issue.
+
+## Deferred from: code review of 12-9-one-dwarf-per-tile, run 2 (2026-10-09)
+
+Diff `2a10797..02e313c`, the run-1 patch pass. Four layers, none timed out.
+
+- **A saved `path` tile is only bounds-checked** (edge, LOW, read; `crates/simd/src/main.rs:604`). Adjacency and walkability are
+  not checked, so a hand-edited save can make `wander` step a dwarf into rock. Matches the run-1 ruling (checked like `pos`/`home`).
+- **The #182 sweep's "crew worked" check is satisfiable without a haul** (edge, LOW, read; `crates/sim-core/tests/scenario.rs`
+  ~:439). `on_pile` counts any item in the pile rect, and the pile may overlap the channel.
+- **Any exit 2 in `occupancy_wire.py` masks a RED** (edge, LOW, RAN on a fake daemon). The counts still print above it.
+- **`occupancy_wire.py` cannot see an item under a dwarf in the first delta, or one there from tick 0** (edge, LOW, read).
+- **`walls_in_a_dwarf` treats equal-sized pieces as no wall-in** (blind, LOW, read; `crates/sim-core/src/lib.rs:812`,
+  `piece.len() < largest`). Two dwarves in two equal pockets can both be sealed.
+- **The abnormal-drop BFS in `release_claim` has no node bound and runs `walls_in_a_dwarf` per visited cell** (blind +
+  acceptance, LOW, read; `lib.rs:1160-1191`). The "nowhere" fallback fired 0 times in 60 probe runs.
+- **A channel mark on the campfire tile now completes** (feature, LOW, RAN): stone on the camp tile, `Ramp(Snow)` under the
+  fire (seed 0, 6x10). AC13 round-1 code. **Issue #188** holds the state.
+
+## Deferred from: code review of 12-9-one-dwarf-per-tile, run 3 (2026-10-10)
+
+Diff `c203ea6..c75def6`, the run-2 patch pass. Round 3 found no HIGH, so it ends the audit; the next spend is the seat.
+
+- **Equal-sized split pockets cage two dwarves** (blind, MED, RAN; `lib.rs:851` `piece.len() < largest`, and the drop
+  search at `:1191`). 5-cell corridor, carrier at c0 and a dwarf at c4: the stone drops at c2, a 2|2 split that neither
+  side calls a wall-in; a 3-cell corridor gives 1|1. The rule is the run-2 deferral (old and new flood agree on 120,075
+  fuzz inputs); new only in that the nearest-tile search reaches such a tile deliberately. Unobserved in 88 real runs.
+- **The remaining fast4x breach is one `astar_with_budget` call inside `execute_jobs`** (feature, MED, RAN; pre-existing).
+  HEAD: 12 of 32 sweep runs over 5 ms, max 8.99-9.20 ms; max A* call 8.9-9.1 ms vs max wall-in call 0.19 ms; old side A*
+  8.56-8.91 ms. Under load 8 runs crossed 10 ms (max 11.3). The run-1 tick-cost deferral with its cause named; posted on #179.
+- **The `release_claim` drop search has no node cap** (blind, LOW; `lib.rs:1191-1206`). The run-2 deferral, revisited as it
+  asked: drops land at most 2 tiles from the carrier over 35 sweep and 12,103 command let-gos; the own-tile fallback fired 0
+  times. No observed cost.
+- **The sweep's marks pin is keyed by (seed, width, count)** (edge, LOW, read; `scenario.rs:2934`). A #187 loop swapped for a
+  #182 mode-ii mark at the same count stays green. Any count change is loud.
+- **The frozen pin reads "ever still 500 ticks", not "still at the end", and cannot tell caged from idle** (edge, LOW, read;
+  `scenario.rs:3056`). Per-dwarf keying is correct; only the #186 comment separates the two.
+- **Load never checks for an item under a dwarf** (feature, LOW, read; `lib.rs:2160`). A save from the pushed tip `34b6783`,
+  whose channel stones landed under dwarves, loads with the stone in place, invisible to the wire's first delta. Explicit Load
+  only; matches the run-2 saved-path ruling.
+- **The let-go can set the carrier's own stone on its last same-level exit and strand it** (feature, MED, RAN; `lib.rs:1183-1212`).
+  Seed 16/4 dwarf 0: let-go at t932 lands east, foliage west, a pile stone north, nothing standable south; still for 3,069
+  ticks. 6 of 12,103 forced let-gos on `c75def6`, 0 of 6,594 on `c203ea6`. **Ruled 2026-10-10 (Wolf): fold into #186 and
+  defer**; the measurement is posted there and the sweep pins (16,4,0).

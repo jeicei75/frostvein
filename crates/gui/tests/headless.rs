@@ -5288,7 +5288,7 @@ fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
         2,
         working(7, [0, 1, 0], JobState::Work, Some(channel), None),
         west,
-        "a channel keeps his heading",
+        "a channel aimed at his own cell has no direction and keeps his heading",
     );
     let dig_east = protocol::DwarfJob::Dig { target: [1, 1, 0] };
     step(
@@ -5304,6 +5304,49 @@ fn a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading() {
         dwarf(7, [0, 2, 0]),
         north,
         "his next step resumes walking facing",
+    );
+}
+
+/// 12.9 AC13: a channel is worked from the next tile, so a channelling miner faces the target cell
+/// like a digging one does.
+#[test]
+fn a_channelling_miner_faces_the_target_cell() {
+    use bevy::prelude::Quat;
+    use std::f32::consts::FRAC_PI_2;
+    let west = Quat::from_rotation_y(FRAC_PI_2);
+    let east = Quat::from_rotation_y(-FRAC_PI_2);
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 4, y: 4, z: 1 },
+        vec![Tile::Empty; 16],
+        vec![dwarf(7, [1, 1, 0])],
+    ));
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    // He steps west to [0,1,0] and channels the cell to his east.
+    let channel_east = protocol::DwarfJob::Channel { target: [1, 1, 0] };
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![working(
+                7,
+                [0, 1, 0],
+                JobState::Work,
+                Some(channel_east),
+                None,
+            )],
+        ),
+    );
+    for _ in 0..20 {
+        app.update();
+    }
+    let drawn = drawn_rotation(&mut app, 7);
+    assert!(
+        drawn.dot(east).abs() > 1.0 - 1e-5,
+        "a channelling miner faces his target (east), drew {drawn:?}, not west {west:?}"
     );
 }
 
@@ -5647,6 +5690,158 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
     );
     app.update();
     assert_eq!(stone(&mut app).0.translation, dropped.translation);
+}
+
+/// 12.9 AC14 fixture: dwarf 7 stands on [0,0,0] of a 4x1 strip and stone 70 lies on [1,0,0], one
+/// tile away. Frames are 100 ms, so the 0.3 s lift and set-down span a few of them.
+fn reach_app() -> App {
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [1, 0, 0],
+        kind: protocol::ItemKind::Stone,
+    }];
+    let mut app = headless_app(start);
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    app
+}
+
+/// The stone's local-or-world translation and whether it has a parent.
+fn stone_70(app: &mut App) -> (Vec3, bool) {
+    use bevy::prelude::ChildOf;
+    app.world_mut()
+        .query::<(&ProjectedItem, &Transform, Option<&ChildOf>)>()
+        .iter(app.world())
+        .find(|(item, _, _)| item.0 == 70)
+        .map(|(_, transform, parent)| (transform.translation, parent.is_some()))
+        .expect("the stone must be projected")
+}
+
+fn stone_70_at(tick: u64, entity: Entity, at: [i32; 3]) -> Delta {
+    Delta {
+        items: vec![Item {
+            id: 70,
+            pos: at,
+            kind: protocol::ItemKind::Stone,
+        }],
+        ..delta_at(tick, Vec::new(), vec![entity])
+    }
+}
+
+fn hauling_70(at: [i32; 3]) -> Entity {
+    working(
+        7,
+        at,
+        JobState::Walk,
+        Some(protocol::DwarfJob::Haul),
+        Some(70),
+    )
+}
+
+/// 12.9 AC14 hold (seat pass 1: "logs are pushed before dwarf instead of carrying"): the stone
+/// two tiles off is put in his hands by the wire while his drawn body is still walking in; the wire
+/// moves it to his tile, but it stays drawn on its own cell until he is drawn there and parents it.
+#[test]
+fn a_stone_the_wire_puts_in_his_hands_holds_its_cell_while_the_hauler_walks_in() {
+    let mut start = snapshot_with_dims(
+        Dims { x: 4, y: 1, z: 1 },
+        vec![Tile::Empty; 4],
+        vec![dwarf(7, [0, 0, 0])],
+    );
+    start.items = vec![Item {
+        id: 70,
+        pos: [2, 0, 0],
+        kind: protocol::ItemKind::Stone,
+    }];
+    let mut app = headless_app(start);
+    app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
+        100,
+    )));
+    app.update();
+    let cell = world_to_render([2, 0, 0]) + Vec3::new(0.0, gui::appearance::STONE_ITEM_DROP, 0.0);
+    // The wire: he is on [1,0,0] and holds the stone, which therefore reads [1,0,0] too.
+    apply_delta(&mut app, stone_70_at(1, hauling_70([1, 0, 0]), [1, 0, 0]));
+    for frame in 0..5 {
+        app.update();
+        let (at, parented) = stone_70(&mut app);
+        assert!(!parented, "frame {frame}: he is still walking in");
+        assert_eq!(at, cell, "frame {frame}: the stone slid off its own cell");
+    }
+    // He arrives (1.1 s) and takes it.
+    for _ in 0..20 {
+        app.update();
+    }
+    assert!(stone_70(&mut app).1, "drawn at the cell: he holds it");
+}
+
+/// 12.9 AC14 rise: picked up from the next tile, the stone rises from its cell to his hands over a
+/// short lift instead of jumping there.
+#[test]
+fn a_stone_picked_up_from_the_next_tile_rises_to_his_hands_over_a_lift() {
+    let mut app = reach_app();
+    let cell = world_to_render([1, 0, 0]) + Vec3::new(0.0, gui::appearance::STONE_ITEM_DROP, 0.0);
+    apply_delta(&mut app, stone_70_at(1, hauling_70([0, 0, 0]), [0, 0, 0]));
+    let carry = gui::appearance::CARRY_OFFSET;
+    let mut seen = Vec::new();
+    for _ in 0..8 {
+        app.update();
+        let (at, parented) = stone_70(&mut app);
+        assert!(parented, "he is drawn at his cell: it is in his hands");
+        seen.push(at);
+    }
+    assert_ne!(
+        seen[0], carry,
+        "the first frame of the lift is the end of it"
+    );
+    assert_ne!(seen[0], cell, "the lift made no progress at all");
+    let intermediate = seen.iter().filter(|at| **at != carry).count();
+    assert!(intermediate >= 2, "the lift took {intermediate} frames");
+    for pair in seen.windows(2) {
+        assert!(
+            pair[1].distance(carry) <= pair[0].distance(carry) + 1e-6,
+            "the lift went backwards: {seen:?}"
+        );
+    }
+    assert_eq!(*seen.last().unwrap(), carry, "and it arrives at his hands");
+}
+
+/// 12.9 AC14 set-down: released onto the next tile, the stone moves from his hands down to its
+/// cell over a short set-down. It is never on the cell in the first frame.
+#[test]
+fn a_stone_released_onto_the_next_tile_is_set_down_over_a_lift() {
+    let mut app = reach_app();
+    apply_delta(&mut app, stone_70_at(1, hauling_70([0, 0, 0]), [0, 0, 0]));
+    for _ in 0..8 {
+        app.update();
+    }
+    assert!(stone_70(&mut app).1 && stone_70(&mut app).0 == gui::appearance::CARRY_OFFSET);
+
+    let cell = world_to_render([1, 0, 0]) + Vec3::new(0.0, gui::appearance::STONE_ITEM_DROP, 0.0);
+    apply_delta(&mut app, stone_70_at(2, dwarf(7, [0, 0, 0]), [1, 0, 0]));
+    let mut seen = Vec::new();
+    for _ in 0..8 {
+        app.update();
+        let (at, parented) = stone_70(&mut app);
+        assert!(!parented, "a released stone is nobody's child");
+        seen.push(at);
+    }
+    assert_ne!(seen[0], cell, "the set-down is a one-frame snap");
+    let on_the_way = seen.iter().filter(|at| **at != cell).count();
+    assert!(on_the_way >= 2, "the set-down took {on_the_way} frames");
+    for pair in seen.windows(2) {
+        assert!(
+            pair[1].distance(cell) <= pair[0].distance(cell) + 1e-6,
+            "the set-down went backwards: {seen:?}"
+        );
+    }
+    assert_eq!(*seen.last().unwrap(), cell, "and it arrives on the cell");
 }
 
 // ---------------------------------------------------------------------------------------------

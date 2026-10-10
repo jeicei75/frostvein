@@ -601,6 +601,18 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                     save.dims.z
                 );
             }
+            if let Some(tile) = dwarf.path.iter().find(|tile| !in_bounds(**tile)) {
+                bail!(
+                    "save dwarf {} path tile {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    tile.x,
+                    tile.y,
+                    tile.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
         }
         for (id, ..) in &save.items {
             if !seen_ids.insert(*id) {
@@ -928,6 +940,64 @@ mod tests {
         fs::remove_file(&path).expect("remove lantern save fixture");
 
         assert!(loaded.is_none(), "lantern save reached the live world");
+    }
+
+    /// 12.9 Task 0 Q2: `SavedDwarf.path` has no serde default, so a pre-12.9 save (no `path` on
+    /// its dwarves) fails to decode and is refused rather than loaded with every path empty.
+    #[test]
+    fn loading_refuses_a_pre_12_9_save_without_dwarf_paths() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-9-pre-path-save-{}.json",
+            std::process::id()
+        ));
+        let save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        let mut json = serde_json::to_value(&save).unwrap();
+        let dwarves = json["dwarves"].as_array_mut().unwrap();
+        assert!(!dwarves.is_empty());
+        for dwarf in dwarves {
+            assert!(dwarf.as_object_mut().unwrap().remove("path").is_some());
+        }
+        fs::write(&path, serde_json::to_vec(&json).unwrap()).expect("write old save fixture");
+        let old = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        // Positive control: the same save with its paths loads.
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write current save fixture");
+        let current = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(old.is_none(), "a pre-12.9 save without paths was loaded");
+        assert!(current.is_some(), "a current save must load");
+    }
+
+    /// 12.9 review: `SavedDwarf.path` is range-checked like every other saved position. A path
+    /// tile off the map was loaded, and `wander` walked the dwarf onto it, off the map on the wire.
+    #[test]
+    fn loading_refuses_a_dwarf_path_tile_outside_the_map() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-9-path-bounds-save-{}.json",
+            std::process::id()
+        ));
+        let mut save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        // Positive control: an in-bounds, non-empty path (the dwarf's own tile and its home) loads.
+        save.dwarves[0].path = vec![save.dwarves[0].pos, save.dwarves[0].home];
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write in-bounds save fixture");
+        let in_bounds = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        save.dwarves[0].path.push(sim_core::Pos {
+            x: 9000,
+            y: 9000,
+            z: 9000,
+        });
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write off-map save fixture");
+        let off_map = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(
+            in_bounds.is_some(),
+            "a save with an in-bounds path must load"
+        );
+        assert!(
+            off_map.is_none(),
+            "a save with an off-map path tile was loaded"
+        );
     }
 
     /// A real loopback pair: the daemon's end goes into `Client`, the peer end stands in

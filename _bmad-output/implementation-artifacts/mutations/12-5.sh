@@ -69,19 +69,19 @@ PY
 mutation "a digging dwarf no longer faces his target" gui a_digging_dwarf_faces_his_target_and_a_channel_keeps_his_heading <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-# Re-pointed 2026-10-05 (12.7): `dig_yaw` also faces a `Cut` target, so the `let Some(..)` pattern is `Dig | Cut` and rustfmt wraps it; the sabotage still blinds it.
-old = '    let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job\n    else {\n'
+# Re-pointed 2026-10-08 (12.9 AC13): `dig_yaw` also faces a `Channel` target, so the `let Some(..)` pattern is `Dig | Cut | Channel` and rustfmt stacks it over five lines; the sabotage still blinds it.
+old = '    let Some(\n        protocol::DwarfJob::Dig { target }\n        | protocol::DwarfJob::Cut { target }\n        | protocol::DwarfJob::Channel { target },\n    ) = entity.job\n    else {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    let Some(protocol::DwarfJob::Dig { target } | protocol::DwarfJob::Cut { target }) = entity.job.filter(|_| false)\n    else {\n'))
+p.write_text(s.replace(old, '    let Some(\n        protocol::DwarfJob::Dig { target }\n        | protocol::DwarfJob::Cut { target }\n        | protocol::DwarfJob::Channel { target },\n    ) = entity.job.filter(|_| false)\n    else {\n'))
 PY
 
 mutation "the blend writer moves a carried stone" gui a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-# Re-pointed 2026-10-05 (12.7): the blend's item map now holds the whole item (kind and stack), so the binding is `item`, not `position`.
-old = '        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none()) {\n'
+# Re-pointed 2026-10-08 (12.9 AC14): the blend's item arm now also skips a wire-carried item and one mid set-down, and rustfmt puts the filter on its own line. The sabotage drops the whole guard, so a parented stone is moved to its cell again.
+old = '            .filter(|_| parent.is_none() && motion.is_none() && !carried.contains(&marker.0))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        } else if let Some(item) = items.get(&marker.0).filter(|_| parent.is_none() || true) {\n'))
+p.write_text(s.replace(old, '            .filter(|_| true)\n'))
 PY
 
 mutation "clips are bound by index again" gui each_clip_binds_the_label_of_its_own_name_in_export_order <<'PY'
