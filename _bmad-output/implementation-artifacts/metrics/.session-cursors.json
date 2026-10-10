@@ -1772,6 +1772,26 @@
     "schema": 2,
     "turns": 81
   },
+  "b171b39a-4d3f-4a52-aa32-b5136bd3147e.jsonl": {
+    "by_model": {
+      "claude-fable-5-1": {
+        "cache_creation": 466930,
+        "cache_read": 14633785,
+        "input": 3244,
+        "output": 134705
+      }
+    },
+    "cache_creation": 466930,
+    "cache_read": 14633785,
+    "input": 3244,
+    "last_ts": "2026-10-10T08:49:21.703Z",
+    "marked_at": null,
+    "output": 134705,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 116
+  },
   "b31911ae-3f52-4845-8b5a-47ac0be0ccb7.jsonl": {
     "by_model": {
       "<synthetic>": {
