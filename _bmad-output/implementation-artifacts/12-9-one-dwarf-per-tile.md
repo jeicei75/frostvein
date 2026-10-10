@@ -323,6 +323,8 @@ A carried item occupies no tile, which is unchanged.
   not really picking up and also when dropping the stone slides.. but not going to tweak it now more" (-> **#181**,
   bug, look parked; AC14's headless tests hold (corrected at review run 1: this said "the sim side of AC14", and AC14 is
   gui-only), and the gui blend reads as a slide rather than a reach).
+  **Pass 3 (2026-10-10, `4c6642a`, after the three review rounds), Wolf:** "ok works now". The live gate is closed; PR
+  on his word.
 
 ### Review Findings
 
@@ -1267,6 +1269,7 @@ a scratch worktree with that tree's `mutate.sh`:
 
 | Date | Change |
 | --- | --- |
+| 2026-10-10 | Seat pass 3 on `4c6642a` (Wolf): "ok works now". Live gate closed. Status done; PR opened on Wolf's yes |
 | 2026-10-10 | Review run 3 patch pass (fresh session, `a7c0865..8fe4b46`, local, unpushed): `3b6f0ca` wire exit 2 on a short run (`max(seen_ticks) >= limit`), a 30 s socket timeout and an empty snapshot (four fake-daemon cases, old script wrong on three, live recipe green); `ac66787` campfire comment struck; `8fe4b46` row 31 mechanism and the run-2 re-pin list. 6 of 6 patches closed, closure table written, no new mutation rows (no Rust behaviour changed). Full gate GREEN on `8fe4b46` (`RUST_TEST_THREADS=1`, 3,508 s, pixel guards 3,077 s). The audit ended at run 3; next is push + the seat pass. Status in-progress |
 | 2026-10-08 | Story created on `26185a0`. #133 reproduced: sim probe (494/3,000 idle ticks shared on `DEFAULT_SEED`, 332 busy) and live wire (`occupancy_wire.py`, 186 shared ticks, `OCCUPANCY RED`). The per-step head-on rule was traced to a livelock, and the escape rule replaces it. `Path` joins `SaveState`. Task 0 (Q1–Q4) is open |
 | 2026-10-08 | **Task 0 ruled (Wolf).** Q1 (b): no swap; the idle dwarf gets an exit `Path` and the miner backs out (AC5 and Task 3.1 amended, mutation row 10 added). Q2: refuse pre-12.9 saves ("old saves are not important"). Q3 (b): **#162 folded in**. Every uncarried item blocks, on pile cells too ("taken pile cells should be impassable"), confirmed over the rec to split it into its own story. Pick-up and drop from the next tile, pile fills inside out: AC10–AC12, Task 10, rows 11–14, instrument `stone entries`. Q4 (a): seat look. Dev mode: Sonnet 5.5 subagents |

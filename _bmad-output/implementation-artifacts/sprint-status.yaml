@@ -2594,7 +2594,7 @@ development_status:
   #     through it -> #177 (Wolf: file, review is done). -> done. PR on Wolf's yes.
   #   2026-10-06 (Wolf): #164 (work visuals trail the walker), #173 (ghost pine) and #174 (cut-mode feel)
   #     FOLDED IN; see epics.md Story 12.8. Larger than drafted; the cap is soft.
-  12-9-one-dwarf-per-tile: in-progress
+  12-9-one-dwarf-per-tile: done
   #   Created 2026-10-08 on 26185a0. #133 REPRODUCED: sim probe (494 of 3,000 idle ticks shared on DEFAULT_SEED,
   #     332 with a busy crew) and live wire (12-9-signoff/occupancy_wire.py: shared ticks 186, OCCUPANCY RED).
   #     FR49's per-step head-on rule LIVELOCKS in a dead-end tunnel (hand-traced); the story uses an escape rule.
@@ -2632,6 +2632,7 @@ development_status:
   #     exit 2; four fake-daemon cases both sides, live recipe green) ac66787 (comment) 8fe4b46 (row 31 text, run-2 re-pin
   #     list). 6/6 closed, no new mutation rows. Full gate GREEN 8fe4b46 3508 s. Audit ended at run 3; next: push +
   #     seat pass (AC13, AC14 lift, back-off feel, let-go beside its hauler, #189 jam, #187 loop). -> in-progress.
+  #   2026-10-10 pushed 4c6642a; seat pass 3 (Wolf): "ok works now". -> done. PR on Wolf's yes.
   12-10-ore-in-the-rock: backlog
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
