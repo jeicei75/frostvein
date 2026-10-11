@@ -497,8 +497,9 @@ fn spawn_positions_for_seed_42_are_pinned() {
     // stone (`z + 2 < height`) into tetrahedrite veins and bloodstone cells, so the folded codes
     // gain 13 and 14. The dwarf positions above, and the camp, height and tree pins elsewhere in
     // this file, did NOT move: ore draws from its own `STREAM_ORE`, which is the whole point of
-    // pinning them separately. Old `0xe5fa_e10f_6708_cc79`.
-    assert_eq!(terrain_fingerprint, 0x369d_d7f4_0876_5f25);
+    // pinning them separately. Old `0xe5fa_e10f_6708_cc79`. (Tuned once more inside 12.10, after the bench showed ore on the grid
+    // edge splitting quads: `0x369d_d7f4_0876_5f25` was the first ore value, never released.)
+    assert_eq!(terrain_fingerprint, 0x9bb0_34d6_e3cd_0a93);
 }
 
 #[test]
@@ -819,10 +820,10 @@ fn ore_is_interior_never_exposed_and_gems_are_deep_and_rare_over_16_seeds() {
                     y: pos.y + dy,
                     z: pos.z + dz,
                 };
-                assert_ne!(
-                    world.tile(beside),
-                    Some(Tile::Empty),
-                    "seed {seed}: {material:?} at {pos:?} touches open air at {beside:?}"
+                // The grid's edge is open air too: `None` is a drawn, bench-counted face.
+                assert!(
+                    matches!(world.tile(beside), Some(tile) if tile != Tile::Empty),
+                    "seed {seed}: {material:?} at {pos:?} touches open air or the world edge at {beside:?}"
                 );
             }
             match material {
@@ -920,10 +921,10 @@ fn default_seed_ore_census_is_in_band() {
         interior,
         percent
     );
-    // Measured 2026-10-11 (12.10): 5009 cells in 556 components (9.0 a vein), 250 bloodstone at
-    // depths 5..=24, 2.00% of 250,849 interior stone cells. The bands are about +-10%.
+    // Measured 2026-10-11 (12.10): 5056 cells in 554 components (9.1 a vein), 252 bloodstone at
+    // depths 5..=25, 2.02% of 250,849 interior stone cells. The bands are about +-10%.
     assert!(
-        (4_500..=5_500).contains(&tetrahedrite.len()) && (500..=620).contains(&veins),
+        (4_550..=5_550).contains(&tetrahedrite.len()) && (500..=620).contains(&veins),
         "{} tetrahedrite cells in {veins} veins is off the measured census",
         tetrahedrite.len()
     );
