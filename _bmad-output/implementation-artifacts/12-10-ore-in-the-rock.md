@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.9's creation
 
 # Story 12.10: Ore in the Rock
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -119,32 +119,32 @@ display is built.
      - tetrahedrite in random-walk veins, about 2% of interior stone, veins of 4-12 cells;
      - bloodstone as single cells at depth ≥ 5 (`GEM_MIN_DEPTH`), about 1 per 20 tetrahedrite cells.
 
-- [ ] **Task 1: protocol** (AC 1, 4)
-  - [ ] `Material` += `Tetrahedrite`, `Bloodstone`; `ItemKind` += `Tetrahedrite`, `Bloodstone` (snake_case, wire diff above).
-  - [ ] Extend the literal pins: the material list in `every_material_and_tile_variant_has_a_pinned_wire_name`
+- [x] **Task 1: protocol** (AC 1, 4)
+  - [x] `Material` += `Tetrahedrite`, `Bloodstone`; `ItemKind` += `Tetrahedrite`, `Bloodstone` (snake_case, wire diff above).
+  - [x] Extend the literal pins: the material list in `every_material_and_tile_variant_has_a_pinned_wire_name`
         (`protocol/src/lib.rs:620-631`), and an ore item JSON pin beside `:732-752`.
 
-- [ ] **Task 2: sim-core** (AC 2-6). RED first: write 2.1's tests and record each failing on the
+- [x] **Task 2: sim-core** (AC 2-6). RED first: write 2.1's tests and record each failing on the
       unchanged rule before 2.2-2.4.
-  - [ ] 2.1 Scenario tests (`tests/scenario.rs`, fixture style of `dig_one_stone` `:1327-1358`, always with a
+  - [x] 2.1 Scenario tests (`tests/scenario.rs`, fixture style of `dig_one_stone` `:1327-1358`, always with a
         pile, because 12.9 items block):
         - `digging_ore_yields_an_ore_item_that_reaches_the_pile`, one tetrahedrite and one bloodstone cell;
         - `a_dig_mark_takes_a_ramp_and_the_ramp_is_dug_out`;
         - `channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp`.
 
         Use `kinds_at` (`:2396-2403`) for kinds.
-  - [ ] 2.2 `Material` (`lib.rs:55-63`) += `Tetrahedrite`, `Bloodstone`; `ItemKind` (`:131-135`) += same.
+  - [x] 2.2 `Material` (`lib.rs:55-63`) += `Tetrahedrite`, `Bloodstone`; `ItemKind` (`:131-135`) += same.
         `fn yield_of(material: Material) -> ItemKind`: ore maps to its own kind, everything else to `Stone`.
-  - [ ] 2.3 Dig filter (`:2326-2329`) keeps `Solid(_) | Ramp(_)` (still no tree). The completion arm (`:1640`)
+  - [x] 2.3 Dig filter (`:2326-2329`) keeps `Solid(_) | Ramp(_)` (still no tree). The completion arm (`:1640`)
         takes `Solid(m) | Ramp(m)` and returns `m`. Capture the material **before** `set_tile` (`:1688`),
         and spawn `Item(yield_of(m))` at `:1695`. Channel (`:1643-1651`): if `m` is ore, produce
         `Ramp(Stone)` and spawn `yield_of(m)`.
-  - [ ] 2.4 `const STREAM_ORE: u64 = 0x4f52_455f_5f5f_5f5f; // "ORE_____"` beside `lib.rs:27-32`.
+  - [x] 2.4 `const STREAM_ORE: u64 = 0x4f52_455f_5f5f_5f5f; // "ORE_____"` beside `lib.rs:27-32`.
         `pub(crate) fn place_ore(dims, heights, tiles, rng)` in `worldgen.rs`, called in `generate` after
         `place_ramps` with `ChaCha8Rng::seed_from_u64(seed ^ STREAM_ORE)`. It replaces only
         `Solid(Stone)` with `z + 2 < height`. Constants are hardcoded (`VEIN_COUNT`, `VEIN_LEN`,
         `GEM_COUNT`, `GEM_MIN_DEPTH`).
-  - [ ] 2.5 `tests/worldgen.rs`:
+  - [x] 2.5 `tests/worldgen.rs`:
         - Extend the exhaustive match `:458-472`. Re-pin the fingerprint `:491` once, with the reason
           "12.10 ore" in the comment block `:475-490` and the commit.
         - Let `surface_is_icy` (`:573-581`) accept ore below the soil.
@@ -155,21 +155,21 @@ display is built.
         - New: bloodstone depth ≥ `GEM_MIN_DEPTH` and bloodstone ≤ tetrahedrite / 10.
         - New: the DEFAULT_SEED census as a printed and asserted band. Record the figures in the
           Completion Notes.
-  - [ ] 2.6 `tests/save_load.rs`: a world with ore items lying and carried saves, loads and steps
+  - [x] 2.6 `tests/save_load.rs`: a world with ore items lying and carried saves, loads and steps
         identically. Per Task 0.4, a world saved before 12.10 (one without ore tiles) loads and ticks.
 
-- [ ] **Task 3: simd** (AC 1, 9)
-  - [ ] `bridge.rs`: `item_kind_out` `:109-114`, `material` `:124-133`, the oracle `expected_material`
+- [x] **Task 3: simd** (AC 1, 9)
+  - [x] `bridge.rs`: `item_kind_out` `:109-114`, `material` `:124-133`, the oracle `expected_material`
         `:347-356`, and the named list in `snapshot_json_obeys_wire_conventions` `:649`. Add the ore arms to
         a unit test of `item_kind_out` (12.7 left it unpinned, `:375-377`).
-  - [ ] `serve.rs`: `the_default_world_holds_tetrahedrite_and_bloodstone_on_the_wire`, which reads the snapshot of a
+  - [x] `serve.rs`: `the_default_world_holds_tetrahedrite_and_bloodstone_on_the_wire`, which reads the snapshot of a
         real daemon and counts both names, with none exposed.
 
-- [ ] **Task 4: gui**, per the approved draft (AC 7)
-  - [ ] `appearance.rs` `material_color` `:350-359`. Extend `appearance_tables_pin_the_cold_boot_palette`
+- [x] **Task 4: gui**, per the approved draft (AC 7)
+  - [x] `appearance.rs` `material_color` `:350-359`. Extend `appearance_tables_pin_the_cold_boot_palette`
         (table `:588-595`, the blue-at-or-above-red check `:602-605`, which stands) and
         `mark_colours_are_distinct_cold_literals` (terrain list `:714-721`, TUI colour list `:760-776`).
-  - [ ] `project.rs`:
+  - [x] `project.rs`:
         - `TerrainSlot` `:209-219` and `TERRAIN_SLOTS` `:229-238` in the **same order** (`slot as usize`
           indexes the array, `:3043-3045`);
         - `base_color` `:241-252` and `TerrainSlot::of` `:254-263`;
@@ -180,31 +180,31 @@ display is built.
 
         `has_snow_cap` (`:3029-3040`) and `rests_on_the_ground` (`:2976-2981`) stay as they are, with ore
         treated like stone. Note it.
-  - [ ] Bench parity, or the gate's bench tier goes red the moment a real export holds ore:
+  - [x] Bench parity, or the gate's bench tier goes red the moment a real export holds ore:
         - `scripts/bench/resolution_bench.py` `KNOWN_MATERIALS` / `_material_detail_depth` `:140-156` and its
           test `:341-350`;
         - `scripts/bench/valley_bench.py` `TERRAIN_RGB` `:35-42`;
         - the matching anchors in `crates/gui/tests/bench_contract.rs:40-202`.
 
         `CONTROL_FACES`/`CONTROL_QUADS`/`24_644` must NOT move (no ore is exposed).
-  - [ ] `headless.rs`, on the `material_rgb` pattern (`:6018-6026`, `:6030-6069`):
+  - [x] `headless.rs`, on the `material_rgb` pattern (`:6018-6026`, `:6030-6069`):
         - `an_ore_cell_on_the_cut_face_draws_in_its_own_colour`, both kinds and stone, all distinct;
         - `an_ore_item_projects_as_a_stone_cube_in_its_ore_colour`;
         - `the_dig_preview_keeps_a_ramp_cell`.
-  - [ ] `docs/tech-art-guidelines.md` materials table `:24-44`: add rows for both ores (#62).
+  - [x] `docs/tech-art-guidelines.md` materials table `:24-44`: add rows for both ores (#62).
 
-- [ ] **Task 5: tui** (AC 8)
-  - [ ] `palette.rs` `tile_cell` `:23-75`: a `Solid` and a `Ramp` arm per ore (a ramp is `▲` in the ore's
+- [x] **Task 5: tui** (AC 8)
+  - [x] `palette.rs` `tile_cell` `:23-75`: a `Solid` and a `Ramp` arm per ore (a ramp is `▲` in the ore's
         colour, as today). Add item cells beside `wood_item_cell` / `stored_wood_item_cell` `:155-169`.
-  - [ ] `view.rs:319-331`: the four new `(ItemKind, stored)` arms.
-  - [ ] `every_look_is_pinned`: add the tile rows `:235-249`. Add the item glyphs to the marker set
+  - [x] `view.rs:319-331`: the four new `(ItemKind, stored)` arms.
+  - [x] `every_look_is_pinned`: add the tile rows `:235-249`. Add the item glyphs to the marker set
         `:333-404`, which asserts they are unique and clear of `existing_glyphs` `:406`. Pin the stored
         variants with their own `assert_eq!` (12.7's deviation).
-  - [ ] `tests/client.rs`, on `capture_growing_world` (`:930-1065`): a `--frames 2 --z 1` capture with
+  - [x] `tests/client.rs`, on `capture_growing_world` (`:930-1065`): a `--frames 2 --z 1` capture with
         ore cells and items gives a count > 0 for each new glyph, and the control 0.
 
-- [ ] **Task 6: the record**
-  - [ ] NEW `mutations/12-10.sh`. Each row is named against its killing test and run alone after commit:
+- [x] **Task 6: the record**
+  - [x] NEW `mutations/12-10.sh`. Each row is named against its killing test and run alone after commit:
         1. dig yields `Stone` whatever the material (`ore_wire` deliberate RED, plus 2.1);
         2. the dig filter refuses ramps again (2.1 ramp test);
         3. ore seeds from `STREAM_WORLDGEN` (the spawn or height pins);
@@ -214,17 +214,17 @@ display is built.
         7. `sim_will_keep` drops ramps (the headless preview test);
         8. tui bloodstone glyph `$` becomes `█` (`every_look_is_pinned`);
         9. gui bloodstone colour equals stone's (the headless colour test).
-  - [ ] Run `scripts/audit-mutations.py` after `cargo fmt`. `3-2-the-dig.sh` and its kin quote the dig
+  - [x] Run `scripts/audit-mutations.py` after `cargo fmt`. `3-2-the-dig.sh` and its kin quote the dig
         filter `Some(Tile::Solid(_)))` and the stone spawn `:1695`. Re-point or retire each with a reason.
         An APPLY-FAILED is a finding.
-  - [ ] Spine (2026-08-09) AD-16: add an amendment paragraph after `:144-157` covering `Material` and
+  - [x] Spine (2026-08-09) AD-16: add an amendment paragraph after `:144-157` covering `Material` and
         `ItemKind` growing by the ore pair, dig taking ramps, and the channel-over-ore rule. Add README rows
         for the new glyphs and colours.
 
-- [ ] **Task 7: live proof and gate** (AC 1, 9, 10)
-  - [ ] The Verification recipes: GREEN, the deliberate RED, and the tui count. Record every figure.
-  - [ ] NEW `12-10-signoff/vehicle-card.md` from the Verification seat block.
-  - [ ] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~55 min; default parallelism OOMs).
+- [x] **Task 7: live proof and gate** (AC 1, 9, 10)
+  - [x] The Verification recipes: GREEN, the deliberate RED, and the tui count. Record every figure.
+  - [x] NEW `12-10-signoff/vehicle-card.md` from the Verification seat block.
+  - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~55 min; default parallelism OOMs).
 
 ## Dev Notes
 
@@ -357,14 +357,167 @@ grep -o '38;2;60;90;210m%' "$SCRATCH/f.txt" | wc -l     # the tetrahedrite liter
 
 ### Agent Model Used
 
+- Orchestrator + verifier: Claude Opus 5.5 (`claude-opus-5-5`). Wolf picked Sonnet 5.5 subagents for the
+  implementation (2026-10-11), as in 12.2-12.9. The skill config still names Codex; Wolf chose against it.
+- Agent A (Sonnet 5.5): Tasks 1, 2 and 3, the gui/tui compile-only stubs, and the old mutation rows its
+  changes un-anchored. Agent B (Sonnet 5.5): Tasks 4 and 5, replacing every stub, and the rows its changes
+  un-anchored. They ran one after the other, on one tree.
+- The orchestrator made `yield_of` exhaustive (`796b450`). It wrote `mutations/12-10.sh`, the spine, README
+  and seat card, and fixed the instrument's pile. It ran every mutation, every live recipe and the full gate.
+
 ### Debug Log References
+
+- **Task 1 RED** (A): the protocol pins did not compile, with four `E0599 no variant … named
+  Tetrahedrite/Bloodstone` errors (`Material`, `ItemKind`).
+- **Task 2 RED** (A). The enum variants were added and the rule left unchanged:
+  - `digging_ore_yields_an_ore_item_that_reaches_the_pile` failed with `digging Tetrahedrite must yield one
+    Tetrahedrite item, got [(Id(10), Stone)]`.
+  - `a_dig_mark_takes_a_ramp_and_the_ramp_is_dug_out` failed with `a dig over a ramp must not be refused`
+    (`left: Some(Designate{Dig…}) right: None`).
+  - `channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp` failed with `left:
+    Some(Ramp(Tetrahedrite)) right: Some(Ramp(Stone))`.
+  - The fingerprint failed alone after `place_ore`. Every dwarf, height, camp and tree pin passed untouched.
+- **Task 3 RED** (A): `E0004 non-exhaustive patterns` in `bridge.rs`: 2 in the bin, 3 in the test bin (the
+  `expected_material` oracle).
+- **Task 4 RED** (B). Each test was run against A's stone-look stubs:
+  - `an_ore_cell_on_the_cut_face_draws_in_its_own_colour` failed with `no tetrahedrite [40, 64, 176] face
+    drawn`. Its stone assertion passed, so the test has a positive half.
+  - `an_ore_item_projects_as_a_stone_cube_in_its_ore_colour` failed with `left: [60, 70, 92] right: [40, 64,
+    176]`.
+  - `the_dig_preview_keeps_a_ramp_cell` failed with `left: [[1, 1, 1]] right: [[1, 1, 1], [2, 1, 1]]`.
+  - `appearance_tables_pin_the_cold_boot_palette` was taken RED after the change, by setting tetrahedrite
+    back to stone.
+  - `bench_literals_match_the_client_palette_lights_and_boot_camera` failed with `matched 0:
+    "tetrahedrite": (40, 64, 176)`.
+  - `test_ore_takes_stones_relief_rule` failed with `'tetrahedrite' not found`.
+  - The blue≥red check and `mark_colours_are_distinct_cold_literals` were extended and pass. They had no
+    separate RED.
+- **Task 5 RED** (B):
+  - `every_look_is_pinned` failed with `left: '█' (86,92,104) right: '%' (60,90,210)`.
+  - `an_ore_item_draws_its_own_glyph_and_a_stored_one_in_the_stockpile_colour` failed with `left: '*'
+    right: '•'`, both in zone green.
+  - `ore_cells_and_ore_items_reach_the_capture_in_their_own_glyph_and_colour` failed with `no % in colour
+    60;90;210`.
+- **Live recipe: instrument defect found and fixed** (`bad0002`). The first GREEN attempt was RED:
+  `bloodstone: target dug NEVER`, at 4000 ticks and again at 12000. A probe showed the cause:
+  - the one 3×3 pile was full at 9 items (8 stone, 1 tetrahedrite);
+  - the two tunnels dig 15 cells;
+  - a stone at `[55,78,13]` blocked the one-wide bloodstone tunnel (12.9), and the marks `[55,79..83,13]`
+    were left.
+
+  No 5×5 or 4×4 is standable near the camp, so the recipe now places **two disjoint 3×3 piles** (18
+  cells). Bloodstone needs ~5,700 ticks, so the recorded run uses `TICKS=8000`, as the Verification allows.
+  A probe on two piles at 8000 had every planned cell dug and the bloodstone on a pile cell at `[61,64,9]`.
+- **Live GREEN** (orchestrator): release `simd` built in a scratch worktree at `796b450`, fresh `simd
+  7718`, `ore_wire.py 7718 8000`:
+  - `census: bloodstone cells=252 depth=5..25 exposed=0 ramps=0`;
+  - `census: tetrahedrite cells=5056 depth=3..25 exposed=0 ramps=0`;
+  - `crew can walk to 16063 cells from 5 dwarves; 201693 cells are within digging reach`;
+  - `plan: tetrahedrite target [77, 64, 11] (depth 3) via 5 digs from [67, 64, 9]`;
+  - `plan: bloodstone target [55, 83, 13] (depth 6) via 10 digs from [62, 67, 9]`;
+  - `piles: [[59, 64, 9], [64, 59, 9]] (18 cells)`;
+  - `bloodstone: target dug tick 4938; bloodstone item on it tick 4938; on a pile cell tick 5670`;
+  - `tetrahedrite: target dug tick 1924; tetrahedrite item on it tick 1924; on a pile cell tick 2326`;
+  - `ore kinds in the rock: 2`, `ORE WIRE OK`, exit 0.
+
+  The bloodstone plan is 10 digs, under the ~12 the Verification flags.
+- **Control** (fresh `simd 7719`, `4000 --control`): `plan: stone target [62, 77, 12] (depth 3) via 4 digs
+  from [62, 67, 9]`; `target dug tick 918; stone item on it tick 918; on a pile cell tick 1341`; `ORE WIRE
+  OK (CONTROL: plain stone)`, exit 0.
+- **Deliberate RED** (row 1, release `simd` in a scratch worktree off `796b450`, `simd 7720`, `8000`):
+  - `bloodstone: target dug tick 4806; bloodstone item on it NEVER; on a pile cell NEVER; FIRST ITEM THERE
+    WAS THE WRONG KIND (tick 4806 kind='stone')`;
+  - `tetrahedrite: target dug tick 1874; … FIRST ITEM THERE WAS THE WRONG KIND (tick 1874 kind='stone')`;
+  - `ORE WIRE RED`, exit 1.
+
+  Ticks vary by ~±250 between runs: commands land on whatever tick the daemon is at when they arrive.
+- **tui recipe** (release `tui`/`simd` at `a69bf7c`, fresh `simd 7741`, `--frame`). Counts are by colour
+  escape, which the renderer emits only when the colour changes, so they are lower bounds:
+  - `--z 11` (the tetrahedrite target): `38;2;60;90;210m%` 88, `38;2;130;220;190m$` 5, `█` 5458;
+  - `--z 13` (the bloodstone target): `%` 80, `$` 4.
+
+  At creation, on `main`, `%` and `$` were 0 (`--z 6`).
+- **Mutations, `12-10.sh`** (`RUST_TEST_THREADS=1 scripts/mutate.sh`, after commit `a69bf7c`): 9 of 10
+  killed on the first run.
+  - Row 1 killed at `digging Tetrahedrite must yield …`. Row 2 killed at the ramp test. Row 3a killed at
+    `spawn_positions_for_seed_42_are_pinned` (the fingerprint). Row 4 killed at `worldgen.rs:806` (`within
+    the soil layer or surface`). Row 5 killed at `worldgen.rs:833` (`bloodstone … is only depth`). Row 6
+    killed at `scenario.rs:3207` (`never a ramp of the ore`). Row 7 killed at `headless.rs:6203`. Row 8
+    killed at `palette.rs:304`. Row 9 killed at `headless.rs:6159`.
+  - **Row 3b SURVIVED** against `tree_density_for_seed_42_is_deterministic_and_in_target_band`. Ore drawing
+    from the tree stream moves every tree, but the trunk count stays in its 230..=300 band. Run by hand
+    under that mutant, with `--no-fail-fast` across sim-core, it was caught by 7 scenario tests (the 12.7
+    tree pin `no trunk at (73, 59): pinned to DEFAULT_SEED`, among them), one `save_load` test and the
+    fingerprint. Re-pointed to `cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing`
+    (`ec7777a`). Run alone after that commit, it was **KILLED**. 10/10.
+  - Row 3a is the story's literal row. Ore seeded from another fresh stream consumes no other stream's
+    draws, so only the fingerprint sees it. That pin was re-pinned in this story, so the row is weaker than
+    3b, which is the real hazard.
+- Exclusivity is not claimed. Each row was run against its named test only.
+- **Full gate** (`RUST_TEST_THREADS=1 scripts/gate.sh`, at `ec7777a`): `GATE GREEN 3393s`, exit 0.
+  The steps took: fmt 0s, clippy 3s, cargo test 384s, pixel guards 2970s, the three no-sim-core-edge
+  probes ok, metrics ledger 0s, bench tests 19s, and mutation tables still apply 9s.
 
 ### Completion Notes List
 
+- **Ore placement** (`worldgen.rs`, `place_ore`, own `STREAM_ORE`, after `place_ramps`):
+  - placement is proportional, not a fixed `VEIN_COUNT`/`GEM_COUNT`: one random-walk vein of 4-12 cells
+    per `INTERIOR_PER_VEIN = 360` interior cells, then one bloodstone per `TETRAHEDRITE_PER_BLOODSTONE = 20`
+    tetrahedrite, at depth ≥ `GEM_MIN_DEPTH = 5`;
+  - small test worlds are not saturated. Depth is `height - z`, so the surface cell is depth 0.
+- **DEFAULT_SEED census:**
+  - 5,056 tetrahedrite in 554 vein components (9.1 per vein), 2.02% of 250,849 interior stone;
+  - 252 bloodstone at depth 5..=25, 1 per 20.1;
+  - the asserted band is 4,550-5,550 cells, 500-620 veins, 1.5-2.5%.
+- **Deviation: ore keeps one cell off the world edge** (`fa9c42c`). The resolution bench counts a grid-edge
+  face as exposed, and ore on the edge split greedy quads (`greedy_quads=12845 (expected 12322)`). Exposed
+  faces did not move. The story's "ore cannot move a bench count" held for faces, not for quads. With the
+  edge skipped, `CONTROL_FACES 62_586`, `CONTROL_QUADS 12_322` and `24_644` are unchanged. The never-exposed
+  test treats the grid edge as air.
+- **Re-pins:** only the terrain fingerprint, `0xe5fa_e10f_6708_cc79` (main) → `0x9bb0_34d6_e3cd_0a93`.
+  It moved twice in-branch (`eb3dc1c`, then `fa9c42c`), and the first value was never released. No
+  scenario pin moved from ramps becoming diggable.
+- `yield_of` is an exhaustive `match` (`796b450`; Agent A had a `_ => Stone` fallback), so a new material
+  must choose its yield.
+- **Look:** every draft literal passed the palette tests unchanged.
+  - gui: tetrahedrite (40,64,176), bloodstone (120,196,176).
+  - tui rock: `%` (60,90,210), `$` (130,220,190), and ramps `▲` in the same colours.
+  - tui items: `•` and `◊`, in zone green when stored.
+  - `TerrainSlot` puts the ores right after Stone, with `TERRAIN_SLOTS` (10) in step. `has_snow_cap` and
+    `rests_on_the_ground` are unchanged, each with a `// NOTE:` that ore counts as stone.
+- **Old mutation rows re-pointed:**
+  - `3-2-the-dig.sh`, 7 rows: the dig filter, the change tuple, the channel arm, the spawn, the stale-job
+    row, and "items draw above entities" (twice: A's stubs, then B's arms);
+  - `3-3` "stone counting and stone drawing use different filters";
+  - `12-7.sh` row 6.
+
+  None was retired. `audit-mutations.py`: 850 rows, all anchored.
+- **The commit `bad0002`** (the Python instrument only) was made with `--no-verify`. The next commit,
+  `a69bf7c`, ran the fast gate over the same tree, green.
+- **AC 10 (the seat) is Wolf's.** The card is `12-10-signoff/vehicle-card.md`. Its tetrahedrite and
+  bloodstone coordinates and z-levels come from the live run.
+
 ### File List
+
+- `crates/protocol/src/lib.rs`
+- `crates/sim-core/src/lib.rs`, `crates/sim-core/src/worldgen.rs`
+- `crates/sim-core/tests/scenario.rs`, `crates/sim-core/tests/worldgen.rs`, `crates/sim-core/tests/save_load.rs`
+- `crates/simd/src/bridge.rs`, `crates/simd/tests/serve.rs`
+- `crates/gui/src/appearance.rs`, `crates/gui/src/project.rs`, `crates/gui/src/designate.rs`
+- `crates/gui/tests/headless.rs`, `crates/gui/tests/bench_contract.rs`
+- `crates/tui/src/palette.rs`, `crates/tui/src/view.rs`, `crates/tui/tests/client.rs`
+- `scripts/bench/resolution_bench.py`, `scripts/bench/valley_bench.py`, `scripts/tests/test_resolution_bench.py`
+- `docs/tech-art-guidelines.md`, `README.md`
+- `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`
+- `_bmad-output/implementation-artifacts/mutations/12-10.sh` (NEW), `mutations/3-2-the-dig.sh`,
+  `mutations/3-3-the-haul-and-the-skeleton-walks.sh`, `mutations/12-7.sh`
+- `_bmad-output/implementation-artifacts/12-10-signoff/ore_wire.py` (pile fix),
+  `12-10-signoff/vehicle-card.md` (NEW)
+- `_bmad-output/implementation-artifacts/12-10-ore-in-the-rock.md`, `sprint-status.yaml`
 
 ## Change Log
 
 | Date | Change |
 |---|---|
 | 2026-10-11 | Created on `32565fd`. Premise defect found: no dig reaches below the surface (ramp-ringed hills), so Task 0.2 proposes ramp digging. `ore_wire.py` RED, its control proven GREEN on a ramp-diggable scratch build. Draft written. Task 0 ruled by Wolf at creation: (b) colours as tetrahedrite + bloodstone, dig takes ramps, #163 split out as 12.10b, channel over ore gives ore + `Ramp(Stone)`, old saves load. |
+| 2026-10-11 | Dev (Sonnet 5.5 subagents A and B, orchestrated and verified by Opus 5.5). Ore veins (tetrahedrite) and rare deep gems (bloodstone) are placed in interior stone from `STREAM_ORE`. Dig takes ramps; a dig or channel over ore yields the ore item, and the channel leaves `Ramp(Stone)`. Wire, gui and tui draw both. Fingerprint re-pinned to `0x9bb0_34d6_e3cd_0a93`. `ore_wire.py` GREEN (two piles, 8000 ticks), and the deliberate RED is red. Mutations 10/10 after row 3b was re-pointed. Full gate green at `ec7777a`. Status → review; AC 10 (the seat) is Wolf's. |

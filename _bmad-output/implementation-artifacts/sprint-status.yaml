@@ -2633,7 +2633,7 @@ development_status:
   #     list). 6/6 closed, no new mutation rows. Full gate GREEN 8fe4b46 3508 s. Audit ended at run 3; next: push +
   #     seat pass (AC13, AC14 lift, back-off feel, let-go beside its hauler, #189 jam, #187 loop). -> in-progress.
   #   2026-10-10 pushed 4c6642a; seat pass 3 (Wolf): "ok works now". -> done. PR #190 opened (a03af91).
-  12-10-ore-in-the-rock: in-progress
+  12-10-ore-in-the-rock: review
   #   Created 2026-10-11 on 32565fd. PREMISE DEFECT: no dig reaches below the surface on any world --
   #     place_ramps rings every hill with ramps and dig takes only Solid, so ore "inside the rock" is
   #     unreachable (fewest-digs search on DEFAULT_SEED: depth 0 only; with ramps diggable, depth 3 in 4
