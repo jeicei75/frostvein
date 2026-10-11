@@ -14,10 +14,10 @@ WSL, first terminal (fresh daemon, DEFAULT_SEED):
 simd 7451
 ```
 
-WSL, second terminal (tui parity; Z is the tetrahedrite target's z, see "Where to look" below):
+WSL, second terminal (tui parity; z 11 is the tetrahedrite's level, see "Where to look" below):
 
 ```bash
-tui 7451 --z Z
+tui 7451 --z 11
 ```
 
 PowerShell, from the Windows checkout:
@@ -28,19 +28,24 @@ PowerShell, from the Windows checkout:
 
 ## Where to look
 
-From `ore_wire.py` on a fresh DEFAULT_SEED daemon (dev, 2026-10-11):
+The **campfire is at `[64, 64, 9]`**. Read on a fresh DEFAULT_SEED daemon (review patch, 2026-10-11):
 
-- the nearest **tetrahedrite** is at `[77, 64, 11]`, 3 below its column's surface, in the hill
-  **east** of the camp (the fire is near `[62, 66, 9]`). Use `--z 11` in the tui;
-- the nearest **bloodstone** is at `[55, 83, 13]`, 6 below its surface, in the hill **south-west**
-  of the camp. Use `--z 13` to see it.
+- **The gui is a mirror image of the tui (#169, open).** With north up in both, **east is on the
+  LEFT in the gui** and on the right in the tui. Every "east" below means world +x.
+- **Tetrahedrite:** the nearest is at `[77, 64, 11]`, 3 below its column's surface, in the hill
+  east of the fire. The tui at `--z 11` shows it as a blue `%`, with more veins beside it.
+- **Bloodstone:** use **`[80, 72, 10]`**, 6 below its surface, in the hill south-east of the fire.
+  In the gui, slice down to z 10. In the tui, press `<` once from z 11: it is the one pale-teal `$`
+  in the frame, low on the right. (The `ore_wire.py` target `[55, 83, 13]` is off the tui's
+  80×24 frame at `--z 13`, which shows no bloodstone at all.)
 
 ## (a) Ore in the rock
 
 1. On a fresh world **no ore shows anywhere**. Ore is only inside the rock.
 2. Press `,` to step the slice down into the hill east of the camp. The cut face shows
    **tetrahedrite veins in deep blue**, as short winding runs, on the grey-blue stone.
-3. Keep going down. Five or more levels into the rock, a lone **bloodstone in pale teal** shows.
+3. Keep going down to z 10. In the hill south-east of the fire (down-left in the gui, #169), a lone
+   **bloodstone in pale teal** shows at `[80, 72, 10]`.
 
 **Question 1:** do the veins and the bloodstone read as ore in the rock, and are they easy to tell
 from stone, soil and ice?
@@ -52,8 +57,9 @@ from stone, soil and ice?
    preview and take marks.** Before this story a hillside refused a dig.
 3. Watch a miner dig in. When he reaches the vein, **a blue cube** comes out where the cell was,
    not a grey stone, and a hauler carries it to the pile.
-4. In the tui, the ore cell is `%` in blue; the dug item is a blue `•`, and it turns **green** on the
-   pile.
+4. In the tui at z 11, the ore cell is `%` in blue and the dug item is a blue `•`. The pile is at
+   the fire's level, z 9: **press `<` twice** to see the item turn **green** on it. At z 11 the
+   pile shows nothing.
 
 **Question 2:** does the ore come out and reach the pile, in both clients?
 
