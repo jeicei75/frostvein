@@ -9,7 +9,7 @@ solid material other than the six pre-12.10 ones is an ore kind, with its cell c
 range below its column's surface, and how many of its cells touch air. Then, for each ore kind, it
 plans the CHEAPEST tunnel (steps + 15 per dig) from the dwarves to a cell of that kind (walking by
 `astar_neighbours`' rules, digging at the digger's own level, ramps included), marks every cell
-of it, places a 3x3 pile near the camp, runs
+of it, places two 3x3 piles near the camp, runs
 at fast4x and reads the daemon's own deltas until TICKS (default 4000). Per kind it checks:
   - the target ore cell becomes `empty`;
   - an item whose `"kind"` is the ORE'S OWN wire name appears on the target cell;
@@ -169,20 +169,22 @@ for name, wanted in targets.items():
           f"{len(cells)} digs from {list(c)}", flush=True)
 taken = {p for cells in plans.values() for p in cells}
 
+# TWO 3x3 piles, not one (dev, 2026-10-11): one item per pile cell, and both tunnels dig 15 cells.
+# A full pile stops a one-wide tunnel at its first unhauled item (12.9), so a single 3x3 stalled the
+# bloodstone tunnel at its 6th dig with the gem never reached. No 4x4 is standable near the camp.
 cx, cy, cz = camp
-pile = None
+piles = []
+pile_cells = set()
 for r in range(3, 12):
     for px, py in ((cx - r - 2, cy), (cx, cy + r), (cx, cy - r - 2), (cx + r, cy)):
         cells = {(x, y, cz) for x in range(px, px + 3) for y in range(py, py + 3)}
-        if all(standable(c) and c not in blocked for c in cells) and not cells & taken:
-            pile = {"min": [px, py, cz], "max": [px + 2, py + 2, cz]}
-            break
-    if pile:
-        break
-if not pile:
-    broken("no 3x3 standable pile near the camp")
-pile_cells = {(x, y, cz) for x in range(pile["min"][0], pile["max"][0] + 1)
-              for y in range(pile["min"][1], pile["max"][1] + 1)}
+        if (len(piles) < 2 and all(standable(c) and c not in blocked for c in cells)
+                and not cells & taken and not cells & pile_cells):
+            piles.append({"min": [px, py, cz], "max": [px + 2, py + 2, cz]})
+            pile_cells |= cells
+if len(piles) < 2:
+    broken("no two 3x3 standable piles near the camp")
+print(f"piles: {[p['min'] for p in piles]} ({len(pile_cells)} cells)", flush=True)
 
 
 def send(obj):
@@ -192,7 +194,7 @@ def send(obj):
 for cells in plans.values():
     for c in cells:
         send({"type": "designate", "kind": "dig", "rect": {"min": list(c), "max": list(c)}})
-send({"type": "place_stockpile", "rects": [pile]})
+send({"type": "place_stockpile", "rects": piles})
 send({"type": "set_speed", "speed": "fast4x"})
 
 found = {name: {"dug": None, "item": None, "piled": None, "wrong": None} for name in plans}
