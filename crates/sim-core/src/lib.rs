@@ -147,7 +147,13 @@ fn yield_of(material: Material) -> ItemKind {
     match material {
         Material::Tetrahedrite => ItemKind::Tetrahedrite,
         Material::Bloodstone => ItemKind::Bloodstone,
-        _ => ItemKind::Stone,
+        // Exhaustive on purpose: a new material must choose its yield, not inherit stone.
+        Material::Stone
+        | Material::Soil
+        | Material::Ice
+        | Material::Snow
+        | Material::TreeTrunk
+        | Material::TreeFoliage => ItemKind::Stone,
     }
 }
 
