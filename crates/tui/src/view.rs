@@ -323,6 +323,13 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             framebuffer.cells[index] = match (item.kind, stored) {
                 (protocol::ItemKind::Stone, true) => stored_item_cell(),
                 (protocol::ItemKind::Stone, false) => item_cell(),
+                // 12.10 Task 5: replaced by Agent B (ore items draw as stone until then).
+                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, true) => {
+                    stored_item_cell()
+                }
+                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, false) => {
+                    item_cell()
+                }
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
             };

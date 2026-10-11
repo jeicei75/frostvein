@@ -350,6 +350,8 @@ mod flicker_tests {
 pub fn material_color(material: Material) -> Color {
     match material {
         Material::Stone => Color::srgb_u8(60, 70, 92),
+        // 12.10 Task 4: replaced by Agent B (ore draws as stone until then).
+        Material::Tetrahedrite | Material::Bloodstone => Color::srgb_u8(60, 70, 92),
         Material::Soil => Color::srgb_u8(56, 52, 62),
         Material::Ice => Color::srgb_u8(104, 128, 170),
         Material::Snow => Color::srgb_u8(136, 150, 178),

@@ -253,7 +253,8 @@ impl TerrainSlot {
 
     fn of(material: Material) -> Self {
         match material {
-            Material::Stone => TerrainSlot::Stone,
+            // 12.10 Task 4: replaced by Agent B (ore uses the stone slot until then).
+            Material::Stone | Material::Tetrahedrite | Material::Bloodstone => TerrainSlot::Stone,
             Material::Soil => TerrainSlot::Soil,
             Material::Ice => TerrainSlot::Ice,
             Material::Snow => TerrainSlot::Snow,
@@ -1729,7 +1730,10 @@ fn coherent_detail_depth(plane: i32, u: i32, v: i32, subdiv: i32, coarse_cells: 
 fn material_detail_depth(material: Material, plane: i32, u: i32, v: i32, subdiv: i32) -> i32 {
     match material {
         Material::Snow => detail_depth(plane, u, v, subdiv),
-        Material::Stone | Material::Soil => coherent_detail_depth(plane, u, v, subdiv, 1),
+        // 12.10 Task 4: ore takes Stone's arm; Agent B to confirm.
+        Material::Stone | Material::Tetrahedrite | Material::Bloodstone | Material::Soil => {
+            coherent_detail_depth(plane, u, v, subdiv, 1)
+        }
         Material::Ice | Material::TreeTrunk | Material::TreeFoliage => 0,
     }
 }
@@ -2236,7 +2240,10 @@ pub fn reconcile(
                     entity.insert((
                         Mesh3d(assets.cube.clone()),
                         MeshMaterial3d(match kind {
-                            ItemKind::Stone => assets.slot(TerrainSlot::Stone, 0),
+                            // 12.10 Task 4: replaced by Agent B.
+                            ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => {
+                                assets.slot(TerrainSlot::Stone, 0)
+                            }
                             ItemKind::Wood => assets.wood_item.clone(),
                         }),
                         Transform::from_translation(item_translation(position, kind, stacks[&id]))
@@ -2348,7 +2355,8 @@ pub fn reconcile(
 /// `blend_entities` call this so the two cannot drift apart.
 fn item_translation(position: [i32; 3], kind: ItemKind, stack: usize) -> Vec3 {
     let drop = match kind {
-        ItemKind::Stone => STONE_ITEM_DROP,
+        // 12.10 Task 4: replaced by Agent B.
+        ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => STONE_ITEM_DROP,
         ItemKind::Wood => WOOD_ITEM_DROP,
     };
     world_to_render(position) + Vec3::new(0.0, drop + ITEM_STACK_STEP * stack as f32, 0.0)
@@ -2357,7 +2365,10 @@ fn item_translation(position: [i32; 3], kind: ItemKind, stack: usize) -> Vec3 {
 /// The drawn size of an item: a stone is a small cube, a log a long box.
 fn item_scale(kind: ItemKind) -> Vec3 {
     match kind {
-        ItemKind::Stone => Vec3::splat(STONE_ITEM_SCALE),
+        // 12.10 Task 4: replaced by Agent B.
+        ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => {
+            Vec3::splat(STONE_ITEM_SCALE)
+        }
         ItemKind::Wood => WOOD_ITEM_SCALE,
     }
 }

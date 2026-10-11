@@ -23,7 +23,8 @@ const DIM_PERCENT: [u16; PEEK_DEPTH] = [55, 35, 22];
 pub fn tile_cell(tile: Tile) -> Cell {
     match tile {
         Tile::Empty => BLANK,
-        Tile::Solid(Material::Stone) => Cell {
+        // 12.10 Task 5: replaced by Agent B (ore draws as stone until then).
+        Tile::Solid(Material::Stone | Material::Tetrahedrite | Material::Bloodstone) => Cell {
             glyph: '█',
             fg: (86, 92, 104),
         },
@@ -47,7 +48,8 @@ pub fn tile_cell(tile: Tile) -> Cell {
             glyph: '♠',
             fg: (54, 106, 78),
         },
-        Tile::Ramp(Material::Stone) => Cell {
+        // 12.10 Task 5: replaced by Agent B.
+        Tile::Ramp(Material::Stone | Material::Tetrahedrite | Material::Bloodstone) => Cell {
             glyph: '▲',
             fg: (86, 92, 104),
         },

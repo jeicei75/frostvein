@@ -345,12 +345,20 @@ p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 # which rotted this anchor. The seam is unchanged.
 # Re-pointed 2026-10-05 (12.7): the item layer now picks the cell by kind (a `match` on kind and
 # stored-ness); the seam is unchanged.
+# Re-pointed 2026-10-11 (12.10): the match gained the two ore-item stub arms (Task 5 replaces them).
 old = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             let stored = mirror.zones().iter().any(|zone| zone.pos == item.pos);
             framebuffer.cells[index] = match (item.kind, stored) {
                 (protocol::ItemKind::Stone, true) => stored_item_cell(),
                 (protocol::ItemKind::Stone, false) => item_cell(),
+                // 12.10 Task 5: replaced by Agent B (ore items draw as stone until then).
+                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, true) => {
+                    stored_item_cell()
+                }
+                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, false) => {
+                    item_cell()
+                }
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
             };
@@ -365,6 +373,13 @@ new = '''    for item in mirror.items() {
             framebuffer.cells[index] = match (item.kind, stored) {
                 (protocol::ItemKind::Stone, true) => stored_item_cell(),
                 (protocol::ItemKind::Stone, false) => item_cell(),
+                // 12.10 Task 5: replaced by Agent B (ore items draw as stone until then).
+                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, true) => {
+                    stored_item_cell()
+                }
+                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, false) => {
+                    item_cell()
+                }
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
             };
