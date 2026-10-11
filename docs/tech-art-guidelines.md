@@ -32,6 +32,8 @@ Ruled in [Value and materials](#value-and-materials), except the rim row. Every 
 | Identifier | RGB | Hex | Notes |
 | --- | --- | --- | --- |
 | `Material::Stone` | `(60, 70, 92)` | `#3C465C` | night palette |
+| `Material::Tetrahedrite` | `(40, 64, 176)` | `#2840B0` | 12.10 ore: deep blue vein mineral, interior rock only; keeps blue at or above red |
+| `Material::Bloodstone` | `(120, 196, 176)` | `#78C4B0` | 12.10 ore: pale teal gem, single cells, deep; keeps blue at or above red |
 | `Material::Soil` | `(56, 52, 62)` | `#38343E` | night palette |
 | `Material::Ice` | `(104, 128, 170)` | `#6880AA` | keeps its blue surface; never capped |
 | `Material::Snow` | `(136, 150, 178)` | `#8896B2` | terrain snow; night palette |
