@@ -2866,3 +2866,66 @@ fn a_save_from_before_item_kinds_is_logged_and_the_daemon_keeps_ticking() {
     let second = read_delta(&mut reader).tick;
     assert!(snapshot.tick < first && first < second);
 }
+
+#[test]
+fn the_default_world_holds_tetrahedrite_and_bloodstone_on_the_wire() {
+    let daemon = Daemon::spawn();
+    let mut reader = BufReader::new(daemon.connect());
+    let mut line = String::new();
+    reader
+        .read_line(&mut line)
+        .expect("daemon must send a snapshot line");
+    // The names as they cross the wire, not as Rust spells them.
+    for wire in [r#"{"solid":"tetrahedrite"}"#, r#"{"solid":"bloodstone"}"#] {
+        assert!(line.contains(wire), "the snapshot never carries {wire}");
+    }
+    let snapshot: protocol::Snapshot =
+        serde_json::from_str(&line).expect("snapshot line must match the protocol");
+
+    let dims = snapshot.dims;
+    let (nx, ny, nz) = (dims.x as usize, dims.y as usize, dims.z as usize);
+    let at = |x: usize, y: usize, z: usize| snapshot.tiles[x + y * nx + z * nx * ny];
+    let (mut tetrahedrite, mut bloodstone) = (0, 0);
+    for z in 0..nz {
+        for y in 0..ny {
+            for x in 0..nx {
+                let tile = at(x, y, z);
+                match tile {
+                    protocol::Tile::Solid(protocol::Material::Tetrahedrite) => tetrahedrite += 1,
+                    protocol::Tile::Solid(protocol::Material::Bloodstone) => bloodstone += 1,
+                    protocol::Tile::Ramp(
+                        protocol::Material::Tetrahedrite | protocol::Material::Bloodstone,
+                    ) => panic!("worldgen produced a ramp of ore at ({x}, {y}, {z})"),
+                    _ => continue,
+                }
+                // Never exposed: no open air beside an ore cell, and the world edge counts as air
+                // (the bench counts an edge face as exposed).
+                for (dx, dy, dz) in [
+                    (-1_i32, 0_i32, 0_i32),
+                    (1, 0, 0),
+                    (0, -1, 0),
+                    (0, 1, 0),
+                    (0, 0, -1),
+                    (0, 0, 1),
+                ] {
+                    let (bx, by, bz) = (x as i32 + dx, y as i32 + dy, z as i32 + dz);
+                    assert!(
+                        (0..nx as i32).contains(&bx)
+                            && (0..ny as i32).contains(&by)
+                            && (0..nz as i32).contains(&bz),
+                        "{tile:?} at ({x}, {y}, {z}) is on the world edge"
+                    );
+                    assert_ne!(
+                        at(bx as usize, by as usize, bz as usize),
+                        protocol::Tile::Empty,
+                        "{tile:?} at ({x}, {y}, {z}) is exposed to open air"
+                    );
+                }
+            }
+        }
+    }
+    assert!(
+        tetrahedrite > 0 && bloodstone > 0 && bloodstone * 10 <= tetrahedrite,
+        "the default world holds {tetrahedrite} tetrahedrite and {bloodstone} bloodstone cells"
+    );
+}
