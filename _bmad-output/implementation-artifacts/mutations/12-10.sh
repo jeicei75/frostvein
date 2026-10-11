@@ -30,7 +30,10 @@ p.write_text(s.replace(old, '        let mut ore_rng = ChaCha8Rng::seed_from_u64
 PY
 
 # 3b is the hazard Key decision 1 names: ore drawing from a stream another feature reads after it.
-mutation "3b ore draws from the tree stream" sim-core tree_density_for_seed_42_is_deterministic_and_in_target_band <<'PY'
+# It SURVIVED against tree_density_for_seed_42_is_deterministic_and_in_target_band (first run,
+# 2026-10-11): the trunk count stays in its 230..=300 band. The pinned tree positions see it: 7
+# scenario tests, a save_load test and the fingerprint fail; the row names the 12.7 tree pin.
+mutation "3b ore draws from the tree stream" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = ('        let mut ore_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_ORE);\n'
