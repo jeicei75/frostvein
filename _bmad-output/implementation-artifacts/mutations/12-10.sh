@@ -99,3 +99,19 @@ old = '        Material::Bloodstone => Color::srgb_u8(120, 196, 176),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        Material::Bloodstone => Color::srgb_u8(60, 70, 92),\n'))
 PY
+
+# Review run 1 (AC 4's other half). Only Ice, the loop's LAST material, so a kill also proves the
+# test reaches every material rather than stopping at Soil.
+mutation "10 ice yields tetrahedrite" sim-core digging_soil_snow_and_ice_still_yields_stone <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = ('        Material::Stone\n'
+       '        | Material::Soil\n'
+       '        | Material::Ice\n'
+       '        | Material::Snow\n')
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        Material::Ice => ItemKind::Tetrahedrite,\n'
+                            '        Material::Stone\n'
+                            '        | Material::Soil\n'
+                            '        | Material::Snow\n'))
+PY

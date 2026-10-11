@@ -3149,6 +3149,38 @@ fn digging_ore_yields_an_ore_item_that_reaches_the_pile() {
     }
 }
 
+/// 12.10 AC4's other half: only ore yields ore. Every other non-tree material still yields one stone.
+#[test]
+fn digging_soil_snow_and_ice_still_yields_stone() {
+    for material in [Material::Soil, Material::Snow, Material::Ice] {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (target, _pile) = ore_fixture(&mut world);
+        assert!(world.set_tile(
+            Pos {
+                z: target.z - 1,
+                ..target
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(target, Tile::Solid(material)));
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        });
+
+        let at = first_item(&mut world, 600, "dig");
+        assert_eq!(at, target, "the dug item lies on the dug cell");
+        assert_eq!(world.tile(target), Some(Tile::Empty));
+        assert_eq!(
+            kinds_at(&world, target, ItemKind::Stone),
+            1,
+            "digging {material:?} must yield one stone, got {:?}",
+            world.item_kinds()
+        );
+        assert_eq!(world.items().len(), 1, "one dig, one item");
+    }
+}
+
 #[test]
 fn a_dig_mark_takes_a_ramp_and_the_ramp_is_dug_out() {
     for (material, kind) in [
