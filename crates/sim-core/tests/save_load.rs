@@ -685,3 +685,105 @@ fn save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end() {
     );
     assert!(control.jobs().is_empty(), "the dig should have completed");
 }
+
+#[test]
+fn a_world_with_ore_items_lying_and_carried_saves_loads_and_steps_identically() {
+    let mut saved = World::generate(42, Dims::DEFAULT);
+    let mut control = World::generate(42, Dims::DEFAULT);
+    let worker = saved.dwarves()[2].1;
+    let tetrahedrite = Pos {
+        x: worker.x + 1,
+        ..worker
+    };
+    let bloodstone = Pos {
+        x: worker.x - 1,
+        ..worker
+    };
+    let pile = saved.dwarves()[0].1;
+    for world in [&mut saved, &mut control] {
+        for (at, material) in [
+            (tetrahedrite, Material::Tetrahedrite),
+            (bloodstone, Material::Bloodstone),
+        ] {
+            assert!(world.set_tile(Pos { z: at.z - 1, ..at }, Tile::Solid(Material::Stone)));
+            assert!(world.set_tile(at, Tile::Solid(material)));
+        }
+        world.apply_command(SimCommand::PlaceStockpile {
+            rect: Rect {
+                min: pile,
+                max: pile,
+            },
+        });
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: Rect {
+                min: bloodstone,
+                max: tetrahedrite,
+            },
+        });
+    }
+    // THE GUARD: stop with ore on the ground and a dwarf carrying one.
+    let carried_and_lying = |world: &World| {
+        let kinds = world.item_kinds();
+        kinds.len() == 2
+            && kinds
+                .iter()
+                .all(|(_, kind)| matches!(kind, ItemKind::Tetrahedrite | ItemKind::Bloodstone))
+            && world
+                .to_save()
+                .dwarves
+                .iter()
+                .any(|dwarf| dwarf.carrying.is_some())
+    };
+    while !carried_and_lying(&saved) {
+        assert!(saved.tick() < 3_000, "never had ore both lying and carried");
+        saved.step();
+        control.step();
+    }
+
+    let mut loaded = World::from_save(saved.to_save());
+    assert_eq!(loaded.item_kinds(), saved.item_kinds());
+    for _ in 0..600 {
+        loaded.step();
+        control.step();
+        assert_eq!(loaded.tiles(), control.tiles());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.item_kinds(), control.item_kinds());
+        assert_eq!(loaded.dwarves(), control.dwarves());
+    }
+    assert!(
+        loaded.items().iter().any(|(_, at)| *at == pile),
+        "no ore item reached the pile after the load"
+    );
+}
+
+#[test]
+fn a_world_saved_before_12_10_loads_ore_less_and_ticks() {
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    let ore = |tile: &Tile| {
+        matches!(
+            tile,
+            Tile::Solid(Material::Tetrahedrite | Material::Bloodstone)
+        )
+    };
+    let had_ore = save.tiles.iter().filter(|tile| ore(tile)).count();
+    assert!(had_ore > 0, "the generated world must hold ore to strip");
+    // A pre-12.10 save is exactly this: every tile one of the six old materials, no ore items.
+    for tile in &mut save.tiles {
+        if ore(tile) {
+            *tile = Tile::Solid(Material::Stone);
+        }
+    }
+    let mut world = World::from_save(save);
+    assert!(!world.tiles().iter().any(ore));
+    for _ in 0..50 {
+        world.step();
+    }
+    assert_eq!(world.tick(), 50);
+    assert!(
+        !world.tiles().iter().any(ore),
+        "loading must not regenerate ore"
+    );
+}
