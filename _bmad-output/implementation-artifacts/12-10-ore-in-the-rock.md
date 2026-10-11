@@ -334,6 +334,67 @@ re-pointed because the cap guard grew two lines; the first commit attempt went R
 
 No REWORK rows: none re-closes a prior round's fix.
 
+#### Review run 2 (2026-10-11, fresh session, on `4f78d88`, diff `571c15e..HEAD`)
+
+**Delta vs run 1:** 3 NEW findings (1 MED, 2 LOW), **1 REWORK** (the seat card's #169 hint, re-opening run 1's
+seat-card patch), 0 HIGH. **Stopping rule: no new finding is HIGH, so the static audit ENDS here.** The next spend is
+seat pass 2 (AC 10), not a run 3.
+
+Four layers ran and none timed out. All used cargo 1.97.1, each in its own `/tmp/review-<layer>` dir with `CARGO_BUILD_JOBS=3`.
+- Blind Hunter (Sonnet): `project.rs`.
+- Edge Case Hunter (Sonnet): the tests, `ore_wire.py`, the seat card and the mutation rows.
+- Acceptance and Feature Auditors (Opus): the whole diff.
+
+| Layer | Findings | Severity | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 1 (kept) | 1 LOW | every `has_snow_cap` call site traced (fine mesher `:1492` shares it); headless + lib `snow` tests |
+| Edge Case Hunter | 2 | 2 LOW | `ore_wire.py` OK (bloodstone piled 5538) and `--control` OK; rows 10, 11 and the 5.4 anchor applied in a copy (10, 11 KILLED); card coordinates on a fresh snapshot |
+| Acceptance Auditor | 1 (merged) | 1 LOW | every closure row; 10 `ore_wire.py` runs (late 3-30 s all OK; OLD script 6 s late RED, #191); Soil/Snow/Ice mutants all KILLED; a subdiv-4 mesher probe (green on HEAD, red on row 11); authors and trailers |
+| Feature Auditor | 2 | 1 MED, 1 LOW | hop trace dig delta → pixel at `--subdiv 4` (all WIRED); **real gui A/B capture** of the card's dug tunnel: floor `(77,95,186)` blue fixed vs `(151,161,184)` cap mutant; boot-frame capture at z 10 |
+
+**Closure table audit (patch pass 1):** all 6 rows HOLD (acceptance, each tested from its unwritten side). The snow-cap
+fix reaches the seat: the subdiv-4 mesher calls the same `has_snow_cap`, proven by a probe test and by a pixel A/B.
+The seat-card row holds for its coordinates and is REWORK for its gui direction (below).
+
+Convergences:
+- the missing subdiv-4 ore cap pin: blind + acceptance;
+- the card's coordinates hold: edge + acceptance + feature.
+
+- [ ] [Review][Patch] **MED, REWORK: the card's gui directions hold only north-up, and the gui boots north DOWN-LEFT
+  (feature)** [`_bmad-output/implementation-artifacts/12-10-signoff/vehicle-card.md`, "Where to look" and (a) step 3]
+  - The card says "with north up in both, east is on the LEFT", and (a)3 says the bloodstone is "down-left in the gui".
+    Nothing tells Wolf to orbit to north-up.
+  - At `BOOT_YAW` 0.7 north is down-left (`camera.rs:13`, pinned at `:266`). `[80,72,10]` therefore projects to
+    about (908,622), **right** of the fire at (640,561). The feature layer's boot capture at z 10 shows the pale-teal
+    cell there.
+  - This is the failure behind seat pass 1's "bloodstone too difficult to find".
+  - Run 1's patch was written for the north-up reading and never tested from the boot view.
+  - Fix: name the boot position ("right of the fire at boot"), or add "orbit with A/D until the compass reads N up".
+- [ ] [Review][Patch] **LOW: "a lone bloodstone" and "the one pale-teal `$`" are false cues (feature)** [same file,
+  same lines] — z 10 holds 16 bloodstone cells, and two lie within about 120 px of the target at boot. An interactive tui
+  larger than 80×24 also shows `[90,53,10]`. The coordinate is right; "one" is the wrong thing to search by. Patched
+  despite LOW because it sits in the lines the MED rewrites.
+- [x] [Review][Defer] **LOW: no test pins ore's top-face colour at `--subdiv 4` (blind + acceptance)**
+  [`crates/gui/tests/headless.rs:6167-6241`, `crates/gui/src/project.rs:1492`] — deferred. The headless test runs
+  subdiv 1 only, where the cube keeps its ore colour under a cap, so only its cap-count assert can fail. The fine mesher
+  shares `has_snow_cap` today, proven live by the pixel A/B. This joins run 1's deferred cut-face item.
+- [x] [Review][Defer] **LOW: `ore_wire.py`'s docstring does not say that the BROKEN check is waived once every kind is
+  piled (edge)** [`12-10-signoff/ore_wire.py`, docstring and the `if last < limit` guard] — deferred, cosmetic.
+
+Dismissed (4):
+- `ore_wire.py` stops after one tick on an empty census (edge): `ok = bool(plans)` still prints RED, so it is not silent.
+- Row 11 kills only on the "open" half (edge): the closure table records the dug-only RED, and acceptance reproduced it.
+- `serve.rs`'s "edge counts as air" is unverified (edge): it was at the wrong path; `crates/simd/tests/serve.rs:2901` holds it.
+- The "0 of 5,716 caps" doc is stale if ore is ever exposed at boot (blind): `serve.rs:2901` and the 16-seed worldgen
+  test pin exposure at 0.
+
+**Not proven live:** AC 10 as a whole (the seat). That includes how ore reads on the 4080 under the seat's lighting,
+whether Wolf finds the bloodstone, the interactive pile/tunnel drag (`--cursor` is dead headless), and tui glyph
+widths in Windows Terminal.
+
+Cost: $13.51 over 323 turns (subagents 81.5% of tokens). Reaped after triage: 8 `/tmp` build dirs, 62.7 GB (34.8 GB reclaimed on disk). Patches LEFT AS ACTION ITEMS (Wolf,
+2026-10-11).
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)

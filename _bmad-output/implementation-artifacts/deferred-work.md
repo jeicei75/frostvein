@@ -2628,3 +2628,15 @@ Diff `32565fd...6e4e8c6`, run 1. Four layers, none timed out.
   It checks `found >= 1` per colour escape and cannot see a wrong item count.
 - **`•` and `◊` are East-Asian-Width Ambiguous** (edge, LOW, read; `crates/tui/src/palette.rs`). They may draw wide in
   some terminals; this is AC 8's seat check. Neither is emoji-capable.
+
+## Deferred from: code review of 12-10-ore-in-the-rock, run 2 (2026-10-11)
+
+Diff `571c15e..4f78d88` (patch pass 1). Four layers, none timed out.
+
+- **No test pins ore's top-face colour at `--subdiv 4`** (blind + acceptance, LOW, RAN;
+  `crates/gui/tests/headless.rs:6167-6241`, `crates/gui/src/project.rs:1492`). The dug-ore test runs subdiv 1, where its
+  own-colour assert cannot fail. The fine mesher shares `has_snow_cap`, which a probe and a pixel A/B proved in review.
+  A duplicated cap predicate there would pass every test. This joins run 1's cut-face item above; acceptance's probe
+  (a 3×3 ore slab through `build_chunk_meshes(.., 4, ..)`, about 25 lines) is the fix.
+- **`ore_wire.py`'s docstring does not say that the BROKEN check is waived once every kind is piled** (edge, LOW,
+  read; `12-10-signoff/ore_wire.py`). Cosmetic.
