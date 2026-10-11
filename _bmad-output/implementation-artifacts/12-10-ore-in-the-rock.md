@@ -259,6 +259,10 @@ real lighting at `--subdiv 4`), and AC 8's glyph width in Windows Terminal.
 Cost: $19.13 over 395 turns (subagents 81.4% of tokens). Reaped after triage: 10 `/tmp` build dirs, 64.6 GB
 (33.7 GB reclaimed on disk). Patches LEFT AS ACTION ITEMS (Wolf, 2026-10-11) for a `/bmad-review-patch` session.
 
+**Seat pass 1 (Wolf, 2026-10-11, after the review):** ore FOUND. Bloodstone is too difficult to find, so it is
+NOT verified at the seat (AC 10's bloodstone half stays open). "Digging is messy": Wolf wants it fixed properly in
+the NEXT story, not in this patch pass.
+
 - [ ] [Review][Patch] (decision resolved) **MED: a tunnel floor of ore draws a snow cap (blind + feature)** — `has_snow_cap`
   (`crates/gui/src/project.rs:3047-3058`) checks only the cell directly above. Any ore cell with `Empty` above therefore
   draws a SnowCap top face (`:1492`), even under a roofed tunnel. On the seat card's own tunnel, `[77,64,10]` is
