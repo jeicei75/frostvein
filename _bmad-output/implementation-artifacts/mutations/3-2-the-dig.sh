@@ -5,11 +5,14 @@ mutation "Designate ignores the diggability filter" sim-core designations_keep_o
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 split the Dig/Channel filter from the new Cut arm and added the tree exclusions; the sabotage still drops the Dig/Channel filter.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
 old = '''                        _ => positions()
                             .filter(|pos| match kind {
                                 DesignationKind::Dig => {
-                                    matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
-                                        && !is_tree(*pos)
+                                    matches!(
+                                        terrain.tile(*pos),
+                                        Some(Tile::Solid(_) | Tile::Ramp(_))
+                                    ) && !is_tree(*pos)
                                 }
                                 DesignationKind::Channel => {
                                     terrain.is_standable(*pos)
@@ -445,14 +448,19 @@ mutation "dig sets the wrong tile" sim-core execute_jobs_walks_then_digs_for_exa
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
 old = '''                JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),
+                    Some(Tile::Solid(material) | Tile::Ramp(material)) => {
+                        Some((job.target, Tile::Empty, yield_of(material)))
+                    }
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''                JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(_)) => Some((Pos { z: job.target.z + 1, ..job.target }, Tile::Empty)),
+                    Some(Tile::Solid(material) | Tile::Ramp(material)) => {
+                        Some((Pos { z: job.target.z + 1, ..job.target }, Tile::Empty, yield_of(material)))
+                    }
 '''))
 PY
 
@@ -480,12 +488,19 @@ mutation "channel writes Empty instead of Ramp" sim-core execute_jobs_channels_a
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
+old = '''                        Some(Tile::Solid(material)) => {
+                            let ramp = match material {
+                                Material::Tetrahedrite | Material::Bloodstone => Material::Stone,
+                                other => other,
+                            };
+                            Some((below, Tile::Ramp(ramp), yield_of(material)))
+                        }
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                        Some(Tile::Solid(_)) => Some((below, Tile::Empty)),
+p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((below, Tile::Empty, yield_of(material))),
 '''))
 PY
 
@@ -493,12 +508,19 @@ mutation "channel loses the material" sim-core execute_jobs_channels_a_material_
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
+old = '''                        Some(Tile::Solid(material)) => {
+                            let ramp = match material {
+                                Material::Tetrahedrite | Material::Bloodstone => Material::Stone,
+                                other => other,
+                            };
+                            Some((below, Tile::Ramp(ramp), yield_of(material)))
+                        }
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                        Some(Tile::Solid(_)) => Some((below, Tile::Ramp(Material::Stone))),
+p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(Material::Stone), yield_of(material))),
 '''))
 PY
 
@@ -506,10 +528,11 @@ mutation "stone is not spawned" sim-core execute_jobs_walks_then_digs_for_exactl
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
 old = '''        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-        ecs.spawn((Item(ItemKind::Stone), item_id, job.target));
+        ecs.spawn((Item(yielded), item_id, job.target));
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
@@ -756,9 +779,10 @@ mutation "stale channel job retries forever" sim-core execute_jobs_removes_a_cha
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''        let Some((changed_pos, tile)) = change else {
+old = '''        let Some((changed_pos, tile, yielded)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
@@ -766,7 +790,7 @@ old = '''        let Some((changed_pos, tile)) = change else {
         };
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''        let Some((changed_pos, tile)) = change else {
+p.write_text(s.replace(old, '''        let Some((changed_pos, tile, yielded)) = change else {
             release_claim(ecs, entity);
             continue;
         };

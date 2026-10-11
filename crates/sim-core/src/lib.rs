@@ -30,6 +30,7 @@ const STREAM_WANDER: u64 = 0x5741_4e44_4552_5f5f;
 const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
 const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"
 const STREAM_PROFESSION: u64 = 0x5052_4f46_4553_534e; // "PROFESSN"
+const STREAM_ORE: u64 = 0x4f52_455f_5f5f_5f5f; // "ORE_____"
 const WANDER_RADIUS: i32 = 3;
 const WANDER_REST_TICKS: u32 = 10;
 /// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
@@ -60,6 +61,8 @@ pub enum Material {
     Snow,
     TreeTrunk,
     TreeFoliage,
+    Tetrahedrite,
+    Bloodstone,
 }
 
 /// A voxel. `Empty` is air; `Solid` is wall/floor; `Ramp` is a walkable slope.
@@ -132,10 +135,21 @@ pub struct Dwarf;
 pub enum ItemKind {
     Stone,
     Wood,
+    Tetrahedrite,
+    Bloodstone,
 }
 
 #[derive(Component)]
 struct Item(ItemKind);
+
+/// What digging a cell of `material` yields: ore its own kind, everything else stone (12.10).
+fn yield_of(material: Material) -> ItemKind {
+    match material {
+        Material::Tetrahedrite => ItemKind::Tetrahedrite,
+        Material::Bloodstone => ItemKind::Bloodstone,
+        _ => ItemKind::Stone,
+    }
+}
 
 #[derive(Component)]
 struct Emitter(LightKind);
@@ -1637,7 +1651,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 // NOTE: designation never marks tree tiles (12.7), so a dig or channel target is
                 // never a tree material by the time it completes.
                 JobKind::Dig => match terrain.tile(job.target) {
-                    Some(Tile::Solid(_)) => Some((job.target, Tile::Empty)),
+                    Some(Tile::Solid(material) | Tile::Ramp(material)) => {
+                        Some((job.target, Tile::Empty, yield_of(material)))
+                    }
                     _ => None,
                 },
                 JobKind::Channel => {
@@ -1646,7 +1662,15 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                         ..job.target
                     };
                     match terrain.tile(below) {
-                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(material))),
+                        // 12.10: ore is taken out, so the ramp it leaves is plain stone and the
+                        // ore is never yielded twice.
+                        Some(Tile::Solid(material)) => {
+                            let ramp = match material {
+                                Material::Tetrahedrite | Material::Bloodstone => Material::Stone,
+                                other => other,
+                            };
+                            Some((below, Tile::Ramp(ramp), yield_of(material)))
+                        }
                         _ => None,
                     }
                 }
@@ -1655,7 +1679,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 }
             }
         };
-        let Some((changed_pos, tile)) = change else {
+        let Some((changed_pos, tile, yielded)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
@@ -1692,7 +1716,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         );
         clear_paths(ecs);
         let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-        ecs.spawn((Item(ItemKind::Stone), item_id, job.target));
+        ecs.spawn((Item(yielded), item_id, job.target));
         ecs.resource_mut::<Jobs>().remove(job.id);
         ecs.resource_mut::<Designations>().0.remove(&job.target);
         release_claim(ecs, entity);
@@ -1975,6 +1999,8 @@ impl World {
         worldgen::apply_ridges(dims, &mut heights);
         let mut tiles = worldgen::layered_terrain(dims, &heights);
         worldgen::place_ramps(dims, &heights, &mut tiles);
+        let mut ore_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_ORE);
+        worldgen::place_ore(dims, &heights, &mut tiles, &mut ore_rng);
         let camp_origin = worldgen::camp_origin(dims, &heights);
         let mut tree_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_TREES);
         worldgen::place_trees(dims, &heights, &mut tiles, camp_origin, &mut tree_rng);
@@ -2325,8 +2351,10 @@ impl World {
                         _ => positions()
                             .filter(|pos| match kind {
                                 DesignationKind::Dig => {
-                                    matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
-                                        && !is_tree(*pos)
+                                    matches!(
+                                        terrain.tile(*pos),
+                                        Some(Tile::Solid(_) | Tile::Ramp(_))
+                                    ) && !is_tree(*pos)
                                 }
                                 DesignationKind::Channel => {
                                     terrain.is_standable(*pos)

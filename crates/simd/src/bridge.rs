@@ -110,6 +110,8 @@ fn item_kind_out(kind: sim_core::ItemKind) -> protocol::ItemKind {
     match kind {
         sim_core::ItemKind::Stone => protocol::ItemKind::Stone,
         sim_core::ItemKind::Wood => protocol::ItemKind::Wood,
+        sim_core::ItemKind::Tetrahedrite => protocol::ItemKind::Tetrahedrite,
+        sim_core::ItemKind::Bloodstone => protocol::ItemKind::Bloodstone,
     }
 }
 
@@ -129,6 +131,8 @@ fn material(material: sim_core::Material) -> protocol::Material {
         sim_core::Material::Snow => protocol::Material::Snow,
         sim_core::Material::TreeTrunk => protocol::Material::TreeTrunk,
         sim_core::Material::TreeFoliage => protocol::Material::TreeFoliage,
+        sim_core::Material::Tetrahedrite => protocol::Material::Tetrahedrite,
+        sim_core::Material::Bloodstone => protocol::Material::Bloodstone,
     }
 }
 
@@ -352,6 +356,8 @@ mod tests {
             sim_core::Material::Snow => protocol::Material::Snow,
             sim_core::Material::TreeTrunk => protocol::Material::TreeTrunk,
             sim_core::Material::TreeFoliage => protocol::Material::TreeFoliage,
+            sim_core::Material::Tetrahedrite => protocol::Material::Tetrahedrite,
+            sim_core::Material::Bloodstone => protocol::Material::Bloodstone,
         }
     }
 
@@ -365,6 +371,35 @@ mod tests {
             sim_core::JobState::Work => r#""work""#,
         };
         serde_json::from_str(wire).expect("hand-written wire name must decode")
+    }
+
+    /// 12.10: the ore pair crosses the bridge under its hand-written wire name, as a material and
+    /// as an item kind (12.7 left `item_kind_out` unpinned; this pins every kind).
+    #[test]
+    fn every_material_and_item_kind_maps_to_its_named_wire_name() {
+        for (value, wire) in [
+            (sim_core::Material::Stone, r#""stone""#),
+            (sim_core::Material::Tetrahedrite, r#""tetrahedrite""#),
+            (sim_core::Material::Bloodstone, r#""bloodstone""#),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&super::material(value)).unwrap(),
+                wire,
+                "{value:?} crossed the bridge as the wrong material"
+            );
+        }
+        for (value, wire) in [
+            (sim_core::ItemKind::Stone, r#""stone""#),
+            (sim_core::ItemKind::Wood, r#""wood""#),
+            (sim_core::ItemKind::Tetrahedrite, r#""tetrahedrite""#),
+            (sim_core::ItemKind::Bloodstone, r#""bloodstone""#),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&super::item_kind_out(value)).unwrap(),
+                wire,
+                "{value:?} crossed the bridge as the wrong item kind"
+            );
+        }
     }
 
     #[test]
@@ -644,9 +679,18 @@ mod tests {
         let tiles = value["tiles"].as_array().expect("tiles must be an array");
         assert!(tiles.iter().any(|tile| tile == "empty"));
 
-        // Every solid/ramp payload must be one of the six named materials — "some
+        // Every solid/ramp payload must be one of the eight named materials — "some
         // lowercase string" would accept a renamed or swapped variant.
-        let named = ["stone", "soil", "ice", "snow", "tree_trunk", "tree_foliage"];
+        let named = [
+            "stone",
+            "soil",
+            "ice",
+            "snow",
+            "tree_trunk",
+            "tree_foliage",
+            "tetrahedrite",
+            "bloodstone",
+        ];
         let mut saw_solid = false;
         for tile in tiles {
             for key in ["solid", "ramp"] {

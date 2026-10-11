@@ -69,11 +69,17 @@ PY
 mutation "6 the dig filter takes tree tiles again" sim-core a_dig_mark_never_lands_on_a_tree_tile <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                                    matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
-                                        && !is_tree(*pos)
+# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
+old = '''                                    matches!(
+                                        terrain.tile(*pos),
+                                        Some(Tile::Solid(_) | Tile::Ramp(_))
+                                    ) && !is_tree(*pos)
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                                    matches!(terrain.tile(*pos), Some(Tile::Solid(_)))
+p.write_text(s.replace(old, '''                                    matches!(
+                                        terrain.tile(*pos),
+                                        Some(Tile::Solid(_) | Tile::Ramp(_))
+                                    )
 '''))
 PY
 
