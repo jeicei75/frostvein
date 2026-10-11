@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.9's creation
 
 # Story 12.10: Ore in the Rock
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -225,6 +225,91 @@ display is built.
   - [x] The Verification recipes: GREEN, the deliberate RED, and the tui count. Record every figure.
   - [x] NEW `12-10-signoff/vehicle-card.md` from the Verification seat block.
   - [x] Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` (~55 min; default parallelism OOMs).
+
+### Review Findings
+
+Code review run 1, 2026-10-11, on `6e4e8c6` (diff `32565fd...HEAD`, 35 files, +2,311/-50; code 19 files,
++1,116/-30). This was a fresh session. Four layers ran and none timed out. All ran cargo 1.97.1, each in its own
+`/tmp/review-<layer>` target dir with `CARGO_BUILD_JOBS=3`.
+- Blind Hunter (Sonnet) took sim-core `src` plus gui `appearance.rs` and `project.rs`.
+- Edge Case Hunter (Sonnet) took simd, tui, protocol, gui `designate.rs`, every `tests/`, the bench scripts and
+  `ore_wire.py`.
+- The Acceptance and Feature Auditors (Opus) took the whole diff.
+
+| Layer | Findings | Severity | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 2 | 1 MED, 1 LOW | the sim-core suite on a `git archive` copy; three dig probes in the copy |
+| Edge Case Hunter | 5 (+2 notes) | 5 LOW | protocol/simd/tui suites; new sim-core, gui and bench tests by name; `ore_wire.py 8000` OK; tui `--z 11` count |
+| Acceptance Auditor | 5 | 2 MED, 3 LOW | every named test; `ore_wire.py` ×4 (2 RED at 8000, OK at 16000, row 1 RED); a `32565fd` vs HEAD snapshot diff; a real `main`-written save loaded live; all 10 rows applied in copies; a soil/snow/ice yield mutant |
+| Feature Auditor | 5 | 5 LOW | hop trace (every hop WIRED); `ore_wire.py 8000` OK; the seat card replayed over the wire with ONE pile (3 runs); tui frames at z 9-13 |
+
+Convergences:
+- the snow cap on dug ore: blind + feature;
+- `rests_on_the_ground` NOTE: blind + acceptance;
+- seat card landmarks and tui steps: feature + acceptance;
+- cut-face test coverage: feature + acceptance.
+
+Live: `ore_wire.py` reproduces GREEN on three independent fresh daemons at 8000 ticks when it connects at once, and
+the row-1 RED reproduces. The seat card's own tunnel was replayed headless with one 3×3 pile: the ramp cell takes its
+mark and is dug, and the tetrahedrite reaches the pile (tick ~1,927). AC 2 was checked against `32565fd`: every one of
+the 5,308 changed cells is ore over `{"solid":"stone"}`, and entities are identical. Seed 42 folded back to stone gives
+main's fingerprint. **Not proven live:** AC 10 in full (the seat), the visual half of AC 7 (ore reads as ore under the
+real lighting at `--subdiv 4`), and AC 8's glyph width in Windows Terminal.
+
+Cost: $19.13 over 395 turns (subagents 81.4% of tokens). Reaped after triage: 10 `/tmp` build dirs, 64.6 GB
+(33.7 GB reclaimed on disk). Patches LEFT AS ACTION ITEMS (Wolf, 2026-10-11) for a `/bmad-review-patch` session.
+
+- [ ] [Review][Patch] (decision resolved) **MED: a tunnel floor of ore draws a snow cap (blind + feature)** — `has_snow_cap`
+  (`crates/gui/src/project.rs:3047-3058`) checks only the cell directly above. Any ore cell with `Empty` above therefore
+  draws a SnowCap top face (`:1492`), even under a roofed tunnel. On the seat card's own tunnel, `[77,64,10]` is
+  tetrahedrite directly under the target `[77,64,11]`, so once the target is dug the vein's continuation in the floor
+  reads white. Task 4 kept `has_snow_cap` unchanged ("ore treated like stone"), and stone tunnel floors already cap the
+  same way, so this follows the spec. But the function's own doc gives the reason soil was excluded: "an excavation
+  erased itself the moment it finished". The 12.10 NOTE's justification ("never exposed at boot") ignores digging, which
+  is how ore is found.
+  **RULED 2026-10-11 (Wolf): option 1, exclude ore from the cap as soil is.** Fix the NOTE, and add a headless test that
+  a dug ore floor draws in its own colour.
+- [ ] [Review][Patch] **MED (#191): `ore_wire.py` goes RED at the recorded 8000 ticks if it connects a few seconds late
+  (acceptance)** [`_bmad-output/implementation-artifacts/12-10-signoff/ore_wire.py:104-108,227-230`] — The planner
+  starts from the dwarves' positions in the connect snapshot. Two fresh daemons, connected late, planned `bloodstone
+  target [95, 23, 17] via 6 digs from [66, 61, 9]`: `on a pile cell NEVER`, `ORE WIRE RED`. At 16000 the same plan piled
+  at tick 8717, `OK`. Fix: stop once every kind is piled, raise the recorded TICKS to 16000, and record the dependence.
+  Same file, folded in (edge, LOW, a latent silent failure): the exposure census (`:90`) counts only `"empty"`
+  neighbours, so ore on the grid edge would print `exposed=0`. Count an off-grid neighbour as exposed, as `serve.rs` and
+  the worldgen test do.
+- [ ] [Review][Patch] **MED: the seat card misplaces the fire, ignores the gui mirror, and its tui steps cannot show the
+  pile or the bloodstone (feature + acceptance)** [`_bmad-output/implementation-artifacts/12-10-signoff/vehicle-card.md`]
+  - The campfire is at `[64,64,9]`, not "near `[62,66,9]`" (a dwarf spawn).
+  - #169 is open: "east of the camp" is on the LEFT in the gui.
+  - The tui at `--z 11` shows 0 green `•`, because the pile is at z 9; say "press `<` twice".
+  - At `--z 13`, the bloodstone at `[55,83]` is 19 rows south, off an 80×24 frame. Name the scroll, or point at the
+    bloodstones visible at z 10/11 near the east hill (`[80,72,10]`, `[89,77,11]`).
+- [ ] [Review][Patch] **MED: AC 4's "any other non-tree material still yields stone" has no test: a mutant survives
+  the whole sim-core suite (acceptance)** [`crates/sim-core/src/lib.rs:146-158`, `crates/sim-core/tests/scenario.rs:3107`]
+  — With `Soil | Snow | Ice => ItemKind::Tetrahedrite`, `cargo test -p sim-core --no-fail-fast` was 0 failed. Add a
+  scenario test that digs soil, snow and ice and asserts one `Stone`, plus a `12-10.sh` row naming it.
+- [ ] [Review][Patch] **LOW: the `rests_on_the_ground` NOTE says ore counts as stone, and the code excludes ore (blind +
+  acceptance)** [`crates/gui/src/project.rs:2991-2997`] — The match is `Stone | Soil | Ice | Snow`. Task 4 rules ore
+  "treated like stone", so add the two ore arms (unreachable today). Patched despite LOW because it is a comment
+  misdescribing the code and a spec deviation.
+- [x] [Review][Defer] **LOW: the "cut face" headless test never slices and never runs `--subdiv 4` (feature +
+  acceptance)** [`crates/gui/tests/headless.rs:6126`] — deferred. It builds a 2-tall world with ore on top and queries
+  `TerrainTile` (subdiv 1 only). Both paths read `TerrainSlot::of` (traced, wired), so a `TERRAIN_SLOTS` drift in the
+  chunk path would pass it. The seat is the real cut-face evidence.
+- [x] [Review][Defer] **LOW: the pre-12.10 save test is built by the new code (edge)**
+  [`crates/sim-core/tests/save_load.rs`, `a_world_saved_before_12_10_loads_ore_less_and_ticks`] — deferred. It
+  rewrites a new save's ore to stone, so it cannot see a representation change. The acceptance layer loaded a real
+  `main`-written `frostvein.save` in the HEAD daemon live (ore 0, ticks on), so AC 6's old-save clause is observed.
+- [x] [Review][Defer] **LOW: the tui ore-capture test is a lower-bound presence check (edge)**
+  [`crates/tui/tests/client.rs:1462-1490`] — deferred. It checks `found >= 1` per colour escape; the literal palette
+  pins and the view test's `stored_*` asserts cover glyph and arm swaps.
+- [x] [Review][Defer] **LOW: `•` and `◊` are East-Asian-Width Ambiguous (edge)** [`crates/tui/src/palette.rs`] —
+  deferred to the seat (AC 8). Neither is emoji-capable. `◊` already carries a NOTE.
+
+Dismissed (2):
+- `ore_wire.py` "piled while still carried" (edge): a carried item has no `Pos` and drops out of `items()`
+  (`simd/src/bridge.rs:91`), so the wire never reports it on a pile cell.
+- the census band pinned to a measured value (edge): intended, per its NOTE.
 
 ## Dev Notes
 

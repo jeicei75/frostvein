@@ -85,6 +85,32 @@
     "schema": 2,
     "turns": 268
   },
+  "0aa9cc45-2226-4c4e-a1ac-6d662daea3b3.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1165226,
+        "cache_read": 41505863,
+        "input": 660,
+        "output": 92661
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 412770,
+        "cache_read": 5248714,
+        "input": 158,
+        "output": 1895
+      }
+    },
+    "cache_creation": 1577996,
+    "cache_read": 46754577,
+    "input": 818,
+    "last_ts": "2026-10-11T13:04:33.415Z",
+    "marked_at": null,
+    "output": 94556,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 395
+  },
   "0b2f00b5-ef80-40d0-b4da-04b92c82fdd0.jsonl": {
     "by_model": {
       "claude-opus-5-5": {

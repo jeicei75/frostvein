@@ -2633,7 +2633,7 @@ development_status:
   #     list). 6/6 closed, no new mutation rows. Full gate GREEN 8fe4b46 3508 s. Audit ended at run 3; next: push +
   #     seat pass (AC13, AC14 lift, back-off feel, let-go beside its hauler, #189 jam, #187 loop). -> in-progress.
   #   2026-10-10 pushed 4c6642a; seat pass 3 (Wolf): "ok works now". -> done. PR #190 opened (a03af91).
-  12-10-ore-in-the-rock: review
+  12-10-ore-in-the-rock: in-progress
   #   Created 2026-10-11 on 32565fd. PREMISE DEFECT: no dig reaches below the surface on any world --
   #     place_ramps rings every hill with ramps and dig takes only Solid, so ore "inside the rock" is
   #     unreachable (fewest-digs search on DEFAULT_SEED: depth 0 only; with ramps diggable, depth 3 in 4
@@ -2641,6 +2641,12 @@ development_status:
   #     RED on main. Task 0 RULED (Wolf, at creation): draft (b) colours as TETRAHEDRITE + BLOODSTONE (DF
   #     names), dig takes ramps (all diggable ground the same, hillsides too), channel over ore -> ore item +
   #     Ramp(Stone), pre-12.10 saves load ore-less. #163 NOT folded in: split out as 12.10b, next.
+  #   2026-10-11 dev DONE (Sonnet A/B + Opus): ore_wire GREEN, row 1 RED, mutations 10/10, full gate GREEN ec7777a.
+  #   2026-10-11 code review run 1 on 32565fd...6e4e8c6 (4 layers, none timed out, every hop WIRED): 0 HIGH, 4 MED,
+  #     LOW tail. 1 decision (snow cap paints a dug ore floor white) RULED: exclude ore from the cap as soil is.
+  #     5 patches LEFT AS ACTION ITEMS (ore_wire late-connect RED at 8000 = #191 + grid-edge census; seat card
+  #     fire/mirror/tui z; AC4 soil/snow/ice yield unpinned; snow cap; rests_on_the_ground NOTE). 4 defer.
+  #     Seat (AC10) still Wolf's. -> in-progress.
   12-10b-a-way-down: backlog
   #   Added 2026-10-11 at 12.10's creation (Wolf: "own story, right after"). #163: the channel opens the
   #     level below. Trap known at creation: since 12.9 an item is lifted only from a same-level neighbour,
