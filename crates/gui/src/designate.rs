@@ -216,9 +216,9 @@ pub fn designation_input(
 
 /// Which cell a mode actually designates, given the cell the ray hit and the face it entered.
 ///
-/// **Dig wants the cell the ray hit.** `sim-core` filters dig on `Tile::Solid`, and picking only
-/// ever resolves a solid or ramp cell (`is_visible_at_slice`), so the picked cell is already the
-/// right one.
+/// **Dig wants the cell the ray hit.** `sim-core` filters dig on `Tile::Solid` or `Tile::Ramp`
+/// (12.10), and picking only ever resolves a solid or ramp cell (`is_visible_at_slice`), so the
+/// picked cell is already the right one.
 ///
 /// **Channel and stockpile want a STANDABLE cell** — `Tile::Empty` with support beneath — and the
 /// picked cell can never be one, because picking cannot return air. Sending the picked cell is

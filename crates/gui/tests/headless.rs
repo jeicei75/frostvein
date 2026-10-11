@@ -6068,6 +6068,145 @@ fn a_wood_item_projects_as_a_log_and_a_stone_still_as_a_stone() {
     );
 }
 
+/// 12.10 AC7: an ore item is the stone's small cube (same scale, same drop) in the ore's colour,
+/// and the three kinds are three different colours. Nothing glows.
+#[test]
+fn an_ore_item_projects_as_a_stone_cube_in_its_ore_colour() {
+    let mut start = snapshot_with_dims(Dims { x: 3, y: 1, z: 1 }, vec![Tile::Empty; 3], Vec::new());
+    start.items = vec![
+        Item {
+            id: 1,
+            pos: [0, 0, 0],
+            kind: protocol::ItemKind::Stone,
+        },
+        Item {
+            id: 2,
+            pos: [1, 0, 0],
+            kind: protocol::ItemKind::Tetrahedrite,
+        },
+        Item {
+            id: 3,
+            pos: [2, 0, 0],
+            kind: protocol::ItemKind::Bloodstone,
+        },
+    ];
+    let mut app = headless_app(start);
+    app.update();
+    app.update();
+
+    let (stone, stone_material) = projected_item_pose(&mut app, 1);
+    let (tetra, tetra_material) = projected_item_pose(&mut app, 2);
+    let (blood, blood_material) = projected_item_pose(&mut app, 3);
+    for (pose, x) in [(tetra, 1), (blood, 2)] {
+        assert_eq!(pose.scale, stone.scale, "an ore is the stone's cube");
+        assert_eq!(pose.scale, Vec3::splat(0.4));
+        assert!(
+            (pose.translation.y - (world_to_render([x, 0, 0]).y - 0.3)).abs() < 1e-6,
+            "an ore item rests where a stone rests: {}",
+            pose.translation.y
+        );
+    }
+    assert_eq!(material_rgb(&app, &stone_material), [60, 70, 92]);
+    assert_eq!(material_rgb(&app, &tetra_material), [40, 64, 176]);
+    assert_eq!(material_rgb(&app, &blood_material), [120, 196, 176]);
+    for handle in [&stone_material, &tetra_material, &blood_material] {
+        let emissive = app
+            .world()
+            .resource::<Assets<StandardMaterial>>()
+            .get(handle)
+            .unwrap()
+            .emissive;
+        assert_eq!(emissive, bevy::color::LinearRgba::BLACK, "nothing glows");
+    }
+}
+
+/// 12.10 AC7: a tetrahedrite and a bloodstone cell draw their own colours on the terrain faces
+/// beside the stone around them. The world is wide enough that the centre has no rim dissolve.
+#[test]
+fn an_ore_cell_on_the_cut_face_draws_in_its_own_colour() {
+    let dims = Dims { x: 60, y: 60, z: 2 };
+    let index = |x: i32, y: i32| (x + y * dims.x as i32) as usize;
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    for y in 0..60 {
+        for x in 0..60 {
+            tiles[index(x, y)] = Tile::Solid(Material::Stone);
+        }
+    }
+    tiles[index(30, 30)] = Tile::Solid(Material::Tetrahedrite);
+    tiles[index(32, 30)] = Tile::Solid(Material::Bloodstone);
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+    app.update();
+    app.update();
+
+    let mut drawn = BTreeSet::new();
+    let handles = app
+        .world_mut()
+        .query_filtered::<&MeshMaterial3d<StandardMaterial>, With<TerrainTile>>()
+        .iter(app.world())
+        .map(|material| material.0.clone())
+        .collect::<Vec<_>>();
+    for handle in &handles {
+        drawn.insert(material_rgb(&app, handle));
+    }
+    let stone = [60, 70, 92];
+    let tetrahedrite = [40, 64, 176];
+    let bloodstone = [120, 196, 176];
+    for (name, rgb) in [
+        ("stone", stone),
+        ("tetrahedrite", tetrahedrite),
+        ("bloodstone", bloodstone),
+    ] {
+        assert!(
+            drawn.contains(&rgb),
+            "no {name} {rgb:?} face drawn: {drawn:?}"
+        );
+    }
+    assert!(stone != tetrahedrite && tetrahedrite != bloodstone && stone != bloodstone);
+}
+
+/// 12.10 Task 0.2: dig takes ramps, so the preview must light a ramp cell as the sim will keep it.
+#[test]
+fn the_dig_preview_keeps_a_ramp_cell() {
+    let anchor = [1, 1, 1];
+    let release = [2, 1, 1];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 4, y: 4, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Ramp(Material::Stone);
+    let mut app = live_app(snapshot_with_dims(dims, tiles, vec![])).0;
+    install_pick_camera(&mut app, rig, anchor_cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(2);
+    app.update();
+
+    press_once(&mut app, KeyCode::Digit1);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(Some(release_cursor));
+    app.update();
+
+    assert_eq!(
+        preview_tiles(&mut app),
+        vec![anchor, release],
+        "the solid and the ramp are both dig targets"
+    );
+}
+
 /// 12.7 Task 0.2: four logs on one cell are drawn stacked, at four DISTINCT heights, in ascending
 /// id order, one log height apart. A lone stone keeps its floor height.
 #[test]
