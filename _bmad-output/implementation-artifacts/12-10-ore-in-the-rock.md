@@ -263,7 +263,7 @@ Cost: $19.13 over 395 turns (subagents 81.4% of tokens). Reaped after triage: 10
 NOT verified at the seat (AC 10's bloodstone half stays open). "Digging is messy": Wolf wants it fixed properly in
 the NEXT story, not in this patch pass.
 
-- [ ] [Review][Patch] (decision resolved) **MED: a tunnel floor of ore draws a snow cap (blind + feature)** — `has_snow_cap`
+- [x] [Review][Patch] (decision resolved) **MED: a tunnel floor of ore draws a snow cap (blind + feature)** — `has_snow_cap`
   (`crates/gui/src/project.rs:3047-3058`) checks only the cell directly above. Any ore cell with `Empty` above therefore
   draws a SnowCap top face (`:1492`), even under a roofed tunnel. On the seat card's own tunnel, `[77,64,10]` is
   tetrahedrite directly under the target `[77,64,11]`, so once the target is dug the vein's continuation in the floor
@@ -273,7 +273,7 @@ the NEXT story, not in this patch pass.
   is how ore is found.
   **RULED 2026-10-11 (Wolf): option 1, exclude ore from the cap as soil is.** Fix the NOTE, and add a headless test that
   a dug ore floor draws in its own colour.
-- [ ] [Review][Patch] **MED (#191): `ore_wire.py` goes RED at the recorded 8000 ticks if it connects a few seconds late
+- [x] [Review][Patch] **MED (#191): `ore_wire.py` goes RED at the recorded 8000 ticks if it connects a few seconds late
   (acceptance)** [`_bmad-output/implementation-artifacts/12-10-signoff/ore_wire.py:104-108,227-230`] — The planner
   starts from the dwarves' positions in the connect snapshot. Two fresh daemons, connected late, planned `bloodstone
   target [95, 23, 17] via 6 digs from [66, 61, 9]`: `on a pile cell NEVER`, `ORE WIRE RED`. At 16000 the same plan piled
@@ -281,18 +281,18 @@ the NEXT story, not in this patch pass.
   Same file, folded in (edge, LOW, a latent silent failure): the exposure census (`:90`) counts only `"empty"`
   neighbours, so ore on the grid edge would print `exposed=0`. Count an off-grid neighbour as exposed, as `serve.rs` and
   the worldgen test do.
-- [ ] [Review][Patch] **MED: the seat card misplaces the fire, ignores the gui mirror, and its tui steps cannot show the
+- [x] [Review][Patch] **MED: the seat card misplaces the fire, ignores the gui mirror, and its tui steps cannot show the
   pile or the bloodstone (feature + acceptance)** [`_bmad-output/implementation-artifacts/12-10-signoff/vehicle-card.md`]
   - The campfire is at `[64,64,9]`, not "near `[62,66,9]`" (a dwarf spawn).
   - #169 is open: "east of the camp" is on the LEFT in the gui.
   - The tui at `--z 11` shows 0 green `•`, because the pile is at z 9; say "press `<` twice".
   - At `--z 13`, the bloodstone at `[55,83]` is 19 rows south, off an 80×24 frame. Name the scroll, or point at the
     bloodstones visible at z 10/11 near the east hill (`[80,72,10]`, `[89,77,11]`).
-- [ ] [Review][Patch] **MED: AC 4's "any other non-tree material still yields stone" has no test: a mutant survives
+- [x] [Review][Patch] **MED: AC 4's "any other non-tree material still yields stone" has no test: a mutant survives
   the whole sim-core suite (acceptance)** [`crates/sim-core/src/lib.rs:146-158`, `crates/sim-core/tests/scenario.rs:3107`]
   — With `Soil | Snow | Ice => ItemKind::Tetrahedrite`, `cargo test -p sim-core --no-fail-fast` was 0 failed. Add a
   scenario test that digs soil, snow and ice and asserts one `Stone`, plus a `12-10.sh` row naming it.
-- [ ] [Review][Patch] **LOW: the `rests_on_the_ground` NOTE says ore counts as stone, and the code excludes ore (blind +
+- [x] [Review][Patch] **LOW: the `rests_on_the_ground` NOTE says ore counts as stone, and the code excludes ore (blind +
   acceptance)** [`crates/gui/src/project.rs:2991-2997`] — The match is `Stone | Soil | Ice | Snow`. Task 4 rules ore
   "treated like stone", so add the two ore arms (unreachable today). Patched despite LOW because it is a comment
   misdescribing the code and a spec deviation.
@@ -314,6 +314,25 @@ Dismissed (2):
 - `ore_wire.py` "piled while still carried" (edge): a carried item has no `Pos` and drops out of `items()`
   (`simd/src/bridge.rs:91`), so the wire never reports it on a pile cell.
 - the census band pinned to a measured value (edge): intended, per its NOTE.
+
+#### Patch pass 1 (2026-10-11, fresh session, on `571c15e`)
+
+All 5 patch items landed in 4 commits: `d3a3d12` (AC 4 test), `e2bc89f` (snow cap + `rests_on_the_ground`),
+`d3bbfb3` (`ore_wire.py`), `b2657c5` (seat card). **Full gate GREEN at `b2657c5`**
+(`RUST_TEST_THREADS=1 scripts/gate.sh`, exit 0, 3502 s: cargo test 414 s, pixel guards 3044 s). Mutations
+for the rows this pass touched: **3/3 KILLED** (12-10 rows 10 and 11, and 5.4's "snow cap leaves bare top",
+re-pointed because the cap guard grew two lines; the first commit attempt went RED on exactly that APPLY-FAILED).
+
+| Item | Fix written for | Then tested | Pre-existing-state fixture | Mutation |
+| --- | --- | --- | --- | --- |
+| Snow cap on ore (ruling) | ore opened to the sky by a dig delta | ore ALREADY open in the boot snapshot (a save or mid-dig world), plus open stone beside it still capped (non-vacuity) | `a_dug_ore_floor_draws_in_its_own_colour_not_a_snow_cap`: `[30,30,0]`/`[32,30,0]` open at snapshot, `[30,34,0]`/`[32,34,0]` roofed then dug | row 11 KILLED. RED before the fix on the snapshot side, and on the dug side alone with the loop cut to `dug` (`Tetrahedrite at [30, 34, 0] … must not draw a snow cap`) |
+| #191 `ore_wire.py` late connect | a late connect (crew wandered) | a prompt connect, the old path, still OK and now stops early | live fresh `simd`: A at once → OK, piled 5538, 33 s; B 5 s late → plan `[95,23,17]` from `[65,61,9]`, piled 9102, OK; C the OLD script at 8000, 5 s late → `on a pile cell NEVER`, RED (#191 reproduced) | hand mutant: drop `and not all(piled)` from the BROKEN check → `ORE WIRE BROKEN: the daemon closed at tick 5670, before TICKS=16000`, exit 2 |
+| `ore_wire.py` edge census (folded) | ore on the grid edge | fully enclosed interior ore (the only shape worldgen makes) | fake daemon (scratch `edge_daemon.py`, 3×3×3 stone): tetrahedrite at x=0 `(0,1,1)`, bloodstone enclosed `(1,1,1)` | the old script is the mutant: edge `exposed=0`; new `exposed=1`; enclosed `exposed=0` in both. The live DEFAULT_SEED census is unchanged (`exposed=0` for both kinds) |
+| Seat card | a reader at the seat | every claim re-read on a fresh daemon and a tui frame | fresh DEFAULT_SEED snapshot: campfire `[64,64,9]`; `[77,64,11]` tetrahedrite, `[80,72,10]` bloodstone (depth 6). `tui --frame` per z: bloodstone `$` count z9 0, z10 1 (row 18 col 56 = `[80,72]`), z11 1, z13 0 | n/a (prose). **Review's evidence partly wrong:** z 11's visible `$` is `[96,55,11]` (depth 14), and the suggested `[89,77,11]` falls on row 23, off the map. The card names `[80,72,10]` only |
+| AC 4 other materials | soil/snow/ice dug (the pre-12.10 rule, unchanged) | the ore arms, already pinned by `digging_ore_yields_…` | `digging_soil_snow_and_ice_still_yields_stone`: generated seed-42 world, each material set on the cell beside dwarf 2 | row 10 (ICE ONLY, the loop's last material) KILLED: `digging Ice must yield one stone, got [(Id(10), Tetrahedrite)]` |
+| `rests_on_the_ground` arms | the NOTE's claim (ore counts as stone) | no test: unreachable, since no tree stands on interior ore | none; a comment and arm fix | none (no new test) |
+
+No REWORK rows: none re-closes a prior round's fix.
 
 ## Dev Notes
 
@@ -615,3 +634,4 @@ grep -o '38;2;60;90;210m%' "$SCRATCH/f.txt" | wc -l     # the tetrahedrite liter
 |---|---|
 | 2026-10-11 | Created on `32565fd`. Premise defect found: no dig reaches below the surface (ramp-ringed hills), so Task 0.2 proposes ramp digging. `ore_wire.py` RED, its control proven GREEN on a ramp-diggable scratch build. Draft written. Task 0 ruled by Wolf at creation: (b) colours as tetrahedrite + bloodstone, dig takes ramps, #163 split out as 12.10b, channel over ore gives ore + `Ramp(Stone)`, old saves load. |
 | 2026-10-11 | Dev (Sonnet 5.5 subagents A and B, orchestrated and verified by Opus 5.5). Ore veins (tetrahedrite) and rare deep gems (bloodstone) are placed in interior stone from `STREAM_ORE`. Dig takes ramps; a dig or channel over ore yields the ore item, and the channel leaves `Ramp(Stone)`. Wire, gui and tui draw both. Fingerprint re-pinned to `0x9bb0_34d6_e3cd_0a93`. `ore_wire.py` GREEN (two piles, 8000 ticks), and the deliberate RED is red. Mutations 10/10 after row 3b was re-pointed. Full gate green at `ec7777a`. Status → review; AC 10 (the seat) is Wolf's. |
+| 2026-10-11 | Review patch pass 1: all 5 patch items landed (`d3a3d12`, `e2bc89f`, `d3bbfb3`, `b2657c5`). Ore excluded from the snow cap (Wolf's ruling); AC 4 soil/snow/ice yield test; `ore_wire.py` to 16000 ticks with early stop and an edge-aware census; seat card fixed. Full gate GREEN at `b2657c5` (3502 s); touched mutation rows 3/3 killed. Status stays in-progress: AC 10 (the seat) is unrun. |
