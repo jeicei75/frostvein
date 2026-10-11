@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.9's creation
 
 # Story 12.10: Ore in the Rock
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
