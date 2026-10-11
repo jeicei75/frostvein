@@ -10,7 +10,8 @@ range below its column's surface, and how many of its cells touch air. Then, for
 plans the CHEAPEST tunnel (steps + 15 per dig) from the dwarves to a cell of that kind (walking by
 `astar_neighbours`' rules, digging at the digger's own level, ramps included), marks every cell
 of it, places two 3x3 piles near the camp, runs
-at fast4x and reads the daemon's own deltas until TICKS (default 4000). Per kind it checks:
+at fast4x and reads the daemon's own deltas until every kind is piled or TICKS (default 16000).
+Per kind it checks:
   - the target ore cell becomes `empty`;
   - an item whose `"kind"` is the ORE'S OWN wire name appears on the target cell;
   - that item later sits on a pile cell.
@@ -22,6 +23,11 @@ One line per finding, then one verdict line: `ORE WIRE OK` (exit 0), `ORE WIRE R
 could be planned). Exit 0 alone is not a result: read the lines.
 
 Observed at creation (2026-10-11, main 32565fd, release simd): see the story's Verification.
+
+TICKS DEPENDS ON WHEN YOU CONNECT (#191, review run 1): the planner starts from the dwarves where the
+connect snapshot finds them. Connected at once, both kinds piled inside 8000 ticks; connected a few
+seconds late, the crew had wandered and the bloodstone plan piled only at tick 8717. Hence 16000 and
+the early stop: a run ends as soon as both are piled, so the larger bound costs a prompt run nothing.
 """
 import collections
 import heapq
@@ -32,7 +38,7 @@ import sys
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 control = "--control" in sys.argv
 port = int(args[0])
-limit = int(args[1]) if len(args) > 1 else 4000
+limit = int(args[1]) if len(args) > 1 else 16000
 BASE = {"stone", "soil", "ice", "snow", "tree_trunk", "tree_foliage"}
 
 
@@ -87,7 +93,9 @@ for p, t in tiles.items():
     entry["ramps"] += ramp(p) is not None
     entry["depths"].append(surface[(p[0], p[1])] - p[2])
     x, y, z = p
-    if any(tiles.get(n) == "empty" for n in
+    # Off the grid counts as exposed, as `serve.rs` and the worldgen test count it: ore on the edge
+    # is a cut face, not "exposed=0".
+    if any(tiles.get(n, "empty") == "empty" for n in
            ((x + 1, y, z), (x - 1, y, z), (x, y + 1, z), (x, y - 1, z), (x, y, z + 1), (x, y, z - 1))):
         entry["exposed"] += 1
 if census:
@@ -224,11 +232,11 @@ try:
             if item["id"] in item_of and p in pile_cells:
                 name = item_of[item["id"]]
                 found[name]["piled"] = found[name]["piled"] or tick
-        if tick >= limit:
+        if tick >= limit or all(r["piled"] for r in found.values()):
             break
 except socket.timeout:
     broken(f"the daemon stalled for 30 s at tick {last}")
-if last < limit:
+if last < limit and not all(r["piled"] for r in found.values()):
     broken(f"the daemon closed at tick {last}, before TICKS={limit}")
 
 

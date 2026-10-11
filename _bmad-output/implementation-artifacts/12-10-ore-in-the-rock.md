@@ -413,6 +413,11 @@ python3 _bmad-output/implementation-artifacts/12-10-signoff/ore_wire.py 7712 400
   NEVER; … FIRST ITEM THERE WAS THE WRONG KIND (tick N kind='stone')` and `ORE WIRE RED`.
 - Bloodstone is depth ≥ 5, which is 6 digs at the nearest (creation search). If its `plan:` line needs more
   than ~12 digs, raise `TICKS` (the 2nd argument) and record the digs and ticks: 12.12 needs reachable gems.
+- **TICKS depends on when you connect (#191, review run 1).** The planner starts from where the connect
+  snapshot finds the dwarves. Connected 5 s late, the bloodstone plan becomes `[95, 23, 17] via 6 digs from
+  [65, 61, 9]` and piles at tick 9102, so a run at 8000 reads `on a pile cell NEVER`, `ORE WIRE RED`. The
+  default is now **16000**, and the script stops as soon as every kind is piled (connected at once: done at
+  tick 5538, 33 s wall).
 - `ORE WIRE BROKEN` (exit 2) means no snapshot, a daemon that closed or stalled, or no plan. It is never a
   pass or a fail of the feature.
 
