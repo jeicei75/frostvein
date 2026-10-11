@@ -6164,6 +6164,82 @@ fn an_ore_cell_on_the_cut_face_draws_in_its_own_colour() {
     assert!(stone != tetrahedrite && tetrahedrite != bloodstone && stone != bloodstone);
 }
 
+/// 12.10 review run 1 (Wolf's ruling): ore is excluded from the snow cap as soil is, so a tunnel
+/// dug down onto a vein shows the vein, not fresh snow. Both paths: ore floors the snapshot already
+/// holds open to the sky, and ore floors a dig delta opens. At subdiv 1 the cube keeps its ore
+/// colour under a cap, so the CAP COUNT is what discriminates; the colour pins what is seen.
+#[test]
+fn a_dug_ore_floor_draws_in_its_own_colour_not_a_snow_cap() {
+    let dims = Dims { x: 60, y: 60, z: 3 };
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    for y in 0..60 {
+        for x in 0..60 {
+            tiles[index([x, y, 0])] = Tile::Solid(Material::Stone);
+        }
+    }
+    let open = [
+        ([30, 30, 0], Material::Tetrahedrite, [40, 64, 176]),
+        ([32, 30, 0], Material::Bloodstone, [120, 196, 176]),
+    ];
+    let dug = [
+        ([30, 34, 0], Material::Tetrahedrite, [40, 64, 176]),
+        ([32, 34, 0], Material::Bloodstone, [120, 196, 176]),
+    ];
+    for (cell, material, _) in open.iter().chain(&dug) {
+        tiles[index(*cell)] = Tile::Solid(*material);
+    }
+    for (cell, _, _) in &dug {
+        tiles[index([cell[0], cell[1], 1])] = Tile::Solid(Material::Stone);
+    }
+    let mut app = headless_app(snapshot_with_dims(dims, tiles, Vec::new()));
+    app.update();
+    app.update();
+    apply_delta(
+        &mut app,
+        delta(
+            dug.iter()
+                .map(|(cell, _, _)| TileChange {
+                    pos: [cell[0], cell[1], 1],
+                    tile: Tile::Empty,
+                })
+                .collect(),
+            Vec::new(),
+        ),
+    );
+    app.update();
+    app.update();
+
+    let caps = app
+        .world_mut()
+        .query::<&SnowCap>()
+        .iter(app.world())
+        .map(|cap| cap.0)
+        .collect::<BTreeSet<_>>();
+    assert!(
+        caps.contains(&[31, 30, 0]) && caps.contains(&[31, 34, 0]),
+        "open stone beside the ore must still be capped, or this test sees nothing"
+    );
+    let faces = app
+        .world_mut()
+        .query::<(&TerrainTile, &MeshMaterial3d<StandardMaterial>)>()
+        .iter(app.world())
+        .map(|(tile, material)| (tile.0, material.0.clone()))
+        .collect::<BTreeMap<_, _>>();
+    for (cell, material, rgb) in open.iter().chain(&dug) {
+        assert!(
+            !caps.contains(cell),
+            "{material:?} at {cell:?} open to the sky must not draw a snow cap"
+        );
+        assert_eq!(
+            material_rgb(&app, &faces[cell]),
+            *rgb,
+            "{material:?} at {cell:?} must draw in its own colour"
+        );
+    }
+}
+
 /// 12.10 Task 0.2: dig takes ramps, so the preview must light a ramp cell as the sim will keep it.
 #[test]
 fn the_dig_preview_keeps_a_ramp_cell() {

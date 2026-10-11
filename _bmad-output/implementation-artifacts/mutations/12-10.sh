@@ -115,3 +115,13 @@ p.write_text(s.replace(old, '        Material::Ice => ItemKind::Tetrahedrite,\n'
                             '        | Material::Soil\n'
                             '        | Material::Snow\n'))
 PY
+
+# Review run 1 (Wolf's snow-cap ruling): ore caps like stone again, as the dev's NOTE had it.
+mutation "11 ore takes a snow cap" gui a_dug_ore_floor_draws_in_its_own_colour_not_a_snow_cap <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = ('                && material != Material::Tetrahedrite\n'
+       '                && material != Material::Bloodstone\n')
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY

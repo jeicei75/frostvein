@@ -2989,11 +2989,18 @@ pub fn has_snow_laden_crown(mirror: &Mirror, position: [i32; 3]) -> bool {
 
 /// Whether the cell directly below is terrain rather than tree. Foliage resting on the ground is a
 /// SKIRT, not a crown — see `has_snow_laden_crown`.
-// NOTE: 12.10 ore counts as stone here; it is interior rock, never a surface a skirt rests on.
+// NOTE: 12.10 ore counts as stone here, though no tree grows on it: ore is interior rock.
 fn rests_on_the_ground(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(
         terrain_material_at(mirror, [position[0], position[1], position[2] - 1]),
-        Some(Material::Stone | Material::Soil | Material::Ice | Material::Snow)
+        Some(
+            Material::Stone
+                | Material::Soil
+                | Material::Ice
+                | Material::Snow
+                | Material::Tetrahedrite
+                | Material::Bloodstone
+        )
     )
 }
 
@@ -3043,7 +3050,8 @@ fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> 
 /// (136,150,178), so an excavation erased itself the moment it finished. Measured before the
 /// change: 1,016 soil tiles are already exposed at boot and NONE of them carried a cap (they all
 /// have solid rock above), so this alters exactly 0 of the 5,716 caps in the approved boot frame.
-// NOTE: 12.10 ore is interior rock and is never exposed at boot; if it ever is, it caps like stone.
+// NOTE: 12.10 ore is excluded for soil's reason (Wolf, review run 1). It is never exposed at boot,
+// so the only way it meets the sky is a dig, and a cap would paint the vein a tunnel was dug to find.
 pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(
         mirror.tile(position),
@@ -3051,6 +3059,8 @@ pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
             if material != Material::Ice
                 && material != Material::TreeFoliage
                 && material != Material::Soil
+                && material != Material::Tetrahedrite
+                && material != Material::Bloodstone
     ) && !matches!(
         mirror.tile([position[0], position[1], position[2] + 1]),
         Some(Tile::Solid(_) | Tile::Ramp(_))
