@@ -5,9 +5,10 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
-    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, carrier_cell, crowd_cell, cursor_cell, designation_cell,
-    dim, dwarf_colour, entity_cell, item_cell, pending_rect_cell, stored_item_cell,
-    stored_wood_item_cell, tile_cell, wood_item_cell, zone_cell,
+    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, bloodstone_item_cell, carrier_cell, crowd_cell,
+    cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, item_cell, pending_rect_cell,
+    stored_bloodstone_item_cell, stored_item_cell, stored_tetrahedrite_item_cell,
+    stored_wood_item_cell, tetrahedrite_item_cell, tile_cell, wood_item_cell, zone_cell,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -323,13 +324,10 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             framebuffer.cells[index] = match (item.kind, stored) {
                 (protocol::ItemKind::Stone, true) => stored_item_cell(),
                 (protocol::ItemKind::Stone, false) => item_cell(),
-                // 12.10 Task 5: replaced by Agent B (ore items draw as stone until then).
-                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, true) => {
-                    stored_item_cell()
-                }
-                (protocol::ItemKind::Tetrahedrite | protocol::ItemKind::Bloodstone, false) => {
-                    item_cell()
-                }
+                (protocol::ItemKind::Tetrahedrite, true) => stored_tetrahedrite_item_cell(),
+                (protocol::ItemKind::Tetrahedrite, false) => tetrahedrite_item_cell(),
+                (protocol::ItemKind::Bloodstone, true) => stored_bloodstone_item_cell(),
+                (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
             };
@@ -1388,6 +1386,46 @@ mod tests {
         assert_eq!(framebuffer.cell(1, 1), stored_wood_item_cell());
         assert_eq!(framebuffer.cell(3, 1).glyph, '=');
         assert_eq!(framebuffer.cell(1, 1).fg, zone_cell().fg);
+    }
+
+    /// 12.10: each ore item draws its own glyph, and a stored one keeps that glyph in zone green.
+    #[test]
+    fn an_ore_item_draws_its_own_glyph_and_a_stored_one_in_the_stockpile_colour() {
+        let mut snapshot = empty_snapshot(Dims { x: 5, y: 3, z: 2 });
+        snapshot.zones = vec![Zone { pos: [1, 1, 1] }, Zone { pos: [2, 1, 1] }];
+        snapshot.items = vec![
+            Item {
+                id: 5,
+                pos: [1, 1, 1],
+                kind: protocol::ItemKind::Tetrahedrite,
+            },
+            Item {
+                id: 6,
+                pos: [2, 1, 1],
+                kind: protocol::ItemKind::Bloodstone,
+            },
+            Item {
+                id: 7,
+                pos: [3, 1, 1],
+                kind: protocol::ItemKind::Tetrahedrite,
+            },
+            Item {
+                id: 8,
+                pos: [4, 1, 1],
+                kind: protocol::ItemKind::Bloodstone,
+            },
+        ];
+
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+
+        assert_eq!(framebuffer.cell(1, 1), stored_tetrahedrite_item_cell());
+        assert_eq!(framebuffer.cell(2, 1), stored_bloodstone_item_cell());
+        assert_eq!(framebuffer.cell(3, 1), tetrahedrite_item_cell());
+        assert_eq!(framebuffer.cell(4, 1), bloodstone_item_cell());
+        assert_eq!(framebuffer.cell(1, 1).glyph, '•');
+        assert_eq!(framebuffer.cell(2, 1).glyph, '◊');
+        assert_eq!(framebuffer.cell(1, 1).fg, zone_cell().fg);
+        assert_eq!(framebuffer.cell(2, 1).fg, zone_cell().fg);
     }
 
     /// 12.7: the `marks:` tally counts a cut mark. A cut glyph the tally does not know reads as
