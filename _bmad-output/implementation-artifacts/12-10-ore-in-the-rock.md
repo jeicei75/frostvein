@@ -360,7 +360,7 @@ Convergences:
 - the missing subdiv-4 ore cap pin: blind + acceptance;
 - the card's coordinates hold: edge + acceptance + feature.
 
-- [ ] [Review][Patch] **MED, REWORK: the card's gui directions hold only north-up, and the gui boots north DOWN-LEFT
+- [x] [Review][Patch] **MED, REWORK: the card's gui directions hold only north-up, and the gui boots north DOWN-LEFT
   (feature)** [`_bmad-output/implementation-artifacts/12-10-signoff/vehicle-card.md`, "Where to look" and (a) step 3]
   - The card says "with north up in both, east is on the LEFT", and (a)3 says the bloodstone is "down-left in the gui".
     Nothing tells Wolf to orbit to north-up.
@@ -370,7 +370,9 @@ Convergences:
   - This is the failure behind seat pass 1's "bloodstone too difficult to find".
   - Run 1's patch was written for the north-up reading and never tested from the boot view.
   - Fix: name the boot position ("right of the fire at boot"), or add "orbit with A/D until the compass reads N up".
-- [ ] [Review][Patch] **LOW: "a lone bloodstone" and "the one pale-teal `$`" are false cues (feature)** [same file,
+  - **Applied 2026-10-12:** both options. "Where to look" names the boot bearing and the `A`/`D` orbit; the
+    bloodstone is "right of the fire at boot" in both places. The LOW below landed in the same edit.
+- [x] [Review][Patch] **LOW: "a lone bloodstone" and "the one pale-teal `$`" are false cues (feature)** [same file,
   same lines] — z 10 holds 16 bloodstone cells, and two lie within about 120 px of the target at boot. An interactive tui
   larger than 80×24 also shows `[90,53,10]`. The coordinate is right; "one" is the wrong thing to search by. Patched
   despite LOW because it sits in the lines the MED rewrites.
