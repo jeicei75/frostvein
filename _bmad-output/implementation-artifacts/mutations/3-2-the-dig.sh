@@ -6,6 +6,7 @@ import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 split the Dig/Channel filter from the new Cut arm and added the tree exclusions; the sabotage still drops the Dig/Channel filter.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
+# Re-pointed 2026-10-13 (12.10b): the channel arm gained a trailing z / emitter filter.
 old = '''                        _ => positions()
                             .filter(|pos| match kind {
                                 DesignationKind::Dig => {
@@ -22,6 +23,12 @@ old = '''                        _ => positions()
                                         })
                                 }
                                 DesignationKind::Cut => unreachable!("handled above"),
+                            })
+                            // 12.10b: a channel's step opens two cells down (D2: none at z < 2) and
+                            // never under a fire (D3, #188).
+                            .filter(|pos| {
+                                kind != DesignationKind::Channel
+                                    || (pos.z >= 2 && !emitter_tiles.contains(pos))
                             })
                             .collect(),
 '''

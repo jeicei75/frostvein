@@ -1071,14 +1071,21 @@ fn preview_cells(
 /// Whether the sim would KEEP a designation of this mode at this cell.
 ///
 /// Mirrors the two filters in `sim-core`'s command handling: dig keeps `Tile::Solid` and
-/// `Tile::Ramp` (never a tree; 12.10), channel and stockpile keep standable cells, and both drop
-/// the remainder in silence.
+/// `Tile::Ramp` (never a tree; 12.10), channel and stockpile keep standable cells (a channel not
+/// on a fire or below z 2), and both drop the remainder in silence.
 fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
     match mode {
         DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_))),
-        DesignateMode::Channel | DesignateMode::Stockpile => {
+        // 12.10b: a channel is also refused on an emitter's tile and below z 2 (D2, D3).
+        DesignateMode::Channel => {
             client_core::is_standable(mirror, tile)
+                && tile[2] >= 2
+                && !mirror.entities().any(|entity| {
+                    matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire)
+                        && entity.pos == tile
+                })
         }
+        DesignateMode::Stockpile => client_core::is_standable(mirror, tile),
         // Cut previews the WHOLE box (12.8 §2); `preview_appearance` tells the trees it will mark
         // from the rest. Clear removes rather than designates; there is nothing for the sim to filter.
         DesignateMode::Cut | DesignateMode::Clear | DesignateMode::None => true,
@@ -4169,6 +4176,58 @@ mod tests {
         assert!((stone.y - resting).abs() < 1e-6);
         assert_eq!(stone.x, world_to_render(position).x);
         assert_eq!(stone.z, world_to_render(position).z);
+    }
+
+    /// 12.10b D2/D3: a channel mark is refused on an emitter's tile and where z < 2, and the
+    /// preview mirrors the sim so it lights neither. A stockpile has no such rule here.
+    #[test]
+    fn the_channel_preview_skips_an_emitters_tile_and_cells_below_z_two() {
+        use crate::designate::DesignateMode::{Channel, Stockpile};
+        let dims = Dims { x: 3, y: 1, z: 4 };
+        let mut tiles = vec![Tile::Empty; 12];
+        let at = |x: usize, z: usize| x + z * 3;
+        for x in 0..3 {
+            tiles[at(x, 0)] = Tile::Solid(protocol::Material::Stone);
+            tiles[at(x, 1)] = Tile::Solid(protocol::Material::Stone);
+        }
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims,
+            tiles: tiles.clone(),
+            entities: vec![protocol::Entity {
+                id: 1,
+                kind: EntityKind::Campfire,
+                pos: [1, 0, 2],
+                state: protocol::JobState::Idle,
+                light: Some(protocol::LightKind::Campfire),
+                identity: None,
+                profession: None,
+                job: None,
+                carrying: None,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        assert!(sim_will_keep(&mirror, [0, 0, 2], Channel));
+        assert!(
+            !sim_will_keep(&mirror, [1, 0, 2], Channel),
+            "the campfire's own tile"
+        );
+        assert!(sim_will_keep(&mirror, [1, 0, 2], Stockpile));
+
+        // Only the floor at z 0: the standable cell at z 1 has no cell two below it.
+        let mut low = tiles;
+        for x in 0..3 {
+            low[at(x, 1)] = Tile::Empty;
+        }
+        let mirror = world(dims, low);
+        assert!(client_core::is_standable(&mirror, [0, 0, 1]));
+        assert!(!sim_will_keep(&mirror, [0, 0, 1], Channel));
+        assert!(sim_will_keep(&mirror, [0, 0, 1], Stockpile));
     }
 
     /// 12.7: the cut preview lights exactly the tree tiles the sim will catch, at the cut level.

@@ -2373,6 +2373,8 @@ impl World {
         };
         match command {
             SimCommand::Designate { kind, rect } => {
+                let emitter_tiles: BTreeSet<Pos> =
+                    self.emitters().into_iter().map(|(_, pos, _)| pos).collect();
                 let workable: Vec<_> = {
                     let terrain = self.ecs.resource::<Terrain>();
                     let is_tree = |pos: Pos| {
@@ -2404,6 +2406,12 @@ impl World {
                                         })
                                 }
                                 DesignationKind::Cut => unreachable!("handled above"),
+                            })
+                            // 12.10b: a channel's step opens two cells down (D2: none at z < 2) and
+                            // never under a fire (D3, #188).
+                            .filter(|pos| {
+                                kind != DesignationKind::Channel
+                                    || (pos.z >= 2 && !emitter_tiles.contains(pos))
                             })
                             .collect(),
                     }
@@ -5067,6 +5075,64 @@ mod tests {
             );
             assert_eq!(world.designations(), vec![(target, kind)]);
         }
+    }
+
+    // 12.10b D3 (#188): a channel under a fire would leave it hanging over a hole.
+    #[test]
+    fn a_channel_mark_is_refused_on_an_emitters_tile_only() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (_, fire, _) = world.emitters()[0];
+        let beside = Pos {
+            x: fire.x + 1,
+            ..fire
+        };
+        for cell in [fire, beside] {
+            assert!(world.ecs.resource::<super::Terrain>().is_standable(cell));
+        }
+        let kind = super::DesignationKind::Channel;
+        let rect = super::Rect {
+            min: fire,
+            max: fire,
+        };
+        assert_eq!(
+            world.apply_command(super::SimCommand::Designate { kind, rect }),
+            Some(super::Refusal::Designate { kind, rect })
+        );
+        assert!(world.designations().is_empty());
+        // A rect over both keeps the cell beside the fire and drops the fire's.
+        let rect = super::Rect {
+            min: fire,
+            max: beside,
+        };
+        assert_eq!(
+            world.apply_command(super::SimCommand::Designate { kind, rect }),
+            None
+        );
+        assert_eq!(world.designations(), vec![(beside, kind)]);
+    }
+
+    // 12.10b D2: the cell two under the target must exist for the step to open into.
+    #[test]
+    fn a_channel_mark_is_refused_where_z_is_below_two() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let kind = super::DesignationKind::Channel;
+        for (z, kept) in [(1, false), (2, true)] {
+            let target = at(30, 30, z);
+            assert!(world.set_tile(target, Tile::Empty));
+            assert!(world.set_tile(at(30, 30, z - 1), Tile::Solid(Material::Stone)));
+            assert!(world.ecs.resource::<super::Terrain>().is_standable(target));
+            let rect = super::Rect {
+                min: target,
+                max: target,
+            };
+            let expected = (!kept).then_some(super::Refusal::Designate { kind, rect });
+            assert_eq!(
+                world.apply_command(super::SimCommand::Designate { kind, rect }),
+                expected,
+                "channel at z {z}"
+            );
+        }
+        assert_eq!(world.designations(), vec![(at(30, 30, 2), kind)]);
     }
 
     #[test]

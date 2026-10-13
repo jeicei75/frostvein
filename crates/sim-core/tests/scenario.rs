@@ -441,18 +441,19 @@ fn reversed_rect_designates_the_normalized_inclusive_tiles() {
 #[test]
 fn designation_rect_clips_to_world_bounds() {
     let mut world = World::generate(42, Dims::DEFAULT);
-    make_standable(&mut world, Pos { x: 0, y: 0, z: 1 });
-    make_standable(&mut world, Pos { x: 1, y: 0, z: 1 });
+    // 12.10b re-pin (was z 1): a channel is refused below z 2, so the rect sits at z 2.
+    make_standable(&mut world, Pos { x: 0, y: 0, z: 2 });
+    make_standable(&mut world, Pos { x: 1, y: 0, z: 2 });
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
-        rect: rect(Pos { x: -1, y: -1, z: 1 }, Pos { x: 1, y: 0, z: 1 }),
+        rect: rect(Pos { x: -1, y: -1, z: 2 }, Pos { x: 1, y: 0, z: 2 }),
     });
 
     assert_eq!(
         world.designations(),
         vec![
-            (Pos { x: 0, y: 0, z: 1 }, DesignationKind::Channel),
-            (Pos { x: 1, y: 0, z: 1 }, DesignationKind::Channel),
+            (Pos { x: 0, y: 0, z: 2 }, DesignationKind::Channel),
+            (Pos { x: 1, y: 0, z: 2 }, DesignationKind::Channel),
         ]
     );
 }
@@ -2683,7 +2684,13 @@ fn a_cut_over_no_tree_is_refused_and_a_dig_never_marks_a_tree() {
     );
     assert!(world.designations().is_empty(), "no channel mark on a tree");
     // A channel on ordinary ground still marks.
-    let ground_cell = Pos { z: camp.z, ..camp };
+    // 12.10b re-pin (was: the camp cell itself): the camp cell is the campfire's tile, where a
+    // channel is now refused (D3), so the ground cell is the one beside it.
+    let ground_cell = Pos {
+        x: camp.x + 1,
+        z: camp.z,
+        ..camp
+    };
     assert!(is_standable(&world, ground_cell));
     assert_eq!(
         world.apply_command(SimCommand::Designate {
@@ -2933,11 +2940,12 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // "Never under any dwarf" moved the runs: (6, 6, 0), (12, 6, 4) and (13, 6, 2) are gone and
     // (16, 4, 0) is new, an idle dwarf between foliage, two loose stones and a drop.
     // 12.10b re-pin: a channel opens a step down and its block lands beside the worker, so the
-    // runs moved again. Was [(10, 4, 2), (10, 6, 3), (16, 4, 0)]; now (4, 4, 4) and (10, 6, 4),
+    // runs moved again. Was [(10, 4, 2), (10, 6, 3), (16, 4, 0)]; now (4, 4, 4) and (10, 6, 4) before D3,
     // read by hand at tick 4,000: each is an idle dwarf whose same-level neighbours are a loose
     // block, rock or a drop (the #186 shape), with no mark and no claim left in the run. Task 4
-    // (the dig-face jam) owns the final record.
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 2] = [(4, 4, 4), (10, 6, 4)];
+    // (the dig-face jam) owns the final record. (10, 6, 4) left once a channel was refused on the
+    // campfire's tile (D3): both rects cover it, so seed 10's crew worked a different order.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 1] = [(4, 4, 4)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
