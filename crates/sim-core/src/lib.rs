@@ -1321,6 +1321,48 @@ fn closed_to_dwarves(
     closed
 }
 
+/// #185: the idle blocker on the holder's path has no way out because idle dwarves are lined up
+/// behind it in a one-wide passage. Searches through the idle dwarves (never the holder, never a
+/// dwarf with a job) for the nearest free tile off the holder's path, and sends the idle dwarf
+/// nearest that tile out on the rest of the route. The line shifts a dwarf at a time and the
+/// holder waits (`false`) meanwhile. No swap: nobody changes places.
+fn make_room_down_the_idle_chain(
+    ecs: &mut EcsWorld,
+    blocked: &BTreeSet<Pos>,
+    occupied: &BTreeSet<Pos>,
+    (pos, next): (Pos, Pos),
+    holder_tiles: &BTreeSet<Pos>,
+) -> bool {
+    let idle: BTreeMap<Pos, Entity> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter(|entity| {
+            entity
+                .get::<CurrentJob>()
+                .is_some_and(|current| current.0.is_none())
+        })
+        .filter_map(|entity| Some((*entity.get::<Pos>()?, entity.id())))
+        .collect();
+    let mut except: Vec<Pos> = idle.keys().copied().collect();
+    except.push(pos);
+    let closed = closed_to_dwarves(blocked, occupied, &except);
+    let Some(route) = route_to_nearest(ecs.resource::<Terrain>(), &closed, next, |tile| {
+        !occupied.contains(&tile) && !holder_tiles.contains(&tile)
+    }) else {
+        return false;
+    };
+    // The last idle dwarf on the route has the free tile ahead of it; the others follow it later.
+    if let Some((at, rest)) = route
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, tile)| idle.get(tile).map(|_| (i, &route[i + 1..])))
+    {
+        ecs.entity_mut(idle[&route[at]]).insert(Path(rest.to_vec()));
+    }
+    false
+}
+
 /// The next tile of a holder's `path` holds another dwarf (FR49). Returns `true` when `path` now
 /// starts on a free tile and the holder should step, `false` when it waits. May move the blocker
 /// (it steps aside, or yields) or replace `path` (a re-route, or the holder yields).
@@ -1383,7 +1425,13 @@ fn resolve_blocked_step(
         let Some(route) = route_to_nearest(terrain, &closed, next, |tile| {
             tile != pos && !holder_tiles.contains(&tile)
         }) else {
-            return false;
+            return make_room_down_the_idle_chain(
+                ecs,
+                blocked,
+                occupied,
+                (pos, next),
+                &holder_tiles,
+            );
         };
         blocker_path = route.clone();
         ecs.entity_mut(blocker).insert(Path(route));
@@ -5818,7 +5866,6 @@ mod tests {
     // one-wide tunnel behind four idle woodcutters whose homes are tunnel tiles; its dig is in the
     // room. The mirrored layout finishes at tick 370; this one was still undone at 40,100.
     #[test]
-    #[ignore = "RED until Task 4"]
     fn a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig() {
         let mut world = room_and_tunnel();
         stand_miners_at(
@@ -5831,6 +5878,7 @@ mod tests {
         insert_dig(&mut world, 0, ROOM_WALL);
         world.ecs.resource_mut::<super::Tick>().0 = 100;
 
+        // Done by about tick 400 (the mirrored layout: 370); the bound is 2.5x that, not a tuned fit.
         watch(&mut world, 1_000, |_| {}, |world| world.jobs().is_empty());
         assert_eq!(world.tile(ROOM_WALL), Some(Tile::Empty));
     }

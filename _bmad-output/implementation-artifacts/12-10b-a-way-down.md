@@ -125,14 +125,14 @@ from channel: **dig** removes a block at the miner's own level (a tunnel), **cha
     `astar_neighbours(terrain, blocked, *pos)`. Keep the "target standable" gate and the delivery leg.
   - [x] Check every consumer that assumed same-z: the gui's facing (`a_channelling_miner_faces_the_target_cell`,
     `headless.rs:5313`) and `serve.rs`'s "same z, Manhattan distance 1" assert from 12.9 (`0fccc74`).
-- [ ] **Task 4: the dig-face jam** (AC 7, 8)
-  - [ ] Reproduce from the sweep's RED delays first: dump positions, `claims()`, `jobs()` and items at the
+- [x] **Task 4: the dig-face jam** (AC 7, 8)
+  - [x] Reproduce from the sweep's RED delays first: dump positions, `claims()`, `jobs()` and items at the
     stall (the probe's dump code) and name the mechanism before changing any rule.
-  - [ ] Fix inside `resolve_blocked_step` / `step_aside` / claiming (`lib.rs:1285-1449`, `:479-560`).
+  - [x] Fix inside `resolve_blocked_step` / `step_aside` / claiming (`lib.rs:1285-1449`, `:479-560`).
     #185's candidate directions: the job holder wins the yield over idle dwarves; a dwarf moved aside does
     not keep a home inside a one-wide passage. **No swap** (Wolf, 12.9 Task 0 Q1b): if the only fix is a
     swap, stop and ask Wolf.
-  - [ ] The judge is AC 7's 24/24 plus AC 8. Then run the 12.9 sweep over seeds `0..=16` and record every
+  - [x] The judge is AC 7's 24/24 plus AC 8. Then run the 12.9 sweep over seeds `0..=16` and record every
     pinned outcome that moved.
 - [x] **Task 5: designation filter** (AC 9)
   - [x] `apply_command`'s `DesignationKind::Channel` filter (`lib.rs:2365-2371`): also refuse an emitter's
@@ -259,8 +259,12 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 - (A) After Task 2 + 3 (rule, landing helper, both work-position changes) and BEFORE the wall-check fix below: AC 3 walk-down GREEN; AC 7 sweep 22 of 24, stalled `[(8, 3), (23, 3)]`; the 12.9 seed sweep showed 4 frozen dwarves and unfinished runs `(0, 4, 1)` and `(4, 4, 1)`.
 - (A) Mechanism of those (traced with a temporary `eprintln!`, removed): the wall-in check read the terrain BEFORE the step was cut, with the target counted as closed. A worker standing in the pit of the level above (it works the next level from below, Task 3) has the target as its only way up, so the check said "walls a dwarf in" every cooldown, forever (seed 0: `walls target [68,66,12] worker [67,66,11]`, repeated every ~72 ticks). Fix: for a channel the step is cut first, the check and the landing read the cut terrain, and the two tile changes are undone if either refuses (`undo`). A dig keeps the old order.
 - (A) After the fix: AC 7 sweep **24 of 24** (creation saw 16 of 24 with the probe's rule; the probe also carried the block in `Carrying` and refused MARKED cells on drops, and read its wall check before the cut: I believe the jam creation saw at levels 2-3 was largely this pre-cut refusal, not only the dig-face crowd). `#185` fixture still RED (`not done by tick 1000`), the sweep is NOT the judge for it. 12.9 seed sweep: frozen dwarves `[(4, 4, 4), (10, 6, 4)]`, unfinished `[]`.
+- (B) Task 4 RED: `a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig` panics `not done by tick 1000` (dump: no dwarf moves for 900 ticks).
+- (B) Mechanism of #185's fixture (dump of positions, `Wander.home`, `Path`, `claims()` every tick from 101): the miner (id 0, x 16, `Path` of 11 to the room) is blocked by idle dwarf 1 at x 15. Dwarves 1-4 stand at x 15..12 and the tunnel is one wide. In `resolve_blocked_step` case 1 the idle blocker has no free neighbour off the holder's path (x 14 is occupied, x 16 is the holder), and its exit search treated every OTHER dwarf as closed, so it found no route and returned `false`: the miner waits. The idle line cannot dissolve itself: only the dwarf at x 12 has a free tile ahead, nothing asks it to move, and idle dwarves wander only near a home (here none moves at all). Not the yield rule, not a home inside the passage: the idle chain was never asked to shift.
+- (B) After the fix: the fixture finishes at about tick 400 (bound 1,000 from clock 100). AC 7 sweep 24 of 24, AC 3 green, all sim-core tests green, the 12.9 seed sweep unchanged (`ONE_LEVEL_ISLANDS` `[(4, 4, 4)]`, `UNFINISHED` `[]`): no pin moved.
 
 ### Completion Notes List
+- (B) Task 4: new `make_room_down_the_idle_chain` (lib.rs, beside `step_aside`), called from `resolve_blocked_step` case 1 only when the idle blocker has neither a free tile aside nor an exit route. It searches through the other IDLE dwarves (never the holder, never a dwarf with a job) for the nearest free tile off the holder's path and gives the idle dwarf nearest that tile the rest of the route as its `Path`; the holder waits meanwhile and the line shifts a dwarf at a time. No swap, no new state, no change to the holder-wins/yield rules. No mutation row re-pointed (`audit-mutations.py` green); a row for this fix is Task 7's.
 - (A) Tasks 1, 2, 3, 5 and the code half of 6 done. Task 1's RED commit was swept into the orchestrator's `dbbebd0` (it committed while my files were staged); the content is mine.
 - (A) **Deviation 1, the wall-in check moved after the cut (channel only).** The story said keep the check and re-state its NOTE. Kept, but it reads the terrain AFTER the step is cut (see Debug Log): read before the cut it refused a pit worker forever (12.9 seed sweep seeds 0 and 4, AC 7 delays 8 and 23). The tiles are undone if the check or the landing refuses. Dig is unchanged. No test names this alone: AC 7 (24/24) and the sweep pin `UNFINISHED = []` kill it.
 - (A) **Deviation 2, none on marked cells.** The probe's drop refused DESIGNATED cells; I did NOT add that, to the shared helper or to the channel landing (the story's ruled shape). 12.9's ordinary drop is unchanged. A block can land on a cell a later level will mark; the probe's "floating blocks" are the same family (12.11).
@@ -274,6 +278,8 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 ### File List
 
+- (B) `crates/sim-core/src/lib.rs` (Task 4: `make_room_down_the_idle_chain`, fixture un-ignored with a bound comment)
+
 - `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/simd/tests/serve.rs`, `crates/gui/src/project.rs`
 - `_bmad-output/implementation-artifacts/mutations/{12-1,12-10,12-9,3-2-the-dig}.sh` (re-pointed)
 
@@ -282,4 +288,5 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 | Date | Change |
 |---|---|
 | 2026-10-13 | Agent A: Tasks 1, 2, 3, 5 and the code half of 6 (channel rule, shared landing helper, work positions across ramp steps, designation filter, re-pins). AC 3 green; AC 7 sweep 24 of 24; #185 fixture still RED for Task 4. |
+| 2026-10-13 | Agent B: Task 4. The #185 fixture jam was an idle line in a one-wide passage that nothing asked to shift; `make_room_down_the_idle_chain` sends the end of the line out. AC 8 green, AC 7 24 of 24, no sweep pin moved. |
 | 2026-10-13 | Created on `015548f`. #163 confirmed in source. Task 0 ruled by Wolf: a channel opens a step down (`z-1` Empty, `z-2` Ramp), the block lands up top beside the miner, and the dig-face jam (#185) is folded in. Probe: the rule plus two work-position changes reaches 4 levels on a two-wide stair, but jams at the dig face (wire 1 of 5, sweep 16 of 24). `way_down_wire.py` written, RED on `015548f`. Defaults D1-D3 (ramp keeps material, z<2 and emitter marks refused; #188). |
