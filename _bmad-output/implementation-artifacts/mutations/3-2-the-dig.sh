@@ -481,56 +481,29 @@ assert old in s
 p.write_text(s.replace(old, new))
 PY
 
-mutation "channel writes Empty instead of Ramp" sim-core execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone <<'PY'
+mutation "channel writes Empty instead of Ramp" sim-core execute_jobs_opens_a_step_down_and_lands_the_stone_up_top <<'PY'
 import pathlib
-# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
+# Re-pointed 2026-10-13 (12.10b): 12.10b: the ramp is cut two cells under the target; the seam (the ramp tile written) is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
-# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
-# and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''                        Some(Tile::Solid(material)) => {
-                            let ramp = match material {
-                                Material::Tetrahedrite | Material::Bloodstone => Material::Stone,
-                                other => other,
-                            };
-                            Some((below, Tile::Ramp(ramp), yield_of(material)))
-                        }
-'''
+old = '                    .set_tile(base, Tile::Ramp(material));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((below, Tile::Empty, yield_of(material))),
-'''))
+p.write_text(s.replace(old, '                    .set_tile(base, Tile::Empty);\n'))
 PY
 
-mutation "channel loses the material" sim-core execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone <<'PY'
+mutation "channel loses the material" sim-core execute_jobs_opens_a_step_down_and_lands_the_stone_up_top <<'PY'
 import pathlib
-# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
+# Re-pointed 2026-10-13 (12.10b): 12.10b: the ramp is cut two cells under the target (the test's base is Snow).
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
-# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
-# and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''                        Some(Tile::Solid(material)) => {
-                            let ramp = match material {
-                                Material::Tetrahedrite | Material::Bloodstone => Material::Stone,
-                                other => other,
-                            };
-                            Some((below, Tile::Ramp(ramp), yield_of(material)))
-                        }
-'''
+old = '                    .set_tile(base, Tile::Ramp(material));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                        Some(Tile::Solid(material)) => Some((below, Tile::Ramp(Material::Stone), yield_of(material))),
-'''))
+p.write_text(s.replace(old, '                    .set_tile(base, Tile::Ramp(Material::Stone));\n'))
 PY
 
 mutation "stone is not spawned" sim-core execute_jobs_walks_then_digs_for_exactly_dig_work_ticks <<'PY'
 import pathlib
-# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
+# Re-pointed 2026-10-13 (12.10b): the spawn lands at `landing`.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
-# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
-# and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-        ecs.spawn((Item(yielded), item_id, job.target));
-'''
+old = '        let item_id = ecs.resource_mut::<IdAllocator>().allocate();\n        ecs.spawn((Item(yielded), item_id, landing));\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
@@ -772,26 +745,13 @@ assert old in s
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "stale channel job retries forever" sim-core execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp <<'PY'
+mutation "a channel over a ramp is a no-op" sim-core execute_jobs_opens_a_channel_whose_support_is_already_a_ramp <<'PY'
 import pathlib
-# Re-pointed 2026-10-05 (12.7): 12.7 dropped the `yields_stone` element from the change tuple (dig/channel never take tree tiles now); the seam is unchanged.
+# Re-pointed 2026-10-13 (12.10b): 12.10b: a channel over a ramp now opens it (it was a removed no-op); the sabotage is the ramp arm dropped.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-11 (12.10): dig takes ramps and the change tuple carries the yielded item kind; the seam is unchanged.
-# Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
-# and added a Haul arm, which rotted this anchor. The seam is unchanged.
-old = '''        let Some((changed_pos, tile, yielded)) = change else {
-            ecs.resource_mut::<Jobs>().remove(job.id);
-            ecs.resource_mut::<Designations>().0.remove(&job.target);
-            release_claim(ecs, entity);
-            continue;
-        };
-'''
+old = '                        Some(Tile::Solid(material) | Tile::Ramp(material)) => {\n                            Some((below, Tile::Empty, yield_of(material)))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''        let Some((changed_pos, tile, yielded)) = change else {
-            release_claim(ecs, entity);
-            continue;
-        };
-'''))
+p.write_text(s.replace(old, '                        Some(Tile::Solid(material)) => {\n                            Some((below, Tile::Empty, yield_of(material)))\n'))
 PY
 
 mutation "load accepts a claim for a missing job" simd missing_claimed_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'

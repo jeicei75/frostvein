@@ -934,19 +934,23 @@ fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
     assert_eq!(world.tile(reachable), Some(Tile::Empty));
     // 12.9 AC13: the target keeps its own support and has other neighbours, so another miner may
     // finish the channel from one of them. What must never happen is the order vanishing unworked.
+    // 12.10b re-pin: a worked channel leaves the cell under the target open (was: a ramp).
     assert!(
         world
             .designations()
             .contains(&(t, DesignationKind::Channel))
-            || matches!(world.tile(below), Some(Tile::Ramp(_))),
+            || world.tile(below) == Some(Tile::Empty),
         "the channel order vanished without being worked"
     );
 }
 
-/// AC13 (12.9 seat pass 1): a channel is worked from a walkable same-z 4-neighbour of the target,
-/// never from the target itself, and the stone still lands on the target.
+/// AC13 (12.9 seat pass 1): a channel is worked from a walkable neighbour of the target, never from
+/// the target itself.
+// 12.10b re-pin (was `..._and_the_stone_lands_on_the_target`, and asserted a same-z neighbour): the
+// stone now lands up top beside the worker, never on the target or in its column, and the cell
+// under the target is opened.
 #[test]
-fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target() {
+fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_beside_the_worker() {
     let (mut world, holder, _, job) = channel_held_by_a_miner();
     let t = job.target;
     let mut worked_from = None;
@@ -970,11 +974,15 @@ fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target() {
         world.step();
     }
     let from = worked_from.expect("the channel was never worked");
-    assert_eq!(from.z, t.z);
     assert_eq!(from.x.abs_diff(t.x) + from.y.abs_diff(t.y), 1);
+    assert_eq!(world.tile(Pos { z: t.z - 1, ..t }), Some(Tile::Empty));
+    let items = world.items();
+    assert_eq!(items.len(), 1, "one block was yielded: {items:?}");
+    let landed = items[0].1;
+    assert_eq!(landed.z, from.z, "the stone lands on the worker's level");
     assert!(
-        world.items().iter().any(|(_, pos)| *pos == t),
-        "the stone did not land on the channelled cell"
+        (landed.x, landed.y) != (t.x, t.y),
+        "the stone landed on the target or in its column: {landed:?}"
     );
 }
 
@@ -2924,28 +2932,22 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // 12.9 review run 2 re-pin: every dwarf over the bound is listed now, not the longest per run.
     // "Never under any dwarf" moved the runs: (6, 6, 0), (12, 6, 4) and (13, 6, 2) are gone and
     // (16, 4, 0) is new, an idle dwarf between foliage, two loose stones and a drop.
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 3] = [(10, 4, 2), (10, 6, 3), (16, 4, 0)];
+    // 12.10b re-pin: a channel opens a step down and its block lands beside the worker, so the
+    // runs moved again. Was [(10, 4, 2), (10, 6, 3), (16, 4, 0)]; now (4, 4, 4) and (10, 6, 4),
+    // read by hand at tick 4,000: each is an idle dwarf whose same-level neighbours are a loose
+    // block, rock or a drop (the #186 shape), with no mark and no claim left in the run. Task 4
+    // (the dig-face jam) owns the final record.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 2] = [(4, 4, 4), (10, 6, 4)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
     // by unhauled stones with no work position left (#182 mode ii, the ruled #180 / FR8
     // never-drop shape). Base `26185a0` left no 4-wide run unfinished.
-    const UNFINISHED: [(u64, i32, usize); 14] = [
-        (2, 6, 2),
-        (4, 6, 1),
-        (5, 4, 1),
-        (6, 6, 2),
-        (7, 4, 1),
-        (9, 6, 2),
-        (10, 4, 1),
-        (10, 6, 6),
-        (11, 6, 3),
-        (12, 6, 1),
-        (13, 4, 1),
-        (13, 6, 3),
-        (15, 6, 2),
-        (16, 6, 3),
-    ];
+    // 12.10b re-pin: was fourteen unfinished runs (the #187 refusal loop and #182 mode ii). A
+    // channel no longer spawns a block on its target, so neither shape arises: none is left. Two
+    // intermediate runs ((0, 4, 1) and (4, 4, 1)) were a worker in the pit of a level above refused
+    // forever by the wall-in check read BEFORE the step was cut; the check now reads after.
+    const UNFINISHED: [(u64, i32, usize); 0] = [];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
@@ -3215,11 +3217,23 @@ fn a_dig_mark_takes_a_ramp_and_the_ramp_is_dug_out() {
     }
 }
 
+// 12.10b re-pin (was `..._and_leaves_a_stone_ramp`, which pinned that a channel over ore left
+// `Ramp(Stone)` and landed the ore on the target): the cell under the target is dug out and yields
+// the ore, which lands beside the worker; the ramp is cut in the cell under THAT and keeps its own
+// material, ore included (D1), since that cell was not dug and nothing is yielded twice.
 #[test]
-fn channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp() {
-    for (material, kind) in [
-        (Material::Tetrahedrite, ItemKind::Tetrahedrite),
-        (Material::Bloodstone, ItemKind::Bloodstone),
+fn channelling_over_ore_yields_the_ore_and_opens_a_step_with_its_own_ramp() {
+    for (material, kind, base_material) in [
+        (
+            Material::Tetrahedrite,
+            ItemKind::Tetrahedrite,
+            Material::Bloodstone,
+        ),
+        (
+            Material::Bloodstone,
+            ItemKind::Bloodstone,
+            Material::Tetrahedrite,
+        ),
     ] {
         let mut world = World::generate(42, Dims::DEFAULT);
         let (target, _pile) = ore_fixture(&mut world);
@@ -3227,27 +3241,33 @@ fn channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp() {
             z: target.z - 1,
             ..target
         };
+        let base = Pos {
+            z: target.z - 2,
+            ..target
+        };
         make_standable(&mut world, target);
         assert!(world.set_tile(below, Tile::Solid(material)));
+        assert!(world.set_tile(base, Tile::Solid(base_material)));
         world.apply_command(SimCommand::Designate {
             kind: DesignationKind::Channel,
             rect: rect(target, target),
         });
 
         let at = first_item(&mut world, 600, "channel");
-        assert_eq!(at, target);
+        assert_ne!(at, target, "the ore must land beside the worker");
+        assert_eq!(world.tile(below), Some(Tile::Empty));
         assert_eq!(
-            world.tile(below),
-            Some(Tile::Ramp(Material::Stone)),
-            "a channel over {material:?} must leave a stone ramp, never a ramp of the ore"
+            world.tile(base),
+            Some(Tile::Ramp(base_material)),
+            "the ramp keeps the material it was cut from"
         );
         assert_eq!(
-            kinds_at(&world, target, kind),
+            kinds_at(&world, at, kind),
             1,
             "a channel over {material:?} must yield the ore, got {:?}",
             world.item_kinds()
         );
-        assert_eq!(kinds_at(&world, target, ItemKind::Stone), 0);
+        assert_eq!(kinds_at(&world, at, ItemKind::Stone), 0);
     }
 }
 
@@ -3339,7 +3359,6 @@ fn no_marks_left(world: &World) -> bool {
 // RED on 015548f: the cell under a channel became a Ramp, so nothing opened and the pit below was
 // never there to walk into.
 #[test]
-#[ignore = "RED until Task 3"]
 fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let site = staircase_site(&world);
@@ -3406,10 +3425,8 @@ fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
     );
 }
 
-// RED on 015548f (0 of 24: a channel only ramps the floor, nothing opens). With the rule and the
-// work-position change, the dig-face jam (#185, Task 4) stalls the rest at levels 2 and 3.
+// RED on 015548f (0 of 24: a channel only ramps the floor, nothing opens).
 #[test]
-#[ignore = "RED until Task 4"]
 fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
     let mut worked = 0;
     let mut stalled = Vec::new();

@@ -108,22 +108,22 @@ from channel: **dig** removes a block at the miner's own level (a tunnel), **cha
     the dig at `ROOM_WALL` done within a stated bound.
   - [x] Run each on `015548f` and paste the failing assert lines into Debug Log References. Commit the RED
     tests with `#[ignore = "RED until Task N"]`, un-ignored by the commit that greens them.
-- [ ] **Task 2: the channel rule** (AC 2, 4)
-  - [ ] `execute_jobs`' `JobKind::Channel` arm (`lib.rs:1665-1680`): `below = target.z-1`, `base = z-2`.
+- [x] **Task 2: the channel rule** (AC 2, 4)
+  - [x] `execute_jobs`' `JobKind::Channel` arm (`lib.rs:1665-1680`): `below = target.z-1`, `base = z-2`.
     `below` `Solid(m) | Ramp(m)` → `Empty`, yield `yield_of(m)`; `base` `Solid(m)` → `Ramp(m)`; `Ramp` and
     `Empty` unchanged. Both tiles change in the same tick, through `Terrain::set_tile` (both dirty).
-  - [ ] Landing: extract the breadth-first "nearest free walkable cell" search from `release_claim`
+  - [x] Landing: extract the breadth-first "nearest free walkable cell" search from `release_claim`
     (`lib.rs:1188-1231`) into one helper and call it from both; the channel's item lands by it from the
     worker's position. Remove the target-occupant `step_aside` block (`:1699-1713`) if nothing spawns on the
     target any more, and its NOTE.
-  - [ ] Keep the `walls_in_a_dwarf` check (the probe broke without it). Its NOTE (`:1698`, "reads the
+  - [x] Keep the `walls_in_a_dwarf` check (the probe broke without it). Its NOTE (`:1698`, "reads the
     terrain before the ramp is cut") is now about the pit: re-state what it reads, and confirm in a test
     that it does not refuse the staircase's own cells forever (AC 7 covers this).
-- [ ] **Task 3: work positions across a ramp step** (AC 5, 6)
-  - [ ] `work_positions` (`lib.rs:1089-1158`): `JobKind::Channel` uses `astar_neighbours(terrain, blocked,
+- [x] **Task 3: work positions across a ramp step** (AC 5, 6)
+  - [x] `work_positions` (`lib.rs:1089-1158`): `JobKind::Channel` uses `astar_neighbours(terrain, blocked,
     job.target)` in place of same-z `side_neighbours`; the haul pick-up leg uses
     `astar_neighbours(terrain, blocked, *pos)`. Keep the "target standable" gate and the delivery leg.
-  - [ ] Check every consumer that assumed same-z: the gui's facing (`a_channelling_miner_faces_the_target_cell`,
+  - [x] Check every consumer that assumed same-z: the gui's facing (`a_channelling_miner_faces_the_target_cell`,
     `headless.rs:5313`) and `serve.rs`'s "same z, Manhattan distance 1" assert from 12.9 (`0fccc74`).
 - [ ] **Task 4: the dig-face jam** (AC 7, 8)
   - [ ] Reproduce from the sweep's RED delays first: dump positions, `claims()`, `jobs()` and items at the
@@ -134,13 +134,13 @@ from channel: **dig** removes a block at the miner's own level (a tunnel), **cha
     swap, stop and ask Wolf.
   - [ ] The judge is AC 7's 24/24 plus AC 8. Then run the 12.9 sweep over seeds `0..=16` and record every
     pinned outcome that moved.
-- [ ] **Task 5: designation filter** (AC 9)
-  - [ ] `apply_command`'s `DesignationKind::Channel` filter (`lib.rs:2365-2371`): also refuse an emitter's
+- [x] **Task 5: designation filter** (AC 9)
+  - [x] `apply_command`'s `DesignationKind::Channel` filter (`lib.rs:2365-2371`): also refuse an emitter's
     tile and `pos.z < 2`. A rect left with zero cells is a `Refusal` (standing AC 6), as today.
-  - [ ] gui `sim_will_keep` (`crates/gui/src/project.rs:1076-1086`): mirror both, so the preview lights none
+  - [x] gui `sim_will_keep` (`crates/gui/src/project.rs:1076-1086`): mirror both, so the preview lights none
     of them.
 - [ ] **Task 6: re-pins and docs** (AC 11)
-  - [ ] Expect to move: `execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone` (`lib.rs:5039`),
+  - [x] Expect to move (code half done, Agent A): `execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone` (`lib.rs:5039`),
     `execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp` (`:5090`), scenario
     `a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target` (`scenario.rs:949`),
     `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on` (`:854`),
@@ -255,8 +255,20 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
   - `a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back`: `scenario.rs:3353` `assertion left == right failed  left: Some(Ramp(Snow))  right: Some(Empty)` (z-1 under the site is a ramp, not open).
   - `a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay`: `assertion left == right failed: staircase worked for 0 of 24 designation delays; stalled (delay, levels done): [(0, 0), (1, 0), ... (23, 0)]`. (First draft judged only "marks gone" and passed vacuously on 015548f, since a ramping channel also clears its mark; the judge now also requires every floor under the level to be `Empty`, per AC 7.)
   - `a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig` (lib.rs, beside `room_and_tunnel`): `not done by tick 1000` (panic from `watch`, bound 1,000 ticks from clock 100).
+- (A) Task 5 RED (before the filter): `a_channel_mark_is_refused_on_an_emitters_tile_only`: `left: None  right: Some(Designate { kind: Channel, rect: ... z: 25 })` (lib.rs); `a_channel_mark_is_refused_where_z_is_below_two`: `channel at z 1  left: None  right: Some(Designate ...)`; gui `the_channel_preview_skips_an_emitters_tile_and_cells_below_z_two`: panicked `the campfire's own tile` (project.rs, with the `sim_will_keep` mirror reverted).
+- (A) After Task 2 + 3 (rule, landing helper, both work-position changes) and BEFORE the wall-check fix below: AC 3 walk-down GREEN; AC 7 sweep 22 of 24, stalled `[(8, 3), (23, 3)]`; the 12.9 seed sweep showed 4 frozen dwarves and unfinished runs `(0, 4, 1)` and `(4, 4, 1)`.
+- (A) Mechanism of those (traced with a temporary `eprintln!`, removed): the wall-in check read the terrain BEFORE the step was cut, with the target counted as closed. A worker standing in the pit of the level above (it works the next level from below, Task 3) has the target as its only way up, so the check said "walls a dwarf in" every cooldown, forever (seed 0: `walls target [68,66,12] worker [67,66,11]`, repeated every ~72 ticks). Fix: for a channel the step is cut first, the check and the landing read the cut terrain, and the two tile changes are undone if either refuses (`undo`). A dig keeps the old order.
+- (A) After the fix: AC 7 sweep **24 of 24** (creation saw 16 of 24 with the probe's rule; the probe also carried the block in `Carrying` and refused MARKED cells on drops, and read its wall check before the cut: I believe the jam creation saw at levels 2-3 was largely this pre-cut refusal, not only the dig-face crowd). `#185` fixture still RED (`not done by tick 1000`), the sweep is NOT the judge for it. 12.9 seed sweep: frozen dwarves `[(4, 4, 4), (10, 6, 4)]`, unfinished `[]`.
 
 ### Completion Notes List
+- (A) Tasks 1, 2, 3, 5 and the code half of 6 done. Task 1's RED commit was swept into the orchestrator's `dbbebd0` (it committed while my files were staged); the content is mine.
+- (A) **Deviation 1, the wall-in check moved after the cut (channel only).** The story said keep the check and re-state its NOTE. Kept, but it reads the terrain AFTER the step is cut (see Debug Log): read before the cut it refused a pit worker forever (12.9 seed sweep seeds 0 and 4, AC 7 delays 8 and 23). The tiles are undone if the check or the landing refuses. Dig is unchanged. No test names this alone: AC 7 (24/24) and the sweep pin `UNFINISHED = []` kill it.
+- (A) **Deviation 2, none on marked cells.** The probe's drop refused DESIGNATED cells; I did NOT add that, to the shared helper or to the channel landing (the story's ruled shape). 12.9's ordinary drop is unchanged. A block can land on a cell a later level will mark; the probe's "floating blocks" are the same family (12.11).
+- (A) The landing is `nearest_free_cell(terrain, blocked, worker_pos, refused)`, shared by `release_claim` and the channel; the channel refuses a dwarf's tile, a cell that walls a dwarf in, and the target's column (the pit is reachable once cut). Item cells are in `blocked`, so a taken pile cell is never chosen. The item is spawned at the landing directly (no `Carrying`).
+- (A) The `step_aside` target-occupant block is gone. A dwarf standing on a channel target now falls into the pit with `settle`. `step_aside` is still used by `resolve_blocked_step`.
+- (A) Task 3 consumers: `a_channelling_miner_faces_the_target_cell` is a synthetic same-z fixture and `dig_yaw` is yaw-only, so it is unaffected and unchanged. `serve.rs` `deltas_label_a_miners_dig...`: the "same z" assert is loosened to `|dz| <= 1` (re-pin, disclosed beside the pin).
+- (A) Re-pins (each disclosed beside the pin): lib.rs `execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone` -> `execute_jobs_opens_a_step_down_and_lands_the_stone_up_top` (z-1 Empty, z-2 Ramp, stone beside the worker); `execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp` -> `execute_jobs_opens_a_channel_whose_support_is_already_a_ramp` (a ramp is dug out, yields; z-2 ramp stays); scenario `a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target` -> `..._lands_beside_the_worker`; `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on` (last assert: worked means z-1 Empty, was Ramp); `channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp` -> `..._opens_a_step_with_its_own_ramp` (D1: the ramp keeps its ore material, retiring "channel over ore leaves Ramp(Stone)"); `no_dwarf_is_caged_by_stones_over_the_probe_seeds` pins `ONE_LEVEL_ISLANDS` [(10,4,2),(10,6,3),(16,4,0)] -> [(4,4,4),(10,6,4)] and `UNFINISHED` (14 runs) -> []; serve.rs as above.
+- (A) Not re-pinned and still green: the walking-skeleton test and every other sim-core, gui lib and `headless::a_channelling_miner_faces_the_target_cell` test.
 
 ### File List
 
