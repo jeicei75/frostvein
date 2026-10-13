@@ -163,7 +163,18 @@ graph LR
   Digging yields the material's item: ore its own kind, every other
   non-tree material `Stone`. A channel whose ramped cell is ore yields the
   ore's item and leaves `Ramp(Stone)`, so ore never yields twice and
-  worldgen and the sim never produce `Ramp(ore)`.
+  worldgen and the sim never produce `Ramp(ore)`. *(The last sentence is
+  superseded by 12.10b, below.)*
+- **Amended 2026-10-13 (Story 12.10b):** a channel opens a step down. The
+  cell under its target (`z-1`) is dug out to `Empty` and yields one item of
+  its material, whether it was `Solid` or `Ramp`; a `Solid(m)` under that
+  (`z-2`) becomes `Ramp(m)`, ore included, and a `Ramp` or `Empty` there is
+  left as it is. The ramp was never dug, so nothing yields twice, and a later
+  dig of a `Ramp(ore)` yields the ore. The dug item lands on the worker's
+  level by 12.9's drop rule, never on the target or in its column. A channel
+  is worked, and a loose item lifted, from any cell a dwarf could step onto
+  the target from, ramp steps included. A channel mark is refused on an
+  emitter's tile and where `z < 2`.
 
 ### AD-17 — The evidence ladder for a real renderer
 
