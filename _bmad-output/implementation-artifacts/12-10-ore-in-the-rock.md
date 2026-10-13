@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.9's creation
 
 # Story 12.10: Ore in the Rock
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -262,6 +262,15 @@ Cost: $19.13 over 395 turns (subagents 81.4% of tokens). Reaped after triage: 10
 **Seat pass 1 (Wolf, 2026-10-11, after the review):** ore FOUND. Bloodstone is too difficult to find, so it is
 NOT verified at the seat (AC 10's bloodstone half stays open). "Digging is messy": Wolf wants it fixed properly in
 the NEXT story, not in this patch pass.
+
+**Seat pass 2 (Wolf, 2026-10-13, on `315e8fc`): CLOSED by Wolf's ruling, AC 10's dig half NOT met.** Ore in the rock
+stands on seat pass 1. Bloodstone is unreachable in practice: it lies 5-25 below the surface and nothing digs a level
+down, so a tunnel must start from a hillside at the gem's exact level (12.10b, #163). Seen near `[80,72]`
+(`12-10-signoff/seat-pass-2-trench.png`): all dwarves but one stuck queued in a one-wide trench (#185), floating dug
+rubbish (12.11, #135), and FPS dropped then recovered, "the whole game felt heavy" (#179). Wolf believes the pile was
+NOT full (a large pile, little dug). A headless replay with one 3×3 pile and the 15-dig line to `[80,72,10]` gave a
+different stall: the pile filled at ~tick 4000 and the crew idled to tick 10,000 with the gem undug (the card's own
+"full pile stops the tunnel" case), at a steady ~197 ticks/s. So the sim did not slow down there.
 
 - [x] [Review][Patch] (decision resolved) **MED: a tunnel floor of ore draws a snow cap (blind + feature)** — `has_snow_cap`
   (`crates/gui/src/project.rs:3047-3058`) checks only the cell directly above. Any ore cell with `Empty` above therefore
@@ -698,3 +707,4 @@ grep -o '38;2;60;90;210m%' "$SCRATCH/f.txt" | wc -l     # the tetrahedrite liter
 | 2026-10-11 | Created on `32565fd`. Premise defect found: no dig reaches below the surface (ramp-ringed hills), so Task 0.2 proposes ramp digging. `ore_wire.py` RED, its control proven GREEN on a ramp-diggable scratch build. Draft written. Task 0 ruled by Wolf at creation: (b) colours as tetrahedrite + bloodstone, dig takes ramps, #163 split out as 12.10b, channel over ore gives ore + `Ramp(Stone)`, old saves load. |
 | 2026-10-11 | Dev (Sonnet 5.5 subagents A and B, orchestrated and verified by Opus 5.5). Ore veins (tetrahedrite) and rare deep gems (bloodstone) are placed in interior stone from `STREAM_ORE`. Dig takes ramps; a dig or channel over ore yields the ore item, and the channel leaves `Ramp(Stone)`. Wire, gui and tui draw both. Fingerprint re-pinned to `0x9bb0_34d6_e3cd_0a93`. `ore_wire.py` GREEN (two piles, 8000 ticks), and the deliberate RED is red. Mutations 10/10 after row 3b was re-pointed. Full gate green at `ec7777a`. Status → review; AC 10 (the seat) is Wolf's. |
 | 2026-10-11 | Review patch pass 1: all 5 patch items landed (`d3a3d12`, `e2bc89f`, `d3bbfb3`, `b2657c5`). Ore excluded from the snow cap (Wolf's ruling); AC 4 soil/snow/ice yield test; `ore_wire.py` to 16000 ticks with early stop and an edge-aware census; seat card fixed. Full gate GREEN at `b2657c5` (3502 s); touched mutation rows 3/3 killed. Status stays in-progress: AC 10 (the seat) is unrun. |
+| 2026-10-13 | Seat pass 2 (Wolf) on `315e8fc`: ore stands; digging to bloodstone is blocked by no way down (12.10b, #163). Trench queue (#185), floating rubbish (12.11) and frame-rate heaviness (#179) recorded. Wolf: close the story. Status → done. |

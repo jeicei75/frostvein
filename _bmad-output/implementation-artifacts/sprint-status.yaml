@@ -2633,7 +2633,7 @@ development_status:
   #     list). 6/6 closed, no new mutation rows. Full gate GREEN 8fe4b46 3508 s. Audit ended at run 3; next: push +
   #     seat pass (AC13, AC14 lift, back-off feel, let-go beside its hauler, #189 jam, #187 loop). -> in-progress.
   #   2026-10-10 pushed 4c6642a; seat pass 3 (Wolf): "ok works now". -> done. PR #190 opened (a03af91).
-  12-10-ore-in-the-rock: in-progress
+  12-10-ore-in-the-rock: done
   #   Created 2026-10-11 on 32565fd. PREMISE DEFECT: no dig reaches below the surface on any world --
   #     place_ramps rings every hill with ramps and dig takes only Solid, so ore "inside the rock" is
   #     unreachable (fewest-digs search on DEFAULT_SEED: depth 0 only; with ramps diggable, depth 3 in 4
@@ -2647,6 +2647,8 @@ development_status:
   #     5 patches LEFT AS ACTION ITEMS (ore_wire late-connect RED at 8000 = #191 + grid-edge census; seat card
   #     fire/mirror/tui z; AC4 soil/snow/ice yield unpinned; snow cap; rests_on_the_ground NOTE). 4 defer.
   #     Seat (AC10) still Wolf's. -> in-progress.
+  #   2026-10-13 seat pass 2 (Wolf) on 315e8fc: ore stands; bloodstone unreachable with no way down (12.10b, #163);
+  #     trench queue -> #185, floating rubbish -> 12.11, heaviness -> #179. Wolf: close it. -> done. PR on Wolf's yes.
   12-10b-a-way-down: backlog
   #   Added 2026-10-11 at 12.10's creation (Wolf: "own story, right after"). #163: the channel opens the
   #     level below. Trap known at creation: since 12.9 an item is lifted only from a same-level neighbour,
