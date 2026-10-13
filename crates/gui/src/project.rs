@@ -209,6 +209,8 @@ pub type DigChipQuery<'w, 's> = Query<'w, 's, (BevyEntity, &'static DigChip)>;
 #[derive(Debug, Clone, Copy)]
 enum TerrainSlot {
     Stone,
+    Tetrahedrite,
+    Bloodstone,
     Soil,
     Ice,
     Snow,
@@ -226,8 +228,10 @@ enum TreeVariant {
     Tree04R,
 }
 
-const TERRAIN_SLOTS: [TerrainSlot; 8] = [
+const TERRAIN_SLOTS: [TerrainSlot; 10] = [
     TerrainSlot::Stone,
+    TerrainSlot::Tetrahedrite,
+    TerrainSlot::Bloodstone,
     TerrainSlot::Soil,
     TerrainSlot::Ice,
     TerrainSlot::Snow,
@@ -241,6 +245,8 @@ impl TerrainSlot {
     fn base_color(self) -> bevy::prelude::Color {
         match self {
             TerrainSlot::Stone => material_color(Material::Stone),
+            TerrainSlot::Tetrahedrite => material_color(Material::Tetrahedrite),
+            TerrainSlot::Bloodstone => material_color(Material::Bloodstone),
             TerrainSlot::Soil => material_color(Material::Soil),
             TerrainSlot::Ice => material_color(Material::Ice),
             TerrainSlot::Snow => material_color(Material::Snow),
@@ -254,6 +260,8 @@ impl TerrainSlot {
     fn of(material: Material) -> Self {
         match material {
             Material::Stone => TerrainSlot::Stone,
+            Material::Tetrahedrite => TerrainSlot::Tetrahedrite,
+            Material::Bloodstone => TerrainSlot::Bloodstone,
             Material::Soil => TerrainSlot::Soil,
             Material::Ice => TerrainSlot::Ice,
             Material::Snow => TerrainSlot::Snow,
@@ -1062,11 +1070,12 @@ fn preview_cells(
 
 /// Whether the sim would KEEP a designation of this mode at this cell.
 ///
-/// Mirrors the two filters in `sim-core`'s command handling: dig keeps `Tile::Solid`, channel and
-/// stockpile keep standable cells, and both drop the remainder in silence.
+/// Mirrors the two filters in `sim-core`'s command handling: dig keeps `Tile::Solid` and
+/// `Tile::Ramp` (never a tree; 12.10), channel and stockpile keep standable cells, and both drop
+/// the remainder in silence.
 fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
     match mode {
-        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_))),
+        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_))),
         DesignateMode::Channel | DesignateMode::Stockpile => {
             client_core::is_standable(mirror, tile)
         }
@@ -1729,7 +1738,9 @@ fn coherent_detail_depth(plane: i32, u: i32, v: i32, subdiv: i32, coarse_cells: 
 fn material_detail_depth(material: Material, plane: i32, u: i32, v: i32, subdiv: i32) -> i32 {
     match material {
         Material::Snow => detail_depth(plane, u, v, subdiv),
-        Material::Stone | Material::Soil => coherent_detail_depth(plane, u, v, subdiv, 1),
+        Material::Stone | Material::Tetrahedrite | Material::Bloodstone | Material::Soil => {
+            coherent_detail_depth(plane, u, v, subdiv, 1)
+        }
         Material::Ice | Material::TreeTrunk | Material::TreeFoliage => 0,
     }
 }
@@ -2237,6 +2248,8 @@ pub fn reconcile(
                         Mesh3d(assets.cube.clone()),
                         MeshMaterial3d(match kind {
                             ItemKind::Stone => assets.slot(TerrainSlot::Stone, 0),
+                            ItemKind::Tetrahedrite => assets.slot(TerrainSlot::Tetrahedrite, 0),
+                            ItemKind::Bloodstone => assets.slot(TerrainSlot::Bloodstone, 0),
                             ItemKind::Wood => assets.wood_item.clone(),
                         }),
                         Transform::from_translation(item_translation(position, kind, stacks[&id]))
@@ -2348,7 +2361,8 @@ pub fn reconcile(
 /// `blend_entities` call this so the two cannot drift apart.
 fn item_translation(position: [i32; 3], kind: ItemKind, stack: usize) -> Vec3 {
     let drop = match kind {
-        ItemKind::Stone => STONE_ITEM_DROP,
+        // An ore item is the stone's cube in the ore's colour: same drop, same scale.
+        ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => STONE_ITEM_DROP,
         ItemKind::Wood => WOOD_ITEM_DROP,
     };
     world_to_render(position) + Vec3::new(0.0, drop + ITEM_STACK_STEP * stack as f32, 0.0)
@@ -2357,7 +2371,9 @@ fn item_translation(position: [i32; 3], kind: ItemKind, stack: usize) -> Vec3 {
 /// The drawn size of an item: a stone is a small cube, a log a long box.
 fn item_scale(kind: ItemKind) -> Vec3 {
     match kind {
-        ItemKind::Stone => Vec3::splat(STONE_ITEM_SCALE),
+        ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => {
+            Vec3::splat(STONE_ITEM_SCALE)
+        }
         ItemKind::Wood => WOOD_ITEM_SCALE,
     }
 }
@@ -2973,10 +2989,18 @@ pub fn has_snow_laden_crown(mirror: &Mirror, position: [i32; 3]) -> bool {
 
 /// Whether the cell directly below is terrain rather than tree. Foliage resting on the ground is a
 /// SKIRT, not a crown — see `has_snow_laden_crown`.
+// NOTE: 12.10 ore counts as stone here, though no tree grows on it: ore is interior rock.
 fn rests_on_the_ground(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(
         terrain_material_at(mirror, [position[0], position[1], position[2] - 1]),
-        Some(Material::Stone | Material::Soil | Material::Ice | Material::Snow)
+        Some(
+            Material::Stone
+                | Material::Soil
+                | Material::Ice
+                | Material::Snow
+                | Material::Tetrahedrite
+                | Material::Bloodstone
+        )
     )
 }
 
@@ -3026,6 +3050,8 @@ fn terrain_material_at(mirror: &Mirror, position: [i32; 3]) -> Option<Material> 
 /// (136,150,178), so an excavation erased itself the moment it finished. Measured before the
 /// change: 1,016 soil tiles are already exposed at boot and NONE of them carried a cap (they all
 /// have solid rock above), so this alters exactly 0 of the 5,716 caps in the approved boot frame.
+// NOTE: 12.10 ore is excluded for soil's reason (Wolf, review run 1). It is never exposed at boot,
+// so the only way it meets the sky is a dig, and a cap would paint the vein a tunnel was dug to find.
 pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
     matches!(
         mirror.tile(position),
@@ -3033,6 +3059,8 @@ pub fn has_snow_cap(mirror: &Mirror, position: [i32; 3]) -> bool {
             if material != Material::Ice
                 && material != Material::TreeFoliage
                 && material != Material::Soil
+                && material != Material::Tetrahedrite
+                && material != Material::Bloodstone
     ) && !matches!(
         mirror.tile([position[0], position[1], position[2] + 1]),
         Some(Tile::Solid(_) | Tile::Ramp(_))

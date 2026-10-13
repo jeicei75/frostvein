@@ -154,6 +154,16 @@ graph LR
   item per trunk cell at the base. `protocol::Item` gains `kind`
   (`ItemKind` = `Stone | Wood`), an M3 vocabulary growth in the sense
   above: a typed field, with the framing unchanged.
+- **Amended 2026-10-11 (Story 12.10):** `Material` and `ItemKind` each grow
+  by the same ore pair, `Tetrahedrite` (the mineral) and `Bloodstone` (the
+  gem), with equal wire names; no shape changes. Worldgen places ore only
+  in interior stone (`z + 2 < height`) from its own stream, so none is
+  exposed on a fresh world. A dig mark takes a `Ramp` as it takes a
+  `Solid` non-tree tile, and a dug ramp becomes `Empty` like a dug solid.
+  Digging yields the material's item: ore its own kind, every other
+  non-tree material `Stone`. A channel whose ramped cell is ore yields the
+  ore's item and leaves `Ramp(Stone)`, so ore never yields twice and
+  worldgen and the sim never produce `Ramp(ore)`.
 
 ### AD-17 — The evidence ladder for a real renderer
 

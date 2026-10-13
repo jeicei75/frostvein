@@ -928,6 +928,13 @@ fn glyph_positions(stdout: &str, glyph: char) -> Vec<(usize, usize)> {
 }
 
 fn capture_growing_world(with_features: bool) -> String {
+    strip_ansi(&capture_growing_world_raw(with_features, false))
+}
+
+/// The growing-world capture with its ANSI colour escapes intact, so a glyph can be counted by
+/// the colour it wears (the status and hint rows hold `o` and `/`). `with_ore` adds ore cells in
+/// the rock, loose and stored ore items on level 1.
+fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
     const MAX_CAPTURE_BYTES: u64 = 2 * 1024 * 1024;
     const FEATURE_DIMS: protocol::Dims = protocol::Dims { x: 9, y: 9, z: 2 };
 
@@ -952,6 +959,28 @@ fn capture_growing_world(with_features: bool) -> String {
         if with_features {
             tiles[2 + 4 * 9 + 81] = protocol::Tile::Solid(protocol::Material::TreeTrunk);
             tiles[3 + 4 * 9 + 81] = protocol::Tile::Solid(protocol::Material::TreeFoliage);
+        }
+        let (mut zones, mut items) = (Vec::new(), Vec::new());
+        if with_ore {
+            tiles[1 + 81 + 9] = protocol::Tile::Solid(protocol::Material::Tetrahedrite);
+            tiles[2 + 81 + 9] = protocol::Tile::Solid(protocol::Material::Bloodstone);
+            tiles[3 + 81 + 9] = protocol::Tile::Ramp(protocol::Material::Tetrahedrite);
+            tiles[4 + 81 + 9] = protocol::Tile::Ramp(protocol::Material::Bloodstone);
+            for (id, x, kind, stored) in [
+                (20, 1, protocol::ItemKind::Tetrahedrite, false),
+                (21, 2, protocol::ItemKind::Bloodstone, false),
+                (22, 3, protocol::ItemKind::Tetrahedrite, true),
+                (23, 5, protocol::ItemKind::Bloodstone, true),
+            ] {
+                items.push(protocol::Item {
+                    id,
+                    pos: [x, 6, 1],
+                    kind,
+                });
+                if stored {
+                    zones.push(protocol::Zone { pos: [x, 6, 1] });
+                }
+            }
         }
         let mut entities = vec![protocol::Entity {
             id: 0,
@@ -996,8 +1025,8 @@ fn capture_growing_world(with_features: bool) -> String {
             tiles,
             entities: entities.clone(),
             designations: Vec::new(),
-            zones: Vec::new(),
-            items: Vec::new(),
+            zones: zones.clone(),
+            items: items.clone(),
             speed: protocol::Speed::Normal,
             tick: 7,
         };
@@ -1012,8 +1041,8 @@ fn capture_growing_world(with_features: bool) -> String {
                 tiles: Vec::new(),
                 entities: entities.clone(),
                 designations: Vec::new(),
-                zones: Vec::new(),
-                items: Vec::new(),
+                zones: zones.clone(),
+                items: items.clone(),
                 speed: protocol::Speed::Normal,
 
                 refusals: Vec::new(),
@@ -1047,7 +1076,7 @@ fn capture_growing_world(with_features: bool) -> String {
     let status = child.wait().expect("wait for growing-world capture");
     server.join().expect("growing-world stub panicked");
     assert!(status.success(), "tui exited with {status}: {stderr}");
-    strip_ansi(&stdout)
+    stdout
 }
 
 #[test]
@@ -1061,6 +1090,41 @@ fn growing_world_instrument_counts_change_with_trees_and_emitters() {
         assert!(feature_count > 0, "feature capture contained zero {glyph}");
         assert_eq!(control_count, 0, "empty control rendered {glyph}");
         assert!(feature_count > control_count);
+    }
+}
+
+/// 12.10: ore cells and ore items reach the real client's frame in their own glyph AND colour.
+/// Counted by the colour escape plus the glyph, never a bare glyph: the status and hint rows
+/// hold `o` and `/`, and `%`/`$` could appear in text. The control (same world, no ore) is 0.
+/// The escape is emitted only on a colour change, so each ore cell sits beside a different colour.
+#[test]
+fn ore_cells_and_ore_items_reach_the_capture_in_their_own_glyph_and_colour() {
+    let ore = capture_growing_world_raw(false, true);
+    let control = capture_growing_world_raw(false, false);
+    let count = |stdout: &str, rgb: &str, glyph: char| {
+        stdout.matches(&format!("38;2;{rgb}m{glyph}")).count()
+    };
+
+    for (name, rgb, glyph, minimum) in [
+        ("tetrahedrite in the rock", "60;90;210", '%', 1),
+        ("bloodstone in the rock", "130;220;190", '$', 1),
+        ("a tetrahedrite ramp", "60;90;210", '▲', 1),
+        ("a bloodstone ramp", "130;220;190", '▲', 1),
+        ("a loose tetrahedrite item", "60;90;210", '•', 1),
+        ("a loose bloodstone item", "130;220;190", '◊', 1),
+        ("a stored tetrahedrite item", "88;190;118", '•', 1),
+        ("a stored bloodstone item", "88;190;118", '◊', 1),
+    ] {
+        let found = count(&ore, rgb, glyph);
+        assert!(
+            found >= minimum,
+            "{name}: no {glyph} in colour {rgb} in the ore capture"
+        );
+        assert_eq!(
+            count(&control, rgb, glyph),
+            0,
+            "{name}: the control has {glyph}"
+        );
     }
 }
 

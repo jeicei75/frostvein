@@ -350,6 +350,8 @@ mod flicker_tests {
 pub fn material_color(material: Material) -> Color {
     match material {
         Material::Stone => Color::srgb_u8(60, 70, 92),
+        Material::Tetrahedrite => Color::srgb_u8(40, 64, 176),
+        Material::Bloodstone => Color::srgb_u8(120, 196, 176),
         Material::Soil => Color::srgb_u8(56, 52, 62),
         Material::Ice => Color::srgb_u8(104, 128, 170),
         Material::Snow => Color::srgb_u8(136, 150, 178),
@@ -556,7 +558,13 @@ mod tests {
         // (55,73,84) sat 38.7 from trunk, already inside the floor, and no terrain-vs-terrain test
         // existed to notice. Ice and Snow are deliberately out: 130.1 and 159.3 away, see
         // deferred-work.md.
-        for material in [Material::Stone, Material::Soil, Material::TreeTrunk] {
+        for material in [
+            Material::Stone,
+            Material::Tetrahedrite,
+            Material::Bloodstone,
+            Material::Soil,
+            Material::TreeTrunk,
+        ] {
             let terrain = rgb(material);
             let separation = channel_distance(foliage, terrain);
             assert!(
@@ -587,6 +595,8 @@ mod tests {
 
         let terrain = [
             (Material::Stone, [60, 70, 92]),
+            (Material::Tetrahedrite, [40, 64, 176]),
+            (Material::Bloodstone, [120, 196, 176]),
             (Material::Soil, [56, 52, 62]),
             (Material::Ice, [104, 128, 170]),
             (Material::Snow, [136, 150, 178]),
@@ -713,6 +723,8 @@ mod tests {
         ];
         let terrain = [
             Material::Stone,
+            Material::Tetrahedrite,
+            Material::Bloodstone,
             Material::Soil,
             Material::Ice,
             Material::Snow,
@@ -773,6 +785,9 @@ mod tests {
             ("TUI wood", [164, 116, 66]),
             ("TUI crowd", [240, 120, 130]),
             ("TUI carrier", [226, 198, 140]),
+            // 12.10: the two ore colours, in the rock and as items (same RGB for each ore).
+            ("TUI tetrahedrite", [60, 90, 210]),
+            ("TUI bloodstone", [130, 220, 190]),
         ];
         for (name, _, rgb) in marks {
             for (tui_name, tui_rgb) in tui_marks {

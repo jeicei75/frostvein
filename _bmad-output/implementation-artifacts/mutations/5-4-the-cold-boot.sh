@@ -9,7 +9,7 @@
 mutation "snow cap leaves bare top" gui snow_caps_follow_material_and_exposure_in_a_seed_shaped_toy_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material) | Tile::Ramp(material))\n            if material != Material::Ice\n                && material != Material::TreeFoliage\n                && material != Material::Soil\n    ) && !matches!(\n'
+old = '    matches!(\n        mirror.tile(position),\n        Some(Tile::Solid(material) | Tile::Ramp(material))\n            if material != Material::Ice\n                && material != Material::TreeFoliage\n                && material != Material::Soil\n                && material != Material::Tetrahedrite\n                && material != Material::Bloodstone\n    ) && !matches!(\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    false && !matches!(\n'))
 PY

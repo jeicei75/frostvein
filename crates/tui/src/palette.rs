@@ -27,6 +27,14 @@ pub fn tile_cell(tile: Tile) -> Cell {
             glyph: '█',
             fg: (86, 92, 104),
         },
+        Tile::Solid(Material::Tetrahedrite) => Cell {
+            glyph: '%',
+            fg: (60, 90, 210),
+        },
+        Tile::Solid(Material::Bloodstone) => Cell {
+            glyph: '$',
+            fg: (130, 220, 190),
+        },
         Tile::Solid(Material::Soil) => Cell {
             glyph: '▓',
             fg: (72, 66, 58),
@@ -50,6 +58,14 @@ pub fn tile_cell(tile: Tile) -> Cell {
         Tile::Ramp(Material::Stone) => Cell {
             glyph: '▲',
             fg: (86, 92, 104),
+        },
+        Tile::Ramp(Material::Tetrahedrite) => Cell {
+            glyph: '▲',
+            fg: (60, 90, 210),
+        },
+        Tile::Ramp(Material::Bloodstone) => Cell {
+            glyph: '▲',
+            fg: (130, 220, 190),
         },
         Tile::Ramp(Material::Soil) => Cell {
             glyph: '▲',
@@ -168,6 +184,39 @@ pub fn stored_wood_item_cell() -> Cell {
     }
 }
 
+/// A tetrahedrite: `•`, narrow on purpose (`o` is taken by the status text; #152 wide glyphs).
+pub fn tetrahedrite_item_cell() -> Cell {
+    Cell {
+        glyph: '•',
+        fg: (60, 90, 210),
+    }
+}
+
+/// Tetrahedrite on a stockpile cell: its glyph in the stockpile's colour, like a stored stone.
+pub fn stored_tetrahedrite_item_cell() -> Cell {
+    Cell {
+        glyph: tetrahedrite_item_cell().glyph,
+        fg: zone_cell().fg,
+    }
+}
+
+// NOTE: `◊` may draw wide in Windows Terminal; if it does at the seat, fall back to `'`.
+/// A bloodstone: `◊`.
+pub fn bloodstone_item_cell() -> Cell {
+    Cell {
+        glyph: '◊',
+        fg: (130, 220, 190),
+    }
+}
+
+/// Bloodstone on a stockpile cell: its glyph in the stockpile's colour, like a stored stone.
+pub fn stored_bloodstone_item_cell() -> Cell {
+    Cell {
+        glyph: bloodstone_item_cell().glyph,
+        fg: zone_cell().fg,
+    }
+}
+
 /// One dwarf sharing a cell with one or more stones — the loaded twin of `☺`.
 // NOTE: the glyph states co-location, which is a carry in every case the sim produces except a
 // dwarf standing on a loose stone it does not hold.
@@ -234,12 +283,16 @@ mod tests {
     fn every_look_is_pinned() {
         let tiles = [
             (Tile::Solid(Material::Stone), '█', (86, 92, 104)),
+            (Tile::Solid(Material::Tetrahedrite), '%', (60, 90, 210)),
+            (Tile::Solid(Material::Bloodstone), '$', (130, 220, 190)),
             (Tile::Solid(Material::Soil), '▓', (72, 66, 58)),
             (Tile::Solid(Material::Ice), '▒', (126, 174, 196)),
             (Tile::Solid(Material::Snow), '░', (206, 218, 228)),
             (Tile::Solid(Material::TreeTrunk), '│', (105, 76, 48)),
             (Tile::Solid(Material::TreeFoliage), '♠', (54, 106, 78)),
             (Tile::Ramp(Material::Stone), '▲', (86, 92, 104)),
+            (Tile::Ramp(Material::Tetrahedrite), '▲', (60, 90, 210)),
+            (Tile::Ramp(Material::Bloodstone), '▲', (130, 220, 190)),
             (Tile::Ramp(Material::Soil), '▲', (72, 66, 58)),
             (Tile::Ramp(Material::Ice), '▲', (126, 174, 196)),
             (Tile::Ramp(Material::Snow), '▲', (206, 218, 228)),
@@ -316,6 +369,34 @@ mod tests {
             }
         );
         assert_eq!(
+            tetrahedrite_item_cell(),
+            Cell {
+                glyph: '•',
+                fg: (60, 90, 210),
+            }
+        );
+        assert_eq!(
+            stored_tetrahedrite_item_cell(),
+            Cell {
+                glyph: '•',
+                fg: (88, 190, 118),
+            }
+        );
+        assert_eq!(
+            bloodstone_item_cell(),
+            Cell {
+                glyph: '◊',
+                fg: (130, 220, 190),
+            }
+        );
+        assert_eq!(
+            stored_bloodstone_item_cell(),
+            Cell {
+                glyph: '◊',
+                fg: (88, 190, 118),
+            }
+        );
+        assert_eq!(
             crowd_cell(),
             Cell {
                 glyph: '⚇',
@@ -342,6 +423,8 @@ mod tests {
             pending_rect_cell(Mode::Remove),
             item_cell(),
             wood_item_cell(),
+            tetrahedrite_item_cell(),
+            bloodstone_item_cell(),
             crowd_cell(),
             carrier_cell(),
         ];
@@ -391,6 +474,14 @@ mod tests {
                 Cell {
                     glyph: '=',
                     fg: (164, 116, 66),
+                },
+                Cell {
+                    glyph: '•',
+                    fg: (60, 90, 210),
+                },
+                Cell {
+                    glyph: '◊',
+                    fg: (130, 220, 190),
                 },
                 Cell {
                     glyph: '⚇',

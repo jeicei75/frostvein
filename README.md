@@ -65,7 +65,10 @@ You open at the **centre of the map**, on the z-level with the most standable gr
 Terrain is one z-level at a time in 24-bit colour — snow `░`, ice `▒`, soil `▓`, stone `█`,
 ramps `▲`, tree trunks `│`, foliage `♠` — with dwarves on top, torches `†` and a
 campfire `♨` beneath them. A pine marked for cutting shows `/` at its trunk's foot, and a log
-of wood lies as `=` (green once it is on a stockpile). A named dwarf is `☻` in his tunic colour; a nameless one is `☺`,
+of wood lies as `=` (green once it is on a stockpile). Ore lies inside the rock, never on the
+surface: step down into a hill to find tetrahedrite `%` in deep blue (in veins) and, five or more
+levels down, a lone bloodstone `$` in pale teal. Digging one yields its own item, a blue `•` or a
+teal `◊`, green on a stockpile like stone. A hillside's ramps take a dig mark like any rock. A named dwarf is `☻` in his tunic colour; a nameless one is `☺`,
 or `☻` where he shares a cell with a stone; `⚇` marks two dwarves sharing one cell. Where a tile is empty the ground up to three levels below shows through,
 dimmed with depth. The bottom row is the key hint; the row above it reports the tick, the
 speed, the z-level and the dwarf count; the row above that is the roster: each dwarf's name,

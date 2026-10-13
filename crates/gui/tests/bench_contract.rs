@@ -45,6 +45,16 @@ fn bench_literals_match_the_client_palette_lights_and_boot_camera() {
         ),
         (
             &appearance,
+            "Material::Tetrahedrite => Color::srgb_u8(40, 64, 176)",
+            "\"tetrahedrite\": (40, 64, 176)",
+        ),
+        (
+            &appearance,
+            "Material::Bloodstone => Color::srgb_u8(120, 196, 176)",
+            "\"bloodstone\": (120, 196, 176)",
+        ),
+        (
+            &appearance,
             "Material::Soil => Color::srgb_u8(56, 52, 62)",
             "\"soil\": (56, 52, 62)",
         ),

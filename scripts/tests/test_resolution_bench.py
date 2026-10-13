@@ -348,6 +348,18 @@ class ResolutionSafetyTests(unittest.TestCase):
         for material in resolution_bench.KNOWN_MATERIALS:
             resolution_bench._material_detail_depth(material, 0, 0, 0, 4)
 
+    def test_ore_takes_stones_relief_rule(self):
+        """12.10: the two ores are known materials and break exactly as stone does (the client's
+        `material_detail_depth` gives them Stone's arm), at a spread of cells, not one."""
+        for ore in ("tetrahedrite", "bloodstone"):
+            self.assertIn(ore, resolution_bench.KNOWN_MATERIALS)
+            for plane, u, v in ((0, 0, 0), (3, 5, 7), (9, 14, 2), (1, 31, 40)):
+                self.assertEqual(
+                    resolution_bench._material_detail_depth(ore, plane, u, v, 4),
+                    resolution_bench._material_detail_depth("stone", plane, u, v, 4),
+                    (ore, plane, u, v),
+                )
+
     def test_snapshot_size_guard_uses_the_explicit_wire_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "snapshot.json"

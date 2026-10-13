@@ -29,6 +29,8 @@ pub enum Material {
     Snow,
     TreeTrunk,
     TreeFoliage,
+    Tetrahedrite,
+    Bloodstone,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -260,6 +262,8 @@ pub struct Item {
 pub enum ItemKind {
     Stone,
     Wood,
+    Tetrahedrite,
+    Bloodstone,
 }
 
 /// Full world state, sent on connect (AD-3). Field order is wire order.
@@ -626,6 +630,8 @@ mod tests {
             (Material::Snow, "\"snow\""),
             (Material::TreeTrunk, "\"tree_trunk\""),
             (Material::TreeFoliage, "\"tree_foliage\""),
+            (Material::Tetrahedrite, "\"tetrahedrite\""),
+            (Material::Bloodstone, "\"bloodstone\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }
@@ -744,6 +750,22 @@ mod tests {
                     id: 13,
                     pos: [73, 59, 12],
                     kind: ItemKind::Wood,
+                },
+            ),
+            (
+                r#"{"id":14,"pos":[62,77,12],"kind":"tetrahedrite"}"#,
+                Item {
+                    id: 14,
+                    pos: [62, 77, 12],
+                    kind: ItemKind::Tetrahedrite,
+                },
+            ),
+            (
+                r#"{"id":15,"pos":[1,2,3],"kind":"bloodstone"}"#,
+                Item {
+                    id: 15,
+                    pos: [1, 2, 3],
+                    kind: ItemKind::Bloodstone,
                 },
             ),
         ] {

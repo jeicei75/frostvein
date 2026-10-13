@@ -469,6 +469,10 @@ fn spawn_positions_for_seed_42_are_pinned() {
                 Tile::Solid(Material::TreeFoliage) => 10,
                 Tile::Ramp(Material::TreeTrunk) => 11,
                 Tile::Ramp(Material::TreeFoliage) => 12,
+                Tile::Solid(Material::Tetrahedrite) => 13,
+                Tile::Solid(Material::Bloodstone) => 14,
+                Tile::Ramp(Material::Tetrahedrite) => 15,
+                Tile::Ramp(Material::Bloodstone) => 16,
             };
             (hash ^ code).wrapping_mul(0x0000_0100_0000_01b3)
         });
@@ -488,7 +492,14 @@ fn spawn_positions_for_seed_42_are_pinned() {
     // at 10.9's sitting). On `DEFAULT_SEED` that re-labels 1,872 surface columns, so the folded
     // codes move 3 -> 1 and 7 -> 5 and the hash moves with them. The dwarf and camp positions
     // asserted above did NOT move, which is the claim that material carries no gameplay meaning.
-    assert_eq!(terrain_fingerprint, 0xe5fa_e10f_6708_cc79);
+    //
+    // MOVED A FOURTH TIME, 2026-10-11, reason "12.10 ore": `worldgen::place_ore` turns interior
+    // stone (`z + 2 < height`) into tetrahedrite veins and bloodstone cells, so the folded codes
+    // gain 13 and 14. The dwarf positions above, and the camp, height and tree pins elsewhere in
+    // this file, did NOT move: ore draws from its own `STREAM_ORE`, which is the whole point of
+    // pinning them separately. Old `0xe5fa_e10f_6708_cc79`. (Tuned once more inside 12.10, after the bench showed ore on the grid
+    // edge splitting quads: `0x369d_d7f4_0876_5f25` was the first ore value, never released.)
+    assert_eq!(terrain_fingerprint, 0x9bb0_34d6_e3cd_0a93);
 }
 
 #[test]
@@ -572,7 +583,10 @@ fn surface_is_icy() {
             let mut seen_soil = false;
             for z in 0..top {
                 match world.tile(Pos { x, y, z }) {
-                    Some(Tile::Solid(Material::Stone)) => assert!(
+                    // 12.10: ore is stone-layer rock, so it is under the soil like stone.
+                    Some(Tile::Solid(
+                        Material::Stone | Material::Tetrahedrite | Material::Bloodstone,
+                    )) => assert!(
                         !seen_soil,
                         "stone above soil at ({x},{y},{z}) — layering is inverted"
                     ),
@@ -748,4 +762,185 @@ fn different_seeds_give_different_name_sets() {
     };
 
     assert_ne!(names(DEFAULT_SEED), names(42));
+}
+
+/// Every ore cell of a world with its depth below the column's surface (`surface - z`, the surface
+/// cell being depth 0), measured from the finished world rather than from worldgen's own heights.
+fn ore_cells(world: &World) -> Vec<(Pos, Material, i32)> {
+    let dims = world.dims();
+    let mut cells = Vec::new();
+    for z in 0..dims.z as i32 {
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                let pos = Pos { x, y, z };
+                if let Some(Tile::Solid(
+                    material @ (Material::Tetrahedrite | Material::Bloodstone),
+                )) = world.tile(pos)
+                {
+                    cells.push((pos, material, surface_height(world, x, y) - z));
+                }
+            }
+        }
+    }
+    cells
+}
+
+#[test]
+fn ore_is_seeded_not_constant() {
+    let first = ore_cells(&World::generate(42, Dims::DEFAULT));
+    let again = ore_cells(&World::generate(42, Dims::DEFAULT));
+    let other = ore_cells(&World::generate(43, Dims::DEFAULT));
+    assert!(!first.is_empty(), "seed 42 holds no ore at all");
+    assert_eq!(first, again, "the same seed must give the same ore");
+    assert_ne!(first, other, "a different seed must give different ore");
+}
+
+#[test]
+fn ore_is_interior_never_exposed_and_gems_are_deep_and_rare_over_16_seeds() {
+    let (mut tetrahedrite_total, mut bloodstone_total) = (0, 0);
+    for seed in 0..16 {
+        let world = World::generate(seed, Dims::DEFAULT);
+        let (mut tetrahedrite, mut bloodstone) = (0, 0);
+        for (pos, material, depth) in ore_cells(&world) {
+            // `z + 2 < surface` is the soil rule: ore only where plain interior stone was.
+            assert!(
+                depth >= 3,
+                "seed {seed}: {material:?} at {pos:?} is within the soil layer or surface (depth {depth})"
+            );
+            for (dx, dy, dz) in [
+                (-1, 0, 0),
+                (1, 0, 0),
+                (0, -1, 0),
+                (0, 1, 0),
+                (0, 0, -1),
+                (0, 0, 1),
+            ] {
+                let beside = Pos {
+                    x: pos.x + dx,
+                    y: pos.y + dy,
+                    z: pos.z + dz,
+                };
+                // The grid's edge is open air too: `None` is a drawn, bench-counted face.
+                assert!(
+                    matches!(world.tile(beside), Some(tile) if tile != Tile::Empty),
+                    "seed {seed}: {material:?} at {pos:?} touches open air or the world edge at {beside:?}"
+                );
+            }
+            match material {
+                Material::Tetrahedrite => tetrahedrite += 1,
+                _ => {
+                    // Independent oracle: the ruled minimum depth, written as a literal.
+                    assert!(
+                        depth >= 5,
+                        "seed {seed}: bloodstone at {pos:?} is only depth {depth}"
+                    );
+                    bloodstone += 1;
+                }
+            }
+        }
+        assert!(tetrahedrite > 0, "seed {seed} has no tetrahedrite");
+        assert!(
+            bloodstone * 10 <= tetrahedrite,
+            "seed {seed}: {bloodstone} bloodstone against {tetrahedrite} tetrahedrite is more than 1 per 10"
+        );
+        tetrahedrite_total += tetrahedrite;
+        bloodstone_total += bloodstone;
+    }
+    assert!(
+        bloodstone_total > 0,
+        "no seed in 16 placed a bloodstone ({tetrahedrite_total} tetrahedrite)"
+    );
+}
+
+#[test]
+fn default_seed_ore_census_is_in_band() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let cells = ore_cells(&world);
+    let tetrahedrite: BTreeSet<Pos> = cells
+        .iter()
+        .filter(|(_, material, _)| *material == Material::Tetrahedrite)
+        .map(|(pos, _, _)| *pos)
+        .collect();
+    let bloodstone: Vec<i32> = cells
+        .iter()
+        .filter(|(_, material, _)| *material == Material::Bloodstone)
+        .map(|(_, _, depth)| *depth)
+        .collect();
+
+    // Veins are the connected components of tetrahedrite under 6-adjacency (touching veins merge).
+    let mut unseen = tetrahedrite.clone();
+    let mut veins = 0;
+    while let Some(&start) = unseen.iter().next() {
+        veins += 1;
+        let mut stack = vec![start];
+        unseen.remove(&start);
+        while let Some(at) = stack.pop() {
+            for (dx, dy, dz) in [
+                (-1, 0, 0),
+                (1, 0, 0),
+                (0, -1, 0),
+                (0, 1, 0),
+                (0, 0, -1),
+                (0, 0, 1),
+            ] {
+                let next = Pos {
+                    x: at.x + dx,
+                    y: at.y + dy,
+                    z: at.z + dz,
+                };
+                if unseen.remove(&next) {
+                    stack.push(next);
+                }
+            }
+        }
+    }
+
+    // Interior stone left after placement, plus the ore, is what plain interior stone was.
+    let dims = world.dims();
+    let mut stone = 0;
+    for z in 0..dims.z as i32 {
+        for y in 0..dims.y as i32 {
+            for x in 0..dims.x as i32 {
+                if world.tile(Pos { x, y, z }) == Some(Tile::Solid(Material::Stone))
+                    && surface_height(&world, x, y) - z >= 3
+                {
+                    stone += 1;
+                }
+            }
+        }
+    }
+    let interior = stone + cells.len();
+    let percent = 100.0 * tetrahedrite.len() as f64 / interior as f64;
+    println!(
+        "ore census DEFAULT_SEED: tetrahedrite {} in {} vein components, bloodstone {} at depths {:?}..={:?}, interior {} cells, tetrahedrite {:.2}%",
+        tetrahedrite.len(),
+        veins,
+        bloodstone.len(),
+        bloodstone.iter().min(),
+        bloodstone.iter().max(),
+        interior,
+        percent
+    );
+    // Measured 2026-10-11 (12.10): 5056 cells in 554 components (9.1 a vein), 252 bloodstone at
+    // depths 5..=25, 2.02% of 250,849 interior stone cells. The bands are about +-10%.
+    assert!(
+        (4_550..=5_550).contains(&tetrahedrite.len()) && (500..=620).contains(&veins),
+        "{} tetrahedrite cells in {veins} veins is off the measured census",
+        tetrahedrite.len()
+    );
+    assert!(
+        (1.5..=2.5).contains(&percent),
+        "tetrahedrite is {percent:.2}% of interior stone, ruled about 2%"
+    );
+    assert!(
+        (4..=12).contains(&(tetrahedrite.len() / veins.max(1))),
+        "{} cells in {veins} veins is not 4-12 cells a vein",
+        tetrahedrite.len()
+    );
+    assert!(bloodstone.len() * 10 <= tetrahedrite.len());
+    assert!(
+        (bloodstone.len() as f64 - tetrahedrite.len() as f64 / 20.0).abs() <= 2.0,
+        "bloodstone should be about 1 per 20 tetrahedrite"
+    );
+    assert!(bloodstone.iter().all(|&depth| depth >= 5));
 }

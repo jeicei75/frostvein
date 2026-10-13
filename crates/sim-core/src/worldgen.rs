@@ -7,6 +7,15 @@ const NOISE_SPACING: u32 = 32;
 pub(crate) const CAMP_RADIUS: u32 = 3;
 const RIDGE_BAND: u32 = 6;
 const RIDGE_RAISE: u32 = 4;
+// NOTE: ore constants are hardcoded (12.10). One vein per `INTERIOR_PER_VEIN` interior stone cells,
+// at 4-12 cells each, is about 2% of the interior (360, not 400, because the edge ring is skipped).
+// Counts scale with the world so small test worlds are not saturated.
+const INTERIOR_PER_VEIN: usize = 360;
+const VEIN_LEN: std::ops::RangeInclusive<usize> = 4..=12;
+/// Bloodstone: one single cell per this many tetrahedrite cells (AC2 allows at most 1 per 10).
+const TETRAHEDRITE_PER_BLOODSTONE: usize = 20;
+/// Depth below the surface column, `height - z`; the surface cell is depth 0.
+pub(crate) const GEM_MIN_DEPTH: u32 = 5;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Biome {
@@ -257,6 +266,82 @@ pub(crate) fn place_ramps(dims: Dims, heights: &[u32], tiles: &mut [Tile]) {
                 }
             }
         }
+    }
+}
+
+/// Ore in the rock (12.10): tetrahedrite in random-walk veins, bloodstone as single deep cells.
+/// Only `Solid(Stone)` with `z + 2 < height` is replaced -- `layered_terrain`'s own interior --
+/// so ore is never at the surface, never on a ramp, and never next to open air.
+// NOTE: the world's own boundary counts as open air too (a face on the edge of the grid is drawn,
+// and the resolution bench counts it as exposed), so ore keeps one cell clear of every edge.
+pub(crate) fn place_ore(dims: Dims, heights: &[u32], tiles: &mut [Tile], rng: &mut ChaCha8Rng) {
+    let height_of = |x: u32, y: u32| heights[(x + y * dims.x) as usize];
+    let off_the_edge = |x: u32, y: u32, z: u32| {
+        x > 0 && y > 0 && z > 0 && x + 1 < dims.x && y + 1 < dims.y && z + 2 < height_of(x, y)
+    };
+    let mut interior = Vec::new();
+    for z in 0..dims.z {
+        for y in 0..dims.y {
+            for x in 0..dims.x {
+                if off_the_edge(x, y, z)
+                    && tiles[index(dims, x, y, z)] == Tile::Solid(Material::Stone)
+                {
+                    interior.push((x, y, z));
+                }
+            }
+        }
+    }
+    if interior.is_empty() {
+        return;
+    }
+
+    let mut tetrahedrite = 0;
+    for _ in 0..interior.len() / INTERIOR_PER_VEIN {
+        let (mut x, mut y, mut z) = interior[rng.random_range(0..interior.len())];
+        let len = rng.random_range(VEIN_LEN);
+        let mut placed = 0;
+        for _ in 0..len * 4 {
+            let at = index(dims, x, y, z);
+            if tiles[at] == Tile::Solid(Material::Stone) {
+                tiles[at] = Tile::Solid(Material::Tetrahedrite);
+                placed += 1;
+                tetrahedrite += 1;
+                if placed == len {
+                    break;
+                }
+            }
+            let (dx, dy, dz) = [
+                (-1, 0, 0),
+                (1, 0, 0),
+                (0, -1, 0),
+                (0, 1, 0),
+                (0, 0, -1),
+                (0, 0, 1),
+            ][rng.random_range(0..6)];
+            let (nx, ny, nz) = (x as i32 + dx, y as i32 + dy, z as i32 + dz);
+            if nx < 0 || ny < 0 || nz < 0 || nx >= dims.x as i32 || ny >= dims.y as i32 {
+                continue;
+            }
+            let (nx, ny, nz) = (nx as u32, ny as u32, nz as u32);
+            if off_the_edge(nx, ny, nz) {
+                (x, y, z) = (nx, ny, nz);
+            }
+        }
+    }
+
+    let mut deep: Vec<_> = interior
+        .into_iter()
+        .filter(|&(x, y, z)| {
+            height_of(x, y) - z >= GEM_MIN_DEPTH
+                && tiles[index(dims, x, y, z)] == Tile::Solid(Material::Stone)
+        })
+        .collect();
+    for _ in 0..tetrahedrite / TETRAHEDRITE_PER_BLOODSTONE {
+        if deep.is_empty() {
+            break;
+        }
+        let (x, y, z) = deep.swap_remove(rng.random_range(0..deep.len()));
+        tiles[index(dims, x, y, z)] = Tile::Solid(Material::Bloodstone);
     }
 }
 

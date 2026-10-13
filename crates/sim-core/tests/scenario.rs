@@ -3073,3 +3073,180 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
         "runs where marks cleared and a stone reached the pile"
     );
 }
+
+/// 12.10: a standable cell beside dwarf 2 to dig or channel, a one-cell stockpile at dwarf 0 (12.9
+/// items block their cell, so a dig with no pile would stop), and the pile cell.
+fn ore_fixture(world: &mut World) -> (Pos, Pos) {
+    let worker = world.dwarves()[2].1;
+    let target = Pos {
+        x: if worker.x + 1 < world.dims().x as i32 {
+            worker.x + 1
+        } else {
+            worker.x - 1
+        },
+        ..worker
+    };
+    let pile = world.dwarves()[0].1;
+    assert_ne!(pile, target);
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(pile, pile),
+    });
+    (target, pile)
+}
+
+/// Steps until the first item exists and returns where it lies; panics after `limit` ticks.
+fn first_item(world: &mut World, limit: u64, what: &str) -> Pos {
+    while world.items().is_empty() {
+        assert!(world.tick() < limit, "{what}: no item within {limit} ticks");
+        world.step();
+    }
+    world.items()[0].1
+}
+
+#[test]
+fn digging_ore_yields_an_ore_item_that_reaches_the_pile() {
+    for (material, kind) in [
+        (Material::Tetrahedrite, ItemKind::Tetrahedrite),
+        (Material::Bloodstone, ItemKind::Bloodstone),
+    ] {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (target, pile) = ore_fixture(&mut world);
+        assert!(world.set_tile(
+            Pos {
+                z: target.z - 1,
+                ..target
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(target, Tile::Solid(material)));
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        });
+
+        let at = first_item(&mut world, 600, "dig");
+        assert_eq!(at, target, "the dug item lies on the dug cell");
+        assert_eq!(world.tile(target), Some(Tile::Empty));
+        assert_eq!(
+            kinds_at(&world, target, kind),
+            1,
+            "digging {material:?} must yield one {kind:?} item, got {:?}",
+            world.item_kinds()
+        );
+        assert_eq!(kinds_at(&world, target, ItemKind::Stone), 0);
+
+        for _ in 0..1_500 {
+            if kinds_at(&world, pile, kind) == 1 {
+                break;
+            }
+            world.step();
+        }
+        assert_eq!(
+            kinds_at(&world, pile, kind),
+            1,
+            "the {kind:?} item never reached the pile"
+        );
+    }
+}
+
+/// 12.10 AC4's other half: only ore yields ore. Every other non-tree material still yields one stone.
+#[test]
+fn digging_soil_snow_and_ice_still_yields_stone() {
+    for material in [Material::Soil, Material::Snow, Material::Ice] {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (target, _pile) = ore_fixture(&mut world);
+        assert!(world.set_tile(
+            Pos {
+                z: target.z - 1,
+                ..target
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(target, Tile::Solid(material)));
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        });
+
+        let at = first_item(&mut world, 600, "dig");
+        assert_eq!(at, target, "the dug item lies on the dug cell");
+        assert_eq!(world.tile(target), Some(Tile::Empty));
+        assert_eq!(
+            kinds_at(&world, target, ItemKind::Stone),
+            1,
+            "digging {material:?} must yield one stone, got {:?}",
+            world.item_kinds()
+        );
+        assert_eq!(world.items().len(), 1, "one dig, one item");
+    }
+}
+
+#[test]
+fn a_dig_mark_takes_a_ramp_and_the_ramp_is_dug_out() {
+    for (material, kind) in [
+        (Material::Stone, ItemKind::Stone),
+        (Material::Tetrahedrite, ItemKind::Tetrahedrite),
+    ] {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (target, _pile) = ore_fixture(&mut world);
+        assert!(world.set_tile(
+            Pos {
+                z: target.z - 1,
+                ..target
+            },
+            Tile::Solid(Material::Stone),
+        ));
+        assert!(world.set_tile(target, Tile::Ramp(material)));
+        let refusal = world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        });
+        assert_eq!(refusal, None, "a dig over a ramp must not be refused");
+        assert_eq!(
+            world.designations(),
+            vec![(target, DesignationKind::Dig)],
+            "the dig mark must land on the ramp"
+        );
+
+        let at = first_item(&mut world, 600, "ramp dig");
+        assert_eq!(at, target);
+        assert_eq!(world.tile(target), Some(Tile::Empty));
+        assert_eq!(kinds_at(&world, target, kind), 1);
+    }
+}
+
+#[test]
+fn channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp() {
+    for (material, kind) in [
+        (Material::Tetrahedrite, ItemKind::Tetrahedrite),
+        (Material::Bloodstone, ItemKind::Bloodstone),
+    ] {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (target, _pile) = ore_fixture(&mut world);
+        let below = Pos {
+            z: target.z - 1,
+            ..target
+        };
+        make_standable(&mut world, target);
+        assert!(world.set_tile(below, Tile::Solid(material)));
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(target, target),
+        });
+
+        let at = first_item(&mut world, 600, "channel");
+        assert_eq!(at, target);
+        assert_eq!(
+            world.tile(below),
+            Some(Tile::Ramp(Material::Stone)),
+            "a channel over {material:?} must leave a stone ramp, never a ramp of the ore"
+        );
+        assert_eq!(
+            kinds_at(&world, target, kind),
+            1,
+            "a channel over {material:?} must yield the ore, got {:?}",
+            world.item_kinds()
+        );
+        assert_eq!(kinds_at(&world, target, ItemKind::Stone), 0);
+    }
+}

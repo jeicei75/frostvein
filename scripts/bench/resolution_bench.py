@@ -139,7 +139,7 @@ def _coarse_faces(snapshot):
 # Name every material instead, and refuse the ones nobody has decided about.
 FLAT_MATERIALS = frozenset({"ice", "tree_trunk", "tree_foliage"})
 DRIFTING_MATERIALS = frozenset({"snow"})
-BREAKING_MATERIALS = frozenset({"stone", "soil"})
+BREAKING_MATERIALS = frozenset({"stone", "tetrahedrite", "bloodstone", "soil"})
 KNOWN_MATERIALS = FLAT_MATERIALS | DRIFTING_MATERIALS | BREAKING_MATERIALS
 
 

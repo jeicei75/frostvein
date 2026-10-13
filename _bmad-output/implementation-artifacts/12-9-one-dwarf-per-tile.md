@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default
 
 # Story 12.9: One Dwarf per Tile
 
-Status: in-progress
+Status: done
 
 ## Story
 

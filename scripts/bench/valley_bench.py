@@ -34,6 +34,8 @@ FACE_CORNERS = (
 
 TERRAIN_RGB = {
     "stone": (60, 70, 92),
+    "tetrahedrite": (40, 64, 176),
+    "bloodstone": (120, 196, 176),
     "soil": (56, 52, 62),
     "ice": (104, 128, 170),
     "snow": (136, 150, 178),

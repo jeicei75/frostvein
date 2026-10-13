@@ -2411,7 +2411,7 @@ capture that does not pin the clock is not evidence.
 
 Wolf starts a fresh world and can tell his five dwarves apart by name and colour. Each one has a trade: miner, hauler or woodcutter. He designates digs and tree cuts, and watches mining, hauling and felling happen at the same time. Minerals and gems come out of the rock and wood comes from the pines. A short tutorial chain (wood, then minerals, then gems) gives the first session a direction, announces when it's done, and play carries on. Along the way, the four sim defects Wolf found at the M2 close (#132–#135) are fixed, each with a scenario test that was red first.
 
-**Twelve stories and one stretch, inside the 10–14 cap.** Cut order if the cap bites: 12.13 (FR40), then the tree half of 12.11, then the gem tier of 12.10 and 12.12. The tooling and hygiene action items (#142–#148) are not in this epic; they run beside it as issues.
+**Thirteen stories and one stretch, inside the 10–14 cap** (12.10b added 2026-10-11 at 12.10's creation). Cut order if the cap bites: 12.13 (FR40), then the tree half of 12.11, then the gem tier of 12.10 and 12.12. The tooling and hygiene action items (#142–#148) are not in this epic; they run beside it as issues.
 
 **Order is load-bearing** (approved 2026-09-28):
 - Identity (12.2) and the first work animation (12.5) land in the first half.
@@ -2693,6 +2693,38 @@ So that digging deeper is worth it.
 
 **Given** the look,
 **Then** Wolf approves a draft of how ore reads in the rock before it is built.
+
+NOTE (Wolf, 2026-10-11, 12.10 creation): **the premise was false.** No dig reached below the surface on any
+world: `place_ramps` rings every hill with ramps, and dig took only `Solid`. 12.10 therefore makes **all
+diggable ground dig the same way, ramps and hillsides included**. The ores are **tetrahedrite** and
+**bloodstone**. Channelling down a level (#163) is split out as 12.10b.
+
+### Story 12.10b: A Way Down
+
+As the boss,
+I want a channel to open the level below,
+So that my miners can dig down into the mountain, not only sideways into hillsides.
+
+**Acceptance Criteria:**
+
+**Given** #163 (a channel turns the cell under its target into a ramp and stops, so it never opens a way
+down),
+**When** the story begins,
+**Then** it reproduces that as a **red scenario test** first, and Wolf rules the channel rule from #163's
+options (M2-27).
+
+**Given** a channel on a standable cell,
+**When** it completes,
+**Then** a dwarf can walk down into the level below and back up, and repeated channels make a way down.
+A scenario test pins the walk down and back.
+
+**Given** the item a channel yields,
+**Then** it is never stranded where no hauler can lift it, and never blocks the way down forever. Since
+12.9, an item blocks its cell and is lifted only from a walkable same-level neighbour, so an item at the
+bottom of a pit needs a pick-up rule from the level above a ramp, or a different landing cell (FR8).
+
+**Given** 12.9's channel tests and the walking-skeleton scenario test,
+**Then** they stay green, or each re-pin is disclosed beside the pin. #163 closes.
 
 ### Story 12.11: Nothing Floats
 
