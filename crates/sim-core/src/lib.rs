@@ -1774,7 +1774,10 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     .set_tile(base, Tile::Ramp(material));
             }
             // The block lands up top, on the nearest free tile from the worker (the 12.9 drop
-            // rule), never on the target or in the pit under it. If the opened step would wall a
+            // rule), never on the target or in the pit under it, and never below the worker's
+            // own level (Wolf, 12.10b dev: down a ramp step is into an earlier level's pit).
+            // NOTE: the worker's own level only is too strict: the staircase sweep stalls at
+            // level 3 for 8 of 24 delays when a pit worker may not land his block up the ramp. If the opened step would wall a
             // dwarf in, or no tile is free, the terrain change is undone, the worker lets go and
             // the job retries after the cooldown.
             // NOTE: both checks read the terrain AFTER the step is cut. The target stops being
@@ -1788,6 +1791,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             } else {
                 nearest_free_cell(terrain, &blocked, pos, |cell| {
                     column(cell)
+                        || cell.z < pos.z
                         || occupied.contains(&cell)
                         || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)
                 })
@@ -5249,6 +5253,69 @@ mod tests {
         assert_eq!(
             world.drain_dirty(),
             vec![(base, Tile::Ramp(Material::Snow)), (below, Tile::Empty)]
+        );
+    }
+
+    #[test]
+    fn a_channel_never_lands_its_stone_below_the_worker() {
+        // 12.10b AC 4 (Wolf, at dev): the stone lands up top, never down in a pit. Here the
+        // worker's nearest walkable tile is one ramp step DOWN, into an open pit cell west of him;
+        // north and south are walled off, east is the target. The next free tile on his own level
+        // is past the pit, two steps away.
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let stand = world.dwarves()[0].1;
+        let at = |dx: i32, dy: i32, dz: i32| Pos {
+            x: stand.x + dx,
+            y: stand.y + dy,
+            z: stand.z + dz,
+        };
+        let target = at(1, 0, 0);
+        assert!(world.set_tile(at(1, 0, -1), Tile::Solid(Material::Soil)));
+        assert!(world.set_tile(at(1, 0, -2), Tile::Solid(Material::Snow)));
+        assert!(world.set_tile(target, Tile::Empty));
+        assert!(world.set_tile(at(0, 1, 0), Tile::Solid(Material::Stone)));
+        assert!(world.set_tile(at(0, -1, 0), Tile::Solid(Material::Stone)));
+        assert!(world.set_tile(at(-1, 0, 0), Tile::Empty));
+        assert!(world.set_tile(at(-1, 0, -1), Tile::Empty));
+        assert!(world.set_tile(at(-1, 0, -2), Tile::Ramp(Material::Stone)));
+        assert!(world.set_tile(at(-2, 0, 0), Tile::Empty));
+        assert!(world.set_tile(at(-2, 0, -1), Tile::Solid(Material::Stone)));
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Channel,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+
+        for _ in 0..=super::DIG_WORK_TICKS {
+            super::execute_jobs(&mut world.ecs);
+        }
+
+        assert_eq!(
+            world.tile(at(1, 0, -1)),
+            Some(Tile::Empty),
+            "the channel was worked"
+        );
+        let items = world.items();
+        assert_eq!(items.len(), 1);
+        let landed = items[0].1;
+        assert!(
+            landed.z >= stand.z,
+            "the stone lands at the worker's level or above, never in the pit: worker {stand:?}, \
+             stone {landed:?}"
         );
     }
 

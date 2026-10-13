@@ -2945,7 +2945,10 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // block, rock or a drop (the #186 shape), with no mark and no claim left in the run. Task 4
     // (the dig-face jam) owns the final record. (10, 6, 4) left once a channel was refused on the
     // campfire's tile (D3): both rects cover it, so seed 10's crew worked a different order.
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 1] = [(4, 4, 4)];
+    // 12.10b re-pin (AC 4 ruling, a channel's block never lands below the worker): was
+    // [(4, 4, 4)], now (10, 4, 4), read by dump at tick 4,000: idle at [67, 76, 28] between two
+    // loose blocks and two drops, no mark and no claim left (the #186 shape again).
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 1] = [(10, 4, 4)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
