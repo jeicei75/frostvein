@@ -5687,6 +5687,27 @@ mod tests {
         );
     }
 
+    // #185 (12.10b AC 8): the review's five-dwarf chain. The miner (id 0) is at the dead end of the
+    // one-wide tunnel behind four idle woodcutters whose homes are tunnel tiles; its dig is in the
+    // room. The mirrored layout finishes at tick 370; this one was still undone at 40,100.
+    #[test]
+    #[ignore = "RED until Task 4"]
+    fn a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig() {
+        let mut world = room_and_tunnel();
+        stand_miners_at(
+            &mut world,
+            [16, 15, 14, 13, 12].map(|x| at(x, FIX_Y, FIX_Z)),
+        );
+        for id in 1..5 {
+            set_profession(&mut world, id, super::Profession::Woodcutter);
+        }
+        insert_dig(&mut world, 0, ROOM_WALL);
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+
+        watch(&mut world, 1_000, |_| {}, |world| world.jobs().is_empty());
+        assert_eq!(world.tile(ROOM_WALL), Some(Tile::Empty));
+    }
+
     // 12.9 AC4: a dwarf falls onto a tile another dwarf stands on (an overhang dug over a cave).
     // It comes to rest on a free standable tile within 3 ticks of the support's removal.
     #[test]

@@ -3250,3 +3250,211 @@ fn channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp() {
         assert_eq!(kinds_at(&world, target, ItemKind::Stone), 0);
     }
 }
+
+// 12.10b: a channel opens a step down, so a crew can dig into the mountain.
+
+fn cell(origin: Pos, dx: i32, dz: i32) -> Pos {
+    Pos {
+        x: origin.x + dx,
+        z: origin.z + dz,
+        ..origin
+    }
+}
+
+fn is_rock(world: &World, pos: Pos) -> bool {
+    matches!(
+        world.tile(pos),
+        Some(Tile::Solid(material)) if !matches!(material, Material::TreeTrunk | Material::TreeFoliage)
+    )
+}
+
+/// The nearest camp-level spot for a row of five cells running +x, with a standable y-neighbour on
+/// both sides, no emitter on it and six solid cells under every cell: room for a staircase four
+/// levels deep and two wide. DEFAULT_SEED gives [61, 62, 9].
+fn staircase_site(world: &World) -> Pos {
+    let camp = world.camp_origin();
+    let emitters: Vec<Pos> = world.emitters().into_iter().map(|(_, p, _)| p).collect();
+    let mut best: Option<(i32, Pos)> = None;
+    for y in camp.y - 20..camp.y + 20 {
+        for x in camp.x - 20..camp.x + 20 {
+            let fits = (-1..6).all(|dx| {
+                (-1..=1).all(|dy| {
+                    let pos = Pos {
+                        x: x + dx,
+                        y: y + dy,
+                        z: camp.z,
+                    };
+                    is_standable(world, pos)
+                        && !emitters.contains(&pos)
+                        && (1..7).all(|depth| is_rock(world, cell(pos, 0, -depth)))
+                })
+            });
+            let distance = (x - camp.x).abs() + (y - camp.y).abs();
+            if fits && distance > 3 && best.is_none_or(|(nearest, _)| distance < nearest) {
+                best = Some((distance, Pos { x, y, z: camp.z }));
+            }
+        }
+    }
+    best.expect("DEFAULT_SEED has a staircase site by the camp")
+        .1
+}
+
+/// A pile big enough for a four-level two-wide staircase: it digs 28 blocks and a pile cell holds
+/// one (12.9).
+fn place_creation_pile(world: &mut World) {
+    let camp = world.camp_origin();
+    let refused = world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            Pos {
+                x: camp.x - 8,
+                y: camp.y + 2,
+                ..camp
+            },
+            Pos {
+                x: camp.x + 8,
+                y: camp.y + 9,
+                ..camp
+            },
+        ),
+    });
+    assert_eq!(refused, None, "the creation pile was refused");
+}
+
+/// Steps until `done` or `limit` ticks have passed; true when it was done.
+fn run_until(world: &mut World, limit: u64, mut done: impl FnMut(&World) -> bool) -> bool {
+    let end = world.tick() + limit;
+    while world.tick() < end {
+        if done(world) {
+            return true;
+        }
+        world.step();
+    }
+    done(world)
+}
+
+fn no_marks_left(world: &World) -> bool {
+    world.designations().is_empty()
+}
+
+// RED on 015548f: the cell under a channel became a Ramp, so nothing opened and the pit below was
+// never there to walk into.
+#[test]
+#[ignore = "RED until Task 3"]
+fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(site, site),
+    });
+    assert!(
+        run_until(&mut world, 3_000, no_marks_left),
+        "the channel at {site:?} was never worked"
+    );
+    assert_eq!(world.tile(cell(site, 0, -1)), Some(Tile::Empty));
+    assert!(
+        matches!(world.tile(cell(site, 0, -2)), Some(Tile::Ramp(_))),
+        "the cell two under the target must be a ramp, got {:?}",
+        world.tile(cell(site, 0, -2))
+    );
+
+    // A dig workable only from inside the pit: the cell beside the opened one, one level down.
+    let wall = Pos {
+        y: site.y + 1,
+        ..cell(site, 0, -1)
+    };
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(wall, wall),
+    });
+    let mut pit_dwarf = None;
+    let dug = run_until(&mut world, 4_000, |world| {
+        for (id, pos, ..) in world.dwarves() {
+            if pos.z == site.z - 1 {
+                pit_dwarf = Some(id);
+            }
+        }
+        world.tile(wall) == Some(Tile::Empty)
+    });
+    assert!(dug, "the dig at {wall:?} from the pit never finished");
+    let pit_dwarf = pit_dwarf.expect("a dwarf stood in the pit to dig it");
+
+    // Walk it back up: the other miner takes another trade and a channel is marked up top, which a
+    // dwarf in the pit may still hold.
+    for (id, profession) in world.professions() {
+        if profession == Profession::Miner && id != pit_dwarf {
+            world.apply_command(SimCommand::SetProfession {
+                dwarf: id,
+                profession: Profession::Hauler,
+            });
+        }
+    }
+    let up_top = cell(site, 4, 0);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(up_top, up_top),
+    });
+    assert!(
+        run_until(&mut world, 4_000, |world| {
+            world
+                .dwarves()
+                .iter()
+                .any(|(id, pos, ..)| *id == pit_dwarf && pos.z == site.z)
+        }),
+        "the dwarf in the pit never climbed back to z {}",
+        site.z
+    );
+}
+
+// RED on 015548f (0 of 24: a channel only ramps the floor, nothing opens). With the rule and the
+// work-position change, the dig-face jam (#185, Task 4) stalls the rest at levels 2 and 3.
+#[test]
+#[ignore = "RED until Task 4"]
+fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
+    let mut worked = 0;
+    let mut stalled = Vec::new();
+    for delay in 0..24u64 {
+        let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+        let site = staircase_site(&world);
+        place_creation_pile(&mut world);
+        let mut levels = 0;
+        for level in 0..4 {
+            for _ in 0..delay {
+                world.step();
+            }
+            // Each level is one row shorter and one level lower, inside the previous one.
+            let first = cell(site, level, -level);
+            let last = Pos {
+                y: site.y + 1,
+                ..cell(site, 4, -level)
+            };
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: rect(first, last),
+            });
+            // Worked means every mark is gone AND every floor under the level is open: on
+            // 015548f a channel only ramps the floor, which clears the marks and opens nothing.
+            let opened = |world: &World| {
+                no_marks_left(world)
+                    && (first.x..=last.x).all(|x| {
+                        (first.y..=last.y).all(|y| {
+                            world.tile(cell(Pos { x, y, ..first }, 0, -1)) == Some(Tile::Empty)
+                        })
+                    })
+            };
+            if !run_until(&mut world, 6_000, opened) {
+                break;
+            }
+            levels = level + 1;
+        }
+        if levels == 4 {
+            worked += 1;
+        } else {
+            stalled.push((delay, levels));
+        }
+    }
+    assert_eq!(
+        worked, 24,
+        "staircase worked for {worked} of 24 designation delays; stalled (delay, levels done): {stalled:?}"
+    );
+}

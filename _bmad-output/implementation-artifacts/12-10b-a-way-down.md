@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -98,15 +98,15 @@ from channel: **dig** removes a block at the miner's own level (a tunnel), **cha
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: RED tests first** (AC 1, 3, 7, 8)
-  - [ ] `crates/sim-core/tests/scenario.rs` (UPDATE):
+- [x] **Task 1: RED tests first** (AC 1, 3, 7, 8)
+  - [x] `crates/sim-core/tests/scenario.rs` (UPDATE):
     `a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back` (AC 3; the probe's `walk_down_and_back`)
     and `a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay` (AC 7; the probe's
     `staircase_delay_sweep`, asserting 24/24 and printing the stalled delays on failure). Take the site
     finder, pile rect and stair geometry from the probe; drop every `PROBE_*` toggle.
-  - [ ] #185's fixture as a test in `lib.rs`'s test module beside `room_and_tunnel` (`lib.rs:5532`):
+  - [x] #185's fixture as a test in `lib.rs`'s test module beside `room_and_tunnel` (`lib.rs:5532`):
     the dig at `ROOM_WALL` done within a stated bound.
-  - [ ] Run each on `015548f` and paste the failing assert lines into Debug Log References. Commit the RED
+  - [x] Run each on `015548f` and paste the failing assert lines into Debug Log References. Commit the RED
     tests with `#[ignore = "RED until Task N"]`, un-ignored by the commit that greens them.
 - [ ] **Task 2: the channel rule** (AC 2, 4)
   - [ ] `execute_jobs`' `JobKind::Channel` arm (`lib.rs:1665-1680`): `below = target.z-1`, `base = z-2`.
@@ -250,6 +250,11 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 ### Agent Model Used
 
 ### Debug Log References
+
+- (A) Task 1 RED, run on unchanged `015548f` code:
+  - `a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back`: `scenario.rs:3353` `assertion left == right failed  left: Some(Ramp(Snow))  right: Some(Empty)` (z-1 under the site is a ramp, not open).
+  - `a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay`: `assertion left == right failed: staircase worked for 0 of 24 designation delays; stalled (delay, levels done): [(0, 0), (1, 0), ... (23, 0)]`. (First draft judged only "marks gone" and passed vacuously on 015548f, since a ramping channel also clears its mark; the judge now also requires every floor under the level to be `Empty`, per AC 7.)
+  - `a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig` (lib.rs, beside `room_and_tunnel`): `not done by tick 1000` (panic from `watch`, bound 1,000 ticks from clock 100).
 
 ### Completion Notes List
 
