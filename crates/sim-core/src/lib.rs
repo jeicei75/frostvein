@@ -5357,6 +5357,101 @@ mod tests {
     }
 
     #[test]
+    fn a_channel_never_lands_its_stone_where_it_walls_a_dwarf_in() {
+        // 12.10b (#182's rule kept for the new landing): the worker stands at the mouth of a
+        // one-wide dead end, west of him, with a second dwarf at its far end. The mouth is the
+        // first tile the landing search tries; a stone there would seal that dwarf in, so it lands
+        // on open ground instead.
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let stand = world.dwarves()[0].1;
+        let at = |dx: i32, dy: i32, dz: i32| Pos {
+            x: stand.x + dx,
+            y: stand.y + dy,
+            z: stand.z + dz,
+        };
+        let target = at(1, 0, 0);
+        assert!(world.set_tile(at(1, 0, -1), Tile::Solid(Material::Soil)));
+        assert!(world.set_tile(at(1, 0, -2), Tile::Solid(Material::Snow)));
+        assert!(world.set_tile(target, Tile::Empty));
+        let (mouth, end, open) = (at(-1, 0, 0), at(-2, 0, 0), at(0, -1, 0));
+        for cell in [mouth, end, open] {
+            assert!(world.set_tile(cell, Tile::Empty));
+            assert!(world.set_tile(
+                Pos {
+                    z: cell.z - 1,
+                    ..cell
+                },
+                Tile::Solid(Material::Stone)
+            ));
+        }
+        for wall in [
+            at(0, 1, 0),
+            at(-1, 1, 0),
+            at(-1, -1, 0),
+            at(-2, 1, 0),
+            at(-2, -1, 0),
+            at(-3, 0, 0),
+        ] {
+            assert!(world.set_tile(wall, Tile::Solid(Material::Stone)));
+        }
+        // Every other dwarf out of the way, and dwarf one at the dead end.
+        let others: Vec<_> = world
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<super::Dwarf>())
+            .filter(|entity| entity.get::<super::Id>() != Some(&super::Id(0)))
+            .map(|entity| (entity.id(), *entity.get::<super::Id>().unwrap()))
+            .collect();
+        for (n, (entity, id)) in others.into_iter().enumerate() {
+            let away = if id == super::Id(1) {
+                end
+            } else {
+                at(0, -6 - n as i32, 0)
+            };
+            *world.ecs.get_mut::<Pos>(entity).unwrap() = away;
+        }
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Channel,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+
+        for _ in 0..=super::DIG_WORK_TICKS {
+            super::execute_jobs(&mut world.ecs);
+        }
+
+        assert_eq!(
+            world.tile(at(1, 0, -1)),
+            Some(Tile::Empty),
+            "the channel was worked"
+        );
+        let items = world.items();
+        assert_eq!(items.len(), 1);
+        assert_ne!(
+            items[0].1, mouth,
+            "a stone at the mouth walls the dwarf at the dead end in"
+        );
+        assert_eq!(
+            items[0].1, open,
+            "the stone lands on the open tile beside the worker"
+        );
+    }
+
+    #[test]
     fn execute_jobs_opens_a_channel_whose_support_is_already_a_ramp() {
         let mut world = World::generate(42, Dims::DEFAULT);
         // 12.9 AC13: the miner works from the next tile, so the target is the cell beside him.

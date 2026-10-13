@@ -263,9 +263,10 @@ p.write_text(s.replace(old, '                    || (dwarves.contains(&cell) && 
 PY
 
 # #182: a channel's stone may wall a dwarf in (the miner sealing itself, seed 10's first shape).
-mutation "28 a channel stone may wall a dwarf in" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+mutation "28 a channel stone may wall a dwarf in" sim-core a_channel_never_lands_its_stone_where_it_walls_a_dwarf_in <<'PY'
 import pathlib
-# Re-pointed 2026-10-13 (12.10b): the channel landing's wall-in refusal.
+# Re-pointed 2026-10-13 (12.10b): the channel landing's wall-in refusal. It SURVIVED the seed sweep
+# (a channel's stone no longer lands on its target), so a direct 12.10b test now pins it.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '                        || occupied.contains(&cell)\n                        || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)\n'
 assert s.count(old) == 1
