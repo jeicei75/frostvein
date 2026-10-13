@@ -2648,7 +2648,7 @@ development_status:
   #     fire/mirror/tui z; AC4 soil/snow/ice yield unpinned; snow cap; rests_on_the_ground NOTE). 4 defer.
   #     Seat (AC10) still Wolf's. -> in-progress.
   #   2026-10-13 seat pass 2 (Wolf) on 315e8fc: ore stands; bloodstone unreachable with no way down (12.10b, #163);
-  #     trench queue -> #185, floating rubbish -> 12.11, heaviness -> #179. Wolf: close it. -> done. PR on Wolf's yes.
+  #     trench queue -> #185, floating rubbish -> 12.11, heaviness -> #179. Wolf: close it. -> done. PR #192 opened (c85120d).
   12-10b-a-way-down: backlog
   #   Added 2026-10-11 at 12.10's creation (Wolf: "own story, right after"). #163: the channel opens the
   #     level below. Trap known at creation: since 12.9 an item is lifted only from a same-level neighbour,
