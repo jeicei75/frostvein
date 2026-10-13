@@ -3540,6 +3540,43 @@ mod tests {
         );
     }
 
+    /// 12.10b AC 6: a stone is lifted from any tile a dwarf could step onto it from, a ramp step
+    /// included. Here the stone lies at the rim (x 1, z 2) and its only such tile is the pit cell
+    /// beside it, one level down on a ramp (x 2, z 1); nothing on its own level stands.
+    #[test]
+    fn a_stone_at_a_pit_rim_is_lifted_from_the_ramp_below() {
+        let dims = Dims { x: 4, y: 1, z: 3 };
+        let mut tiles = vec![Tile::Empty; 12];
+        let at = |x: u32, z: u32| super::worldgen::index(dims, x, 0, z);
+        for x in [0, 1, 3] {
+            tiles[at(x, 0)] = Tile::Solid(Material::Stone);
+        }
+        tiles[at(2, 0)] = Tile::Ramp(Material::Stone);
+        tiles[at(1, 1)] = Tile::Solid(Material::Stone);
+        let terrain = Terrain {
+            dims,
+            tiles,
+            dirty: BTreeSet::new(),
+        };
+        let stone = Pos { x: 1, y: 0, z: 2 };
+        let pit = Pos { x: 2, y: 0, z: 1 };
+        let zones = BTreeSet::from([Pos { x: 3, y: 0, z: 1 }]);
+        let items = BTreeMap::from([(12, stone)]);
+        let blocked = BTreeSet::from([stone]);
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Haul { item: 12 },
+            target: stone,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert_eq!(
+            super::work_positions(&terrain, &blocked, &zones, &items, job, None),
+            BTreeSet::from([pit]),
+            "the stone is lifted from the pit cell, one ramp step below it"
+        );
+    }
+
     #[test]
     fn an_old_save_zone_on_an_emitter_is_no_haul_goal() {
         let terrain = flat_terrain(5, 1);

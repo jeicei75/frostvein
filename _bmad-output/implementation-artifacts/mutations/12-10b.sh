@@ -16,7 +16,9 @@ p.write_text(s.replace(old, '                side_neighbours(job.target)\n'
                             '                    .collect()\n'))
 PY
 
-mutation "2 a loose item is lifted from the same level only" sim-core a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay <<'PY'
+# Row 2 SURVIVED against the staircase sweep (first run, 2026-10-13): since the AC 4 ruling the
+# blocks land up top, and the sweep stays 24/24 with same-level lifts. AC 6 now has its own test.
+mutation "2 a loose item is lifted from the same level only" sim-core a_stone_at_a_pit_rim_is_lifted_from_the_ramp_below <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = ('                    astar_neighbours(terrain, blocked, *pos)\n'
@@ -91,7 +93,9 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "8 the channel's wall-in check also reads the terrain before the cut" sim-core a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay <<'PY'
+# Row 8 SURVIVED against the staircase sweep (first run, 2026-10-13; the Task 4 fix cleared the two
+# delays Agent A saw stall). The 12.9 seed sweep's UNFINISHED pin kills it: marks left undone.
+mutation "8 the channel's wall-in check also reads the terrain before the cut" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = ('        if job.kind != JobKind::Channel\n'
