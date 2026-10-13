@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-11
+# last_updated: 2026-10-13
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-11
+last_updated: 2026-10-13
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2649,10 +2649,14 @@ development_status:
   #     Seat (AC10) still Wolf's. -> in-progress.
   #   2026-10-13 seat pass 2 (Wolf) on 315e8fc: ore stands; bloodstone unreachable with no way down (12.10b, #163);
   #     trench queue -> #185, floating rubbish -> 12.11, heaviness -> #179. Wolf: close it. -> done. PR #192 opened (c85120d).
-  12-10b-a-way-down: backlog
+  12-10b-a-way-down: ready-for-dev
   #   Added 2026-10-11 at 12.10's creation (Wolf: "own story, right after"). #163: the channel opens the
   #     level below. Trap known at creation: since 12.9 an item is lifted only from a same-level neighbour,
   #     so a channel's item at the bottom of a pit is unliftable and blocks the way down.
+  #   Created 2026-10-13 on 015548f. #163 confirmed in source. Task 0 RULED (Wolf): a channel opens a step down
+  #     (z-1 Empty, z-2 Ramp), the block lands up top beside the miner, the dig-face jam (#185) FOLDED IN.
+  #     Probe: rule + channel/pick-up across a ramp step reaches 4 levels on a two-wide stair; jams at the face
+  #     (wire 1/5, sweep 16/24). way_down_wire.py RED on 015548f. D1-D3 defaults (#188 folded). -> ready-for-dev.
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
   12-13-ready-for-more-faces: backlog
