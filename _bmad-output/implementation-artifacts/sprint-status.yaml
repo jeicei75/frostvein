@@ -2649,7 +2649,7 @@ development_status:
   #     Seat (AC10) still Wolf's. -> in-progress.
   #   2026-10-13 seat pass 2 (Wolf) on 315e8fc: ore stands; bloodstone unreachable with no way down (12.10b, #163);
   #     trench queue -> #185, floating rubbish -> 12.11, heaviness -> #179. Wolf: close it. -> done. PR #192 opened (c85120d).
-  12-10b-a-way-down: in-progress
+  12-10b-a-way-down: review
   #   Added 2026-10-11 at 12.10's creation (Wolf: "own story, right after"). #163: the channel opens the
   #     level below. Trap known at creation: since 12.9 an item is lifted only from a same-level neighbour,
   #     so a channel's item at the bottom of a pit is unliftable and blocks the way down.
@@ -2657,6 +2657,10 @@ development_status:
   #     (z-1 Empty, z-2 Ramp), the block lands up top beside the miner, the dig-face jam (#185) FOLDED IN.
   #     Probe: rule + channel/pick-up across a ramp step reaches 4 levels on a two-wide stair; jams at the face
   #     (wire 1/5, sweep 16/24). way_down_wire.py RED on 015548f. D1-D3 defaults (#188 folded). -> ready-for-dev.
+  #   2026-10-13 dev DONE (Sonnet A/B + Opus): D1-D3 confirmed by Wolf. AC 7 sweep 24/24, #185 fixture green
+  #     (idle line shifted, no swap), wire 5/5 OK. AC 4 measured (40% of landings off the worker's level) and
+  #     RULED (Wolf): never below the worker. Mutations 11/11 + 13 re-pointed old rows KILLED (3 survivors fixed by
+  #     direct tests). Full gate GREEN 79a210b 3508 s. Seat (AC 12) is Wolf's. -> review.
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
   12-13-ready-for-more-faces: backlog

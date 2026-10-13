@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -139,30 +139,30 @@ from channel: **dig** removes a block at the miner's own level (a tunnel), **cha
     tile and `pos.z < 2`. A rect left with zero cells is a `Refusal` (standing AC 6), as today.
   - [x] gui `sim_will_keep` (`crates/gui/src/project.rs:1076-1086`): mirror both, so the preview lights none
     of them.
-- [ ] **Task 6: re-pins and docs** (AC 11)
+- [x] **Task 6: re-pins and docs** (AC 11)
   - [x] Expect to move (code half done, Agent A): `execute_jobs_channels_a_material_preserving_ramp_and_spawns_stone` (`lib.rs:5039`),
     `execute_jobs_removes_a_channel_job_when_the_support_is_already_a_ramp` (`:5090`), scenario
     `a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target` (`scenario.rs:949`),
     `a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on` (`:854`),
     `channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp` (`:3219`), and any 12.9 sweep pin.
     Disclose each beside the pin and in its commit (12.9 rule).
-  - [ ] `ARCHITECTURE-SPINE.md` (2026-08-09): amend the 12.10 bullet (`:157-166`) for D1 and add the channel
+  - [x] `ARCHITECTURE-SPINE.md` (2026-08-09): amend the 12.10 bullet (`:157-166`) for D1 and add the channel
     rule. README: one line under the controls saying dig = sideways at your level, channel = a step down.
-- [ ] **Task 7: the instrument and its RED** (AC 10)
-  - [ ] `12-10b-signoff/way_down_wire.py` (EXISTING, creation) is the instrument. Run it on 5 fresh release
+- [x] **Task 7: the instrument and its RED** (AC 10)
+  - [x] `12-10b-signoff/way_down_wire.py` (EXISTING, creation) is the instrument. Run it on 5 fresh release
     daemons; paste each verdict block.
-  - [ ] NEW `mutations/12-10b.sh`, each row named against its killing test, run alone after commit:
+  - [x] NEW `mutations/12-10b.sh`, each row named against its killing test, run alone after commit:
     channel worked from the same level only (kills AC 7; the wire goes RED at level 1); pick-up from the
     same level only (AC 7; wire RED at level 2); `base` left `Solid` (AC 3); the item spawned on the target
     (AC 4); the emitter refusal dropped (AC 9); the Task 4 fix reverted (AC 7 and AC 8). Re-point any old
     row the change breaks (`audit-mutations.py`).
-- [ ] **Task 8: the seat card** (AC 12)
-  - [ ] NEW `12-10b-signoff/vehicle-card.md`, in the seat's launch form. Teach: dig vs channel in one
+- [x] **Task 8: the seat card** (AC 12)
+  - [x] NEW `12-10b-signoff/vehicle-card.md`, in the seat's launch form. Teach: dig vs channel in one
     sentence each; drag a BIG pile first (4 levels two wide = 28 blocks); channel a 2-wide row of 5 at the
     camp level, then each next row one shorter and one level down inside it. Give the site, the z per row,
     the compass bearing at boot, and the tui `--z` and keys. Known, by design: blocks can float until
     12.11; one-wide passages are slower.
-- [ ] **Task 9: gate** — `RUST_TEST_THREADS=1 scripts/gate.sh`, full, green, before review.
+- [x] **Task 9: gate** — `RUST_TEST_THREADS=1 scripts/gate.sh`, full, green, before review.
 
 ## Dev Notes
 
@@ -249,6 +249,13 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 ### Agent Model Used
 
+- Orchestrator + verifier: Claude Opus 5.5 (`claude-opus-5-5`). Wolf picked Sonnet 5.5 subagents for the
+  implementation (2026-10-13), as in 12.2-12.10; the skill config still names Codex.
+- Agent A (Sonnet 5.5): Tasks 1, 2, 3, 5 and the code half of 6. Agent B (Sonnet 5.5): Task 4. One after
+  the other, on one tree.
+- The orchestrator: the AC 4 landing rule after Wolf's ruling (`4df25a3`), AC 6's direct test, the spine,
+  README and seat card, `mutations/12-10b.sh`, every mutation run, every wire run and the full gate.
+
 ### Debug Log References
 
 - (A) Task 1 RED, run on unchanged `015548f` code:
@@ -263,7 +270,59 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 - (B) Mechanism of #185's fixture (dump of positions, `Wander.home`, `Path`, `claims()` every tick from 101): the miner (id 0, x 16, `Path` of 11 to the room) is blocked by idle dwarf 1 at x 15. Dwarves 1-4 stand at x 15..12 and the tunnel is one wide. In `resolve_blocked_step` case 1 the idle blocker has no free neighbour off the holder's path (x 14 is occupied, x 16 is the holder), and its exit search treated every OTHER dwarf as closed, so it found no route and returned `false`: the miner waits. The idle line cannot dissolve itself: only the dwarf at x 12 has a free tile ahead, nothing asks it to move, and idle dwarves wander only near a home (here none moves at all). Not the yield rule, not a home inside the passage: the idle chain was never asked to shift.
 - (B) After the fix: the fixture finishes at about tick 400 (bound 1,000 from clock 100). AC 7 sweep 24 of 24, AC 3 green, all sim-core tests green, the 12.9 seed sweep unchanged (`ONE_LEVEL_ISLANDS` `[(4, 4, 4)]`, `UNFINISHED` `[]`): no pin moved.
 
+- (O) Verified independently at `4a877a4` (after A): AC 3 and AC 7 green; #185 fixture RED `not done by
+  tick 1000`. Wire on 5 fresh release daemons (scratch-worktree build): **5 of 5 `WAY DOWN OK`** (level 3
+  worked by tick 1246-1599, deepest dwarf z 5, a dwarf back up by tick 1141-1528).
+- (O) **AC 4 finding.** A temporary `eprintln!` at the channel landing over the AC 7 sweep (672 landings,
+  `4a877a4` + B): landing z minus worker z = `{0: 406, +1: 172, +2: 19, +3: 22, +4: 9, -1: 44}`. 40% off
+  the worker's level; 44 dropped one level DOWN into an earlier pit. Variants, AC 7 sweep: refuse below
+  the worker 24/24; worker's level only **16/24**, stalled `[(2, 3), (3, 3), (4, 3), (5, 3), (6, 3), (7,
+  3), (8, 3), (10, 3)]`. **Wolf ruled (b), never below the worker** (2026-10-13).
+- (O) AC 4 RED: `a_channel_never_lands_its_stone_below_the_worker` panicked `the stone lands at the
+  worker's level or above, never in the pit: worker Pos { x: 65, y: 65, z: 25 }, stone Pos { x: 64, y: 65,
+  z: 24 }`. Green with `|| cell.z < pos.z` in the landing's refusal. The 12.9 seed sweep moved:
+  `ONE_LEVEL_ISLANDS` `[(4, 4, 4)]` -> `[(10, 4, 4)]`, read by dump at tick 4,000: idle at `[67, 76, 28]`
+  between two loose blocks and two drops, 0 marks, every claim `None` (the #186 shape). `UNFINISHED` `[]`.
+- (O) `mutations/12-10b.sh`, first run on `dfe6718` (`RUST_TEST_THREADS=1`, alone): 9 KILLED, **2
+  SURVIVED** the staircase sweep: row 2 (lift from the same level only) and row 8 (the channel's wall-in
+  check also read before the cut). Full sim-core suite under each mutant (scratch worktree): row 2 only
+  moved the `ONE_LEVEL_ISLANDS` trajectory pin (weak), so AC 6 had no direct test; row 8 failed
+  `UNFINISHED` (marks left after 4,000 ticks, a real stall). Fixed in `79a210b`: AC 6's own test
+  `a_stone_at_a_pit_rim_is_lifted_from_the_ramp_below` (a positive assertion: the work set is exactly the
+  pit cell); row 2 re-pointed to it, row 8 to `no_dwarf_is_caged_by_stones_over_the_probe_seeds`. Re-run
+  alone: row 2 KILLED `the stone is lifted from the pit cell, one ramp step below it`; row 8 KILLED `runs
+  with marks left after 4000 ticks`. **All 11 rows KILLED.**
+- (O) Final wire at `79a210b`, 5 fresh release daemons (scratch-worktree build): **5 of 5 `WAY DOWN OK`**
+  (each: level 0..3 worked, level 3 by tick 1219-1583, `deepest dwarf z 5`, `back up: dwarf 1 at tick
+  1402` x4 and `dwarf 3 at tick 1396` x1).
+- (O) Full gate, `RUST_TEST_THREADS=1 scripts/gate.sh` on `79a210b`: **GATE GREEN 3508 s** (fmt, clippy,
+  cargo test 422 s, pixel guards 3046 s, edge probes, metrics, bench, mutation tables still apply).
+- (O) Agent A's 13 re-pointed old rows (`12-1` x1, `12-10` x2, `12-9` x5, `3-2-the-dig` x5), run alone after
+  the gate: 12 KILLED, **1 SURVIVED**: 12-9 row 28 "a channel stone may wall a dwarf in" against the seed
+  sweep (a channel's stone no longer lands on its target, so the sweep never reaches that refusal). New
+  direct test `a_channel_never_lands_its_stone_where_it_walls_a_dwarf_in` (worker at the mouth of a
+  one-wide dead end, a dwarf at its far end; positive assert: the stone lands on the open tile); row 28
+  re-pointed to it (`1ab5d3b`) and re-run alone: KILLED `a stone at the mouth walls the dwarf at the dead
+  end in`. **Every 12.10b row and every re-pointed old row now KILLED (24 of 24).**
+- (O) `1ab5d3b` is after the full gate: it adds one unit test and re-points one mutation row, no
+  production code. Its pre-commit fast gate (everything but `serve.rs` and the pixel guards) is green; the
+  full gate was NOT re-run on it.
+
 ### Completion Notes List
+- (O) **AC 4 as shipped (Wolf's ruling at dev):** the block lands on the nearest free tile at the worker's
+  level OR ABOVE, never below it, never on the target or in its column. "The worker's level" taken
+  literally stalls the staircase (16/24); a pit worker lands his block up the ramp. The story's AC 4 text
+  is left as written; this note is the amendment. The NOTE beside the rule names the limitation.
+- (O) The premise "both work-position changes are load-bearing" (Key decision 2) no longer holds for the
+  staircase after the AC 4 ruling: with blocks landing up top, same-level lifts still reach 24/24. The
+  cross-ramp lift stays (AC 6 asks for it) and now has its own test.
+- (O) `dbbebd0` "Start 12.10b: mark it in-progress" also carries Agent A's Task 1 RED tests: they were
+  staged when the orchestrator committed. Not rewritten (the record says so instead).
+- (O) Two direct tests added for rules no instrument reached after the change: AC 6's cross-ramp lift
+  and the channel landing's wall-in refusal (both found by surviving mutations).
+- (O) Docs: the spine's 12.10 bullet keeps its text, its last sentence marked superseded, and a 12.10b
+  bullet states the channel rule, D1, the landing and the refusals. README: one paragraph, dig vs channel.
+  Seat card: `12-10b-signoff/vehicle-card.md`.
 - (B) Task 4: new `make_room_down_the_idle_chain` (lib.rs, beside `step_aside`), called from `resolve_blocked_step` case 1 only when the idle blocker has neither a free tile aside nor an exit route. It searches through the other IDLE dwarves (never the holder, never a dwarf with a job) for the nearest free tile off the holder's path and gives the idle dwarf nearest that tile the rest of the route as its `Path`; the holder waits meanwhile and the line shifts a dwarf at a time. No swap, no new state, no change to the holder-wins/yield rules. No mutation row re-pointed (`audit-mutations.py` green); a row for this fix is Task 7's.
 - (A) Tasks 1, 2, 3, 5 and the code half of 6 done. Task 1's RED commit was swept into the orchestrator's `dbbebd0` (it committed while my files were staged); the content is mine.
 - (A) **Deviation 1, the wall-in check moved after the cut (channel only).** The story said keep the check and re-state its NOTE. Kept, but it reads the terrain AFTER the step is cut (see Debug Log): read before the cut it refused a pit worker forever (12.9 seed sweep seeds 0 and 4, AC 7 delays 8 and 23). The tiles are undone if the check or the landing refuses. Dig is unchanged. No test names this alone: AC 7 (24/24) and the sweep pin `UNFINISHED = []` kill it.
@@ -278,6 +337,13 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 ### File List
 
+- (O) `crates/sim-core/src/lib.rs` (AC 4 refusal + its test, AC 6 test), `crates/sim-core/tests/scenario.rs`
+  (island re-pin), `README.md`, `_bmad-output/implementation-artifacts/mutations/12-9.sh` (row 28 re-pointed),
+  `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`,
+  `_bmad-output/implementation-artifacts/mutations/12-10b.sh` (NEW),
+  `_bmad-output/implementation-artifacts/12-10b-signoff/vehicle-card.md` (NEW),
+  `_bmad-output/implementation-artifacts/12-10b-a-way-down.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`
+
 - (B) `crates/sim-core/src/lib.rs` (Task 4: `make_room_down_the_idle_chain`, fixture un-ignored with a bound comment)
 
 - `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/simd/tests/serve.rs`, `crates/gui/src/project.rs`
@@ -288,5 +354,7 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 | Date | Change |
 |---|---|
 | 2026-10-13 | Agent A: Tasks 1, 2, 3, 5 and the code half of 6 (channel rule, shared landing helper, work positions across ramp steps, designation filter, re-pins). AC 3 green; AC 7 sweep 24 of 24; #185 fixture still RED for Task 4. |
+| 2026-10-13 | Orchestrator: full gate GREEN on `79a210b` (3508 s); old re-pointed rows 12 of 13 KILLED, row 28 pinned by a new direct test and KILLED. Status -> review. |
+| 2026-10-13 | Orchestrator: wire 5 of 5 OK; AC 4 measured (40% of landings off the worker's level) and ruled by Wolf: never below the worker (`4df25a3`); AC 6 direct test; `mutations/12-10b.sh` 11 of 11 KILLED after re-pointing 2 survivors; spine, README, seat card. |
 | 2026-10-13 | Agent B: Task 4. The #185 fixture jam was an idle line in a one-wide passage that nothing asked to shift; `make_room_down_the_idle_chain` sends the end of the line out. AC 8 green, AC 7 24 of 24, no sweep pin moved. |
 | 2026-10-13 | Created on `015548f`. #163 confirmed in source. Task 0 ruled by Wolf: a channel opens a step down (`z-1` Empty, `z-2` Ramp), the block lands up top beside the miner, and the dig-face jam (#185) is folded in. Probe: the rule plus two work-position changes reaches 4 levels on a two-wide stair, but jams at the dig face (wire 1 of 5, sweep 16 of 24). `way_down_wire.py` written, RED on `015548f`. Defaults D1-D3 (ramp keeps material, z<2 and emitter marks refused; #188). |
