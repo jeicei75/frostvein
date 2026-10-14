@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -433,6 +433,103 @@ otherwise bit-identical).
 - 8 patches were LEFT AS ACTION ITEMS for a `/bmad-review-patch` session.
 - Status -> in-progress.
 - Round 3 is authorised (new HIGHs). It audits this round's closure table.
+
+#### Code review run 3, 2026-10-14, on `ecd96dc` (diff `31322f8^..2b4db37`, the run-2 patch pass; 8 files, +285/-64)
+
+Fresh session. Four layers ran and none timed out. All ran cargo 1.97.1, each in its own `/tmp/review-<layer>` target dir.
+The territories were the same as in runs 1 and 2.
+
+**Delta vs run 2:**
+- **NEW: 10.** 0 HIGH, 1 MED, 9 LOW.
+- **REWORK: 2**, both half-closed rows of the run-2 closure table.
+  - #195 (MED): the fix covers the cut check but not the landing (#197).
+  - Card floating count (LOW): "about 6" was measured on 2 runs; following the card's own procedure gives a median of 11.
+- **Stopping rule: NO new finding is HIGH, so THE AUDIT ENDS here.** The next spend goes to the live gate, which is the seat
+  (AC 12), after the patches. No round 4.
+
+| Layer | Findings | Severity (layer's) | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter (Sonnet) | 2 | 2 LOW | sim-core all green (debug); gui `project` 16 green; a 392-run release sweep of the #196 fixture over first-mark delay 0..300 × level gap 0..40, under `step_and_watch`: 392/392, no stall, swap or shared tile |
+| Edge Case Hunter (Sonnet) | 3 | 3 LOW | every payload of 12-10b.sh (1-19) and 12-9.sh (1-32) applied in an archive copy (no APPLY-FAILED); rows 15/18/19 in debug and release (each on its recorded line); wire `two` 6/6, `onewide` 6/6 |
+| Acceptance Auditor (Opus) | 4 | 1 MED, 3 LOW | closure table re-run row by row (8 CLOSED, #195 HALF-CLOSED); the #195 hunk reverted alone; rows 15/16/17/18/19 in fresh copies; AC 7 24/24, the one-wide sweep, seeds 0..=16, AC 8 green; wire `two` 5/5, `onewide` 3/3; the bystander probe (#197) |
+| Feature Auditor (Opus) | 6 | 1 MED, 1 LOW-MED, 4 LOW | hop trace all WIRED; wire `two` 20/20 and `onewide` 20/20 (up-top call fired 9 and 3 times); **the card's procedure, scripted literally, 38 runs** (uptime 0-5000, human pause 0-300): stair reached row 3 in 38/38, 0 cages, longest job holder stood still 106 ticks |
+
+**Convergences:** row 19 is debug-shadowed (edge + acceptance, both RAN).
+
+**Live bugs filed when found:** **#197**, the #195 landing cage.
+
+**#196 held live:** 0 freezes in 67 + 11 runs and in 392 sweep runs (round 2 saw it on 2 of 9). That is an outcome-level
+result; nothing traced the back-out per step.
+
+**Not proven live:** AC 12 in full, the seat.
+- The gui watch, tui parity, the compass/orbit, `,` slice-down and ramp contrast on Wolf's terminal.
+- The preview filters were reached only by their unit tests.
+
+- [ ] [Review][Patch] **MED (#197): a channel's dug block can seal the pit a dwarf on the target falls into (acceptance,
+  RAN), REWORK of #195** [`crates/sim-core/src/lib.rs:1868`, the Channel arm's landing closure]
+  - The cut check reads `&dwarves`, where the dwarf on the target is moved to its fall cell. The landing closure still reads
+    `&occupied`, where that dwarf is in the air on the target and stands in no flood piece.
+  - Probe: `severing_pit(true, true)` plus bystanders at (9,20,5) and (10,19,5). The block lands on (10,21,5), which is the
+    second step's rim. The dwarf at (11,20,3) has no route to the rim. With `on_target = false`, the block lands at (8,20,5).
+  - The run-2 other-side fixture asserts "dropped into the pit it can climb out of" but never checks that it can.
+  - Fix: pass `&dwarves` to the landing closure. Go RED with the bystander fixture plus a route-to-the-rim assert, and add
+    a mutation row.
+  - Re-state the NOTEs at `:805` and `:1839`, which read as covering the whole arm.
+- [ ] [Review][Patch] **MED: the card's "or a dig at the rim" never brings a miner up, 0 of 9 (feature, RAN)**
+  [`12-10b-signoff/vehicle-card.md:92`]
+  - A gui dig at the rim targets the rim's top block at z 8, and dig work positions are same-z.
+  - On the east rim the mark is never worked and stays lit (4/4).
+  - On the west rim it is worked from inside the pit at z 8, and the miner stays down (4/4).
+  - Fix: say "mark a channel up top, at the rim", and drop "or a dig".
+- [ ] [Review][Patch] **LOW: "mark something up top" brings ONE miner, and none from below when a miner is already up
+  (feature, RAN)** [`vehicle-card.md:92`]
+  - Two-wide: 17/17 runs brought one miner up and left the other at z 5.
+  - One-wide: in 6/10 runs a miner already up top took the mark.
+  - Fix: "one mark per miner; the nearest free miner takes it". Fix it in the same edit as the line above.
+- [ ] [Review][Patch] **LOW: the card's floating count is half of what its own procedure leaves (feature, RAN), REWORK of
+  the run-2 row** [`vehicle-card.md:88`]
+  - The card procedure measured 6-13 floating blocks, median 11, over 27 two-wide runs. One-wide's 4 holds.
+  - The run-2 row was read against 2 wire runs, on the wire's geometry and not the card's.
+- [ ] [Review][Patch] **LOW: the card says "walk to the row's level with `<`", but row 0 needs `>` (feature, read)**
+  [`vehicle-card.md:72`] — the tui boots at `--z 8`, and the paragraph above already says so.
+- [ ] [Review][Patch] **LOW: the Dig preview lights tree cells the sim drops, while its doc says "never a tree" (feature,
+  read; orchestrator confirmed)** [`crates/gui/src/project.rs:1086`]
+  - The sim's Dig filter is `Solid | Ramp && !is_tree` (`lib.rs:2519-2523`). Trees are `Solid(TreeTrunk | TreeFoliage)`.
+  - The mirror's Dig arm keeps every `Solid | Ramp`.
+  - It is pre-existing (12.10), but it is a latent silent failure in the function round 2 edited. Fix it RED first, as
+    with the channel-over-a-tree row.
+- [ ] [Review][Patch] **LOW: two NOTEs still say the preview does not filter emitters (feature, read)**
+  [`crates/gui/src/designate.rs:199`; `crates/client-core/src/lib.rs:292`]
+  - `preview_cells` now filters emitters for Channel and Stockpile.
+  - This is the partial-doc-update shape. It is patched rather than deferred because a stale rationale survives review.
+- [ ] [Review][Patch] **LOW: under `mutate.sh`, row 19 is killed by `World::step`'s debug_assert, never by
+  `step_and_watch`'s shared-tile assert (edge + acceptance, RAN)** [`mutations/12-10b.sh` row 19]
+  - `mutate.sh` runs debug only. Deleting the `scenario.rs:3498` assert would leave row 19 KILLED.
+  - It is the "KILLED names the test, not the assertion" trap, and it is the very assert the row was added to show.
+  - Fix: have row 19's payload also strip the `lib.rs:2376` debug_assert, so the debug run dies on `step_and_watch`'s
+    line. Re-mutate and check the killing line.
+- [x] [Review][Defer] **LOW: #195 counts the dwarf at the fall cell, but `settle` lands it beside that cell when the cell is
+  taken (blind, read)** [`lib.rs:1839-1841`] — deferred: the NOTE discloses it, and it was not constructed.
+- [x] [Review][Defer] **LOW: no preview test uses a Torch; both new Stockpile asserts use the Campfire (blind, read)**
+  [`project.rs` tests] — deferred: `on_emitter` matches `Torch | Campfire` and the behaviour is correct.
+- [x] [Review][Defer] **LOW: the #196 fixture has a loose 6,000-tick bound and no check that a dwarf went low or came back
+  up (edge, read + row 15)** [`scenario.rs` `job_holders_head_on_…`] — deferred: row 15 still kills it at the level-2
+  stall.
+- [x] [Review][Defer] **LOW: #196's only deterministic guard is its own fixture (acceptance, RAN)** — with row 15 applied
+  the one-wide sweep stays green, and the 1,200-run release probe behind "4 → 0" is scratch code, not in the repo.
+  Deferred.
+
+Dismissed (2):
+- The wire's up-top call on `two` can turn an unaided-climb RED into OK. This is Wolf's M2 ruling, disclosed in the
+  docstring, and the wire prints the call line.
+- `onewide`'s "back up" can fire before level 3 is worked. Run 1 already deferred this.
+
+**Run 3 outcome:**
+- Cost: $13.88 over 305 turns, with subagents at 78.3% of tokens.
+- Reaped after triage: 10 `/tmp` build dirs, 51.9 GB (28.7 GB reclaimed on disk).
+- 8 patches were LEFT AS ACTION ITEMS for a `/bmad-review-patch` session.
+- Status -> in-progress.
+- The audit ENDS (no new HIGH). After the patch pass: push, then the seat (AC 12).
 
 ## Dev Notes
 

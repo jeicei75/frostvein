@@ -2675,3 +2675,10 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **The wire's `same` shape** (edge, RAN). Its verdict is always RED and cannot tell a #193 refusal from any other stall (no `Refusal` is printed for a refused completion). Only the lines can.
 - **The #194 one-wide sweep's mutants** (edge, RAN). They take 465-676 s in a debug build because every stalled delay burns its tick cap. They still report KILLED.
 - **The #194 case-1 fallback** (`lib.rs:~1462-1467`, blind, read). Its search closes only `blocked`, so the idle blocker can get a `Path` whose first tile is a third dwarf. It then freezes in `wander` until that tile frees. Bounded, no swap, and no worse than the old `return false`.
+
+## Deferred from: code review of 12-10b-a-way-down, run 3 (2026-10-14)
+
+- **#195 fall cell vs `settle`'s actual landing** (`crates/sim-core/src/lib.rs:1839-1841`): the cut check counts a dwarf on the channel target at its fall cell, but `settle` lands it BESIDE that cell when an item or another dwarf is there, possibly in a different piece of the pit. The NOTE discloses it. Not constructed. (blind, read)
+- **No preview test uses a Torch** (`crates/gui/src/project.rs` tests): both new Stockpile asserts and the Channel emitter asserts use the Campfire only. `on_emitter` matches `Torch | Campfire`, so the behaviour is correct; only a pin is missing. (blind, read)
+- **#196 fixture is loose** (`crates/sim-core/tests/scenario.rs` `job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever`): a 6,000-tick bound on a ~1 s test, and no assert that a dwarf went low or came back up. The `low` set is passed to `step_and_watch` but never asserted. Row 15 still kills it at the level-2 stall. (edge)
+- **#196 has one deterministic guard**: with row 15 (back-out for idle blockers only) applied, the one-wide sweep stays green. Only the head-on fixture catches it, and the 1,200-run release probe behind "frozen one-wide 4 -> 0" is scratch code, not in the repo. (acceptance, RAN)
