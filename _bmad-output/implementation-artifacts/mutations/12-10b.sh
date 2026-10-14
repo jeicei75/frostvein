@@ -66,9 +66,10 @@ PY
 mutation "5c the gui preview lights an emitter's tile" gui the_channel_preview_skips_an_emitters_tile_and_cells_below_z_two <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                        && entity.pos == tile\n'
+# Re-pointed 2026-10-14 (review run 2 patch): the emitter test is one `on_emitter` closure for both modes.
+old = '            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == tile\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                        && entity.pos == [tile[0], tile[1], -1]\n'))
+p.write_text(s.replace(old, '            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == [tile[0], tile[1], -1]\n'))
 PY
 
 mutation "6 the Task 4 fix is reverted (no idle chain shift)" sim-core a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig <<'PY'
@@ -166,4 +167,23 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '            if let Some(back_out) = back_out {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            if let Some(back_out) = back_out.filter(|_| idle) {\n'))
+PY
+
+# 12.10b review run 2 patch: the Stockpile arm drops its emitter rule again (the preview lights the
+# fire, which the sim's `is_walkable` drops).
+mutation "16 the stockpile preview lights an emitter's tile" gui a_channel_drag_over_the_campfire_does_not_light_its_tile <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        DesignateMode::Stockpile => client_core::is_standable(mirror, tile) && !on_emitter(),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        DesignateMode::Stockpile => client_core::is_standable(mirror, tile),\n'))
+PY
+
+# 12.10b review run 2 patch: the Channel arm drops the sim's "no tree at z-1" rule again.
+mutation "17 the channel preview lights a cell over a tree" gui the_channel_preview_skips_a_cell_standing_on_a_tree <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                && !crate::designate::is_tree_tile(mirror, [tile[0], tile[1], tile[2] - 1])\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
 PY
