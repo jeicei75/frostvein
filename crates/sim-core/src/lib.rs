@@ -802,7 +802,7 @@ fn drop_cell(
 ///
 /// NOTE: a piece is measured up to `MAX_ASTAR_NODES` tiles, so two pieces past that both read as
 /// the world and neither walls anybody in. No caller fills a cell a dwarf stands on (every drop
-/// refuses a dwarf's tile, and a channel's occupant falls into the pit it opens), except the
+/// refuses a dwarf's tile, and a channel counts its occupant where it falls, #195), except the
 /// walled-in carrier's last-resort drop in `release_claim`.
 fn walls_in_a_dwarf(
     terrain: &Terrain,
@@ -1833,10 +1833,29 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             // in the pit of the level above, whose way up the cut itself opens. Started from the
             // sides after the cut, it never saw the rim, and a cut that took a pit's last step up
             // caged the dwarves inside. A refused cut stays as the step.
+            // #195: a dwarf on the target is counted where `settle` drops it, down the opened
+            // column to the first cell it can stand on. NOTE: `settle` lands it beside that cell
+            // when another dwarf or an item is there; the check reads the cell itself.
             let terrain = ecs.resource::<Terrain>();
+            let mut dwarves = occupied.clone();
+            if dwarves.remove(&job.target) {
+                let mut fall = job.target;
+                while !terrain.is_standable(fall)
+                    && matches!(
+                        terrain.tile(Pos {
+                            z: fall.z - 1,
+                            ..fall
+                        }),
+                        Some(Tile::Empty)
+                    )
+                {
+                    fall.z -= 1;
+                }
+                dwarves.insert(fall);
+            }
             let column = |cell: Pos| (cell.x, cell.y) == (job.target.x, job.target.y);
             let found =
-                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) {
+                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides) {
                     None
                 } else {
                     nearest_free_cell(terrain, &blocked, pos, |cell| {
@@ -5504,8 +5523,9 @@ mod tests {
     /// #193 (12.10b review): a rim room at `FIX_Z`; the channel target `(11, FIX_Y, FIX_Z - 1)`
     /// stands on a ramp, a step down from the rim and a step up from a two-cell pit at
     /// `FIX_Z - 2` where dwarf 1 stands. Dwarf 0 works the channel from the rim. With
-    /// `second_link`, the row beside it is a second step from the rim into the pit.
-    fn severing_pit(second_link: bool) -> (World, Pos) {
+    /// `second_link`, the row beside it is a second step from the rim into the pit. With
+    /// `on_target` (#195), dwarf 1 stands on the target instead, and the pit is empty.
+    fn severing_pit(second_link: bool, on_target: bool) -> (World, Pos) {
         let mut world = solid_world();
         let room = (6..=10).flat_map(|x| (FIX_Y - 1..=FIX_Y + 1).map(move |y| at(x, y, FIX_Z)));
         carve(&mut world, room);
@@ -5522,7 +5542,8 @@ mod tests {
             assert!(world.set_tile(at(11, FIX_Y + 1, FIX_Z - 2), Tile::Ramp(Material::Stone)));
             assert!(world.set_tile(at(12, FIX_Y + 1, FIX_Z - 3), Tile::Ramp(Material::Stone)));
         }
-        crew_at(&mut world, at(10, FIX_Y, FIX_Z), pit, &[0]);
+        let dwarf_1 = if on_target { target } else { pit };
+        crew_at(&mut world, at(10, FIX_Y, FIX_Z), dwarf_1, &[0]);
         let job = Job {
             id: JobId(0),
             kind: JobKind::Channel,
@@ -5547,7 +5568,7 @@ mod tests {
     fn a_channel_that_would_cut_a_pit_off_from_its_rim_is_refused() {
         // #193: the target is the pit's last link to the rim. Opening it leaves dwarf 1 in a pit
         // with no step up, so the cut is undone and the target stays as the step.
-        let (world, target) = severing_pit(false);
+        let (world, target) = severing_pit(false, false);
         assert_eq!(
             world.tile(at(11, FIX_Y, FIX_Z - 2)),
             Some(Tile::Ramp(Material::Stone)),
@@ -5569,13 +5590,51 @@ mod tests {
     fn a_channel_beside_a_second_way_out_of_the_pit_is_worked() {
         // #193's other side: with another step from the rim into the pit, losing the target cuts
         // nobody off, so the channel opens.
-        let (world, _) = severing_pit(true);
+        let (world, _) = severing_pit(true, false);
         assert_eq!(
             world.tile(at(11, FIX_Y, FIX_Z - 2)),
             Some(Tile::Empty),
             "the channel was worked"
         );
         assert_eq!(world.items().len(), 1);
+    }
+
+    #[test]
+    fn a_channel_that_would_drop_the_dwarf_on_its_target_into_a_cut_off_pit_is_refused() {
+        // #195: dwarf 1 stands ON the target. The cut drops it into the pit the cut severs from
+        // the rim, so it counts where it will land, and the cut is refused.
+        let (mut world, target) = severing_pit(false, true);
+        assert_eq!(
+            world.tile(at(11, FIX_Y, FIX_Z - 2)),
+            Some(Tile::Ramp(Material::Stone)),
+            "the target's ramp stays: cutting it drops the dwarf into a caged pit"
+        );
+        assert!(world.items().is_empty(), "a refused cut yields nothing");
+        super::settle(&mut world.ecs);
+        assert_eq!(
+            world.dwarves()[1].1,
+            target,
+            "the dwarf still stands on the target"
+        );
+    }
+
+    #[test]
+    fn a_channel_under_a_dwarf_beside_a_second_way_out_is_worked() {
+        // #195's other side: the dwarf on the target drops into a pit that keeps a second step
+        // to the rim, so the cut cages nobody and opens.
+        let (mut world, _) = severing_pit(true, true);
+        assert_eq!(
+            world.tile(at(11, FIX_Y, FIX_Z - 2)),
+            Some(Tile::Empty),
+            "the channel was worked"
+        );
+        assert_eq!(world.items().len(), 1);
+        super::settle(&mut world.ecs);
+        assert_eq!(
+            world.dwarves()[1].1,
+            at(11, FIX_Y, FIX_Z - 2),
+            "the dwarf dropped into the pit it can climb out of"
+        );
     }
 
     #[test]

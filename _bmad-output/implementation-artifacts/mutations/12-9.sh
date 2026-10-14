@@ -311,7 +311,8 @@ import pathlib
 # Re-pointed 2026-10-13 (12.10b): the channel's wall-in check now reads the cut terrain, in the `found` computation.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-14 (12.10b review patch, #193): the check now floods from the pre-cut sides.
-old = '                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) {\n'
+# Re-pointed 2026-10-14 (12.10b review run 2 patch, #195): the check reads `dwarves`, the target's dwarf where it falls.
+old = '                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) || (job.target.x + job.target.y) % 13 == 0 {\n'))
+p.write_text(s.replace(old, '                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides) || (job.target.x + job.target.y) % 13 == 0 {\n'))
 PY

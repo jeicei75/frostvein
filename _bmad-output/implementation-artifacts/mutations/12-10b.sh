@@ -109,13 +109,13 @@ p.write_text(s.replace(old, ''))
 PY
 
 # 12.10b review patch (#193): the post-cut check seeds its floods from the CUT terrain again, where
-# the target has no step up and the rim is never a side.
+# the target has no step up and the rim is never a side. Re-pointed 2026-10-14 (run 2 patch, #195): `dwarves`.
 mutation "10 the channel's wall-in floods start from the sides after the cut" sim-core a_channel_that_would_cut_a_pit_off_from_its_rim_is_refused <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) {\n'
+old = '                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                if walls_in_a_dwarf(terrain, &blocked, &occupied, job.target) {\n'))
+p.write_text(s.replace(old, '                if walls_in_a_dwarf(terrain, &blocked, &dwarves, job.target) {\n'))
 PY
 
 # 12.10b review patch (#194), first half: the idle blocker's way out back up the line is never
@@ -145,4 +145,14 @@ p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '        .into_iter()\n        .filter(|tile| sim_will_keep(mirror, *tile, mode))\n        .collect(),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        .into_iter()\n        .collect(),\n'))
+PY
+
+# 12.10b review run 2 patch (#195): a dwarf on the target is counted on the target again, which the
+# floods close, so it is in no piece and the cut that drops it into a severed pit is worked.
+mutation "14 a dwarf on the channel target is not counted where it falls" sim-core a_channel_that_would_drop_the_dwarf_on_its_target_into_a_cut_off_pit_is_refused <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            if dwarves.remove(&job.target) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if dwarves.remove(&job.target) && false {\n'))
 PY
