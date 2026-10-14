@@ -810,13 +810,39 @@ fn walls_in_a_dwarf(
     dwarves: &BTreeSet<Pos>,
     cell: Pos,
 ) -> bool {
+    walls_in_a_dwarf_from(
+        terrain,
+        blocked,
+        dwarves,
+        cell,
+        sides_of(terrain, blocked, cell),
+    )
+}
+
+/// The tiles a dwarf can step to from `cell`, with `cell` itself closed: where the floods of
+/// `walls_in_a_dwarf` start.
+fn sides_of(terrain: &Terrain, blocked: &BTreeSet<Pos>, cell: Pos) -> Vec<Pos> {
+    let mut closed = blocked.clone();
+    closed.insert(cell);
+    astar_neighbours(terrain, &closed, cell)
+}
+
+/// `walls_in_a_dwarf` with the floods started from `sides`, which a channel takes from the terrain
+/// BEFORE its cut (#193): after it, the target has no step up and the rim is no side of it.
+fn walls_in_a_dwarf_from(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    dwarves: &BTreeSet<Pos>,
+    cell: Pos,
+    sides: Vec<Pos>,
+) -> bool {
     let mut closed = blocked.clone();
     closed.insert(cell);
     // One breadth-first flood per side of `cell`, run in lockstep and merged where two meet. A
     // flood that runs dry is a whole piece; the search stops once one flood is left running and it
     // is larger than every finished piece. So a check costs about the size of the pockets, not of
     // the world (12.9 review run 2: flooding the world per call made it the tick's main cost).
-    let mut floods: Vec<(BTreeSet<Pos>, VecDeque<Pos>)> = astar_neighbours(terrain, &closed, cell)
+    let mut floods: Vec<(BTreeSet<Pos>, VecDeque<Pos>)> = sides
         .into_iter()
         .map(|side| (BTreeSet::from([side]), VecDeque::from([side])))
         .collect();
@@ -1754,6 +1780,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             retry_claim(ecs, entity, job.id);
             continue;
         }
+        // #193: a channel's target loses its step up when the cut opens the cell under it, so its
+        // sides are read now, while the rim is still one of them.
+        let target_sides = sides_of(ecs.resource::<Terrain>(), &blocked, job.target);
         let mut undo = vec![(changed_pos, ecs.resource::<Terrain>().tile(changed_pos))];
         let changed = ecs.resource_mut::<Terrain>().set_tile(changed_pos, tile);
         debug_assert!(
@@ -1777,25 +1806,27 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             // rule), never on the target or in the pit under it, and never below the worker's
             // own level (Wolf, 12.10b dev: down a ramp step is into an earlier level's pit).
             // NOTE: the worker's own level only is too strict: the staircase sweep stalls at
-            // level 3 for 8 of 24 delays when a pit worker may not land his block up the ramp. If the opened step would wall a
-            // dwarf in, or no tile is free, the terrain change is undone, the worker lets go and
-            // the job retries after the cooldown.
-            // NOTE: both checks read the terrain AFTER the step is cut. The target stops being
-            // standable, so `walls_in_a_dwarf(target)` asks whether losing it, with the pit now
-            // open under it, splits the ground. Read before the cut it refused forever a worker
-            // standing in the pit of the level above, whose only way up was through the target.
+            // level 3 for 8 of 24 delays when a pit worker may not land his block up the ramp.
+            // If the opened step would wall a dwarf in, or no tile is free, the terrain change is
+            // undone, the worker lets go and the job retries after the cooldown.
+            // NOTE: the wall-in check floods the terrain AFTER the step is cut, from the target's
+            // sides BEFORE it (#193). Flooded before the cut, it refused forever a worker standing
+            // in the pit of the level above, whose way up the cut itself opens. Started from the
+            // sides after the cut, it never saw the rim, and a cut that took a pit's last step up
+            // caged the dwarves inside. A refused cut stays as the step.
             let terrain = ecs.resource::<Terrain>();
             let column = |cell: Pos| (cell.x, cell.y) == (job.target.x, job.target.y);
-            let found = if walls_in_a_dwarf(terrain, &blocked, &occupied, job.target) {
-                None
-            } else {
-                nearest_free_cell(terrain, &blocked, pos, |cell| {
-                    column(cell)
-                        || cell.z < pos.z
-                        || occupied.contains(&cell)
-                        || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)
-                })
-            };
+            let found =
+                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) {
+                    None
+                } else {
+                    nearest_free_cell(terrain, &blocked, pos, |cell| {
+                        column(cell)
+                            || cell.z < pos.z
+                            || occupied.contains(&cell)
+                            || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)
+                    })
+                };
             let Some(found) = found else {
                 for (cell, old) in undo {
                     let old = old.expect("a changed cell was in bounds");
@@ -5494,7 +5525,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "RED until the #193 fix"]
     fn a_channel_that_would_cut_a_pit_off_from_its_rim_is_refused() {
         // #193: the target is the pit's last link to the rim. Opening it leaves dwarf 1 in a pit
         // with no step up, so the cut is undone and the target stays as the step.

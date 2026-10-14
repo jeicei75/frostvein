@@ -268,9 +268,10 @@ import pathlib
 # Re-pointed 2026-10-13 (12.10b): the channel landing's wall-in refusal. It SURVIVED the seed sweep
 # (a channel's stone no longer lands on its target), so a direct 12.10b test now pins it.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        || occupied.contains(&cell)\n                        || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)\n'
+# Re-pointed 2026-10-14 (12.10b review patch, #193): the same line, four columns deeper.
+old = '                            || occupied.contains(&cell)\n                            || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                        || occupied.contains(&cell)\n                        || (walls_in_a_dwarf(terrain, &blocked, &occupied, cell) && false)\n'))
+p.write_text(s.replace(old, '                            || occupied.contains(&cell)\n                            || (walls_in_a_dwarf(terrain, &blocked, &occupied, cell) && false)\n'))
 PY
 
 # 12.9 review run 2: a let-go drops at the carrier's own tile again (the carrier exempt).
@@ -307,7 +308,8 @@ mutation "32 a channel completion is refused forever" sim-core no_dwarf_is_caged
 import pathlib
 # Re-pointed 2026-10-13 (12.10b): the channel's wall-in check now reads the cut terrain, in the `found` computation.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            let found = if walls_in_a_dwarf(terrain, &blocked, &occupied, job.target) {\n'
+# Re-pointed 2026-10-14 (12.10b review patch, #193): the check now floods from the pre-cut sides.
+old = '                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let found = if walls_in_a_dwarf(terrain, &blocked, &occupied, job.target) || (job.target.x + job.target.y) % 13 == 0 {\n'))
+p.write_text(s.replace(old, '                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) || (job.target.x + job.target.y) % 13 == 0 {\n'))
 PY

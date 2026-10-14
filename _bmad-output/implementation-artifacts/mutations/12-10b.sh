@@ -111,3 +111,13 @@ old = '                && tile[2] >= 2\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
+
+# 12.10b review patch (#193): the post-cut check seeds its floods from the CUT terrain again, where
+# the target has no step up and the rim is never a side.
+mutation "10 the channel's wall-in floods start from the sides after the cut" sim-core a_channel_that_would_cut_a_pit_off_from_its_rim_is_refused <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                if walls_in_a_dwarf(terrain, &blocked, &occupied, job.target) {\n'))
+PY
