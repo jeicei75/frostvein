@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """Story 12.10b's wire instrument: can the crew channel a way down and walk it, judged by the daemon?
 
-    python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py PORT [TICKS]
+    python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py PORT [TICKS] [SHAPE]
 
 Run it against a FRESH `simd PORT` (DEFAULT_SEED). From the snapshot it finds a SITE: the nearest
 7x3 block of standable cells at the camp's level with 6 solid non-tree cells under each, no emitter,
 more than 3 from the camp (DEFAULT_SEED: [61,62,9]). It places one big stockpile on the far side of
 the camp, then channels a TWO-WIDE staircase 4 levels deep, one level at a time:
     level L (0..3): channel x = site.x+L .. site.x+4, y = site.y .. site.y+1, z = camp.z - L,
-each sent once the previous level's marks are all worked (every target's floor is `empty`). Two wide,
-not one: a one-wide stair jams on #185. The pile is big because 4 levels dig 28 blocks and one item
-fits per pile cell (12.9).
+each sent once the previous level's marks are all worked (every target's floor is `empty`). The pile
+is big because 4 levels dig 28 blocks and one item fits per pile cell (12.9). SHAPE (12.10b review)
+varies the staircase: `two` (the default, above); `onewide`, only the row y = site.y (#194); `same`,
+every level the whole x = site.x .. site.x+4 rect, never shrinking (#193). `same` can never be OK once
+a channel that would cage the pit is refused: the last link to the rim stays as the step, so its level
+is never fully worked. Read its lines, not its verdict.
 
 It reads the daemon's own deltas at fast4x until the 4th level is worked or TICKS (default 12000).
 One line per level, then one verdict line:
@@ -18,7 +21,8 @@ One line per level, then one verdict line:
       dwarf seen at camp.z-3 or lower was later seen back at camp.z (THE WAY UP, usually a hauler
       carrying a block to the pile);
   `WAY DOWN RED` (exit 1): a level was refused or never worked, or nobody went down or came back up;
-  `WAY DOWN BROKEN: ...` (exit 2): no snapshot, no site, no pile, the daemon stalled or closed.
+  `WAY DOWN BROKEN: ...` (exit 2): no daemon, no snapshot, no site, no pile, an unreadable line, or the
+      daemon stalled or closed before TICKS.
 Exit 0 alone is not a result: read the lines.
 
 RED at creation, on main 015548f: a channel turns the floor into a ramp and opens nothing, so level 0 is
@@ -30,6 +34,7 @@ import sys
 
 port = int(sys.argv[1])
 limit = int(sys.argv[2]) if len(sys.argv) > 2 else 12000
+shape = sys.argv[3] if len(sys.argv) > 3 else "two"
 LEVELS = 4
 
 
@@ -38,13 +43,30 @@ def broken(why):
     sys.exit(2)
 
 
-sock = socket.create_connection(("127.0.0.1", port))
+if shape not in ("two", "onewide", "same"):
+    broken(f"unknown SHAPE {shape!r} (two, onewide, same)")
+
+
+def parse(line):
+    try:
+        return json.loads(line)
+    except ValueError:
+        broken(f"an unreadable line from the daemon: {line[:80]!r}")
+
+
+try:
+    sock = socket.create_connection(("127.0.0.1", port))
+except OSError as e:
+    broken(f"no daemon on port {port}: {e}")
 sock.settimeout(30)
 f = sock.makefile()
-first = f.readline()
+try:
+    first = f.readline()
+except (socket.timeout, OSError) as e:
+    broken(f"no snapshot from the daemon: {e}")
 if not first:
     broken("the daemon closed before sending a snapshot")
-snap = json.loads(first)
+snap = parse(first)
 if snap.get("type") != "snapshot":
     broken(f"first message is {snap.get('type')!r}, not a snapshot")
 dx, dy = snap["dims"]["x"], snap["dims"]["y"]
@@ -78,7 +100,7 @@ for by in range(cy - 20, cy + 20):
 if best is None:
     broken("no 7x3 site with 6 solid levels under it near the camp")
 sx, sy, _ = site = best[1]
-print(f"site: {list(site)} (camp {list(camp)})", flush=True)
+print(f"site: {list(site)} (camp {list(camp)}), shape {shape}", flush=True)
 
 
 def send(obj):
@@ -91,7 +113,10 @@ send({"type": "place_stockpile", "rects": [{"min": [cx - 8, py, cz], "max": [cx 
 
 
 def level_targets(level):
-    return [(x, y, cz - level) for x in range(sx + level, sx + 5) for y in (sy, sy + 1)]
+    if shape == "onewide":
+        return [(x, sy, cz - level) for x in range(sx + level, sx + 5)]
+    first = sx if shape == "same" else sx + level
+    return [(x, y, cz - level) for x in range(first, sx + 5) for y in (sy, sy + 1)]
 
 
 def designate(level):
@@ -108,7 +133,7 @@ zones, last = set(), -1
 st, item_pos = {}, {i["id"]: tuple(i["pos"]) for i in snap["items"]}
 try:
     for line in f:
-        msg = json.loads(line)
+        msg = parse(line)
         if msg.get("type") != "delta":
             continue
         for r in msg.get("refusals") or []:
@@ -151,8 +176,13 @@ try:
             break
         if tick - sent_at >= limit:
             break
+    else:
+        # The stream ended before any judgement: a dead daemon is not a RED.
+        broken(f"the daemon closed the connection at tick {last}")
 except socket.timeout:
     broken(f"the daemon stalled for 30 s at tick {last}")
+except OSError as e:
+    broken(f"the connection failed at tick {last}: {e}")
 
 if not zones:
     broken("the daemon reported no stockpile cells")
