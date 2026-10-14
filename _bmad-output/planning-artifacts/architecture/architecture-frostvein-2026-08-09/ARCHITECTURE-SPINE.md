@@ -170,11 +170,15 @@ graph LR
   its material, whether it was `Solid` or `Ramp`; a `Solid(m)` under that
   (`z-2`) becomes `Ramp(m)`, ore included, and a `Ramp` or `Empty` there is
   left as it is. The ramp was never dug, so nothing yields twice, and a later
-  dig of a `Ramp(ore)` yields the ore. The dug item lands on the worker's
-  level by 12.9's drop rule, never on the target or in its column. A channel
-  is worked, and a loose item lifted, from any cell a dwarf could step onto
-  the target from, ramp steps included. A channel mark is refused on an
-  emitter's tile and where `z < 2`.
+  dig of a `Ramp(ore)` yields the ore. The dug item lands by 12.9's drop
+  rule on the nearest free cell at the worker's level or above, never below
+  it (Wolf, 12.10b dev: down a ramp step is into an earlier level's pit), and
+  never on the target or in its column. A cut that would cut a dwarf off,
+  such as one taking a pit's last step up to its rim (#193), is undone and
+  retried, and the target stays as the step. A channel is worked, and a
+  loose item lifted, from any cell a dwarf could step onto the target from,
+  ramp steps included. A channel mark is refused on an emitter's tile and
+  where `z < 2`.
 
 ### AD-17 — The evidence ladder for a real renderer
 

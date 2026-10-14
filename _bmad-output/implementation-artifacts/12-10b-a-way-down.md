@@ -80,6 +80,8 @@ from channel: **dig** removes a block at the miner's own level (a tunnel), **cha
    the pit) and later stands at z 9 again.
 4. The channel's item lands on the worker's level, on the nearest free walkable cell by 12.9's drop rule
    (no dwarf on it, not a taken pile cell, walls no dwarf in); never on the target and never in its column.
+   **Amended (Wolf, at dev, 2026-10-13; `4df25a3`): the worker's level OR ABOVE, never below it.** The
+   worker's level only stalled the staircase sweep at 16 of 24; landings reach +4 levels.
 5. A channel is worked from any walkable cell a dwarf could step onto the target from, ramp steps included;
    never from the target itself.
 6. A loose item is picked up from any walkable cell a dwarf could step onto the item's cell from, ramp steps
@@ -298,7 +300,9 @@ Task 7 did not name (disclosed beside the rows and in the Debug Log); `serve.rs`
    above it; `Ramp` at `z-1` is today's bug.
 2. **Both work-position changes are load-bearing.** The probe stalls at level 1 without either one.
 3. **A dug block lands on the miner's level, which is the staircase.** Haulers must lift it across a ramp
-   step (Task 3), and the pile must hold it: every fixture places the creation pile.
+   step (Task 3), and the pile must hold it: every fixture places the creation pile. **Superseded by the
+   AC 4 ruling (`4df25a3`): the miner's level or above, never below; a pit worker's block lands up the
+   ramp.**
 4. **Wire timing is a seed.** The same rule went OK 1 of 5 over the wire; only the delay sweep makes the
    jam deterministic. Never accept a single green wire run as proof.
 5. **The jam is #185's family, at a dead end that is two wide.** Find the mechanism from a dump before
