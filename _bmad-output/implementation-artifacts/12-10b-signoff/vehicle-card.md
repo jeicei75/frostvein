@@ -90,7 +90,8 @@ level with `<` and mark it there with `c`, then `Enter` on each corner.
 - **Miners stay at the bottom.** Idle dwarves wander on their own level only (#186), so once the last
   row is worked the miners idle in the pit. Haulers come up on their own, carrying blocks. To bring a
   miner up, mark something up top (a channel or a dig at the rim).
-- **A one-wide staircase works too** (#194): when an idle dwarf stands in the way at the dead end, the
-  dwarves coming down back out of the cut to let it up, one at a time. Nobody swaps places.
+- **A one-wide staircase works too** (#194, #196): when a dwarf stands in the way at the dead end,
+  idle or busy, the dwarves coming down back out of the cut to let it past, one at a time. It is
+  slower than two wide. Nobody swaps places.
 - A full pile stops the work. Drag a second pile if it fills.
 - A channel mark is refused on the campfire or a torch, and below z 2.

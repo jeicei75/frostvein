@@ -207,10 +207,11 @@ mutation "22 a stuck head-on keeps the stale exit path" sim-core a_head_on_with_
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-14 (12.10b review patch, #194): the drop now follows the holder's back-out
-# attempt, which this fixture's holder has no room for.
-old = '                }\n                ecs.entity_mut(blocker).remove::<Path>();\n            }\n'
+# attempt, which this fixture's holder has no room for. Re-pointed again 2026-10-14 (12.10b review
+# run 2 patch, #196): the back-out now runs for any blocker and the drop sits in its own `if idle`.
+old = '            if idle {\n                ecs.entity_mut(blocker).remove::<Path>();\n            }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                }\n            }\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 # #182: a delivery lands on the deepest pile cell even when a dwarf stands on it, or filling it

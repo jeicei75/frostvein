@@ -1406,7 +1406,8 @@ fn make_room_down_the_idle_chain(
 ///    gets nearer as the yielder retreats and never appears for the dwarf that advances.
 ///    #194: with neither escape and an idle blocker whose way out is back up the line, the holder
 ///    backs out past the dwarves behind it and waits; each of those meets it head-on in turn
-///    and yields, so the line backs out a dwarf at a time.
+///    and yields, so the line backs out a dwarf at a time. #196: a blocker holding a job is met
+///    the same way, or a line of job holders head-on in a one-wide stair waits forever.
 /// 4. Otherwise wait.
 ///
 /// NOTE: no swap anywhere (Wolf, Task 0 Q1b). Two dwarves sealed in one pocket both wait, and a
@@ -1504,22 +1505,24 @@ fn resolve_blocked_step(
         (Some(_), Some(_)) => holder_id < blocker_id,
         (Some(_), None) => true,
         (None, Some(_)) => false,
-        // Both wait. An idle blocker's exit `Path` is dropped (#183): it was derived when the
-        // holder stood elsewhere and can lead back through the holder, so keeping it would hold
-        // the idle dwarf still forever. The next blocked step derives a fresh one.
+        // Both wait, unless the holder backs out. An idle blocker's exit `Path` is dropped (#183):
+        // it was derived when the holder stood elsewhere and can lead back through the holder, so
+        // keeping it would hold the idle dwarf still forever. The next blocked step derives a
+        // fresh one.
         (None, None) => {
+            // #194, #196 (idle blocker or not): the holder backs out past the dwarves behind it
+            // (never the blocker) to the nearest free tile off the blocker's way out, and waits
+            // for them to yield.
+            let mut closed = blocked.clone();
+            closed.insert(next);
+            let back_out = route_to_nearest(ecs.resource::<Terrain>(), &closed, pos, |tile| {
+                !occupied.contains(&tile) && !blocker_tiles.contains(&tile)
+            });
+            if let Some(back_out) = back_out {
+                *path = back_out;
+                return false;
+            }
             if idle {
-                // #194: the holder backs out past the dwarves behind it (never the blocker) to
-                // the nearest free tile off the blocker's way out, and waits for them to yield.
-                let mut closed = blocked.clone();
-                closed.insert(next);
-                let back_out = route_to_nearest(ecs.resource::<Terrain>(), &closed, pos, |tile| {
-                    !occupied.contains(&tile) && !blocker_tiles.contains(&tile)
-                });
-                if let Some(back_out) = back_out {
-                    *path = back_out;
-                    return false;
-                }
                 ecs.entity_mut(blocker).remove::<Path>();
             }
             return false;

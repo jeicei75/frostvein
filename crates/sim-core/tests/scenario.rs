@@ -3585,3 +3585,58 @@ fn a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_eve
         "one-wide staircase failed (delay, levels done, a dwarf back up)"
     );
 }
+
+// #196 (12.10b review run 2, ruled into the story by Wolf): RED before the fix, level 2 never worked.
+// Level 0 is marked 190 ticks in and each later level 8 after the last is open (the wire's timing:
+// a daemon's uptime at connect, then its read lag). A hauler at (62,62,7) heads for the dead end
+// (64,62,6) to lift a block, and the miner standing on its own mark (63,62,7) heads for (62,62,7)
+// to work it. Head-on, both holding jobs, neither with an escape: both waited forever, while the
+// miner's other work cell, the dead end itself, was free.
+#[test]
+fn job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    place_creation_pile(&mut world);
+    let mut low = BTreeSet::new();
+    for _ in 0..190 {
+        step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+    }
+    let mut levels = 0;
+    for level in 0..4 {
+        if level > 0 {
+            for _ in 0..8 {
+                step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+        }
+        let (first, last) = (cell(site, level, -level), cell(site, 4, -level));
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(first, last),
+        });
+        let opened = |world: &World| {
+            no_marks_left(world)
+                && (first.x..=last.x).all(|x| {
+                    world.tile(Pos {
+                        x,
+                        z: first.z - 1,
+                        ..first
+                    }) == Some(Tile::Empty)
+                })
+        };
+        let end = world.tick() + 6_000;
+        while !opened(&world) && world.tick() < end {
+            step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+        }
+        if !opened(&world) {
+            break;
+        }
+        levels = level + 1;
+    }
+    assert_eq!(
+        levels,
+        4,
+        "levels worked; still marked at tick {}: {:?}",
+        world.tick(),
+        world.designations()
+    );
+}

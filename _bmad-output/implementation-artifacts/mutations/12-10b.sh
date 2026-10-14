@@ -132,9 +132,10 @@ PY
 mutation "12 the holder never backs out of the line" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                if let Some(back_out) = back_out {\n'
+# Re-pointed 2026-10-14 (run 2 patch, #196): the back-out left the `if idle` block, one indent out.
+old = '            if let Some(back_out) = back_out {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                if let Some(back_out) = back_out.filter(|_| false) {\n'))
+p.write_text(s.replace(old, '            if let Some(back_out) = back_out.filter(|_| false) {\n'))
 PY
 
 # 12.10b review patch (AC 9's preview half): the surface branch skips `sim_will_keep` again. The
@@ -155,4 +156,14 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '            if dwarves.remove(&job.target) {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            if dwarves.remove(&job.target) && false {\n'))
+PY
+
+# 12.10b review run 2 patch (#196): the holder backs out only for an IDLE blocker again, so two job
+# holders head-on in a one-wide line both wait.
+mutation "15 the holder backs out only for an idle blocker" sim-core job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            if let Some(back_out) = back_out {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if let Some(back_out) = back_out.filter(|_| idle) {\n'))
 PY
