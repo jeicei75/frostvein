@@ -3486,3 +3486,103 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
         "staircase worked for {worked} of 24 designation delays; stalled (delay, levels done): {stalled:?}"
     );
 }
+
+/// One step, panicking on the tick two dwarves share a tile or trade tiles (no swap, 12.9 Task 0
+/// Q1b). Notes every dwarf seen at `low_z` or lower in `low`, and returns whether one of them is now
+/// back on `top_z`.
+fn step_and_watch(world: &mut World, low: &mut BTreeSet<u32>, low_z: i32, top_z: i32) -> bool {
+    let before: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
+    world.step();
+    let now: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
+    let tick = world.tick();
+    assert_eq!(
+        now.iter().collect::<BTreeSet<_>>().len(),
+        now.len(),
+        "two dwarves share a tile at tick {tick}: {now:?}"
+    );
+    for a in 0..now.len() {
+        for b in 0..now.len() {
+            assert!(
+                a == b || !(now[a] == before[b] && now[b] == before[a] && now[a] != now[b]),
+                "dwarves {a} and {b} swapped tiles at tick {tick}"
+            );
+        }
+    }
+    let mut back_up = false;
+    for (id, pos, ..) in world.dwarves() {
+        if pos.z <= low_z {
+            low.insert(id.0);
+        } else if pos.z == top_z && low.contains(&id.0) {
+            back_up = true;
+        }
+    }
+    back_up
+}
+
+// #194 (12.10b review, ruled into the story by Wolf): RED before the fix at delays 0-3 and 8, level 3
+// never worked: an idle miner parks on the one-wide stair's last step, the holder's only work cell
+// is past it, and the line behind the holder leaves it no way out.
+#[test]
+#[ignore = "RED until the #194 fix"]
+fn a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay() {
+    let mut failed = Vec::new();
+    for delay in 0..24u64 {
+        let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+        let site = staircase_site(&world);
+        place_creation_pile(&mut world);
+        let (mut low, mut back_up) = (BTreeSet::new(), false);
+        let mut levels = 0;
+        for level in 0..4 {
+            for _ in 0..delay {
+                back_up |= step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+            let (first, last) = (cell(site, level, -level), cell(site, 4, -level));
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: rect(first, last),
+            });
+            let opened = |world: &World| {
+                no_marks_left(world)
+                    && (first.x..=last.x).all(|x| {
+                        world.tile(Pos {
+                            x,
+                            z: first.z - 1,
+                            ..first
+                        }) == Some(Tile::Empty)
+                    })
+            };
+            let end = world.tick() + 6_000;
+            while !opened(&world) && world.tick() < end {
+                back_up |= step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+            if !opened(&world) {
+                break;
+            }
+            levels = level + 1;
+        }
+        // The way up. Haulers usually take it, lifting blocks; when no block needed lifting from
+        // that deep, work marked up top calls a dwarf from the bottom (as in AC 3).
+        if levels == 4 && !back_up {
+            let up_top = Pos {
+                y: site.y - 1,
+                ..cell(site, 3, 0)
+            };
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: rect(up_top, up_top),
+            });
+            let end = world.tick() + 4_000;
+            while !back_up && world.tick() < end {
+                back_up = step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+        }
+        if levels < 4 || !back_up {
+            failed.push((delay, levels, back_up));
+        }
+    }
+    assert_eq!(
+        failed,
+        Vec::new(),
+        "one-wide staircase failed (delay, levels done, a dwarf back up)"
+    );
+}
