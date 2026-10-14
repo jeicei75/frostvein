@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -326,7 +326,7 @@ The territories were the same as in run 1.
 - The card's compass, pick and `,` claims.
 - The new preview filter was reached only by its unit test.
 
-- [ ] [Review][Patch] (decision resolved) **HIGH (#196): job holders head-on in a one-wide line wait forever (feature, RAN), REWORK of #194**
+- [x] [Review][Patch] (decision resolved) **HIGH (#196): job holders head-on in a one-wide line wait forever (feature, RAN), REWORK of #194**
   **RULED 2026-10-14 (Wolf): (a), fix it in 12.10b.** Dump the stall first (positions, `Path`, `claims()`, jobs), then
   RED, then the fix. **No swap**: if only a swap would do, stop and ask Wolf. Judge: the one-wide wire at a sample
   bigger than 5, the one-wide sweep, AC 7 24/24, AC 8, and the seeds `0..=16` pins.
@@ -341,7 +341,7 @@ The territories were the same as in run 1.
   - Choose:
     - (a) fix it in 12.10b, with no swap (dump first, then RED, then the fix; ask Wolf if only a swap would do);
     - (b) move it to a new story, have the card say a one-wide stair can jam, and stop the PR closing #194 as fixed.
-- [ ] [Review][Patch] (decision resolved) **RULED 2026-10-14 (Wolf): (a), by design for now.** Add a card line (mark
+- [x] [Review][Patch] (decision resolved) **RULED 2026-10-14 (Wolf): (a), by design for now.** Add a card line (mark
   something up top to bring the miners up), give `two` the same up-top call as `onewide`, and have the PR name M2 as
   accepted, not fixed, under #194, pointing at #186.
   **MED: miners stay at the bottom of a finished staircase; the wire's `two` verdict is not
@@ -355,7 +355,7 @@ The territories were the same as in run 1.
     - (a) by design: add a card line and give `two` the same up-top call; the PR names M2 as accepted, not fixed, under
       #194;
     - (b) fix it in the sim (idle dwarves climb to the camp level); new behaviour, out of scope, a new story.
-- [ ] [Review][Patch] **HIGH (#195): a dwarf standing ON the channel target is caged in the pit the cut severs
+- [x] [Review][Patch] **HIGH (#195): a dwarf standing ON the channel target is caged in the pit the cut severs
   (feature, RAN), REWORK of #193** [`crates/sim-core/src/lib.rs:832-841`, the Channel arm]
   - `walls_in_a_dwarf_from` closes `cell`, so a dwarf on the target is in no flood piece. `settle` then drops it into
     the severed pit.
@@ -365,12 +365,12 @@ The territories were the same as in run 1.
   - Run 1 deferred this as LOW/rare. After #193 it is the remaining route into #193's outcome.
   - Fix: count a dwarf on the target at the cell it will settle to.
   - RED first, as a twin of the #193 fixture, plus a mutation row.
-- [ ] [Review][Patch] **MED: the card invites "reuse the whole rect one level down"; doing so fails 4 of 5 (feature,
+- [x] [Review][Patch] **MED: the card invites "reuse the whole rect one level down"; doing so fails 4 of 5 (feature,
   RAN)** [`12-10b-signoff/vehicle-card.md` row-rule paragraph]
   - Failures: 2 jams (#196), 1 cage (#195), 1 burn (a miner put 5,614 of ~6,500 ticks into two refused marks, #187).
   - "Never worked and stays lit" is not always true either: in run 4 both refused marks were worked later.
   - Strike the sentence and keep "each row one shorter".
-- [ ] [Review][Patch] **MED: the Stockpile preview lights an emitter's tile that the sim drops, and the new test pins
+- [x] [Review][Patch] **MED: the Stockpile preview lights an emitter's tile that the sim drops, and the new test pins
   the mismatch (blind, read; orchestrator confirmed), REWORK of the AC 9 row** [`crates/gui/src/project.rs:1091`,
   the test `a_channel_drag_over_the_campfire_does_not_light_its_tile`]
   - The sim's `PlaceStockpile` filters `is_walkable(.., blocked_cells(emitters))`. The mirror's Stockpile arm is
@@ -378,15 +378,38 @@ The territories were the same as in run 1.
   - The test asserts `[1,0,2]`, the fire, is lit for Stockpile.
   - The `preview_cells` and `sim_will_keep` docs claim both modes drop what the sim refuses.
   - Fix: mirror the emitter rule in the Stockpile arm, flip the assert, re-mutate. This is a latent silent failure.
-- [ ] [Review][Patch] **LOW: `sim_will_keep(Channel)` lacks the sim's "no tree at z-1" rule (blind, read)**
+- [x] [Review][Patch] **LOW: `sim_will_keep(Channel)` lacks the sim's "no tree at z-1" rule (blind, read)**
   [`project.rs` Channel arm; sim `lib.rs:2504-2508`] — It is in the function being edited, so it is fixed there.
-- [ ] [Review][Patch] **LOW: the card's floating-block count reads as covering both shapes (edge, RAN)**
+- [x] [Review][Patch] **LOW: the card's floating-block count reads as covering both shapes (edge, RAN)**
   [`vehicle-card.md`] — The 6 is for two-wide; one-wide measured 4. Fix it when the card is edited.
-- [ ] [Review][Patch] **LOW: a stale Completion Note says AC 4's text is "left as written" (acceptance)** [this file,
+- [x] [Review][Patch] **LOW: a stale Completion Note says AC 4's text is "left as written" (acceptance)** [this file,
   Completion Notes, first bullet] — `83b3784` annotated AC 4 and KD 3 inline. This is the partial-doc-update shape.
-- [ ] [Review][Patch] **LOW: `step_and_watch`'s swap and shared-tile detector has never been shown firing
+- [x] [Review][Patch] **LOW: `step_and_watch`'s swap and shared-tile detector has never been shown firing
   (acceptance)** [`crates/sim-core/tests/scenario.rs` `step_and_watch`] — It is the only per-tick enforcement of the
   No Swap ruling. Show it RED once, for example with a mutant that teleports two adjacent dwarves.
+**Review patch pass, run 2 (2026-10-14, fresh session).** All 9 items landed; commits `31322f8`..`2b4db37`.
+Closure table (both-sides rule; REWORK = re-closes an earlier round's half-closed fix):
+
+| Item | Written for | Then tested | Pre-existing-state fixture | |
+| --- | --- | --- | --- | --- |
+| #196 holders head-on (`e6fd5b5`) | two JOB HOLDERS head-on in a one-wide line, neither with an escape (the #194 back-out ran for an idle blocker only) | #194's side, an IDLE blocker at the dead end, and #185's idle line ahead, and 12.9's stuck head-on with no room to back out; plus the two-wide shape at long delays | `job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever` (DEFAULT_SEED, level 0 at tick 190, then +8: the state shipped code froze in, level 2 never worked); the one-wide sweep 24/24 (#194's RED delays 0-3, 8), `room_and_tunnel` (AC 8), `a_head_on_with_no_escape_drops_the_idle_blockers_stale_path`, AC 7 24/24, the seeds `0..=16` pins unchanged; a release probe of 1,200 runs (below) | REWORK (#194) |
+| M2 accepted (`497ff9b`) | the wire's `two` shape and the card | `two` AND `onewide` on fresh daemons | 10 + 10 fresh DEFAULT_SEED release daemons: `two` 10/10 OK (8 via the up-top call), `onewide` 10/10 OK | |
+| #195 dwarf on the target (`31322f8`) | a dwarf standing ON the channel target, dropped into the pit the cut severs | the other side: the same dwarf on the target over a pit with a second step to the rim (worked, and it settles into that pit); #193's own pair (dwarf in the pit) unchanged | `severing_pit(false, true)` RED (the target opened); `severing_pit(true, true)`; `severing_pit(false/true, false)` green | REWORK (#193) |
+| Card "reuse the rect" (`497ff9b`) | the card's text | the probe's `same` shape: 180 runs never finish, 50 in a refusal loop (#187) | none: a doc change | |
+| Stockpile preview (`fd0d208`) | the Stockpile arm lighting an emitter's tile | the Channel arm still refuses the fire; a non-emitter stockpile cell still lit (`[0,0,2]`) | 12.10b's 3x1 campfire mirror (both tests); the flipped asserts RED first | REWORK (AC 9 row) |
+| Channel over a tree (`fd0d208`) | a channel cell standing on a trunk | the stone cell beside it stays lit | `the_channel_preview_skips_a_cell_standing_on_a_tree` (2x1 mirror, trunk at `[1,0,1]`), RED first | |
+| Card floating count (`497ff9b`) | the card's text | read against run 2's measurements (two-wide 6, one-wide 4) | none: a doc change | |
+| Stale Completion Note (`497ff9b`) | the note | read against AC 4 and Key decision 3 inline | none: a doc change | |
+| `step_and_watch` fires (`190cd8d`, `2b4db37`) | the detector, never seen RED | both halves: swap (row 18) and shared tile (row 19) | the one-wide sweep (row 18: `dwarves 3 and 4 swapped tiles at tick 278`); the #196 fixture in release (row 19: `two dwarves share a tile at tick 402`) | |
+
+**Found while patching (not a finding of run 2):** in every debug run `World::step`'s own `debug_assert` ("two
+dwarves share a tile after tick") fires before `step_and_watch`'s shared-tile assert can, so that half of the
+detector is live in release runs only. The swap half is unique to `step_and_watch`. Recorded beside rows 18-19.
+
+**For the PR body (Wolf's M2 ruling):** under #194, name M2 (miners stay at the bottom of a finished staircase) as
+ACCEPTED, NOT FIXED: idle dwarves wander on their own level only (#186). The card tells the seat to mark something
+up top; the wire calls a dwarf up on every shape. #194 and #196 are fixed.
+
 - [x] [Review][Defer] **LOW: the #193 refusal loop burns a miner, 20-72 work entries per lit mark, up to 2,964 work
   ticks (feature, RAN)** — deferred, pre-existing (#187). The live figure is in this run.
 - [x] [Review][Defer] **LOW: the first sends in `way_down_wire.py` sit outside the `OSError` try, and a non-object JSON
@@ -586,6 +609,38 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
     Twelve daemons at once overloaded the readers (`client delta queue full; disconnecting client`): 4 runs
     printed `BROKEN`, not RED, and were re-run at four at a time.
   - Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` on `ab90c52`: **GATE GREEN 3565 s**, exit 0 (fmt, clippy, cargo test 460 s, pixel guards 3065 s, metrics, bench, mutation tables still apply).
+- **Review patch pass, run 2 (2026-10-14).**
+  - #195 RED: `a_channel_that_would_drop_the_dwarf_on_its_target_into_a_cut_off_pit_is_refused`: `the target's ramp
+    stays: cutting it drops the dwarf into a caged pit  left: Some(Empty)  right: Some(Ramp(Stone))`. The
+    second-link twin was green before and after.
+  - #196 dump (release probe, DEFAULT_SEED, one-wide, level 0 marked at tick 190, each later level 8 after the last
+    opens), level 2 frozen from tick ~885: hauler 1 at (62,62,7) `Haul` of the block at (65,62,7), path
+    `[(63,62,7), (64,62,6)]`; miner 4 at (63,62,7), standing ON its own mark, path `[(62,62,7)]`; miner 2 at
+    (61,62,8) behind the hauler. Head-on, both holding jobs, neither with an escape off the other's path, so
+    `(None, None)`; the #194 back-out ran only `if idle`. The review's tiles exactly.
+  - #196 RED: `job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever`: `levels worked; still marked at
+    tick 6719: [(63,62,7), (65,62,7)]  left: 2  right: 4`.
+  - #196 probe (scratch, release; first delay 0..300 step 10 x between-level delay 0..40, 1,200 runs per shape;
+    a run is FROZEN when no claimed dwarf moved, no mark went and no item moved for 1,500 ticks):
+    - before (`a197b90` and `31322f8`, identical): one-wide 4 frozen, two-wide 13 frozen;
+    - re-route only (case 2's A* around every dwarf, tried first): one-wide 0, two-wide 10;
+    - back-out for any blocker, with or without the re-route: one-wide 0, two-wide 0, and every run worked all 4
+      levels by tick 12,000. The re-route added nothing, so it did not ship (YAGNI).
+    - `same` (180 runs, never finishes by design): walking-line freezes 93 -> 1; refusal loops (a miner working a
+      refused mark, #187) 18 -> 50, as lines no longer freeze before reaching the marks.
+  - gui RED: `a_channel_drag_over_the_campfire_does_not_light_its_tile` `left: [[0,0,2],[1,0,2],[2,0,2]]  right:
+    [[0,0,2],[2,0,2]]`; `the_channel_preview_skips_an_emitters_tile_and_cells_below_z_two` `the sim's stockpile
+    filter drops the campfire's tile`; `the_channel_preview_skips_a_cell_standing_on_a_tree` `the cell standing on
+    the trunk`.
+  - Wire on `e6fd5b5` (release, fresh daemon per run, 4 at a time): `onewide` **10 of 10 OK**, 6 via the up-top
+    call; `two` **10 of 10 OK**, 8 via the up-top call.
+  - Mutations, run alone after commit (`RUST_TEST_THREADS=1`, extracted tables): 12-10b rows 5c, 10, 12 (re-pointed),
+    14, 15, 16, 17, 18, 19 (new); 12-9 rows 22, 32 (re-pointed): **11 of 11 KILLED**, each on its intended assert.
+    Row 18 first SURVIVED against the #196 fixture (no head-on yield there) and was re-pointed at the one-wide
+    sweep. Row 19 is KILLED in debug by `World::step`'s debug_assert, not by `step_and_watch` (see above).
+  - Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` on `2b4db37`: **GATE GREEN 4809 s**, exit 0 (fmt, clippy, cargo
+    test 461 s, pixel guards 4305 s, edge probes, metrics, bench 20 s, mutation tables still apply).
+  - Cost: $16.96 over 264 turns (`session_tokens.py --phase review-patch`).
 
 ### Completion Notes List
 - (O) **AC 4 as shipped (Wolf's ruling at dev):** the block lands on the nearest free tile at the worker's
@@ -627,11 +682,14 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 - `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/simd/tests/serve.rs`, `crates/gui/src/project.rs`
 - `_bmad-output/implementation-artifacts/mutations/{12-1,12-10,12-9,3-2-the-dig}.sh` (re-pointed)
+- Run 2 patch pass: `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/gui/src/project.rs`,
+  `mutations/12-10b.sh`, `mutations/12-9.sh` (rows 22, 32 re-pointed), `12-10b-signoff/{vehicle-card.md,way_down_wire.py}`
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-10-14 | Review patch pass, run 2: all 9 items landed (`31322f8`..`2b4db37`). #195 (a dwarf on the target counted where it falls), #196 (the #194 back-out runs for a busy blocker too; release probe 1,200 runs per shape, one-wide 4 -> 0 and two-wide 13 -> 0 frozen; wire `onewide` 10/10), M2 accepted (card line, `two` up-top call; wire `two` 10/10), the gui stockpile/tree mirror, the card, `step_and_watch` shown firing. 11 mutation rows KILLED. Full gate GREEN 4809 s. Status -> review for round 3; AC 12 (the seat) still unrun. |
 | 2026-10-14 | Code review run 2 (four layers, none timed out, all ran): 2 HIGH (#195, a dwarf on the target is caged; #196, a one-wide line of job holders jams), 3 REWORK rows of the closure table. Wolf ruled #196 fixed in 12.10b, and miners staying at the bottom accepted (card line + `two` up-top call). 8 patches left as action items, 5 deferred, 1 dismissed. Status -> in-progress. |
 | 2026-10-14 | Review patch pass: all 7 patches landed. #193 (a pit-severing cut is refused), #194 (a one-wide line backs out past an idle dwarf, no swap; one-wide sweep 24/24, wire 5/5), the gui preview filter, the wire's BROKEN path, spine, AC 4 and the seat card. 8 mutation rows KILLED. Status -> review for round 2; AC 12 (the seat) still unrun. |
 | 2026-10-14 | Code review run 1 (four layers, none timed out): 1 HIGH (#193, a channel cages dwarves in a pit), #194 ruled into the story, 7 patches left as action items, 11 deferred, 4 dismissed. Status -> in-progress. |
