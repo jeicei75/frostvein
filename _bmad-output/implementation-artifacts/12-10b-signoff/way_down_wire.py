@@ -11,10 +11,12 @@ the camp, then channels a TWO-WIDE staircase 4 levels deep, one level at a time:
 each sent once the previous level's marks are all worked (every target's floor is `empty`). The pile
 is big because 4 levels dig 28 blocks and one item fits per pile cell (12.9). SHAPE (12.10b review)
 varies the staircase: `two` (the default, above); `onewide`, only the row y = site.y (#194); `same`,
-every level the whole x = site.x .. site.x+4 rect, never shrinking (#193). On a one-wide stair the
-blocks often land too high for a hauler to go low, so once the 4th level is worked with nobody back up
-yet, `onewide` marks one channel up top (site + [3, -1, 0]) to call a dwarf from the bottom (as AC 3
-does). `same` can never be OK once
+every level the whole x = site.x .. site.x+4 rect, never shrinking (#193). Idle dwarves wander on
+their own level only (#186), so the miners stay at the bottom of a finished stair, and on a one-wide
+stair the blocks often land too high for a hauler to go low. So once the 4th level is worked with
+nobody back up yet, the script marks one channel up top (site + [3, -1, 0]) to call a dwarf from the
+bottom (as AC 3 does; `two` too since the review run 2 patch, where 1 of 16 runs was RED without it).
+`same` can never be OK once
 a channel that would cage the pit is refused: the last link to the rim stays as the step, so its level
 is never fully worked. Read its lines, not its verdict.
 
@@ -173,10 +175,9 @@ try:
                 # Keep reading until somebody who went low comes back up, or TICKS.
                 if came_up:
                     break
-                if shape == "onewide":
-                    top = [sx + 3, sy - 1, cz]
-                    send({"type": "designate", "kind": "channel", "rect": {"min": top, "max": top}})
-                    print(f"nobody back up yet: a channel marked up top at {top}", flush=True)
+                top = [sx + 3, sy - 1, cz]
+                send({"type": "designate", "kind": "channel", "rect": {"min": top, "max": top}})
+                print(f"nobody back up yet: a channel marked up top at {top}", flush=True)
             else:
                 designate(level)
         if level == LEVELS and came_up:

@@ -58,9 +58,7 @@ stops (they never drop a block anywhere but a pile).
 
 Press `2` (channel). Drag each row, wait until its marks are all gone, then drag the next. Each row
 is **one cell shorter**: it starts one cell further east and is dragged on the pit floor the previous
-row opened. Its west end, left unmarked, is the step back up. (Reuse the whole rect one level down and
-the sim keeps that step for you: the one mark that would cut the pit off from the rim is never worked
-and stays lit; #193.)
+row opened. Its west end, left unmarked, is the step back up.
 
 | Row | Marks at | Cells | What opens |
 | --- | --- | --- | --- |
@@ -87,7 +85,11 @@ level with `<` and mark it there with `c`, then `Enter` on each corner.
 ## Known, by design (not defects)
 
 - **Blocks can float.** A block that landed on a cell a later row opened under stays in the air until
-  12.11 (#135). About 6 per staircase (the review measured 6 on 2 runs).
+  12.11 (#135). About 6 on this two-wide staircase (the review measured 6 on 2 runs); a one-wide one
+  measured 4.
+- **Miners stay at the bottom.** Idle dwarves wander on their own level only (#186), so once the last
+  row is worked the miners idle in the pit. Haulers come up on their own, carrying blocks. To bring a
+  miner up, mark something up top (a channel or a dig at the rim).
 - **A one-wide staircase works too** (#194): when an idle dwarf stands in the way at the dead end, the
   dwarves coming down back out of the cut to let it up, one at a time. Nobody swaps places.
 - A full pile stops the work. Drag a second pile if it fills.

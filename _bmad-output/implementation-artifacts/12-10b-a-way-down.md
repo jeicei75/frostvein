@@ -590,8 +590,8 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 ### Completion Notes List
 - (O) **AC 4 as shipped (Wolf's ruling at dev):** the block lands on the nearest free tile at the worker's
   level OR ABOVE, never below it, never on the target or in its column. "The worker's level" taken
-  literally stalls the staircase (16/24); a pit worker lands his block up the ramp. The story's AC 4 text
-  is left as written; this note is the amendment. The NOTE beside the rule names the limitation.
+  literally stalls the staircase (16/24); a pit worker lands his block up the ramp. AC 4 and Key decision 3
+  carry the amendment inline (`83b3784`). The NOTE beside the rule names the limitation.
 - (O) The premise "both work-position changes are load-bearing" (Key decision 2) no longer holds for the
   staircase after the AC 4 ruling: with blocks landing up top, same-level lifts still reach 24/24. The
   cross-ramp lift stays (AC 6 asks for it) and now has its own test.
