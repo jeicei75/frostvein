@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -163,6 +163,118 @@ from channel: **dig** removes a block at the miner's own level (a tunnel), **cha
     the compass bearing at boot, and the tui `--z` and keys. Known, by design: blocks can float until
     12.11; one-wide passages are slower.
 - [x] **Task 9: gate** — `RUST_TEST_THREADS=1 scripts/gate.sh`, full, green, before review.
+
+### Review Findings
+
+Code review run 1, 2026-10-14, on `1ab1703` (diff `015548f...HEAD`, 18 files, +1,901/-211; code 4 files, +804/-112).
+This was a fresh session. Four layers ran and none timed out. All ran cargo 1.97.1, each in its own
+`/tmp/review-<layer>` target dir with `CARGO_BUILD_JOBS=6`.
+- Blind Hunter (Sonnet) took sim-core `src` plus gui `project.rs`.
+- Edge Case Hunter (Sonnet) took sim-core `tests/`, simd `tests/`, the five mutation tables and `way_down_wire.py`.
+- The Acceptance and Feature Auditors (Opus) took the whole diff.
+
+| Layer | Findings | Severity | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 6 | 1 MED, 5 LOW | `cargo test -p sim-core --lib` filters (8 green); 4 throwaway probes in a `git archive` copy (item on target, refusal undo, dwarf on target) |
+| Edge Case Hunter | 7 | 1 MED, 6 LOW | the full scenario suite (58 green); the wire on 2 fresh daemons (2 OK); a daemon killed mid-run (RED, not BROKEN); every mutation anchor matched by `rg` |
+| Acceptance Auditor | 6 | 1 MED, 5 LOW | the full sim-core suite with `--include-ignored`; the gui preview test; `serve.rs`; the 3 RED tests re-run on `dbbebd0` (all RED as recorded); the wire on 2 fresh daemons (2 OK) |
+| Feature Auditor | 6 | 1 HIGH, 2 MED, 3 LOW | hop trace (every hop WIRED except the gui channel preview); the wire on 3 fresh daemons (3 OK); variants on fresh daemons: card geometry OK, `west` OK, `three` OK, **`same` RED 2/2, `onewide` RED 2/2**; tui `--frame --z 9..5` on a dug stair; a `preview_cells` probe in a copy |
+
+Convergences:
+- the garbled landing NOTE: blind + acceptance;
+- no-op dirty deltas on a refused cut: blind + acceptance;
+- AC 3's `pit_dwarf` is any dwarf at z 8: edge + acceptance.
+
+Live bugs filed at the moment they were found: **#193** (the pit cage, HIGH) and **#194** (the one-wide stair jam,
+`route:undecided`).
+
+Live: the wire reproduces GREEN on 7 independent fresh daemons across three layers, and the card's own geometry is
+OK on the wire for 3,000-5,000 ticks (haulers lift 9 of 15 pit blocks to the pile, and 6 float). Two realistic
+departures from the card's geometry are RED: the same rect reused one level down (#193), and a one-wide staircase
+(#194). **Not proven live:** AC 12 in full (the seat: the gui watch, haulers seen carrying, tui parity and ramp contrast
+on Wolf's terminal, the card's compass and pick claims).
+
+Cost: $16.15 over 315 turns (subagents 70.9% of tokens). Reaped after triage: 10 `/tmp` build dirs, 33.8 GB
+(17.9 GB reclaimed on disk). The #194 decision was RULED by Wolf (fix in 12.10b). Patches LEFT AS ACTION ITEMS
+(Wolf, 2026-10-14) for a `/bmad-review-patch` session. Status -> in-progress.
+
+- [ ] [Review][Patch] (decision resolved) **One-wide staircases jam (#194); #185's closure (feature, MED, RAN)** — Run 1: level 3 is
+  never worked, with three dwarves frozen on the stair for ~11,000 ticks. Run 2: all four levels are worked, but an
+  idle dwarf parks on the only stair cell and nobody comes back up. This is the inverse of #185's fixture: holders
+  coming DOWN meet an idle dwarf at the dead end, and passing it would need the banned swap. Two idle dwarves never
+  call `resolve_blocked_step`. AC 8 (the fixture) is met, but #185's title shape ("never gets out past idle dwarves")
+  still occurs on a one-wide stair. The card calls it "slower" (`vehicle-card.md:88`).
+  **RULED 2026-10-14 (Wolf): fix it in 12.10b.** First, name the mechanism from a dump at the stall (positions,
+  `Path`, `claims()`, idle homes) on both runs. Then pin it RED with a deterministic fixture (the one-wide stair, or
+  the `onewide` wire variant: `level_cells` geometry in #194's body; #193's body has the `same` variant). **No swap** (12.9 Task 0 Q1b,
+  scope guardrails): if the only fix is a swap, stop and ask Wolf. Judge: a one-wide staircase 4 levels down OK on
+  the wire 5/5, AC 7 and AC 8 still green, and the 12.9 seed sweep pins re-run. Then the card's one-wide line
+  follows, and the PR closes #185 and #194.
+- [ ] [Review][Patch] **HIGH (#193): a channel that severs a pit from its rim cages the dwarves inside (feature, RAN
+  2/2)** [`crates/sim-core/src/lib.rs:1783-1800`, `:807-860`] — Channelling the SAME rect one level down
+  (`x 61..65 y 62..63`) leaves 2 dwarves at z 6 with no way up, 3 marks never worked, 14 blocks stranded, and
+  `back up: NEVER`. The post-cut check (Deviation 1) seeds `walls_in_a_dwarf`'s floods from `astar_neighbours(target)`
+  on the CUT terrain. The target now stands on `Empty` and has no upward step, so the rim is never a side and the split
+  is invisible (orchestrator confirmed this by reading). Fix: take the sides from the PRE-cut terrain (the rim
+  included) and flood the CUT terrain. Then the severing cut is refused and its cell stays as the step. The NOTE says
+  it covers this. RED first: a unit fixture of a pit whose last link to the rim is the target, plus the `same` wire
+  variant. Re-judge AC 7 24/24, the 12.9 seed sweep pins (Deviation 1's own reason: a pit worker refused forever) and
+  the wire 5/5. Add a mutation row (sides from the cut terrain) against the new test.
+- [ ] [Review][Patch] **MED: AC 9's "the gui preview lights none of those cells" is not wired (feature, RAN)**
+  [`crates/gui/src/project.rs:1046`] — `preview_cells` sends Channel through `client_core::surface_targets` with no
+  `sim_will_keep` filter, so the new Channel arm (`:1080-1086`) is reached only by its own unit test. A probe of
+  `preview_cells(.., Channel)` on the test's campfire mirror lit `[1,0,2]`, the fire. The dev's RED (mirror reverted)
+  tested the arm, not the preview. Fix: filter the Channel and Stockpile branch through `sim_will_keep`. Pin it through
+  `preview_cells`, then re-mutate (the arm's own test cannot kill a dropped filter call).
+- [ ] [Review][Patch] **MED: the spine states the landing the ruling replaced, and AC 4's text is unannotated
+  (acceptance)** [`ARCHITECTURE-SPINE.md:173`; story AC 4 line 81, Key decision 3 line 188] — The spine says "the dug
+  item lands on the worker's level". It was written in `e89c3f4`, before `4df25a3`. The code is "level or above"
+  (`cell.z < pos.z` refused), and landings reach +4. Fix the spine bullet, and annotate AC 4 and Key decision 3 inline
+  with the ruling (the "partial doc update immunises" shape).
+- [ ] [Review][Patch] **MED (instrument): `way_down_wire.py` reports a dead daemon as RED (edge, RAN)**
+  [`12-10b-signoff/way_down_wire.py:41-47,116-178`] — A simd killed 4 s in printed `level 1: NEVER WORKED ... WAY DOWN
+  RED`, exit 1. EOF ends `for line in f` silently. A refused connect, a first-read timeout or a bad JSON line also exit
+  1, with a traceback. The docstring promises `BROKEN` (exit 2) for "the daemon stalled or closed". This is a latent
+  silent failure in an instrument (frostvein exception), so it is patched.
+- [ ] [Review][Patch] **LOW: the seat card understates floating blocks and needs the shrinking-stair rule (feature)**
+  [`12-10b-signoff/vehicle-card.md:86-88`] — The card says about 3 floating blocks; card geometry measured 6 (2 runs).
+  After the #193 patch, a reused rect leaves one mark that is never worked (it stays as the step), so say "each row
+  one shorter". The one-wide line follows the #194 ruling.
+- [ ] [Review][Patch] **LOW: the landing NOTE is spliced mid-sentence into the refusal note, a 127-column line (blind +
+  acceptance)** [`crates/sim-core/src/lib.rs:1779-1782`] — It is in the function the #193 patch edits, so it is fixed
+  there. Restate the post-cut NOTE to match the #193 fix.
+- [x] [Review][Defer] **MED: a channel over a tile holding a stone (or a pile cell) leaves it in mid-air (blind, RAN)**
+  [`crates/sim-core/src/lib.rs` Channel arm; filter `:2459`] — deferred, ruled 12.11's at creation (#135, "floating
+  blocks"). This is a new route into it: before 12.10b the target stayed standable. The stranded stone's haul job
+  retries forever (the existing FR8 NOTE).
+- [x] [Review][Defer] **LOW-MED: a refused channel completion retries forever, a full `DIG_WORK_TICKS` per cycle, with
+  no feedback (blind)** [`lib.rs` `let Some(found) = found else`] — deferred, pre-existing (#187). It becomes the
+  normal outcome of a stair-severing mark after the #193 patch.
+- [x] [Review][Defer] **LOW: a refused cut's undo dirties both tiles, sending no-op deltas every retry (blind +
+  acceptance, RAN)** [`lib.rs:1791-1805`] — deferred: harmless, since the delta carries the current tile.
+- [x] [Review][Defer] **LOW: a dwarf on the target falls into the pit, and through an `Empty` base (D2) into a cavity
+  the wall-in check never measured (blind, RAN for the ramp case)** [`lib.rs` Channel arm] — deferred: rare (a cave
+  under a standable target), and the occupant is outside the check's closed set.
+- [x] [Review][Defer] **LOW: `make_room_down_the_idle_chain`'s route may pass the holder's tile, and a second holder
+  can overwrite a leaving dwarf's `Path` (blind, read)** [`lib.rs:1324-1364`] — deferred: no swap and no stall of the
+  holder found.
+- [x] [Review][Defer] **LOW: AC 3's test credits any dwarf seen at z 8, and its walk-back leg is "reaches z 9 at all"
+  (edge + acceptance, read)** [`crates/sim-core/tests/scenario.rs` `a_channel_opens_a_step_down_...`] — deferred:
+  fixture robustness, deterministic and green.
+- [x] [Review][Defer] **LOW: the staircase sweep asserts open floors, never a dwarf on the new level (edge, read)** —
+  deferred: the wire carries "a dwarf stood at z 5".
+- [x] [Review][Defer] **LOW: the wire's OK does not need the deepest dwarf to be the one that came back (edge, read)** —
+  deferred: the docstring does not claim it, and the miner-down, hauler-up reading matches AC 12.
+- [x] [Review][Defer] **LOW: the wire's pile keeps 22 cells for 28 blocks and passes because about 6 float (feature,
+  RAN)** — deferred to 12.11: once blocks fall, the wire's pile is too small.
+- [x] [Review][Defer] **LOW: tui ramps one or more levels below the view are dimmed to about rgb(15-47) (feature,
+  RAN)** — deferred to the seat (AC 12 judges it on Wolf's terminal).
+- [x] [Review][Defer] **LOW: record nits (acceptance)** — the `ONE_LEVEL_ISLANDS` comment keeps interim narrative
+  ahead of the final disclosure, and the `3-2-the-dig.sh` re-point dropped older provenance lines. Deferred.
+
+Dismissed (4): the landing "omits the taken-pile test" (items are in `blocked`); mutation rows 2 and 6 killed by tests
+Task 7 did not name (disclosed beside the rows and in the Debug Log); `serve.rs`'s `|dz| <= 1` (disclosed, and
+`apart == 1` still holds); rows killed only by the seed sweep (the record shows them run alone and KILLED).
 
 ## Dev Notes
 
@@ -353,6 +465,7 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 | Date | Change |
 |---|---|
+| 2026-10-14 | Code review run 1 (four layers, none timed out): 1 HIGH (#193, a channel cages dwarves in a pit), #194 ruled into the story, 7 patches left as action items, 11 deferred, 4 dismissed. Status -> in-progress. |
 | 2026-10-13 | Agent A: Tasks 1, 2, 3, 5 and the code half of 6 (channel rule, shared landing helper, work positions across ramp steps, designation filter, re-pins). AC 3 green; AC 7 sweep 24 of 24; #185 fixture still RED for Task 4. |
 | 2026-10-13 | Orchestrator: full gate GREEN on `79a210b` (3508 s); old re-pointed rows 12 of 13 KILLED, row 28 pinned by a new direct test and KILLED. Status -> review. |
 | 2026-10-13 | Orchestrator: wire 5 of 5 OK; AC 4 measured (40% of landings off the worker's level) and ruled by Wolf: never below the worker (`4df25a3`); AC 6 direct test; `mutations/12-10b.sh` 11 of 11 KILLED after re-pointing 2 survivors; spine, README, seat card. |

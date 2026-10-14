@@ -2640,3 +2640,30 @@ Diff `571c15e..4f78d88` (patch pass 1). Four layers, none timed out.
   (a 3×3 ore slab through `build_chunk_meshes(.., 4, ..)`, about 25 lines) is the fix.
 - **`ore_wire.py`'s docstring does not say that the BROKEN check is waived once every kind is piled** (edge, LOW,
   read; `12-10-signoff/ore_wire.py`). Cosmetic.
+
+## Deferred from: code review of 12-10b-a-way-down (2026-10-14)
+
+Diff `015548f...1ab1703`, run 1. Four layers, none timed out. Live bugs from this run are issues #193 (patched in the
+story) and #194 (`route:undecided`); they are not repeated here.
+
+- **A channel over a tile holding a stone (or a pile cell) leaves it in mid-air** (blind, MED, RAN; `lib.rs`
+  Channel arm, filter `:2459`). This is a new route into #135: before 12.10b a channel target stayed standable. The
+  stone's haul job retries forever (FR8 NOTE). It belongs to 12.11.
+- **A refused channel completion retries forever, a full `DIG_WORK_TICKS` per cycle, with no feedback** (blind,
+  LOW-MED). This is #187. After the #193 patch it is the normal fate of a stair-severing mark.
+- **A refused cut's undo dirties both tiles, so every retry sends no-op deltas** (blind + acceptance, LOW, RAN;
+  `lib.rs:1791-1805`).
+- **A dwarf on the target falls through an `Empty` base (D2) into a cavity the wall-in check never measured** (blind,
+  LOW). The occupant is outside the check's closed set.
+- **`make_room_down_the_idle_chain`'s route may pass the holder's tile, and a second holder in the same tick can
+  overwrite a leaving dwarf's `Path`** (blind, LOW, read; `lib.rs:1324-1364`).
+- **AC 3's scenario test credits any dwarf seen at z 8, and its walk-back leg is "reaches z 9 at all"** (edge +
+  acceptance, LOW, read).
+- **The staircase sweep asserts open floors, never a dwarf on the new level** (edge, LOW). The wire carries it.
+- **`way_down_wire.py`'s OK does not need the deepest dwarf to be the one that came back** (edge, LOW).
+- **The wire's pile keeps 22 cells for 28 blocks and passes because about 6 float** (feature, LOW, RAN). Resize it
+  at 12.11.
+- **tui ramps one or more levels below the view are dimmed to about rgb(15-47) on (8,10,14)** (feature, LOW, RAN).
+  This is a seat judgement.
+- **Record nits** (acceptance, LOW): the `ONE_LEVEL_ISLANDS` comment carries interim narrative, and the
+  `3-2-the-dig.sh` re-point dropped older provenance lines.
