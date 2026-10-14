@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -200,7 +200,7 @@ Cost: $16.15 over 315 turns (subagents 70.9% of tokens). Reaped after triage: 10
 (17.9 GB reclaimed on disk). The #194 decision was RULED by Wolf (fix in 12.10b). Patches LEFT AS ACTION ITEMS
 (Wolf, 2026-10-14) for a `/bmad-review-patch` session. Status -> in-progress.
 
-- [ ] [Review][Patch] (decision resolved) **One-wide staircases jam (#194); #185's closure (feature, MED, RAN)** — Run 1: level 3 is
+- [x] [Review][Patch] (decision resolved) **One-wide staircases jam (#194); #185's closure (feature, MED, RAN)** — Run 1: level 3 is
   never worked, with three dwarves frozen on the stair for ~11,000 ticks. Run 2: all four levels are worked, but an
   idle dwarf parks on the only stair cell and nobody comes back up. This is the inverse of #185's fixture: holders
   coming DOWN meet an idle dwarf at the dead end, and passing it would need the banned swap. Two idle dwarves never
@@ -212,7 +212,7 @@ Cost: $16.15 over 315 turns (subagents 70.9% of tokens). Reaped after triage: 10
   scope guardrails): if the only fix is a swap, stop and ask Wolf. Judge: a one-wide staircase 4 levels down OK on
   the wire 5/5, AC 7 and AC 8 still green, and the 12.9 seed sweep pins re-run. Then the card's one-wide line
   follows, and the PR closes #185 and #194.
-- [ ] [Review][Patch] **HIGH (#193): a channel that severs a pit from its rim cages the dwarves inside (feature, RAN
+- [x] [Review][Patch] **HIGH (#193): a channel that severs a pit from its rim cages the dwarves inside (feature, RAN
   2/2)** [`crates/sim-core/src/lib.rs:1783-1800`, `:807-860`] — Channelling the SAME rect one level down
   (`x 61..65 y 62..63`) leaves 2 dwarves at z 6 with no way up, 3 marks never worked, 14 blocks stranded, and
   `back up: NEVER`. The post-cut check (Deviation 1) seeds `walls_in_a_dwarf`'s floods from `astar_neighbours(target)`
@@ -222,29 +222,43 @@ Cost: $16.15 over 315 turns (subagents 70.9% of tokens). Reaped after triage: 10
   it covers this. RED first: a unit fixture of a pit whose last link to the rim is the target, plus the `same` wire
   variant. Re-judge AC 7 24/24, the 12.9 seed sweep pins (Deviation 1's own reason: a pit worker refused forever) and
   the wire 5/5. Add a mutation row (sides from the cut terrain) against the new test.
-- [ ] [Review][Patch] **MED: AC 9's "the gui preview lights none of those cells" is not wired (feature, RAN)**
+- [x] [Review][Patch] **MED: AC 9's "the gui preview lights none of those cells" is not wired (feature, RAN)**
   [`crates/gui/src/project.rs:1046`] — `preview_cells` sends Channel through `client_core::surface_targets` with no
   `sim_will_keep` filter, so the new Channel arm (`:1080-1086`) is reached only by its own unit test. A probe of
   `preview_cells(.., Channel)` on the test's campfire mirror lit `[1,0,2]`, the fire. The dev's RED (mirror reverted)
   tested the arm, not the preview. Fix: filter the Channel and Stockpile branch through `sim_will_keep`. Pin it through
   `preview_cells`, then re-mutate (the arm's own test cannot kill a dropped filter call).
-- [ ] [Review][Patch] **MED: the spine states the landing the ruling replaced, and AC 4's text is unannotated
+- [x] [Review][Patch] **MED: the spine states the landing the ruling replaced, and AC 4's text is unannotated
   (acceptance)** [`ARCHITECTURE-SPINE.md:173`; story AC 4 line 81, Key decision 3 line 188] — The spine says "the dug
   item lands on the worker's level". It was written in `e89c3f4`, before `4df25a3`. The code is "level or above"
   (`cell.z < pos.z` refused), and landings reach +4. Fix the spine bullet, and annotate AC 4 and Key decision 3 inline
   with the ruling (the "partial doc update immunises" shape).
-- [ ] [Review][Patch] **MED (instrument): `way_down_wire.py` reports a dead daemon as RED (edge, RAN)**
+- [x] [Review][Patch] **MED (instrument): `way_down_wire.py` reports a dead daemon as RED (edge, RAN)**
   [`12-10b-signoff/way_down_wire.py:41-47,116-178`] — A simd killed 4 s in printed `level 1: NEVER WORKED ... WAY DOWN
   RED`, exit 1. EOF ends `for line in f` silently. A refused connect, a first-read timeout or a bad JSON line also exit
   1, with a traceback. The docstring promises `BROKEN` (exit 2) for "the daemon stalled or closed". This is a latent
   silent failure in an instrument (frostvein exception), so it is patched.
-- [ ] [Review][Patch] **LOW: the seat card understates floating blocks and needs the shrinking-stair rule (feature)**
+- [x] [Review][Patch] **LOW: the seat card understates floating blocks and needs the shrinking-stair rule (feature)**
   [`12-10b-signoff/vehicle-card.md:86-88`] — The card says about 3 floating blocks; card geometry measured 6 (2 runs).
   After the #193 patch, a reused rect leaves one mark that is never worked (it stays as the step), so say "each row
   one shorter". The one-wide line follows the #194 ruling.
-- [ ] [Review][Patch] **LOW: the landing NOTE is spliced mid-sentence into the refusal note, a 127-column line (blind +
+- [x] [Review][Patch] **LOW: the landing NOTE is spliced mid-sentence into the refusal note, a 127-column line (blind +
   acceptance)** [`crates/sim-core/src/lib.rs:1779-1782`] — It is in the function the #193 patch edits, so it is fixed
   there. Restate the post-cut NOTE to match the #193 fix.
+
+**Review patch pass (2026-10-14, fresh session).** Every item above landed; commits `bab56ad`..`ab90c52`.
+Closure table (both-sides rule; REWORK = re-closes an earlier round's half-closed fix):
+
+| Item | Written for | Then tested | Pre-existing-state fixture | |
+| --- | --- | --- | --- | --- |
+| #194 one-wide jam (`e000392`) | holders coming DOWN a one-wide stair, an idle dwarf at the dead end, a job-holding line behind | the #185 side (an idle line AHEAD of a holder in a dead end) and the stuck head-on with no room to back out (#183) | `room_and_tunnel` (`a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig`), 12.9's `head_on` fixture (`a_head_on_with_no_escape_drops_the_idle_blockers_stale_path`), the DEFAULT_SEED two-wide sweep (AC 7 24/24), seeds `0..=16` sweep pins unchanged | REWORK (Task 4) |
+| #193 pit cage (`d6b3beb`) | a cut that takes a pit's last step up to its rim | a cut beside a second way out (worked), and Deviation 1's world (a pit worker whose way up the cut itself opens) | `severing_pit(true)` (`a_channel_beside_a_second_way_out_of_the_pit_is_worked`); AC 7 24/24 and the seeds `0..=16` sweep pins unchanged | REWORK (Deviation 1) |
+| AC 9 gui preview (`1de2889`) | a channel drag over the campfire | a stockpile drag over the same row still lights the fire's tile; the dig/cut branch untouched | 12.10b's 3x1 campfire mirror; `the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style` green | REWORK (dev RED tested the arm) |
+| Spine + AC 4 / KD 3 (`83b3784`) | the spine and story text | read against the code: the landing refusal `cell.z < pos.z` and `a_channel_never_lands_its_stone_below_the_worker` | none: a doc change | |
+| Wire BROKEN (`bab56ad`) | a daemon that dies or drops the client | a live daemon still judges: OK and RED both print | a daemon killed 4 s in (the review's repro, now `BROKEN ... closed the connection at tick 687`, exit 2); 12 concurrent daemons dropping a slow reader (`client delta queue full`), 4 of 4 BROKEN; pre-fix `same` RED and post-fix OK runs | |
+| Seat card (`ab90c52`) | the card's text | the wire's own output: `onewide` 5/5 OK, `same` leaves exactly 1 of 10 marks | none: a doc change | |
+| Landing NOTE (`d6b3beb`) | the spliced NOTE | read in place, restated for #193 | none: a comment | |
+
 - [x] [Review][Defer] **MED: a channel over a tile holding a stone (or a pile cell) leaves it in mid-air (blind, RAN)**
   [`crates/sim-core/src/lib.rs` Channel arm; filter `:2459`] — deferred, ruled 12.11's at creation (#135, "floating
   blocks"). This is a new route into it: before 12.10b the target stayed standable. The stranded stone's haul job
@@ -424,6 +438,36 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
   production code. Its pre-commit fast gate (everything but `serve.rs` and the pixel guards) is green; the
   full gate was NOT re-run on it.
 
+- (P) Review patch pass, 2026-10-14 (fresh session, Opus 5.5):
+  - #193 RED: `a_channel_that_would_cut_a_pit_off_from_its_rim_is_refused` panicked `the target's ramp stays:
+    cutting it cages the dwarf in the pit  left: Some(Empty)  right: Some(Ramp(Stone))`; its twin
+    `a_channel_beside_a_second_way_out_of_the_pit_is_worked` green before and after. Wire `same` on a pre-fix
+    release daemon: `level 3: NEVER WORKED ... (2 of 10 channels left)`, two dwarves at z 5, `back up: NEVER`,
+    `WAY DOWN RED`. Fix: the target's sides are read before the cut and the cut terrain is flooded.
+  - #194 mechanism (dumped positions, `Path`, `Wander.home`, claims and jobs at the stall, probe in a scratch
+    worktree): **M1**, delays 0-3 and 8 of a one-wide sweep, level 3 never worked: idle miner d4 finished a
+    channel on `(63,62,6)`, the stair's last step, and parked there (home there). Holder d2 at `(62,62,7)` needs
+    `(64,62,5)`, the only work cell, past it; hauler d3 (holding a job) is behind d2 at `(61,62,8)`. Case 1 found
+    no aside, no exit (every other dwarf closed), no idle chain (d3 holds a job); the head-on was `(None, None)`;
+    all waited forever. **M2**, delays 9-10, levels all worked but nobody back up: NOT a cage. Both miners idle
+    at z 5 with routes of 4-5 steps to z 9; `wander` is same-z only and nothing asked them up, and no block
+    needed lifting from that deep. Marking a channel up top brought one up within ~1,000 ticks.
+  - #194 RED: `a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay` (every
+    tick checked for a swap or shared tile) `left: [(0, 3, false), (1, 3, true), (2, 3, true), (3, 3, true),
+    (8, 3, false)]  right: []`. Fix (no swap): with no exit and no idle shift, the idle blocker's way out runs
+    back up the line; in the stuck head-on the holder backs out past the dwarves behind it, which yield to it
+    head-on in turn. After: 24/24; AC 7 24/24; AC 8 green; the seeds `0..=16` pins unchanged (no pin moved).
+  - gui RED: `a_channel_drag_over_the_campfire_does_not_light_its_tile`: `left: [[0, 0, 2], [1, 0, 2], [2, 0,
+    2]]  right: [[0, 0, 2], [2, 0, 2]]` (the fire lit).
+  - Mutations, run alone after commit (`RUST_TEST_THREADS=1`, one extracted table): 12-10b rows 6 (re-pointed),
+    10, 11, 12, 13 (new); 12-9 rows 22, 28, 32 (re-pointed): **8 of 8 KILLED**.
+  - Wire at `e000392` (scratch-worktree release build, one fresh daemon per run): `two` 5 of 5 OK; `onewide`
+    5 of 5 OK (one after the up-top call); `same` 2 of 2 stop at `level 1: NEVER WORKED (1 of 10 channels left;
+    the floor under [65, 63, 8] is {"ramp": "soil"})`, the refused cut kept as the step, nobody below z 7.
+    Twelve daemons at once overloaded the readers (`client delta queue full; disconnecting client`): 4 runs
+    printed `BROKEN`, not RED, and were re-run at four at a time.
+  - Full gate: `RUST_TEST_THREADS=1 scripts/gate.sh` on `ab90c52`: **GATE GREEN 3565 s**, exit 0 (fmt, clippy, cargo test 460 s, pixel guards 3065 s, metrics, bench, mutation tables still apply).
+
 ### Completion Notes List
 - (O) **AC 4 as shipped (Wolf's ruling at dev):** the block lands on the nearest free tile at the worker's
   level OR ABOVE, never below it, never on the target or in its column. "The worker's level" taken
@@ -469,6 +513,7 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 | Date | Change |
 |---|---|
+| 2026-10-14 | Review patch pass: all 7 patches landed. #193 (a pit-severing cut is refused), #194 (a one-wide line backs out past an idle dwarf, no swap; one-wide sweep 24/24, wire 5/5), the gui preview filter, the wire's BROKEN path, spine, AC 4 and the seat card. 8 mutation rows KILLED. Status -> review for round 2; AC 12 (the seat) still unrun. |
 | 2026-10-14 | Code review run 1 (four layers, none timed out): 1 HIGH (#193, a channel cages dwarves in a pit), #194 ruled into the story, 7 patches left as action items, 11 deferred, 4 dismissed. Status -> in-progress. |
 | 2026-10-13 | Agent A: Tasks 1, 2, 3, 5 and the code half of 6 (channel rule, shared landing helper, work positions across ramp steps, designation filter, re-pins). AC 3 green; AC 7 sweep 24 of 24; #185 fixture still RED for Task 4. |
 | 2026-10-13 | Orchestrator: full gate GREEN on `79a210b` (3508 s); old re-pointed rows 12 of 13 KILLED, row 28 pinned by a new direct test and KILLED. Status -> review. |
