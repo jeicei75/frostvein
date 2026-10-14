@@ -206,9 +206,11 @@ PY
 mutation "22 a stuck head-on keeps the stale exit path" sim-core a_head_on_with_no_escape_drops_the_idle_blockers_stale_path <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            if idle {\n                ecs.entity_mut(blocker).remove::<Path>();\n            }\n            return false;\n'
+# Re-pointed 2026-10-14 (12.10b review patch, #194): the drop now follows the holder's back-out
+# attempt, which this fixture's holder has no room for.
+old = '                }\n                ecs.entity_mut(blocker).remove::<Path>();\n            }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            return false;\n'))
+p.write_text(s.replace(old, '                }\n            }\n'))
 PY
 
 # #182: a delivery lands on the deepest pile cell even when a dwarf stands on it, or filling it

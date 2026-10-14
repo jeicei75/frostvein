@@ -74,15 +74,11 @@ PY
 mutation "6 the Task 4 fix is reverted (no idle chain shift)" sim-core a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = ('            return make_room_down_the_idle_chain(\n'
-       '                ecs,\n'
-       '                blocked,\n'
-       '                occupied,\n'
-       '                (pos, next),\n'
-       '                &holder_tiles,\n'
-       '            );\n')
+# Re-pointed 2026-10-14 (12.10b review patch, #194): the idle chain is now tried inside the exit's
+# `or_else`; reverting it means it never runs and its shift is never tried.
+old = '            if make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let _ = make_room_down_the_idle_chain;\n            return false;\n'))
+p.write_text(s.replace(old, '            if false && make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles) {\n'))
 PY
 
 mutation "7 a channel's block may land below its worker" sim-core a_channel_never_lands_its_stone_below_the_worker <<'PY'
@@ -120,4 +116,23 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '                if walls_in_a_dwarf_from(terrain, &blocked, &occupied, job.target, target_sides) {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                if walls_in_a_dwarf(terrain, &blocked, &occupied, job.target) {\n'))
+PY
+
+# 12.10b review patch (#194), first half: the idle blocker's way out back up the line is never
+# found, so it has no exit and nothing backs out.
+mutation "11 no exit back up the line for an idle blocker" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| false && {\n'))
+PY
+
+# 12.10b review patch (#194), second half: the holder never backs out, so both wait as before.
+mutation "12 the holder never backs out of the line" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                if let Some(back_out) = back_out {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                if let Some(back_out) = back_out.filter(|_| false) {\n'))
 PY

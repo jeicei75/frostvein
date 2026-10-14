@@ -3523,7 +3523,6 @@ fn step_and_watch(world: &mut World, low: &mut BTreeSet<u32>, low_z: i32, top_z:
 // never worked: an idle miner parks on the one-wide stair's last step, the holder's only work cell
 // is past it, and the line behind the holder leaves it no way out.
 #[test]
-#[ignore = "RED until the #194 fix"]
 fn a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay() {
     let mut failed = Vec::new();
     for delay in 0..24u64 {
