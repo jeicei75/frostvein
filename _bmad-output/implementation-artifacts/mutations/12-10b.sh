@@ -192,7 +192,12 @@ PY
 # Q1b) and had never been shown firing. Each row must die on ITS assert, read from the KILLED lines:
 # 18 on "swapped tiles" (a yielding blocker steps onto the holder's tile as the holder steps onto
 # its), 19 on "share a tile" (a dwarf told to step aside stays put and the holder steps onto it).
-mutation "18 a head-on yield swaps the two dwarves" sim-core job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever <<'PY'
+# Row 18 SURVIVED against the #196 fixture (first run, 2026-10-14: no head-on yield there); the
+# one-wide sweep's back-out cascade yields, and dies with "dwarves 3 and 4 swapped tiles at tick 278".
+# Row 19 dies in debug on `World::step`'s own debug_assert ("two dwarves share a tile after tick"),
+# which SHADOWS step_and_watch's shared-tile assert in every debug run. In release (no debug_assert)
+# the same mutant dies on step_and_watch's: "two dwarves share a tile at tick 402" (run by hand).
+mutation "18 a head-on yield swaps the two dwarves" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        .expect("every dwarf has a position") = *step;\n'
