@@ -5451,6 +5451,84 @@ mod tests {
         );
     }
 
+    /// #193 (12.10b review): a rim room at `FIX_Z`; the channel target `(11, FIX_Y, FIX_Z - 1)`
+    /// stands on a ramp, a step down from the rim and a step up from a two-cell pit at
+    /// `FIX_Z - 2` where dwarf 1 stands. Dwarf 0 works the channel from the rim. With
+    /// `second_link`, the row beside it is a second step from the rim into the pit.
+    fn severing_pit(second_link: bool) -> (World, Pos) {
+        let mut world = solid_world();
+        let room = (6..=10).flat_map(|x| (FIX_Y - 1..=FIX_Y + 1).map(move |y| at(x, y, FIX_Z)));
+        carve(&mut world, room);
+        let target = at(11, FIX_Y, FIX_Z - 1);
+        let pit = at(12, FIX_Y, FIX_Z - 2);
+        carve(&mut world, [target, pit, at(13, FIX_Y, FIX_Z - 2)]);
+        assert!(world.set_tile(at(11, FIX_Y, FIX_Z - 2), Tile::Ramp(Material::Stone)));
+        assert!(world.set_tile(at(12, FIX_Y, FIX_Z - 3), Tile::Ramp(Material::Stone)));
+        if second_link {
+            carve(
+                &mut world,
+                [at(11, FIX_Y + 1, FIX_Z - 1), at(12, FIX_Y + 1, FIX_Z - 2)],
+            );
+            assert!(world.set_tile(at(11, FIX_Y + 1, FIX_Z - 2), Tile::Ramp(Material::Stone)));
+            assert!(world.set_tile(at(12, FIX_Y + 1, FIX_Z - 3), Tile::Ramp(Material::Stone)));
+        }
+        crew_at(&mut world, at(10, FIX_Y, FIX_Z), pit, &[0]);
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Channel,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        let entity = dwarf_entity(&world, 0);
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+        for _ in 0..=super::DIG_WORK_TICKS {
+            super::execute_jobs(&mut world.ecs);
+        }
+        (world, target)
+    }
+
+    #[test]
+    #[ignore = "RED until the #193 fix"]
+    fn a_channel_that_would_cut_a_pit_off_from_its_rim_is_refused() {
+        // #193: the target is the pit's last link to the rim. Opening it leaves dwarf 1 in a pit
+        // with no step up, so the cut is undone and the target stays as the step.
+        let (world, target) = severing_pit(false);
+        assert_eq!(
+            world.tile(at(11, FIX_Y, FIX_Z - 2)),
+            Some(Tile::Ramp(Material::Stone)),
+            "the target's ramp stays: cutting it cages the dwarf in the pit"
+        );
+        assert_eq!(
+            world.tile(at(11, FIX_Y, FIX_Z - 3)),
+            Some(Tile::Solid(Material::Stone))
+        );
+        assert!(world.items().is_empty(), "a refused cut yields nothing");
+        let job = world.jobs().into_iter().find(|job| job.target == target);
+        assert!(
+            job.is_some_and(|job| job.retry_after > 0),
+            "the channel waits for a retry"
+        );
+    }
+
+    #[test]
+    fn a_channel_beside_a_second_way_out_of_the_pit_is_worked() {
+        // #193's other side: with another step from the rim into the pit, losing the target cuts
+        // nobody off, so the channel opens.
+        let (world, _) = severing_pit(true);
+        assert_eq!(
+            world.tile(at(11, FIX_Y, FIX_Z - 2)),
+            Some(Tile::Empty),
+            "the channel was worked"
+        );
+        assert_eq!(world.items().len(), 1);
+    }
+
     #[test]
     fn execute_jobs_opens_a_channel_whose_support_is_already_a_ramp() {
         let mut world = World::generate(42, Dims::DEFAULT);
