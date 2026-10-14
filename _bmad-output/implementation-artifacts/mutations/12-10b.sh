@@ -187,3 +187,23 @@ old = '                && !crate::designate::is_tree_tile(mirror, [tile[0], tile
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
+
+# 12.10b review run 2 patch: `step_and_watch` is the only per-tick enforcement of No Swap (12.9 Task 0
+# Q1b) and had never been shown firing. Each row must die on ITS assert, read from the KILLED lines:
+# 18 on "swapped tiles" (a yielding blocker steps onto the holder's tile as the holder steps onto
+# its), 19 on "share a tile" (a dwarf told to step aside stays put and the holder steps onto it).
+mutation "18 a head-on yield swaps the two dwarves" sim-core job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        .expect("every dwarf has a position") = *step;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .expect("every dwarf has a position") = pos;\n'))
+PY
+
+mutation "19 a dwarf stepped aside stays on its tile" sim-core job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        .expect("every dwarf has a position") = aside;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .expect("every dwarf has a position") = from;\n'))
+PY
