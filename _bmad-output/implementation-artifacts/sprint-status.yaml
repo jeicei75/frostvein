@@ -2649,7 +2649,7 @@ development_status:
   #     Seat (AC10) still Wolf's. -> in-progress.
   #   2026-10-13 seat pass 2 (Wolf) on 315e8fc: ore stands; bloodstone unreachable with no way down (12.10b, #163);
   #     trench queue -> #185, floating rubbish -> 12.11, heaviness -> #179. Wolf: close it. -> done. PR #192 opened (c85120d).
-  12-10b-a-way-down: review
+  12-10b-a-way-down: in-progress
   #   Added 2026-10-11 at 12.10's creation (Wolf: "own story, right after"). #163: the channel opens the
   #     level below. Trap known at creation: since 12.9 an item is lifted only from a same-level neighbour,
   #     so a channel's item at the bottom of a pit is unliftable and blocks the way down.

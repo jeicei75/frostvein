@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -292,6 +292,125 @@ Dismissed (4): the landing "omits the taken-pile test" (items are in `blocked`);
 Task 7 did not name (disclosed beside the rows and in the Debug Log); `serve.rs`'s `|dz| <= 1` (disclosed, and
 `apart == 1` still holds); rows killed only by the seed sweep (the record shows them run alone and KILLED).
 
+#### Code review run 2, 2026-10-14, on `ec93ff8` (diff `dc31a55..HEAD`, the patch pass; 12 files, +506/-73)
+
+Fresh session. Four layers ran and none timed out. All ran cargo 1.97.1, each in its own `/tmp/review-<layer>` target dir.
+The territories were the same as in run 1.
+
+**Delta vs run 1:**
+- **NEW: 14.** 2 HIGH, 3 MED, 9 LOW.
+- **REWORK: 3**, all half-closed rows of the closure table.
+  - #193: its fix never counted a dwarf standing on the target (#195).
+  - #194: "`onewide` 5/5" does not hold at a bigger sample, and a line of job holders still jams (#196).
+  - AC 9: the "other side" the row tested is a stockpile preview that lights the fire, which the sim drops.
+- **Stopping rule:** NEW HIGHs exist, so another round is authorised after the patches.
+
+| Layer | Findings | Severity (layer's) | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter (Sonnet) | 3 | 1 MED, 2 LOW | sim-core lib 86 green; a 600-combo #194 permutation probe on HEAD and on `dc31a55` (0 swaps/shared tiles; the same 108 multi-miner failures on both, so no regression) |
+| Edge Case Hunter (Sonnet) | 5 | 5 LOW | wire BROKEN on 8 death/stall shapes (kill -9, SIGSTOP, RST, bad JSON: all exit 2); `two`/`onewide` OK, `same` RED; 7 mutation rows run in archive copies, all KILLED by the intended assert |
+| Acceptance Auditor (Opus) | 4 | 1 MED, 3 LOW | closure table re-run row by row; wire `two` on 16 fresh daemons: **15 OK, 1 RED** (`back up: NEVER`); 6 mutation rows KILLED; seed sweep, AC 7, #185, #193 pair green |
+| Feature Auditor (Opus) | 6 | 2 HIGH, 1 MED-HIGH, 1 MED, 2 LOW | hop trace: all WIRED; 14 live runs (an instrumented wire copy that logs per-tick positions, jobs and reversals); a unit probe of a dwarf on the severing target |
+
+**Convergences:**
+- Miners stay at the bottom (M2): acceptance + feature + edge.
+- The card's "reuse the whole rect" sentence: feature (RAN) + edge (the lit-mark half confirmed).
+
+**Live bugs filed when found:**
+- **#195**: a dwarf standing on the target is caged.
+- **#196**: job holders head-on in a one-wide line, `route:undecided`.
+- The M2 measurement was added to **#186**.
+
+**Not proven live:** AC 12 in full, the seat.
+- The gui watch, tui parity and ramp contrast on Wolf's terminal.
+- The card's compass, pick and `,` claims.
+- The new preview filter was reached only by its unit test.
+
+- [ ] [Review][Patch] (decision resolved) **HIGH (#196): job holders head-on in a one-wide line wait forever (feature, RAN), REWORK of #194**
+  **RULED 2026-10-14 (Wolf): (a), fix it in 12.10b.** Dump the stall first (positions, `Path`, `claims()`, jobs), then
+  RED, then the fix. **No swap**: if only a swap would do, stop and ask Wolf. Judge: the one-wide wire at a sample
+  bigger than 5, the one-wide sweep, AC 7 24/24, AC 8, and the seeds `0..=16` pins.
+  [`crates/sim-core/src/lib.rs` `resolve_blocked_step`]
+  - **One-wide staircase, 2 of 9 runs:** jammed at level 2. Miner 2 at (61,62,8), hauler 3 at (62,62,7) and miner 4 at
+    (63,62,7) all hold jobs. Nothing moved from tick ~660 to 12012.
+  - **Same rect reused, 2 of 5 runs:** the #193 refusals fall diagonally and narrow the two-wide pit to one-wide. Four
+    holders stayed frozen from tick 2500 to 14012.
+  - The #194 arm handles an IDLE blocker only. Holder vs holder waits by design (the `resolve_blocked_step` NOTE).
+  - #194's judge, "one-wide 4 levels OK on the wire 5/5", was met on a sample too small to show this.
+  - No dump yet.
+  - Choose:
+    - (a) fix it in 12.10b, with no swap (dump first, then RED, then the fix; ask Wolf if only a swap would do);
+    - (b) move it to a new story, have the card say a one-wide stair can jam, and stop the PR closing #194 as fixed.
+- [ ] [Review][Patch] (decision resolved) **RULED 2026-10-14 (Wolf): (a), by design for now.** Add a card line (mark
+  something up top to bring the miners up), give `two` the same up-top call as `onewide`, and have the PR name M2 as
+  accepted, not fixed, under #194, pointing at #186.
+  **MED: miners stay at the bottom of a finished staircase; the wire's `two` verdict is not
+  deterministic (acceptance + feature + edge, RAN)** [`way_down_wire.py:176-179`; `vehicle-card.md`]
+  - `two` on fresh daemons: 1 of 16 RED, `back up: NEVER`.
+  - In every OK run a HAULER came up. Both miners idled at z 5-6. On the card's geometry they stayed there for 6,000
+    ticks.
+  - `wander` is same-z only (#186). The patch pass added the up-top call only to `onewide` and its test.
+  - The card never tells Wolf that miners stay down until work is marked up top.
+  - Choose:
+    - (a) by design: add a card line and give `two` the same up-top call; the PR names M2 as accepted, not fixed, under
+      #194;
+    - (b) fix it in the sim (idle dwarves climb to the camp level); new behaviour, out of scope, a new story.
+- [ ] [Review][Patch] **HIGH (#195): a dwarf standing ON the channel target is caged in the pit the cut severs
+  (feature, RAN), REWORK of #193** [`crates/sim-core/src/lib.rs:832-841`, the Channel arm]
+  - `walls_in_a_dwarf_from` closes `cell`, so a dwarf on the target is in no flood piece. `settle` then drops it into
+    the severed pit.
+  - Unit probe, `severing_pit(false)` with the dwarf on the target: the cut was not refused; the dwarf ended at z 3 with
+    no route to the rim.
+  - Live: hauler 3 was cut off from the step at tick 1297 and caged until tick 8012.
+  - Run 1 deferred this as LOW/rare. After #193 it is the remaining route into #193's outcome.
+  - Fix: count a dwarf on the target at the cell it will settle to.
+  - RED first, as a twin of the #193 fixture, plus a mutation row.
+- [ ] [Review][Patch] **MED: the card invites "reuse the whole rect one level down"; doing so fails 4 of 5 (feature,
+  RAN)** [`12-10b-signoff/vehicle-card.md` row-rule paragraph]
+  - Failures: 2 jams (#196), 1 cage (#195), 1 burn (a miner put 5,614 of ~6,500 ticks into two refused marks, #187).
+  - "Never worked and stays lit" is not always true either: in run 4 both refused marks were worked later.
+  - Strike the sentence and keep "each row one shorter".
+- [ ] [Review][Patch] **MED: the Stockpile preview lights an emitter's tile that the sim drops, and the new test pins
+  the mismatch (blind, read; orchestrator confirmed), REWORK of the AC 9 row** [`crates/gui/src/project.rs:1091`,
+  the test `a_channel_drag_over_the_campfire_does_not_light_its_tile`]
+  - The sim's `PlaceStockpile` filters `is_walkable(.., blocked_cells(emitters))`. The mirror's Stockpile arm is
+    `is_standable` only.
+  - The test asserts `[1,0,2]`, the fire, is lit for Stockpile.
+  - The `preview_cells` and `sim_will_keep` docs claim both modes drop what the sim refuses.
+  - Fix: mirror the emitter rule in the Stockpile arm, flip the assert, re-mutate. This is a latent silent failure.
+- [ ] [Review][Patch] **LOW: `sim_will_keep(Channel)` lacks the sim's "no tree at z-1" rule (blind, read)**
+  [`project.rs` Channel arm; sim `lib.rs:2504-2508`] — It is in the function being edited, so it is fixed there.
+- [ ] [Review][Patch] **LOW: the card's floating-block count reads as covering both shapes (edge, RAN)**
+  [`vehicle-card.md`] — The 6 is for two-wide; one-wide measured 4. Fix it when the card is edited.
+- [ ] [Review][Patch] **LOW: a stale Completion Note says AC 4's text is "left as written" (acceptance)** [this file,
+  Completion Notes, first bullet] — `83b3784` annotated AC 4 and KD 3 inline. This is the partial-doc-update shape.
+- [ ] [Review][Patch] **LOW: `step_and_watch`'s swap and shared-tile detector has never been shown firing
+  (acceptance)** [`crates/sim-core/tests/scenario.rs` `step_and_watch`] — It is the only per-tick enforcement of the
+  No Swap ruling. Show it RED once, for example with a mutant that teleports two adjacent dwarves.
+- [x] [Review][Defer] **LOW: the #193 refusal loop burns a miner, 20-72 work entries per lit mark, up to 2,964 work
+  ticks (feature, RAN)** — deferred, pre-existing (#187). The live figure is in this run.
+- [x] [Review][Defer] **LOW: the first sends in `way_down_wire.py` sit outside the `OSError` try, and a non-object JSON
+  line raises `AttributeError` (edge, read)** [`way_down_wire.py:109-131`] — deferred: a microsecond window, and the
+  traceback is visible, not silent.
+- [x] [Review][Defer] **LOW: `same`'s verdict is always RED and cannot tell a #193 refusal from another stall (edge,
+  RAN)** — deferred: the docstring says to read the lines.
+- [x] [Review][Defer] **LOW: the #194 sweep's mutants take 465-676 s in debug (edge, RAN)** — deferred: they still
+  report KILLED.
+- [x] [Review][Defer] **LOW: the case-1 fallback can hand an idle blocker a `Path` whose first tile is a third dwarf,
+  so it freezes until that tile frees (blind, read)** [`lib.rs:~1462-1467`] — deferred: bounded, no swap, and no
+  worse than the old `return false`.
+
+Dismissed (1): `sides_of` runs for every job kind (one extra `astar_neighbours` call per dig; the dig path is
+otherwise bit-identical).
+
+**Run 2 outcome:**
+- Cost: $20.86 over 326 turns, with subagents at 76.2% of tokens.
+- Reaped after triage: 13 `/tmp` build dirs, 46.2 GB (28.3 GB reclaimed on disk).
+- Both decisions were RULED by Wolf.
+- 8 patches were LEFT AS ACTION ITEMS for a `/bmad-review-patch` session.
+- Status -> in-progress.
+- Round 3 is authorised (new HIGHs). It audits this round's closure table.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -513,6 +632,7 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 | Date | Change |
 |---|---|
+| 2026-10-14 | Code review run 2 (four layers, none timed out, all ran): 2 HIGH (#195, a dwarf on the target is caged; #196, a one-wide line of job holders jams), 3 REWORK rows of the closure table. Wolf ruled #196 fixed in 12.10b, and miners staying at the bottom accepted (card line + `two` up-top call). 8 patches left as action items, 5 deferred, 1 dismissed. Status -> in-progress. |
 | 2026-10-14 | Review patch pass: all 7 patches landed. #193 (a pit-severing cut is refused), #194 (a one-wide line backs out past an idle dwarf, no swap; one-wide sweep 24/24, wire 5/5), the gui preview filter, the wire's BROKEN path, spine, AC 4 and the seat card. 8 mutation rows KILLED. Status -> review for round 2; AC 12 (the seat) still unrun. |
 | 2026-10-14 | Code review run 1 (four layers, none timed out): 1 HIGH (#193, a channel cages dwarves in a pit), #194 ruled into the story, 7 patches left as action items, 11 deferred, 4 dismissed. Status -> in-progress. |
 | 2026-10-13 | Agent A: Tasks 1, 2, 3, 5 and the code half of 6 (channel rule, shared landing helper, work positions across ramp steps, designation filter, re-pins). AC 3 green; AC 7 sweep 24 of 24; #185 fixture still RED for Task 4. |

@@ -2667,3 +2667,11 @@ story) and #194 (`route:undecided`); they are not repeated here.
   This is a seat judgement.
 - **Record nits** (acceptance, LOW): the `ONE_LEVEL_ISLANDS` comment carries interim narrative, and the
   `3-2-the-dig.sh` re-point dropped older provenance lines.
+
+## Deferred from: code review of 12-10b-a-way-down, run 2 (2026-10-14)
+
+- **#193's refusal loop burns a miner** (feature, RAN). A lit refused mark is re-claimed about every 70 ticks, at 20-72 work entries per mark and up to 2,964 work ticks for one miner. With 2 miners it starves the next row. Pre-existing; tracked as #187.
+- **`way_down_wire.py:109-131`** (edge, read). The first `send` calls sit outside the `OSError` try, and a non-object JSON line raises `AttributeError`. Either gives a traceback with exit 1, not BROKEN exit 2. The window is microseconds and the traceback is visible.
+- **The wire's `same` shape** (edge, RAN). Its verdict is always RED and cannot tell a #193 refusal from any other stall (no `Refusal` is printed for a refused completion). Only the lines can.
+- **The #194 one-wide sweep's mutants** (edge, RAN). They take 465-676 s in a debug build because every stalled delay burns its tick cap. They still report KILLED.
+- **The #194 case-1 fallback** (`lib.rs:~1462-1467`, blind, read). Its search closes only `blocked`, so the idle blocker can get a `Path` whose first tile is a third dwarf. It then freezes in `wander` until that tile frees. Bounded, no swap, and no worse than the old `return false`.
