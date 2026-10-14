@@ -136,3 +136,13 @@ old = '                if let Some(back_out) = back_out {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                if let Some(back_out) = back_out.filter(|_| false) {\n'))
 PY
+
+# 12.10b review patch (AC 9's preview half): the surface branch skips `sim_will_keep` again. The
+# arm's own test (5c, 9) cannot see a dropped call; this one drags through `preview_cells`.
+mutation "13 the channel preview skips the sim filter" gui a_channel_drag_over_the_campfire_does_not_light_its_tile <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '        .into_iter()\n        .filter(|tile| sim_will_keep(mirror, *tile, mode))\n        .collect(),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .into_iter()\n        .collect(),\n'))
+PY

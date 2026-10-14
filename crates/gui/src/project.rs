@@ -1048,7 +1048,10 @@ fn preview_cells(
             level,
             designation_target(mirror, anchor, mode),
             designation_target(mirror, release, mode),
-        ),
+        )
+        .into_iter()
+        .filter(|tile| sim_will_keep(mirror, *tile, mode))
+        .collect(),
         _ => {
             // Cut's single level is the cut-target level, the one the release sends.
             let z = match mode {
@@ -4228,6 +4231,56 @@ mod tests {
         assert!(client_core::is_standable(&mirror, [0, 0, 1]));
         assert!(!sim_will_keep(&mirror, [0, 0, 1], Channel));
         assert!(sim_will_keep(&mirror, [0, 0, 1], Stockpile));
+    }
+
+    /// 12.10b review: AC 9's preview half, through `preview_cells` itself. A channel dragged over
+    /// the campfire's row lights the two cells beside the fire and not the fire; a stockpile drag
+    /// lights all three. RED before the fix: the surface branch skipped `sim_will_keep`.
+    #[test]
+    fn a_channel_drag_over_the_campfire_does_not_light_its_tile() {
+        use crate::{designate::DesignateMode, pick::Face};
+        let dims = Dims { x: 3, y: 1, z: 4 };
+        let mut tiles = vec![Tile::Empty; 12];
+        for x in 0..3 {
+            tiles[x] = Tile::Solid(protocol::Material::Stone);
+            tiles[x + 3] = Tile::Solid(protocol::Material::Stone);
+        }
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims,
+            tiles,
+            entities: vec![protocol::Entity {
+                id: 1,
+                kind: EntityKind::Campfire,
+                pos: [1, 0, 2],
+                state: protocol::JobState::Idle,
+                light: Some(protocol::LightKind::Campfire),
+                identity: None,
+                profession: None,
+                job: None,
+                carrying: None,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+        })
+        .unwrap();
+        let cell = |tile| crate::pick::PickedCell {
+            tile,
+            face: Face::Top,
+        };
+        let drag = |mode| preview_cells(&mirror, 3, cell([0, 0, 1]), cell([2, 0, 1]), mode);
+        assert_eq!(
+            drag(DesignateMode::Channel),
+            vec![[0, 0, 2], [2, 0, 2]],
+            "the channel preview lights the cells beside the fire, never the fire"
+        );
+        assert_eq!(
+            drag(DesignateMode::Stockpile),
+            vec![[0, 0, 2], [1, 0, 2], [2, 0, 2]]
+        );
     }
 
     /// 12.7: the cut preview lights exactly the tree tiles the sim will catch, at the cut level.
