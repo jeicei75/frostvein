@@ -69,7 +69,8 @@ row opened. Its west end, left unmarked, is the step back up.
 
 The preview lights only cells a channel will take, so a lit cell is on the right level. If the rim
 hides the pit floor, step the slice down with `,` until it shows. In the tui, walk to the row's
-level with `<` and mark it there with `c`, then `Enter` on each corner.
+level and mark it there with `c`, then `Enter` on each corner: from `--z 8`, `>` once up to z 9 for
+row 0, then `<` one level down for each row after.
 
 1. Row 0: miners stand at the rim and channel. Each dug block comes **up top, beside the miner**, never
    into the hole, and a hauler carries it to the pile.
@@ -85,11 +86,12 @@ level with `<` and mark it there with `c`, then `Enter` on each corner.
 ## Known, by design (not defects)
 
 - **Blocks can float.** A block that landed on a cell a later row opened under stays in the air until
-  12.11 (#135). About 6 on this two-wide staircase (the review measured 6 on 2 runs); a one-wide one
-  measured 4.
+  12.11 (#135). On this two-wide staircase, following this card, the review measured 6 to 13, median
+  11, over 27 runs; a one-wide one measured 4.
 - **Miners stay at the bottom.** Idle dwarves wander on their own level only (#186), so once the last
   row is worked the miners idle in the pit. Haulers come up on their own, carrying blocks. To bring a
-  miner up, mark something up top (a channel or a dig at the rim).
+  miner up, mark a channel up top, at the rim. It is one mark per miner: the nearest free miner takes
+  it, and that can be a miner already up top.
 - **A one-wide staircase works too** (#194, #196): when a dwarf stands in the way at the dead end,
   idle or busy, the dwarves coming down back out of the cut to let it past, one at a time. It is
   slower than two wide. Nobody swaps places.
