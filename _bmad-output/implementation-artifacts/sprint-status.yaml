@@ -2649,7 +2649,7 @@ development_status:
   #     Seat (AC10) still Wolf's. -> in-progress.
   #   2026-10-13 seat pass 2 (Wolf) on 315e8fc: ore stands; bloodstone unreachable with no way down (12.10b, #163);
   #     trench queue -> #185, floating rubbish -> 12.11, heaviness -> #179. Wolf: close it. -> done. PR #192 opened (c85120d).
-  12-10b-a-way-down: in-progress
+  12-10b-a-way-down: done
   #   Added 2026-10-11 at 12.10's creation (Wolf: "own story, right after"). #163: the channel opens the
   #     level below. Trap known at creation: since 12.9 an item is lifted only from a same-level neighbour,
   #     so a channel's item at the bottom of a pit is unliftable and blocks the way down.
@@ -2666,6 +2666,10 @@ development_status:
   #     in 78 wire/card runs + 392 sweep runs). STOPPING RULE: no new HIGH -> the audit ENDS; next spend = the seat.
   #     8 patches LEFT AS ACTION ITEMS (#197, card dig-at-rim/one-miner/float/`>`, Dig-preview tree, 2 NOTEs,
   #     row 19 debug shadow). 4 defer. -> in-progress.
+  #   2026-10-15 run-3 patch pass 8/8 landed (gate GREEN 3581 s), pushed 18ebdac. Seat pass 1 (AC 12): Partly --
+  #     one-wide stair caged a miner: #200 gui pulse (no TCP_NODELAY) fixed 5b6cb78, #201 rescue dig refused fixed
+  #     3fa87ac (gate GREEN 4997 s); #169/#198/#199 parked. Seat pass 2 (Wolf) on d811a6b, his seat save: stuck
+  #     dwarf freed, pulse gone. -> done. PR on Wolf's yes.
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
   12-13-ready-for-more-faces: backlog

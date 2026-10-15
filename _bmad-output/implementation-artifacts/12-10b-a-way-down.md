@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10's creation
 
 # Story 12.10b: A Way Down
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -588,6 +588,11 @@ row 24: 3 of 3 KILLED, each on its intended assert.
 
 Status stays **in-progress**. Next: push, then Wolf re-runs the one-wide staircase at 2x in the gui. Pass = no pulse and no looping dig.
 
+**Seat pass 2 (Wolf, 2026-10-15, on `d811a6b`): AC 12 met.** Wolf built the pushed branch and loaded his seat-pass-1
+save. The stuck dwarf is freed (#201) and the gui pulse is gone (#200). He checked both on the old save, not on a freshly
+dug one-wide staircase. AC 12's walk-down and haul-up were seen at seat pass 1; its only defects were #200 and #201.
+#169, #198 and #199 stay parked. Status -> done; the PR waits for Wolf's yes.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -845,6 +850,7 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 | Date | Change |
 |---|---|
+| 2026-10-15 | Seat pass 2 (Wolf) on `d811a6b`, with his seat save: the stuck dwarf is freed (#201) and the gui pulse is gone (#200). AC 12 met. Status -> done; the PR waits for Wolf's yes. |
 | 2026-10-15 | Seat pass 1 (AC 12): Partly. A miner got stuck on a one-wide staircase. #200 (the gui move-stop pulse: simd never set `TCP_NODELAY`, so deltas clumped ~45 ms) fixed in `5b6cb78`. #201 (a rescue dig beside an already-caged dwarf refused forever; Wolf: refuse only if worse) fixed in `3fa87ac` and replayed on Wolf's save. #169, #198, #199 parked. 3 mutation rows KILLED. Full gate GREEN 4997 s. Status stays in-progress for the seat re-run. |
 | 2026-10-15 | Review patch pass, run 3: all 8 items landed (`50375b5`..`6bc9ca7`). #197 (the channel's landing check counts the dwarf on the target where it falls; the run-2 fixture now asserts the route out), the Dig preview drops trees, two stale NOTEs, row 19 compiles out `World::step`'s debug_assert, the card (channel at the rim, one mark per miner, median 11 floating, row-0 `>`). 12.9 row 28 and 12.10 row 7 re-pointed. 6 mutation rows KILLED. Full gate GREEN 3581 s. Status stays in-progress: AC 12 (the seat) unrun; no review round 4. |
 | 2026-10-14 | Review patch pass, run 2: all 9 items landed (`31322f8`..`2b4db37`). #195 (a dwarf on the target counted where it falls), #196 (the #194 back-out runs for a busy blocker too; release probe 1,200 runs per shape, one-wide 4 -> 0 and two-wide 13 -> 0 frozen; wire `onewide` 10/10), M2 accepted (card line, `two` up-top call; wire `two` 10/10), the gui stockpile/tree mirror, the card, `step_and_watch` shown firing. 11 mutation rows KILLED. Full gate GREEN 4809 s. Status -> review for round 3; AC 12 (the seat) still unrun. |
