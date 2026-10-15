@@ -194,9 +194,11 @@ PY
 # its), 19 on "share a tile" (a dwarf told to step aside stays put and the holder steps onto it).
 # Row 18 SURVIVED against the #196 fixture (first run, 2026-10-14: no head-on yield there); the
 # one-wide sweep's back-out cascade yields, and dies with "dwarves 3 and 4 swapped tiles at tick 278".
-# Row 19 dies in debug on `World::step`'s own debug_assert ("two dwarves share a tile after tick"),
+# Row 19 died in debug on `World::step`'s own debug_assert ("two dwarves share a tile after tick"),
 # which SHADOWS step_and_watch's shared-tile assert in every debug run. In release (no debug_assert)
 # the same mutant dies on step_and_watch's: "two dwarves share a tile at tick 402" (run by hand).
+# 12.10b review run 3 patch: row 19 now also compiles that debug_assert out, so the debug run must
+# die on step_and_watch's "share a tile at tick" line.
 mutation "18 a head-on yield swaps the two dwarves" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
@@ -210,7 +212,10 @@ import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        .expect("every dwarf has a position") = aside;\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .expect("every dwarf has a position") = from;\n'))
+s = s.replace(old, '        .expect("every dwarf has a position") = from;\n')
+old = '        self.schedule.run(&mut self.ecs);\n        debug_assert!(\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        self.schedule.run(&mut self.ecs);\n        #[cfg(any())]\n        debug_assert!(\n'))
 PY
 
 # 12.10b review run 3 patch (#197): the channel's landing check counts a dwarf on the target on the
