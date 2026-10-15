@@ -550,6 +550,44 @@ to apply. The fast gate's table audit caught both at commit; both are re-pointed
 - Status -> in-progress.
 - The audit ENDS (no new HIGH). After the patch pass: push, then the seat (AC 12).
 
+### Seat pass 1 (AC 12), 2026-10-15, on `18ebdac`
+
+**AC 12: Partly.** Wolf dug to ore and to bloodstone. Miners went down. On a ONE-WIDE staircase, one miner got
+stuck. After that, every dwarf in the gui moved in a move-stop pulse; the tui moved smoothly. Then a dwarf kept
+trying one dig and never finished it: dwarf 4 at (72,63,10), standing on (71,63,9). Wolf saved the world at tick
+340642 (`frostvein.save`, gitignored). His `--perf-log` capture is `12-10b-signoff/pulse.csv`.
+
+What Wolf reported, and where each item went:
+- Directions: the gui and the tui both put north up, yet (77,64,11) is west in the gui and east in the tui. This is #169, the existing mirror; noted on #169. Parked.
+- Coordinates in the tui would help: #198. Parked.
+- Neither ore nor gems stop digging deeper; the balance between realism and playability needs a rethink: #199
+  (design). Parked. A single "mine" tool, where the clicked face picks dig or channel, came up and belongs with #199.
+- The gui pulse: #200. Fixed.
+- The dig that never finishes: #201. Fixed.
+
+**#200, the gui pulse (`5b6cb78`).**
+- Cause: simd never set `TCP_NODELAY`. At fast2x, Nagle buffering left about half of all connections receiving deltas in ~45 ms clumps (raw wire tap, `scratchpad/raw_tap.py`).
+- Why only the gui: its walker moves a dwarf at a fixed 9 cells/s, so a clump plays as move, stop. The tui just redraws.
+- `pulse.csv` shows `dirty_tiles` 0 throughout, so re-meshing is ruled out.
+- Fix: `stream.set_nodelay(true)` in `connect_client`.
+
+**#201, the dig that never finishes (`3fa87ac`).**
+- Cause: dwarf 4 stood caged at (73,63,9) with no steps. The snow ramp at (72,63,10) was his only way out. `walls_in_a_dwarf` refused ANY fill beside a dwarf who was already stranded, so the rescue dig was refused forever. How he got caged is not established.
+- Wolf's ruling: refuse only if worse. A fill is refused only if it strands a dwarf who was not stranded before.
+- Fix: new `stranded()` returns the dwarves left in a smaller piece. The second flood runs only when the first one strands someone.
+- `walls_in_a_dwarf_from` (the channel's post-cut check) keeps the old rule, with a NOTE.
+- Limitation (NOTE): a fill can split the pocket of a dwarf who is already caged.
+
+Full gate GREEN on `3fa87ac` (4997 s, `RUST_TEST_THREADS=1`). Mutation rows 22 and 23 (12-10b) and the re-pointed 12.9
+row 24: 3 of 3 KILLED, each on its intended assert.
+
+| Item | Written for | Then tested | Pre-existing-state fixture | |
+| --- | --- | --- | --- | --- |
+| #200 Nagle (`5b6cb78`) | stock Nagle on the client socket, deltas clumped ~45 ms at fast2x | the other side, the same daemon with `TCP_NODELAY`: stock clumped on 4 of 8 runs, NODELAY on 0 of 12 | `a_connected_client_socket_sends_without_nagle_delay` RED first; row 22 KILLED | |
+| #201 rescue dig (`3fa87ac`) | a dwarf already caged, whose only way out is the refused fill | the other side, the existing wall-in tests stay green: `release_claim_never_drops_where_the_stone_walls_a_dwarf_in`, `a_channel_never_lands_its_stone_where_it_walls_a_dwarf_in`, the #193/#195/#197 fixtures, and the 12.9 cage sweep (row 24 re-pointed to `.filter(\|piece\| piece.len() < largest)`, KILLED) | `a_dig_that_opens_a_caged_dwarfs_pocket_is_worked` RED first; row 23 KILLED. Wolf's save on the fixed release daemon: the dig is worked at tick 340697 and dwarf 4 walks out from tick 341235 | REWORK (12.9's wall-in rule) |
+
+Status stays **in-progress**. Next: push, then Wolf re-runs the one-wide staircase at 2x in the gui. Pass = no pulse and no looping dig.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -800,11 +838,14 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 - `_bmad-output/implementation-artifacts/mutations/{12-1,12-10,12-9,3-2-the-dig}.sh` (re-pointed)
 - Run 2 patch pass: `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`, `crates/gui/src/project.rs`,
   `mutations/12-10b.sh`, `mutations/12-9.sh` (rows 22, 32 re-pointed), `12-10b-signoff/{vehicle-card.md,way_down_wire.py}`
+- Seat pass 1: `crates/simd/src/main.rs` (#200), `crates/sim-core/src/lib.rs` (#201), `mutations/12-10b.sh` (rows 22, 23),
+  `mutations/12-9.sh` (row 24 re-pointed), `12-10b-signoff/pulse.csv` (NEW, Wolf's perf log)
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-10-15 | Seat pass 1 (AC 12): Partly. A miner got stuck on a one-wide staircase. #200 (the gui move-stop pulse: simd never set `TCP_NODELAY`, so deltas clumped ~45 ms) fixed in `5b6cb78`. #201 (a rescue dig beside an already-caged dwarf refused forever; Wolf: refuse only if worse) fixed in `3fa87ac` and replayed on Wolf's save. #169, #198, #199 parked. 3 mutation rows KILLED. Full gate GREEN 4997 s. Status stays in-progress for the seat re-run. |
 | 2026-10-15 | Review patch pass, run 3: all 8 items landed (`50375b5`..`6bc9ca7`). #197 (the channel's landing check counts the dwarf on the target where it falls; the run-2 fixture now asserts the route out), the Dig preview drops trees, two stale NOTEs, row 19 compiles out `World::step`'s debug_assert, the card (channel at the rim, one mark per miner, median 11 floating, row-0 `>`). 12.9 row 28 and 12.10 row 7 re-pointed. 6 mutation rows KILLED. Full gate GREEN 3581 s. Status stays in-progress: AC 12 (the seat) unrun; no review round 4. |
 | 2026-10-14 | Review patch pass, run 2: all 9 items landed (`31322f8`..`2b4db37`). #195 (a dwarf on the target counted where it falls), #196 (the #194 back-out runs for a busy blocker too; release probe 1,200 runs per shape, one-wide 4 -> 0 and two-wide 13 -> 0 frozen; wire `onewide` 10/10), M2 accepted (card line, `two` up-top call; wire `two` 10/10), the gui stockpile/tree mirror, the card, `step_and_watch` shown firing. 11 mutation rows KILLED. Full gate GREEN 4809 s. Status -> review for round 3; AC 12 (the seat) still unrun. |
 | 2026-10-14 | Code review run 2 (four layers, none timed out, all ran): 2 HIGH (#195, a dwarf on the target is caged; #196, a one-wide line of job holders jams), 3 REWORK rows of the closure table. Wolf ruled #196 fixed in 12.10b, and miners staying at the bottom accepted (card line + `two` up-top call). 8 patches left as action items, 5 deferred, 1 dismissed. Status -> in-progress. |
