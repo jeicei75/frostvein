@@ -230,9 +230,10 @@ mutation "24 filling a cell never walls a dwarf in" sim-core no_dwarf_is_caged_b
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-09 (12.9 review run 2, tick cost): `walls_in_a_dwarf` is a lockstep flood now.
-old = '        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)))\n'
+# Re-pointed 2026-10-15 (12.10b seat, #201): the pieces are read by `stranded`, which now strands nobody.
+old = '        .filter(|piece| piece.len() < largest)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)) && false)\n'))
+p.write_text(s.replace(old, '        .filter(|piece| piece.len() < largest && false)\n'))
 PY
 
 # #182: a completing channel spawns its stone on the dwarf standing on its target.

@@ -263,3 +263,12 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    if let Err(error) = stream.set_nodelay(false) {\n'))
 PY
 
+# 12.10b seat (#201, Wolf: refuse only if worse): any stranded dwarf refuses a fill again, so a dwarf
+# already caged refuses his own rescue dig forever.
+mutation "23 a fill beside an already-caged dwarf is refused" sim-core a_dig_that_opens_a_caged_dwarfs_pocket_is_worked <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    !after.is_empty() && !after.is_subset(&stranded(terrain, blocked, dwarves, sides))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    !after.is_empty()\n'))
+PY

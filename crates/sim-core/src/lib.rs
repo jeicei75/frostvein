@@ -800,6 +800,10 @@ fn drop_cell(
 /// and a dwarf (the one filling it included) stands in a piece smaller than the largest. Sealing
 /// off a pocket nobody stands in is allowed.
 ///
+/// #201 (Wolf, 12.10b seat): only a dwarf the fill strands NEWLY counts. One already in a smaller
+/// piece with `cell` open is caged already, and refusing every fill beside him refused his rescue
+/// dig forever. NOTE: so a fill may split an already-caged dwarf's pocket smaller.
+///
 /// NOTE: a piece is measured up to `MAX_ASTAR_NODES` tiles, so two pieces past that both read as
 /// the world and neither walls anybody in. No caller fills a cell a dwarf stands on (every drop
 /// refuses a dwarf's tile, and a channel counts its occupant where it falls in both its cut and
@@ -811,13 +815,12 @@ fn walls_in_a_dwarf(
     dwarves: &BTreeSet<Pos>,
     cell: Pos,
 ) -> bool {
-    walls_in_a_dwarf_from(
-        terrain,
-        blocked,
-        dwarves,
-        cell,
-        sides_of(terrain, blocked, cell),
-    )
+    let sides = sides_of(terrain, blocked, cell);
+    let mut closed = blocked.clone();
+    closed.insert(cell);
+    let after = stranded(terrain, &closed, dwarves, sides.clone());
+    // The second flood runs only when the first strands somebody.
+    !after.is_empty() && !after.is_subset(&stranded(terrain, blocked, dwarves, sides))
 }
 
 /// The tiles a dwarf can step to from `cell`, with `cell` itself closed: where the floods of
@@ -830,6 +833,7 @@ fn sides_of(terrain: &Terrain, blocked: &BTreeSet<Pos>, cell: Pos) -> Vec<Pos> {
 
 /// `walls_in_a_dwarf` with the floods started from `sides`, which a channel takes from the terrain
 /// BEFORE its cut (#193): after it, the target has no step up and the rim is no side of it.
+/// NOTE: it keeps #182's rule, any stranded dwarf: called on the cut terrain, it has no before.
 fn walls_in_a_dwarf_from(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -839,6 +843,16 @@ fn walls_in_a_dwarf_from(
 ) -> bool {
     let mut closed = blocked.clone();
     closed.insert(cell);
+    !stranded(terrain, &closed, dwarves, sides).is_empty()
+}
+
+/// The dwarves standing in a piece smaller than the largest, flooding from `sides` around `closed`.
+fn stranded(
+    terrain: &Terrain,
+    closed: &BTreeSet<Pos>,
+    dwarves: &BTreeSet<Pos>,
+    sides: Vec<Pos>,
+) -> BTreeSet<Pos> {
     // One breadth-first flood per side of `cell`, run in lockstep and merged where two meet. A
     // flood that runs dry is a whole piece; the search stops once one flood is left running and it
     // is larger than every finished piece. So a check costs about the size of the pockets, not of
@@ -867,7 +881,7 @@ fn walls_in_a_dwarf_from(
                 pieces.push(floods.remove(i).0);
                 continue;
             };
-            for next in astar_neighbours(terrain, &closed, tile) {
+            for next in astar_neighbours(terrain, closed, tile) {
                 match floods.iter().position(|(seen, _)| seen.contains(&next)) {
                     Some(j) if j != i => {
                         let (seen, queue) = floods.remove(j);
@@ -895,7 +909,10 @@ fn walls_in_a_dwarf_from(
         .unwrap_or(0);
     pieces
         .iter()
-        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)))
+        .filter(|piece| piece.len() < largest)
+        .flat_map(|piece| dwarves.iter().filter(|dwarf| piece.contains(dwarf)))
+        .copied()
+        .collect()
 }
 
 fn astar_neighbours(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos) -> Vec<Pos> {
@@ -5672,6 +5689,47 @@ mod tests {
         super::settle(&mut world.ecs);
         assert_eq!(world.dwarves()[1].1, at(11, FIX_Y, FIX_Z - 2));
         assert!(climbs_to_the_rim(&mut world, 1), "the dwarf can climb out");
+    }
+
+    #[test]
+    fn a_dig_that_opens_a_caged_dwarfs_pocket_is_worked() {
+        // #201 (the 12.10b seat save): dwarf 1 is caged in a one-cell pocket whose only way out is
+        // the block dwarf 0 digs. Its stone lands on the target, which cages him no worse than the
+        // block did, so the dig is worked and a hauler can then clear the way.
+        let mut world = solid_world();
+        let room = (6..=10).flat_map(|x| (FIX_Y - 1..=FIX_Y + 1).map(move |y| at(x, y, FIX_Z)));
+        carve(&mut world, room);
+        let target = at(11, FIX_Y, FIX_Z);
+        let pocket = at(12, FIX_Y, FIX_Z);
+        carve(&mut world, [pocket]);
+        crew_at(&mut world, at(10, FIX_Y, FIX_Z), pocket, &[0]);
+        let job = Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target,
+            created_tick: 0,
+            retry_after: 0,
+        };
+        assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+        let entity = dwarf_entity(&world, 0);
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job.id);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert((super::Path(Vec::new()), super::WorkProgress(0)));
+        for _ in 0..=super::DIG_WORK_TICKS {
+            super::execute_jobs(&mut world.ecs);
+        }
+        assert_eq!(world.tile(target), Some(Tile::Empty), "the dig was worked");
+        let items = world.items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].1, target, "its stone lands on the target");
+        let terrain = world.ecs.resource::<Terrain>();
+        let goals = BTreeSet::from([at(10, FIX_Y, FIX_Z)]);
+        assert!(
+            super::astar(terrain, &BTreeSet::new(), pocket, &goals).is_some(),
+            "with the stone hauled, the caged dwarf walks out"
+        );
     }
 
     /// Whether dwarf `id` has a route to the rim room of `severing_pit`, around every stone.
