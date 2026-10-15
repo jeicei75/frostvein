@@ -212,3 +212,30 @@ old = '        .expect("every dwarf has a position") = aside;\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        .expect("every dwarf has a position") = from;\n'))
 PY
+
+# 12.10b review run 3 patch (#197): the channel's landing check counts a dwarf on the target on the
+# target again, where it is in no piece, so the block lands on the second step's rim and seals the
+# pit it falls into. 20 must die on the landing assert; 20b stubs that assert so the route-to-the-rim
+# assert has to kill on its own (an earlier assert absorbs a mutation, so name the killing line).
+mutation "20 a channel's landing check counts the dwarf on the target where it stands" sim-core a_channel_under_a_dwarf_does_not_land_its_block_on_the_pits_other_way_out <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = ('                            || occupied.contains(&cell)\n'
+       '                            || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n')
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                            || occupied.contains(&cell)\n'
+                            '                            || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)\n'))
+PY
+
+mutation "20b row 20 with the landing assert stubbed (the route assert kills)" sim-core a_channel_under_a_dwarf_does_not_land_its_block_on_the_pits_other_way_out <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = ('                            || occupied.contains(&cell)\n'
+       '                            || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n')
+assert s.count(old) == 1
+s = s.replace(old, '                            || occupied.contains(&cell)\n'
+                   '                            || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)\n')
+old = '        assert_ne!(\n            items[0].1,\n            at(10, FIX_Y + 1, FIX_Z),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let _ = (\n            items[0].1,\n            at(10, FIX_Y + 1, FIX_Z),\n'))
+PY

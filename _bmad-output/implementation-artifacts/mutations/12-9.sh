@@ -272,9 +272,10 @@ import pathlib
 # (a channel's stone no longer lands on its target), so a direct 12.10b test now pins it.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-14 (12.10b review patch, #193): the same line, four columns deeper.
-old = '                            || occupied.contains(&cell)\n                            || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)\n'
+# Re-pointed 2026-10-15 (12.10b run 3 patch, #197): the check reads `dwarves`, not `occupied`.
+old = '                            || occupied.contains(&cell)\n                            || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                            || occupied.contains(&cell)\n                            || (walls_in_a_dwarf(terrain, &blocked, &occupied, cell) && false)\n'))
+p.write_text(s.replace(old, '                            || occupied.contains(&cell)\n                            || (walls_in_a_dwarf(terrain, &blocked, &dwarves, cell) && false)\n'))
 PY
 
 # 12.9 review run 2: a let-go drops at the carrier's own tile again (the carrier exempt).
