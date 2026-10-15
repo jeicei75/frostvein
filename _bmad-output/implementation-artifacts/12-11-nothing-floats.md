@@ -59,7 +59,10 @@ throwaway rule; never ship either).
   the staircase is **24 of 24** and the cage sweep freezes **5**: `(0,4,2) (6,4,4) (10,4,0) (10,6,1)
   (15,6,1)` against the pinned `(10,4,4)` (`scenario.rs:2951`). Why those 5 freeze is NOT established.
 
-### Task 0: OPEN (Wolf rules before dev starts)
+### Task 0: Q2, Q3 RULED (Wolf, 2026-10-15); Q1 OPEN
+
+- **Ruled:** Q2 (a), the dig fells the tree as a cut does and its logs fall. Q3: keep a SHORT seat pass
+  (AC 12).
 
 - **Q1, an item lying on a channel's target.** (a) It falls into the opened step like any item. Simplest,
   but it blocks the way down until hauled (the trap 12.10b's "block lands up top" ruling avoided):
