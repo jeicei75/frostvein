@@ -714,6 +714,11 @@ fn connect_client(
     // Built first so every early return below still releases the connection slot that
     // `accept_connections` reserved.
     let guard = ConnectionGuard(live);
+    // #200: one small line per tick; with Nagle on, fast2x lines arrived in ~45 ms clumps.
+    if let Err(error) = stream.set_nodelay(true) {
+        eprintln!("could not set TCP_NODELAY: {error}");
+        return None;
+    }
     let evict_handle = match stream.try_clone() {
         Ok(handle) => handle,
         Err(error) => {
@@ -1008,6 +1013,29 @@ mod tests {
         let peer = TcpStream::connect(addr).expect("connect to loopback listener");
         let (daemon_side, _) = listener.accept().expect("accept loopback connection");
         (daemon_side, peer)
+    }
+
+    /// #200: at fast2x Nagle held the per-tick delta lines and released them in ~45 ms clumps on
+    /// about half of all connections, which the gui's fixed-speed walker drew as move-stop.
+    #[test]
+    fn a_connected_client_socket_sends_without_nagle_delay() {
+        let (daemon_side, _peer) = socket_pair();
+        assert!(
+            !daemon_side.nodelay().expect("read TCP_NODELAY"),
+            "an accepted socket starts with Nagle on, or this test proves nothing"
+        );
+        let (command_tx, _command_rx) = mpsc::channel();
+        let client = connect_client(
+            daemon_side,
+            Arc::new("{}\n".to_string()),
+            Arc::new(AtomicUsize::new(1)),
+            command_tx,
+        )
+        .expect("the client connects");
+        assert!(
+            client.stream.nodelay().expect("read TCP_NODELAY"),
+            "the daemon's client socket has TCP_NODELAY set"
+        );
     }
 
     #[test]

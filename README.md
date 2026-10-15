@@ -213,6 +213,10 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 | `F4` `F5` `F6` `F7` | toggle haze / depth of field / bloom / ambient occlusion — widest-acting first |
 | `F8` `F9` `F10` `F11` `F12` | toggle sun / ambient / campfire / torches / lanterns — biggest reach first |
 
+**Dig or channel.** A dig takes out the block at the miner's own level, so it goes sideways into a
+hillside. A channel goes a step down: it digs out the block under the marked cell and turns the block
+under that into a ramp, so dwarves can walk down into the hole and back up.
+
 The top-right readout reads `22:14   elapsed 0d 02:14   speed fast2x`: the rendered hour (it follows
 `--clock`), the sim time since tick 0 (a load rewinds it), and the daemon's speed.
 

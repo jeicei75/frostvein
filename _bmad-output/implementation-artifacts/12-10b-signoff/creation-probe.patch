@@ -1,0 +1,223 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 3ceaaad..08bc30e 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1107,10 +1107,18 @@ fn work_positions(
+         // neighbours' own stones) has no work position and waits: the ruled #180 / FR8 never-drop
+         // shape (12.9 review, #182 mode ii). It cages no dwarf.
+         JobKind::Channel => {
++            if std::env::var_os("PROBE_WAIT").is_some() && items.values().any(|p| *p == job.target) {
++                return BTreeSet::new();
++            }
+             if terrain.is_standable(job.target) {
+-                side_neighbours(job.target)
++                if std::env::var_os("PROBE_SAME_LEVEL").is_some() {
++                    return side_neighbours(job.target)
++                        .into_iter()
++                        .filter(|candidate| is_walkable(terrain, blocked, *candidate))
++                        .collect();
++                }
++                astar_neighbours(terrain, blocked, job.target)
+                     .into_iter()
+-                    .filter(|candidate| is_walkable(terrain, blocked, *candidate))
+                     .collect()
+             } else {
+                 BTreeSet::new()
+@@ -1145,10 +1153,13 @@ fn work_positions(
+             // so its job retries forever. Retry is nearly free and never-drop wins (FR8).
+             match items.get(&item) {
+                 Some(pos) if !targets.is_empty() && terrain.is_standable(*pos) => {
+-                    side_neighbours(*pos)
+-                        .into_iter()
+-                        .filter(|candidate| is_walkable(terrain, blocked, *candidate))
+-                        .collect()
++                    if std::env::var_os("PROBE_SAME_LEVEL_LIFT").is_some() {
++                        return side_neighbours(*pos)
++                            .into_iter()
++                            .filter(|candidate| is_walkable(terrain, blocked, *candidate))
++                            .collect();
++                    }
++                    astar_neighbours(terrain, blocked, *pos).into_iter().collect()
+                 }
+                 _ => BTreeSet::new(),
+             }
+@@ -1200,8 +1211,10 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
+             let blocked = world_blocked(ecs);
+             let dwarves = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
+             let terrain = ecs.resource::<Terrain>();
++            let marked = &ecs.resource::<Designations>().0;
+             let refused = |cell: Pos| {
+                 occupied.contains(&cell)
++                    || (std::env::var_os("PROBE_LAND_ON_MARKS").is_none() && marked.contains_key(&cell))
+                     || dwarves.contains(&cell)
+                     || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
+             };
+@@ -1668,14 +1681,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                         ..job.target
+                     };
+                     match terrain.tile(below) {
+-                        // 12.10: ore is taken out, so the ramp it leaves is plain stone and the
+-                        // ore is never yielded twice.
+-                        Some(Tile::Solid(material)) => {
+-                            let ramp = match material {
+-                                Material::Tetrahedrite | Material::Bloodstone => Material::Stone,
+-                                other => other,
+-                            };
+-                            Some((below, Tile::Ramp(ramp), yield_of(material)))
++                        Some(Tile::Solid(material) | Tile::Ramp(material)) => {
++                            Some((below, Tile::Empty, yield_of(material)))
+                         }
+                         _ => None,
+                     }
+@@ -1711,7 +1718,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 .expect("an occupied tile has a dwarf on it");
+             step_aside(ecs, &mut occupied, occupant, job.target, aside);
+         }
+-        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) {
++        if !(job.kind == JobKind::Channel && std::env::var_os("PROBE_NO_WALLCHECK").is_some())
++            && walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) {
+             retry_claim(ecs, entity, job.id);
+             continue;
+         }
+@@ -1722,7 +1730,16 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+         );
+         clear_paths(ecs);
+         let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+-        ecs.spawn((Item(yielded), item_id, job.target));
++        if job.kind == JobKind::Channel {
++            let base = Pos { z: job.target.z - 2, ..job.target };
++            if let Some(Tile::Solid(m)) = ecs.resource::<Terrain>().tile(base) {
++                ecs.resource_mut::<Terrain>().set_tile(base, Tile::Ramp(m));
++            }
++            ecs.spawn((Item(yielded), item_id, pos));
++            ecs.get_mut::<Carrying>(entity).unwrap().0 = Some(item_id.0);
++        } else {
++            ecs.spawn((Item(yielded), item_id, job.target));
++        }
+         ecs.resource_mut::<Jobs>().remove(job.id);
+         ecs.resource_mut::<Designations>().0.remove(&job.target);
+         release_claim(ecs, entity);
+diff --git a/crates/sim-core/tests/way_down_probe.rs b/crates/sim-core/tests/way_down_probe.rs
+new file mode 100644
+index 0000000..b506398
+--- /dev/null
++++ b/crates/sim-core/tests/way_down_probe.rs
+@@ -0,0 +1,118 @@
++use sim_core::{DesignationKind, Dims, Material, Pos, Rect, SimCommand, Tile, World, Profession};
++
++fn standable(w: &World, p: Pos) -> bool {
++    w.tile(p) == Some(Tile::Empty)
++        && matches!(w.tile(Pos { z: p.z - 1, ..p }), Some(Tile::Solid(_) | Tile::Ramp(_)))
++}
++fn solid(w: &World, p: Pos) -> bool {
++    matches!(w.tile(p), Some(Tile::Solid(m)) if m != Material::TreeTrunk && m != Material::TreeFoliage)
++}
++fn r(a: Pos, b: Pos) -> Rect { Rect { min: a, max: b } }
++fn at(p: Pos, dx: i32, dz: i32) -> Pos { Pos { x: p.x + dx, z: p.z + dz, ..p } }
++
++/// A 5-long row along +x at camp level, every cell and its y-neighbours standable with 6 solid below.
++fn site(w: &World) -> Pos {
++    let c = w.camp_origin();
++    let em: Vec<Pos> = w.emitters().into_iter().map(|(_, p, _)| p).collect();
++    let mut best = None;
++    for by in c.y - 20..c.y + 20 { for bx in c.x - 20..c.x + 20 {
++        let ok = (-1..6).all(|i| (-1..=1).all(|j| {
++            let p = Pos { x: bx + i, y: by + j, z: c.z };
++            standable(w, p) && !em.contains(&p) && (1..7).all(|k| solid(w, Pos { z: c.z - k, ..p }))
++        }));
++        let d = (bx - c.x).abs() + (by - c.y).abs();
++        if ok && d > 3 && best.map_or(true, |(bd, _)| d < bd) { best = Some((d, Pos { x: bx, y: by, z: c.z })); }
++    }}
++    if let Some((_, p)) = best { println!("site {p:?}"); return p; }
++    panic!("no site");
++}
++
++fn run_until(w: &mut World, limit: u64, mut done: impl FnMut(&World) -> bool) -> bool {
++    let end = w.tick() + limit;
++    while w.tick() < end { if done(w) { return true; } w.step(); }
++    done(w)
++}
++
++fn no_marks(w: &World) -> bool { w.designations().is_empty() }
++
++#[test]
++fn walk_down_and_back() {
++    let mut w = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++    let t = site(&w);
++    w.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: r(t, t) });
++    assert!(run_until(&mut w, 3000, no_marks), "channel never done");
++    println!("after channel: z-1 {:?} z-2 {:?}; items at {:?}", w.tile(at(t,0,-1)), w.tile(at(t,0,-2)), w.items());
++    let d = Pos { y: t.y + 1, ..at(t, 0, -1) };
++    w.apply_command(SimCommand::Designate { kind: DesignationKind::Dig, rect: r(d, d) });
++    let mut down = None;
++    let ok = run_until(&mut w, 4000, |w| {
++        for (id, p, ..) in w.dwarves() { if p.z == t.z - 1 { down = Some(id); } }
++        w.tile(d) == Some(Tile::Empty)
++    });
++    println!("dig from the pit done={ok} dwarf down={down:?} tick {}", w.tick());
++    assert!(ok);
++    let down = down.unwrap();
++    // pull him back up: give the other miner another trade, mark a channel up top
++    for (id, p) in w.professions() { if p == Profession::Miner && id != down { w.apply_command(SimCommand::SetProfession { dwarf: id, profession: Profession::Hauler }); } }
++    let u = at(t, 4, 0);
++    w.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: r(u, u) });
++    let up = run_until(&mut w, 4000, |w| w.dwarves().iter().any(|(id, p, ..)| *id == down && p.z == t.z));
++    println!("pit dwarf back up: {up} tick {}", w.tick());
++    assert!(up);
++}
++
++#[test]
++fn staircase() {
++    let mut w = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++    let t = site(&w);
++    if std::env::var_os("PROBE_PILE").is_some() {
++        let c = w.camp_origin();
++        let refused = w.apply_command(SimCommand::PlaceStockpile { rect: r(Pos { x: c.x - 8, y: c.y + 2, z: c.z }, Pos { x: c.x + 8, y: c.y + 9, z: c.z }) });
++        println!("pile refused={refused:?} zones={}", w.zones().len());
++    }
++    for lvl in 0..4 {
++        let a = at(t, lvl, -lvl);
++        let b = Pos { y: t.y + if std::env::var_os("PROBE_WIDE").is_some() { 1 } else { 0 }, ..at(t, 4, -lvl) };
++        let refused = w.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: r(a, b) });
++        println!("lvl {lvl} rect {a:?}..{b:?} marks {}", w.designations().len());
++        let ok = run_until(&mut w, 8000, no_marks);
++        println!("level {lvl}: refused={refused:?} all worked={ok} left={:?} tick {}", w.designations(), w.tick());
++        if !ok {
++            for z in (5..=9).rev() { let row: Vec<String> = (60..68).map(|x| { let p = Pos{x, y: t.y, z}; let it = w.items().iter().any(|(_, q)| *q == p); let dw = w.dwarves().iter().any(|d| d.1 == p);
++                format!("{}{}", match w.tile(p) { Some(Tile::Empty) => ".", Some(Tile::Ramp(_)) => "/", Some(Tile::Solid(_)) => "#", _ => "?" }, if dw {"D"} else if it {"*"} else {" "}) }).collect(); println!("z{z} x60..67: {}", row.join("")); }
++            println!("items {:?}", w.items());
++            println!("dwarves {:?}", w.dwarves()); println!("prof {:?}", w.professions()); println!("jobs {:?}", w.jobs()); println!("claims {:?}", w.claims());
++            return;
++        }
++    }
++    let bottom = at(t, 4, -4);
++    println!("floating items {}", w.items().iter().filter(|(_, p)| !standable(&w, *p)).count());
++    println!("bottom {:?} tile {:?} under {:?}", bottom, w.tile(bottom), w.tile(at(bottom, 0, -1)));
++    let e = at(bottom, 1, 0);
++    w.apply_command(SimCommand::Designate { kind: DesignationKind::Dig, rect: r(e, e) });
++    let ok = run_until(&mut w, 6000, |w| w.tile(e) == Some(Tile::Empty));
++    println!("dig at the bottom (z {}) done={ok}; min dwarf z seen now {:?}", e.z, w.dwarves().iter().map(|d| d.1.z).min());
++}
++
++#[test]
++fn staircase_delay_sweep() {
++    let mut ok_n = 0;
++    let mut red = vec![];
++    for delay in 0..24u64 {
++        let mut w = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++        let t = site(&w);
++        let c = w.camp_origin();
++        w.apply_command(SimCommand::PlaceStockpile { rect: r(Pos { x: c.x - 8, y: c.y + 2, z: c.z }, Pos { x: c.x + 8, y: c.y + 9, z: c.z }) });
++        let mut reached = 0;
++        for lvl in 0..4 {
++            for _ in 0..delay { w.step(); }
++            let a = at(t, lvl, -lvl);
++            let b = Pos { y: t.y + 1, ..at(t, 4, -lvl) };
++            w.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: r(a, b) });
++            if !run_until(&mut w, 6000, no_marks) { break; }
++            reached = lvl + 1;
++        }
++        if reached == 4 { ok_n += 1 } else { red.push((delay, reached)); }
++    }
++    println!("sweep: OK {ok_n}/24; stalled (delay, levels done): {red:?}");
++}

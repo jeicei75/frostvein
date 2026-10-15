@@ -196,7 +196,8 @@ pub fn designation_input(
                 designation_target(mirror, anchor_cell, mode),
                 designation_target(mirror, release_cell, mode),
             ));
-            // NOTE: surface preview does not filter emitters; the sim decides whether a zone is valid.
+            // NOTE: the commands do not filter emitters; the sim drops them, and the preview
+            // mirrors that rule (`project::sim_will_keep`).
             // One level for the whole cut rect, taken from the anchor, like dig's single-z rect.
             let cut_rect = client_core::rect_on_level(
                 (anchor_cell.tile[0], anchor_cell.tile[1]),

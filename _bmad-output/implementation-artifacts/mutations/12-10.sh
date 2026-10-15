@@ -5,10 +5,11 @@
 # Also the ore_wire.py deliberate RED (Verification), run from a scratch-worktree release simd.
 mutation "1 dig yields stone whatever the material" sim-core digging_ore_yields_an_ore_item_that_reaches_the_pile <<'PY'
 import pathlib
+# Re-pointed 2026-10-13 (12.10b): the spawn now lands at `landing` (the target, for a dig); the seam is unchanged.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        ecs.spawn((Item(yielded), item_id, job.target));\n'
+old = '        ecs.spawn((Item(yielded), item_id, landing));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        let _ = yielded;\n        ecs.spawn((Item(ItemKind::Stone), item_id, job.target));\n'))
+p.write_text(s.replace(old, '        let _ = yielded;\n        ecs.spawn((Item(ItemKind::Stone), item_id, landing));\n'))
 PY
 
 mutation "2 the dig filter refuses ramps again" sim-core a_dig_mark_takes_a_ramp_and_the_ramp_is_dug_out <<'PY'
@@ -68,20 +69,23 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            height_of(x, y) - z >= 0\n'))
 PY
 
-mutation "6 the channel leaves Ramp(ore)" sim-core channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp <<'PY'
+mutation "6 the channel's ramp loses its ore" sim-core channelling_over_ore_yields_the_ore_and_opens_a_step_with_its_own_ramp <<'PY'
 import pathlib
+# Re-pointed 2026-10-13 (12.10b): D1 retired 'a channel over ore leaves Ramp(Stone)': the ramp keeps its own material, so the
+# sabotage is the ramp losing an ore material.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                                Material::Tetrahedrite | Material::Bloodstone => Material::Stone,\n'
+old = '                    .set_tile(base, Tile::Ramp(material));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '                    .set_tile(base, Tile::Ramp(Material::Stone));\n'))
 PY
 
 mutation "7 sim_will_keep drops ramps" gui the_dig_preview_keeps_a_ramp_cell <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_))),\n'
+# Re-pointed 2026-10-15 (12.10b run 3 patch): the Dig arm also drops trees, on a second line.
+old = '            matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_)))\n                && !crate::designate::is_tree_tile(mirror, tile)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_))),\n'))
+p.write_text(s.replace(old, '            matches!(mirror.tile(tile), Some(Tile::Solid(_)))\n                && !crate::designate::is_tree_tile(mirror, tile)\n'))
 PY
 
 mutation "8 tui bloodstone glyph is stone's" tui every_look_is_pinned <<'PY'

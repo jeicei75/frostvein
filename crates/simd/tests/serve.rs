@@ -645,10 +645,12 @@ fn deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries() {
                     );
                     if let Some(protocol::DwarfJob::Channel { target }) = job {
                         // 12.9 AC13: he channels from the next tile, never from the target.
+                        // 12.10b re-pin (was: same z): the next tile may be one level up or down
+                        // across a ramp step.
                         let apart =
                             target[0].abs_diff(dwarf.pos[0]) + target[1].abs_diff(dwarf.pos[1]);
                         assert!(
-                            target[2] == dwarf.pos[2] && apart == 1,
+                            target[2].abs_diff(dwarf.pos[2]) <= 1 && apart == 1,
                             "a channel is worked from the next tile: miner {} at {:?}, target {target:?}",
                             dwarf.id,
                             dwarf.pos

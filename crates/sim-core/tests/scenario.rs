@@ -441,18 +441,19 @@ fn reversed_rect_designates_the_normalized_inclusive_tiles() {
 #[test]
 fn designation_rect_clips_to_world_bounds() {
     let mut world = World::generate(42, Dims::DEFAULT);
-    make_standable(&mut world, Pos { x: 0, y: 0, z: 1 });
-    make_standable(&mut world, Pos { x: 1, y: 0, z: 1 });
+    // 12.10b re-pin (was z 1): a channel is refused below z 2, so the rect sits at z 2.
+    make_standable(&mut world, Pos { x: 0, y: 0, z: 2 });
+    make_standable(&mut world, Pos { x: 1, y: 0, z: 2 });
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
-        rect: rect(Pos { x: -1, y: -1, z: 1 }, Pos { x: 1, y: 0, z: 1 }),
+        rect: rect(Pos { x: -1, y: -1, z: 2 }, Pos { x: 1, y: 0, z: 2 }),
     });
 
     assert_eq!(
         world.designations(),
         vec![
-            (Pos { x: 0, y: 0, z: 1 }, DesignationKind::Channel),
-            (Pos { x: 1, y: 0, z: 1 }, DesignationKind::Channel),
+            (Pos { x: 0, y: 0, z: 2 }, DesignationKind::Channel),
+            (Pos { x: 1, y: 0, z: 2 }, DesignationKind::Channel),
         ]
     );
 }
@@ -934,19 +935,23 @@ fn a_channel_worker_whose_support_is_removed_lets_go_and_the_crew_goes_on() {
     assert_eq!(world.tile(reachable), Some(Tile::Empty));
     // 12.9 AC13: the target keeps its own support and has other neighbours, so another miner may
     // finish the channel from one of them. What must never happen is the order vanishing unworked.
+    // 12.10b re-pin: a worked channel leaves the cell under the target open (was: a ramp).
     assert!(
         world
             .designations()
             .contains(&(t, DesignationKind::Channel))
-            || matches!(world.tile(below), Some(Tile::Ramp(_))),
+            || world.tile(below) == Some(Tile::Empty),
         "the channel order vanished without being worked"
     );
 }
 
-/// AC13 (12.9 seat pass 1): a channel is worked from a walkable same-z 4-neighbour of the target,
-/// never from the target itself, and the stone still lands on the target.
+/// AC13 (12.9 seat pass 1): a channel is worked from a walkable neighbour of the target, never from
+/// the target itself.
+// 12.10b re-pin (was `..._and_the_stone_lands_on_the_target`, and asserted a same-z neighbour): the
+// stone now lands up top beside the worker, never on the target or in its column, and the cell
+// under the target is opened.
 #[test]
-fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target() {
+fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_beside_the_worker() {
     let (mut world, holder, _, job) = channel_held_by_a_miner();
     let t = job.target;
     let mut worked_from = None;
@@ -970,11 +975,15 @@ fn a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target() {
         world.step();
     }
     let from = worked_from.expect("the channel was never worked");
-    assert_eq!(from.z, t.z);
     assert_eq!(from.x.abs_diff(t.x) + from.y.abs_diff(t.y), 1);
+    assert_eq!(world.tile(Pos { z: t.z - 1, ..t }), Some(Tile::Empty));
+    let items = world.items();
+    assert_eq!(items.len(), 1, "one block was yielded: {items:?}");
+    let landed = items[0].1;
+    assert_eq!(landed.z, from.z, "the stone lands on the worker's level");
     assert!(
-        world.items().iter().any(|(_, pos)| *pos == t),
-        "the stone did not land on the channelled cell"
+        (landed.x, landed.y) != (t.x, t.y),
+        "the stone landed on the target or in its column: {landed:?}"
     );
 }
 
@@ -2675,7 +2684,13 @@ fn a_cut_over_no_tree_is_refused_and_a_dig_never_marks_a_tree() {
     );
     assert!(world.designations().is_empty(), "no channel mark on a tree");
     // A channel on ordinary ground still marks.
-    let ground_cell = Pos { z: camp.z, ..camp };
+    // 12.10b re-pin (was: the camp cell itself): the camp cell is the campfire's tile, where a
+    // channel is now refused (D3), so the ground cell is the one beside it.
+    let ground_cell = Pos {
+        x: camp.x + 1,
+        z: camp.z,
+        ..camp
+    };
     assert!(is_standable(&world, ground_cell));
     assert_eq!(
         world.apply_command(SimCommand::Designate {
@@ -2924,28 +2939,26 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // 12.9 review run 2 re-pin: every dwarf over the bound is listed now, not the longest per run.
     // "Never under any dwarf" moved the runs: (6, 6, 0), (12, 6, 4) and (13, 6, 2) are gone and
     // (16, 4, 0) is new, an idle dwarf between foliage, two loose stones and a drop.
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 3] = [(10, 4, 2), (10, 6, 3), (16, 4, 0)];
+    // 12.10b re-pin: a channel opens a step down and its block lands beside the worker, so the
+    // runs moved again. Was [(10, 4, 2), (10, 6, 3), (16, 4, 0)]; now (4, 4, 4) and (10, 6, 4) before D3,
+    // read by hand at tick 4,000: each is an idle dwarf whose same-level neighbours are a loose
+    // block, rock or a drop (the #186 shape), with no mark and no claim left in the run. Task 4
+    // (the dig-face jam) owns the final record. (10, 6, 4) left once a channel was refused on the
+    // campfire's tile (D3): both rects cover it, so seed 10's crew worked a different order.
+    // 12.10b re-pin (AC 4 ruling, a channel's block never lands below the worker): was
+    // [(4, 4, 4)], now (10, 4, 4), read by dump at tick 4,000: idle at [67, 76, 28] between two
+    // loose blocks and two drops, no mark and no claim left (the #186 shape again).
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 1] = [(10, 4, 4)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
     // by unhauled stones with no work position left (#182 mode ii, the ruled #180 / FR8
     // never-drop shape). Base `26185a0` left no 4-wide run unfinished.
-    const UNFINISHED: [(u64, i32, usize); 14] = [
-        (2, 6, 2),
-        (4, 6, 1),
-        (5, 4, 1),
-        (6, 6, 2),
-        (7, 4, 1),
-        (9, 6, 2),
-        (10, 4, 1),
-        (10, 6, 6),
-        (11, 6, 3),
-        (12, 6, 1),
-        (13, 4, 1),
-        (13, 6, 3),
-        (15, 6, 2),
-        (16, 6, 3),
-    ];
+    // 12.10b re-pin: was fourteen unfinished runs (the #187 refusal loop and #182 mode ii). A
+    // channel no longer spawns a block on its target, so neither shape arises: none is left. Two
+    // intermediate runs ((0, 4, 1) and (4, 4, 1)) were a worker in the pit of a level above refused
+    // forever by the wall-in check read BEFORE the step was cut; the check now reads after.
+    const UNFINISHED: [(u64, i32, usize); 0] = [];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
@@ -3215,11 +3228,23 @@ fn a_dig_mark_takes_a_ramp_and_the_ramp_is_dug_out() {
     }
 }
 
+// 12.10b re-pin (was `..._and_leaves_a_stone_ramp`, which pinned that a channel over ore left
+// `Ramp(Stone)` and landed the ore on the target): the cell under the target is dug out and yields
+// the ore, which lands beside the worker; the ramp is cut in the cell under THAT and keeps its own
+// material, ore included (D1), since that cell was not dug and nothing is yielded twice.
 #[test]
-fn channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp() {
-    for (material, kind) in [
-        (Material::Tetrahedrite, ItemKind::Tetrahedrite),
-        (Material::Bloodstone, ItemKind::Bloodstone),
+fn channelling_over_ore_yields_the_ore_and_opens_a_step_with_its_own_ramp() {
+    for (material, kind, base_material) in [
+        (
+            Material::Tetrahedrite,
+            ItemKind::Tetrahedrite,
+            Material::Bloodstone,
+        ),
+        (
+            Material::Bloodstone,
+            ItemKind::Bloodstone,
+            Material::Tetrahedrite,
+        ),
     ] {
         let mut world = World::generate(42, Dims::DEFAULT);
         let (target, _pile) = ore_fixture(&mut world);
@@ -3227,26 +3252,391 @@ fn channelling_over_ore_yields_the_ore_and_leaves_a_stone_ramp() {
             z: target.z - 1,
             ..target
         };
+        let base = Pos {
+            z: target.z - 2,
+            ..target
+        };
         make_standable(&mut world, target);
         assert!(world.set_tile(below, Tile::Solid(material)));
+        assert!(world.set_tile(base, Tile::Solid(base_material)));
         world.apply_command(SimCommand::Designate {
             kind: DesignationKind::Channel,
             rect: rect(target, target),
         });
 
         let at = first_item(&mut world, 600, "channel");
-        assert_eq!(at, target);
+        assert_ne!(at, target, "the ore must land beside the worker");
+        assert_eq!(world.tile(below), Some(Tile::Empty));
         assert_eq!(
-            world.tile(below),
-            Some(Tile::Ramp(Material::Stone)),
-            "a channel over {material:?} must leave a stone ramp, never a ramp of the ore"
+            world.tile(base),
+            Some(Tile::Ramp(base_material)),
+            "the ramp keeps the material it was cut from"
         );
         assert_eq!(
-            kinds_at(&world, target, kind),
+            kinds_at(&world, at, kind),
             1,
             "a channel over {material:?} must yield the ore, got {:?}",
             world.item_kinds()
         );
-        assert_eq!(kinds_at(&world, target, ItemKind::Stone), 0);
+        assert_eq!(kinds_at(&world, at, ItemKind::Stone), 0);
     }
+}
+
+// 12.10b: a channel opens a step down, so a crew can dig into the mountain.
+
+fn cell(origin: Pos, dx: i32, dz: i32) -> Pos {
+    Pos {
+        x: origin.x + dx,
+        z: origin.z + dz,
+        ..origin
+    }
+}
+
+fn is_rock(world: &World, pos: Pos) -> bool {
+    matches!(
+        world.tile(pos),
+        Some(Tile::Solid(material)) if !matches!(material, Material::TreeTrunk | Material::TreeFoliage)
+    )
+}
+
+/// The nearest camp-level spot for a row of five cells running +x, with a standable y-neighbour on
+/// both sides, no emitter on it and six solid cells under every cell: room for a staircase four
+/// levels deep and two wide. DEFAULT_SEED gives [61, 62, 9].
+fn staircase_site(world: &World) -> Pos {
+    let camp = world.camp_origin();
+    let emitters: Vec<Pos> = world.emitters().into_iter().map(|(_, p, _)| p).collect();
+    let mut best: Option<(i32, Pos)> = None;
+    for y in camp.y - 20..camp.y + 20 {
+        for x in camp.x - 20..camp.x + 20 {
+            let fits = (-1..6).all(|dx| {
+                (-1..=1).all(|dy| {
+                    let pos = Pos {
+                        x: x + dx,
+                        y: y + dy,
+                        z: camp.z,
+                    };
+                    is_standable(world, pos)
+                        && !emitters.contains(&pos)
+                        && (1..7).all(|depth| is_rock(world, cell(pos, 0, -depth)))
+                })
+            });
+            let distance = (x - camp.x).abs() + (y - camp.y).abs();
+            if fits && distance > 3 && best.is_none_or(|(nearest, _)| distance < nearest) {
+                best = Some((distance, Pos { x, y, z: camp.z }));
+            }
+        }
+    }
+    best.expect("DEFAULT_SEED has a staircase site by the camp")
+        .1
+}
+
+/// A pile big enough for a four-level two-wide staircase: it digs 28 blocks and a pile cell holds
+/// one (12.9).
+fn place_creation_pile(world: &mut World) {
+    let camp = world.camp_origin();
+    let refused = world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            Pos {
+                x: camp.x - 8,
+                y: camp.y + 2,
+                ..camp
+            },
+            Pos {
+                x: camp.x + 8,
+                y: camp.y + 9,
+                ..camp
+            },
+        ),
+    });
+    assert_eq!(refused, None, "the creation pile was refused");
+}
+
+/// Steps until `done` or `limit` ticks have passed; true when it was done.
+fn run_until(world: &mut World, limit: u64, mut done: impl FnMut(&World) -> bool) -> bool {
+    let end = world.tick() + limit;
+    while world.tick() < end {
+        if done(world) {
+            return true;
+        }
+        world.step();
+    }
+    done(world)
+}
+
+fn no_marks_left(world: &World) -> bool {
+    world.designations().is_empty()
+}
+
+// RED on 015548f: the cell under a channel became a Ramp, so nothing opened and the pit below was
+// never there to walk into.
+#[test]
+fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(site, site),
+    });
+    assert!(
+        run_until(&mut world, 3_000, no_marks_left),
+        "the channel at {site:?} was never worked"
+    );
+    assert_eq!(world.tile(cell(site, 0, -1)), Some(Tile::Empty));
+    assert!(
+        matches!(world.tile(cell(site, 0, -2)), Some(Tile::Ramp(_))),
+        "the cell two under the target must be a ramp, got {:?}",
+        world.tile(cell(site, 0, -2))
+    );
+
+    // A dig workable only from inside the pit: the cell beside the opened one, one level down.
+    let wall = Pos {
+        y: site.y + 1,
+        ..cell(site, 0, -1)
+    };
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(wall, wall),
+    });
+    let mut pit_dwarf = None;
+    let dug = run_until(&mut world, 4_000, |world| {
+        for (id, pos, ..) in world.dwarves() {
+            if pos.z == site.z - 1 {
+                pit_dwarf = Some(id);
+            }
+        }
+        world.tile(wall) == Some(Tile::Empty)
+    });
+    assert!(dug, "the dig at {wall:?} from the pit never finished");
+    let pit_dwarf = pit_dwarf.expect("a dwarf stood in the pit to dig it");
+
+    // Walk it back up: the other miner takes another trade and a channel is marked up top, which a
+    // dwarf in the pit may still hold.
+    for (id, profession) in world.professions() {
+        if profession == Profession::Miner && id != pit_dwarf {
+            world.apply_command(SimCommand::SetProfession {
+                dwarf: id,
+                profession: Profession::Hauler,
+            });
+        }
+    }
+    let up_top = cell(site, 4, 0);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(up_top, up_top),
+    });
+    assert!(
+        run_until(&mut world, 4_000, |world| {
+            world
+                .dwarves()
+                .iter()
+                .any(|(id, pos, ..)| *id == pit_dwarf && pos.z == site.z)
+        }),
+        "the dwarf in the pit never climbed back to z {}",
+        site.z
+    );
+}
+
+// RED on 015548f (0 of 24: a channel only ramps the floor, nothing opens).
+#[test]
+fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
+    let mut worked = 0;
+    let mut stalled = Vec::new();
+    for delay in 0..24u64 {
+        let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+        let site = staircase_site(&world);
+        place_creation_pile(&mut world);
+        let mut levels = 0;
+        for level in 0..4 {
+            for _ in 0..delay {
+                world.step();
+            }
+            // Each level is one row shorter and one level lower, inside the previous one.
+            let first = cell(site, level, -level);
+            let last = Pos {
+                y: site.y + 1,
+                ..cell(site, 4, -level)
+            };
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: rect(first, last),
+            });
+            // Worked means every mark is gone AND every floor under the level is open: on
+            // 015548f a channel only ramps the floor, which clears the marks and opens nothing.
+            let opened = |world: &World| {
+                no_marks_left(world)
+                    && (first.x..=last.x).all(|x| {
+                        (first.y..=last.y).all(|y| {
+                            world.tile(cell(Pos { x, y, ..first }, 0, -1)) == Some(Tile::Empty)
+                        })
+                    })
+            };
+            if !run_until(&mut world, 6_000, opened) {
+                break;
+            }
+            levels = level + 1;
+        }
+        if levels == 4 {
+            worked += 1;
+        } else {
+            stalled.push((delay, levels));
+        }
+    }
+    assert_eq!(
+        worked, 24,
+        "staircase worked for {worked} of 24 designation delays; stalled (delay, levels done): {stalled:?}"
+    );
+}
+
+/// One step, panicking on the tick two dwarves share a tile or trade tiles (no swap, 12.9 Task 0
+/// Q1b). Notes every dwarf seen at `low_z` or lower in `low`, and returns whether one of them is now
+/// back on `top_z`.
+fn step_and_watch(world: &mut World, low: &mut BTreeSet<u32>, low_z: i32, top_z: i32) -> bool {
+    let before: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
+    world.step();
+    let now: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
+    let tick = world.tick();
+    assert_eq!(
+        now.iter().collect::<BTreeSet<_>>().len(),
+        now.len(),
+        "two dwarves share a tile at tick {tick}: {now:?}"
+    );
+    for a in 0..now.len() {
+        for b in 0..now.len() {
+            assert!(
+                a == b || !(now[a] == before[b] && now[b] == before[a] && now[a] != now[b]),
+                "dwarves {a} and {b} swapped tiles at tick {tick}"
+            );
+        }
+    }
+    let mut back_up = false;
+    for (id, pos, ..) in world.dwarves() {
+        if pos.z <= low_z {
+            low.insert(id.0);
+        } else if pos.z == top_z && low.contains(&id.0) {
+            back_up = true;
+        }
+    }
+    back_up
+}
+
+// #194 (12.10b review, ruled into the story by Wolf): RED before the fix at delays 0-3 and 8, level 3
+// never worked: an idle miner parks on the one-wide stair's last step, the holder's only work cell
+// is past it, and the line behind the holder leaves it no way out.
+#[test]
+fn a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay() {
+    let mut failed = Vec::new();
+    for delay in 0..24u64 {
+        let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+        let site = staircase_site(&world);
+        place_creation_pile(&mut world);
+        let (mut low, mut back_up) = (BTreeSet::new(), false);
+        let mut levels = 0;
+        for level in 0..4 {
+            for _ in 0..delay {
+                back_up |= step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+            let (first, last) = (cell(site, level, -level), cell(site, 4, -level));
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: rect(first, last),
+            });
+            let opened = |world: &World| {
+                no_marks_left(world)
+                    && (first.x..=last.x).all(|x| {
+                        world.tile(Pos {
+                            x,
+                            z: first.z - 1,
+                            ..first
+                        }) == Some(Tile::Empty)
+                    })
+            };
+            let end = world.tick() + 6_000;
+            while !opened(&world) && world.tick() < end {
+                back_up |= step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+            if !opened(&world) {
+                break;
+            }
+            levels = level + 1;
+        }
+        // The way up. Haulers usually take it, lifting blocks; when no block needed lifting from
+        // that deep, work marked up top calls a dwarf from the bottom (as in AC 3).
+        if levels == 4 && !back_up {
+            let up_top = Pos {
+                y: site.y - 1,
+                ..cell(site, 3, 0)
+            };
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: rect(up_top, up_top),
+            });
+            let end = world.tick() + 4_000;
+            while !back_up && world.tick() < end {
+                back_up = step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+        }
+        if levels < 4 || !back_up {
+            failed.push((delay, levels, back_up));
+        }
+    }
+    assert_eq!(
+        failed,
+        Vec::new(),
+        "one-wide staircase failed (delay, levels done, a dwarf back up)"
+    );
+}
+
+// #196 (12.10b review run 2, ruled into the story by Wolf): RED before the fix, level 2 never worked.
+// Level 0 is marked 190 ticks in and each later level 8 after the last is open (the wire's timing:
+// a daemon's uptime at connect, then its read lag). A hauler at (62,62,7) heads for the dead end
+// (64,62,6) to lift a block, and the miner standing on its own mark (63,62,7) heads for (62,62,7)
+// to work it. Head-on, both holding jobs, neither with an escape: both waited forever, while the
+// miner's other work cell, the dead end itself, was free.
+#[test]
+fn job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    place_creation_pile(&mut world);
+    let mut low = BTreeSet::new();
+    for _ in 0..190 {
+        step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+    }
+    let mut levels = 0;
+    for level in 0..4 {
+        if level > 0 {
+            for _ in 0..8 {
+                step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+            }
+        }
+        let (first, last) = (cell(site, level, -level), cell(site, 4, -level));
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(first, last),
+        });
+        let opened = |world: &World| {
+            no_marks_left(world)
+                && (first.x..=last.x).all(|x| {
+                    world.tile(Pos {
+                        x,
+                        z: first.z - 1,
+                        ..first
+                    }) == Some(Tile::Empty)
+                })
+        };
+        let end = world.tick() + 6_000;
+        while !opened(&world) && world.tick() < end {
+            step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+        }
+        if !opened(&world) {
+            break;
+        }
+        levels = level + 1;
+    }
+    assert_eq!(
+        levels,
+        4,
+        "levels worked; still marked at tick {}: {:?}",
+        world.tick(),
+        world.designations()
+    );
 }

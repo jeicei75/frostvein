@@ -109,19 +109,11 @@ PY
 
 mutation "12 haul pick-up stands on the item" sim-core a_hauler_picks_up_and_drops_from_the_next_tile <<'PY'
 import pathlib
+# Re-pointed 2026-10-13 (12.10b): the pick-up leg reads `astar_neighbours` (ramp steps included).
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                Some(pos) if !targets.is_empty() && terrain.is_standable(*pos) => {
-                    side_neighbours(*pos)
-                        .into_iter()
-                        .filter(|candidate| is_walkable(terrain, blocked, *candidate))
-                        .collect()
-                }
-'''
+old = '                Some(pos) if !targets.is_empty() && terrain.is_standable(*pos) => {\n                    astar_neighbours(terrain, blocked, *pos)\n                        .into_iter()\n                        .collect()\n                }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                Some(pos) if !targets.is_empty() && terrain.is_standable(*pos) => {
-                    BTreeSet::from([*pos])
-                }
-'''))
+p.write_text(s.replace(old, '                Some(pos) if !targets.is_empty() && terrain.is_standable(*pos) => {\n                    BTreeSet::from([*pos])\n                }\n'))
 PY
 
 mutation "13 delivery picks the shallowest free pile cell" sim-core a_3x3_pile_fills_from_the_inside_out <<'PY'
@@ -145,21 +137,13 @@ p.write_text(s.replace(old, '                            .expect("every stone ha
 PY
 
 # Seat pass 1 (Tasks 11-12).
-mutation "15 a channel is worked from the target itself" sim-core a_channel_is_worked_from_the_next_tile_and_the_stone_lands_on_the_target <<'PY'
+mutation "15 a channel is worked from the target itself" sim-core a_channel_is_worked_from_the_next_tile_and_the_stone_lands_beside_the_worker <<'PY'
 import pathlib
+# Re-pointed 2026-10-13 (12.10b): work positions read `astar_neighbours`; test renamed.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''        JobKind::Channel => {
-            if terrain.is_standable(job.target) {
-                side_neighbours(job.target)
-                    .into_iter()
-                    .filter(|candidate| is_walkable(terrain, blocked, *candidate))
-                    .collect()
-'''
+old = '            if terrain.is_standable(job.target) {\n                astar_neighbours(terrain, blocked, job.target)\n                    .into_iter()\n                    .collect()\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''        JobKind::Channel => {
-            if terrain.is_standable(job.target) {
-                BTreeSet::from([job.target])
-'''))
+p.write_text(s.replace(old, '            if terrain.is_standable(job.target) {\n                BTreeSet::from([job.target])\n'))
 PY
 
 mutation "16 dig_yaw ignores a channel" gui a_channelling_miner_faces_the_target_cell <<'PY'
@@ -222,9 +206,12 @@ PY
 mutation "22 a stuck head-on keeps the stale exit path" sim-core a_head_on_with_no_escape_drops_the_idle_blockers_stale_path <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            if idle {\n                ecs.entity_mut(blocker).remove::<Path>();\n            }\n            return false;\n'
+# Re-pointed 2026-10-14 (12.10b review patch, #194): the drop now follows the holder's back-out
+# attempt, which this fixture's holder has no room for. Re-pointed again 2026-10-14 (12.10b review
+# run 2 patch, #196): the back-out now runs for any blocker and the drop sits in its own `if idle`.
+old = '            if idle {\n                ecs.entity_mut(blocker).remove::<Path>();\n            }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            return false;\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 # #182: a delivery lands on the deepest pile cell even when a dwarf stands on it, or filling it
@@ -243,18 +230,20 @@ mutation "24 filling a cell never walls a dwarf in" sim-core no_dwarf_is_caged_b
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-09 (12.9 review run 2, tick cost): `walls_in_a_dwarf` is a lockstep flood now.
-old = '        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)))\n'
+# Re-pointed 2026-10-15 (12.10b seat, #201): the pieces are read by `stranded`, which now strands nobody.
+old = '        .filter(|piece| piece.len() < largest)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .any(|piece| piece.len() < largest && dwarves.iter().any(|dwarf| piece.contains(dwarf)) && false)\n'))
+p.write_text(s.replace(old, '        .filter(|piece| piece.len() < largest && false)\n'))
 PY
 
 # #182: a completing channel spawns its stone on the dwarf standing on its target.
 mutation "25 a channel stone spawns under its occupant" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
 import pathlib
+# Re-pointed 2026-10-13 (12.10b): a channel's block no longer spawns on the target; the shape now is the landing refusing no dwarf's tile.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if occupied.contains(&job.target) {\n'
+old = '                        || occupied.contains(&cell)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if occupied.contains(&job.target) && false {\n'))
+p.write_text(s.replace(old, '                        || (occupied.contains(&cell) && false)\n'))
 PY
 
 # #182: a refused delivery holds at Work (the ruled first form), which deadlocks a hauler standing
@@ -278,12 +267,16 @@ p.write_text(s.replace(old, '                    || (dwarves.contains(&cell) && 
 PY
 
 # #182: a channel's stone may wall a dwarf in (the miner sealing itself, seed 10's first shape).
-mutation "28 a channel stone may wall a dwarf in" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+mutation "28 a channel stone may wall a dwarf in" sim-core a_channel_never_lands_its_stone_where_it_walls_a_dwarf_in <<'PY'
 import pathlib
+# Re-pointed 2026-10-13 (12.10b): the channel landing's wall-in refusal. It SURVIVED the seed sweep
+# (a channel's stone no longer lands on its target), so a direct 12.10b test now pins it.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) {\n'
+# Re-pointed 2026-10-14 (12.10b review patch, #193): the same line, four columns deeper.
+# Re-pointed 2026-10-15 (12.10b run 3 patch, #197): the check reads `dwarves`, not `occupied`.
+old = '                            || occupied.contains(&cell)\n                            || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) && false {\n'))
+p.write_text(s.replace(old, '                            || occupied.contains(&cell)\n                            || (walls_in_a_dwarf(terrain, &blocked, &dwarves, cell) && false)\n'))
 PY
 
 # 12.9 review run 2: a let-go drops at the carrier's own tile again (the carrier exempt).
@@ -318,8 +311,11 @@ PY
 # miners keep moving, so only the sweep's marks-left pin can see it.
 mutation "32 a channel completion is refused forever" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
 import pathlib
+# Re-pointed 2026-10-13 (12.10b): the channel's wall-in check now reads the cut terrain, in the `found` computation.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) {\n'
+# Re-pointed 2026-10-14 (12.10b review patch, #193): the check now floods from the pre-cut sides.
+# Re-pointed 2026-10-14 (12.10b review run 2 patch, #195): the check reads `dwarves`, the target's dwarf where it falls.
+old = '                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target) || (job.target.x + job.target.y) % 13 == 0 {\n'))
+p.write_text(s.replace(old, '                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides) || (job.target.x + job.target.y) % 13 == 0 {\n'))
 PY

@@ -97,13 +97,12 @@ PY
 mutation "drop search walks through rock" sim-core release_claim_drops_where_the_carrier_can_walk <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-09 (12.9 review run 2, never under any dwarf): the search loop is no longer
-# inside `if refused(pos)`, one indentation level out.
-check = '                    if !refused(cell) {\n'
-walk = '                    for candidate in astar_neighbours(terrain, &blocked, cell) {\n'
+# Re-pointed 2026-10-13 (12.10b): the search moved into `nearest_free_cell`, shared with the channel landing.
+check = '            if !refused(cell) {\n'
+walk = '            for candidate in astar_neighbours(terrain, blocked, cell) {\n'
 assert s.count(check) == 1 and s.count(walk) == 1
-s = s.replace(check, '                    if is_walkable(terrain, &blocked, cell) && !refused(cell) {\n')
-p.write_text(s.replace(walk, '                    for candidate in [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1)].map(|(dx, dy, dz)| Pos { x: cell.x + dx, y: cell.y + dy, z: cell.z + dz }).into_iter().filter(|candidate| terrain.tile(*candidate).is_some()) {\n'))
+s = s.replace(check, '            if is_walkable(terrain, blocked, cell) && !refused(cell) {\n')
+p.write_text(s.replace(walk, '            for candidate in [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1)].map(|(dx, dy, dz)| Pos { x: cell.x + dx, y: cell.y + dy, z: cell.z + dz }).into_iter().filter(|candidate| terrain.tile(*candidate).is_some()) {\n'))
 PY
 
 mutation "campfire pile never fills" sim-core a_stockpile_around_the_campfire_never_zones_or_receives_the_fire <<'PY'
