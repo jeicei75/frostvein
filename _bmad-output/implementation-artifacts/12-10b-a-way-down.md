@@ -465,7 +465,7 @@ result; nothing traced the back-out per step.
 - The gui watch, tui parity, the compass/orbit, `,` slice-down and ramp contrast on Wolf's terminal.
 - The preview filters were reached only by their unit tests.
 
-- [ ] [Review][Patch] **MED (#197): a channel's dug block can seal the pit a dwarf on the target falls into (acceptance,
+- [x] [Review][Patch] **MED (#197): a channel's dug block can seal the pit a dwarf on the target falls into (acceptance,
   RAN), REWORK of #195** [`crates/sim-core/src/lib.rs:1868`, the Channel arm's landing closure]
   - The cut check reads `&dwarves`, where the dwarf on the target is moved to its fall cell. The landing closure still reads
     `&occupied`, where that dwarf is in the air on the target and stands in no flood piece.
@@ -475,34 +475,34 @@ result; nothing traced the back-out per step.
   - Fix: pass `&dwarves` to the landing closure. Go RED with the bystander fixture plus a route-to-the-rim assert, and add
     a mutation row.
   - Re-state the NOTEs at `:805` and `:1839`, which read as covering the whole arm.
-- [ ] [Review][Patch] **MED: the card's "or a dig at the rim" never brings a miner up, 0 of 9 (feature, RAN)**
+- [x] [Review][Patch] **MED: the card's "or a dig at the rim" never brings a miner up, 0 of 9 (feature, RAN)**
   [`12-10b-signoff/vehicle-card.md:92`]
   - A gui dig at the rim targets the rim's top block at z 8, and dig work positions are same-z.
   - On the east rim the mark is never worked and stays lit (4/4).
   - On the west rim it is worked from inside the pit at z 8, and the miner stays down (4/4).
   - Fix: say "mark a channel up top, at the rim", and drop "or a dig".
-- [ ] [Review][Patch] **LOW: "mark something up top" brings ONE miner, and none from below when a miner is already up
+- [x] [Review][Patch] **LOW: "mark something up top" brings ONE miner, and none from below when a miner is already up
   (feature, RAN)** [`vehicle-card.md:92`]
   - Two-wide: 17/17 runs brought one miner up and left the other at z 5.
   - One-wide: in 6/10 runs a miner already up top took the mark.
   - Fix: "one mark per miner; the nearest free miner takes it". Fix it in the same edit as the line above.
-- [ ] [Review][Patch] **LOW: the card's floating count is half of what its own procedure leaves (feature, RAN), REWORK of
+- [x] [Review][Patch] **LOW: the card's floating count is half of what its own procedure leaves (feature, RAN), REWORK of
   the run-2 row** [`vehicle-card.md:88`]
   - The card procedure measured 6-13 floating blocks, median 11, over 27 two-wide runs. One-wide's 4 holds.
   - The run-2 row was read against 2 wire runs, on the wire's geometry and not the card's.
-- [ ] [Review][Patch] **LOW: the card says "walk to the row's level with `<`", but row 0 needs `>` (feature, read)**
+- [x] [Review][Patch] **LOW: the card says "walk to the row's level with `<`", but row 0 needs `>` (feature, read)**
   [`vehicle-card.md:72`] — the tui boots at `--z 8`, and the paragraph above already says so.
-- [ ] [Review][Patch] **LOW: the Dig preview lights tree cells the sim drops, while its doc says "never a tree" (feature,
+- [x] [Review][Patch] **LOW: the Dig preview lights tree cells the sim drops, while its doc says "never a tree" (feature,
   read; orchestrator confirmed)** [`crates/gui/src/project.rs:1086`]
   - The sim's Dig filter is `Solid | Ramp && !is_tree` (`lib.rs:2519-2523`). Trees are `Solid(TreeTrunk | TreeFoliage)`.
   - The mirror's Dig arm keeps every `Solid | Ramp`.
   - It is pre-existing (12.10), but it is a latent silent failure in the function round 2 edited. Fix it RED first, as
     with the channel-over-a-tree row.
-- [ ] [Review][Patch] **LOW: two NOTEs still say the preview does not filter emitters (feature, read)**
+- [x] [Review][Patch] **LOW: two NOTEs still say the preview does not filter emitters (feature, read)**
   [`crates/gui/src/designate.rs:199`; `crates/client-core/src/lib.rs:292`]
   - `preview_cells` now filters emitters for Channel and Stockpile.
   - This is the partial-doc-update shape. It is patched rather than deferred because a stale rationale survives review.
-- [ ] [Review][Patch] **LOW: under `mutate.sh`, row 19 is killed by `World::step`'s debug_assert, never by
+- [x] [Review][Patch] **LOW: under `mutate.sh`, row 19 is killed by `World::step`'s debug_assert, never by
   `step_and_watch`'s shared-tile assert (edge + acceptance, RAN)** [`mutations/12-10b.sh` row 19]
   - `mutate.sh` runs debug only. Deleting the `scenario.rs:3498` assert would leave row 19 KILLED.
   - It is the "KILLED names the test, not the assertion" trap, and it is the very assert the row was added to show.
@@ -523,6 +523,25 @@ Dismissed (2):
 - The wire's up-top call on `two` can turn an unaided-climb RED into OK. This is Wolf's M2 ruling, disclosed in the
   docstring, and the wire prints the call line.
 - `onewide`'s "back up" can fire before level 3 is worked. Run 1 already deferred this.
+
+**Review patch pass, run 3 (2026-10-15, fresh session).** All 8 items landed; commits `50375b5`..`6bc9ca7`.
+Cost $6.07 over 156 turns. Full gate GREEN on `6bc9ca7` (3581 s, `RUST_TEST_THREADS=1`). Mutation rows 19, 20, 20b, 21 and the re-pointed
+12.9 row 28 and 12.10 row 7: 6 of 6 KILLED, each on its intended line. Closure table (both-sides rule; REWORK =
+re-closes an earlier round's half-closed fix):
+
+| Item | Written for | Then tested | Pre-existing-state fixture | |
+| --- | --- | --- | --- | --- |
+| #197 landing cage (`50375b5`) | a dwarf on the target whose fall cell the block's landing would seal (bystanders crowd the worker's nearest rim tiles, so the nearest free tile is the second step's rim) | the other side: the same dwarf on the target with no bystanders, where the landing seals nothing (worked, and now ASSERTED to have a route to the rim); #193's pair (dwarf in the pit) unchanged | `severing_pit(true, true, true)` RED first (block on `(10, FIX_Y + 1, FIX_Z)`); `severing_pit(true, true, false)`, run 2's fixture, now with `climbs_to_the_rim`; `severing_pit(false/true, false, false)` green. Row 20 dies on the landing assert, 20b (that assert stubbed) on the route assert | REWORK (#195) |
+| Card "or a dig at the rim" (`6bc9ca7`) | the card's text | read against run 3's 0/9 (a gui dig at the rim is same-z work at z 8) | none: a doc change | |
+| Card "one mark per miner" (`6bc9ca7`) | the card's text | read against run 3's 17/17 two-wide and 6/10 one-wide | none: a doc change | |
+| Card floating count (`6bc9ca7`) | the card's text | read against run 3's card-procedure measurement (27 two-wide runs, 6-13, median 11) | none: a doc change | REWORK (run-2 row) |
+| Card row-0 key (`6bc9ca7`) | the card's text | read against the card's own `--z 8` boot line and its `>` step | none: a doc change | |
+| Dig preview trees (`0457832`) | a Dig drag over a trunk cell (`Solid(TreeTrunk)`) | the cells the sim keeps: a stone cell beside the trunk, and a ramp | `the_dig_preview_skips_a_tree_cell` (2x1 mirror) RED first on "the trunk"; 12.10's `the_dig_preview_keeps_a_ramp_cell` (headless) green, its row 7 re-pointed and KILLED | |
+| Two emitter NOTEs (`15d404b`) | the NOTE text | read against `sim_will_keep`'s Channel and Stockpile arms | none: a comment change | |
+| Row 19 shadow (`4969cfa`) | the mutation row | debug run under `mutate.sh` | the #196 fixture: row 19 now dies at `scenario.rs:3498`, "two dwarves share a tile at tick 402", the same tick as run 2's release check | |
+
+**Found while patching:** the landing-line change left 12.9 row 28 and the Dig-arm change left 12.10 row 7 unable
+to apply. The fast gate's table audit caught both at commit; both are re-pointed and KILLED.
 
 **Run 3 outcome:**
 - Cost: $13.88 over 305 turns, with subagents at 78.3% of tokens.
@@ -786,6 +805,7 @@ python3 _bmad-output/implementation-artifacts/12-10b-signoff/way_down_wire.py 74
 
 | Date | Change |
 |---|---|
+| 2026-10-15 | Review patch pass, run 3: all 8 items landed (`50375b5`..`6bc9ca7`). #197 (the channel's landing check counts the dwarf on the target where it falls; the run-2 fixture now asserts the route out), the Dig preview drops trees, two stale NOTEs, row 19 compiles out `World::step`'s debug_assert, the card (channel at the rim, one mark per miner, median 11 floating, row-0 `>`). 12.9 row 28 and 12.10 row 7 re-pointed. 6 mutation rows KILLED. Full gate GREEN 3581 s. Status stays in-progress: AC 12 (the seat) unrun; no review round 4. |
 | 2026-10-14 | Review patch pass, run 2: all 9 items landed (`31322f8`..`2b4db37`). #195 (a dwarf on the target counted where it falls), #196 (the #194 back-out runs for a busy blocker too; release probe 1,200 runs per shape, one-wide 4 -> 0 and two-wide 13 -> 0 frozen; wire `onewide` 10/10), M2 accepted (card line, `two` up-top call; wire `two` 10/10), the gui stockpile/tree mirror, the card, `step_and_watch` shown firing. 11 mutation rows KILLED. Full gate GREEN 4809 s. Status -> review for round 3; AC 12 (the seat) still unrun. |
 | 2026-10-14 | Code review run 2 (four layers, none timed out, all ran): 2 HIGH (#195, a dwarf on the target is caged; #196, a one-wide line of job holders jams), 3 REWORK rows of the closure table. Wolf ruled #196 fixed in 12.10b, and miners staying at the bottom accepted (card line + `two` up-top call). 8 patches left as action items, 5 deferred, 1 dismissed. Status -> in-progress. |
 | 2026-10-14 | Review patch pass: all 7 patches landed. #193 (a pit-severing cut is refused), #194 (a one-wide line backs out past an idle dwarf, no swap; one-wide sweep 24/24, wire 5/5), the gui preview filter, the wire's BROKEN path, spine, AC 4 and the seat card. 8 mutation rows KILLED. Status -> review for round 2; AC 12 (the seat) still unrun. |
