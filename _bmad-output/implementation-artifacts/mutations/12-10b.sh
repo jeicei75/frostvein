@@ -253,3 +253,13 @@ old = '                && !crate::designate::is_tree_tile(mirror, tile)\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
+
+# 12.10b seat (#200): the daemon's client socket keeps Nagle on again (fast2x deltas arrive in clumps).
+mutation "22 the client socket keeps Nagle on" simd a_connected_client_socket_sends_without_nagle_delay <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '    if let Err(error) = stream.set_nodelay(true) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if let Err(error) = stream.set_nodelay(false) {\n'))
+PY
+
