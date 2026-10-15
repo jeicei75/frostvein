@@ -17,7 +17,7 @@ so that the world never shows stones hanging or trees standing on air.
 
 `main` is `56bfbe5` (PR #202 merged), clean. Branch `story-12-11-nothing-floats` carries this file,
 `12-11-signoff/` and the board edit. Epic 12's standing ACs (`epics.md:2422-2434`) bind this story and are
-not restated. **No wire change** (standing AC 4): an item's `pos` is resent in full on every delta
+not restated. **No wire shape change** (standing AC 4; D7 reuses `DwarfJob::Haul` for a clearing miner): an item's `pos` is resent in full on every delta
 (`protocol/src/lib.rs:254-258, 296`; `simd/src/bridge.rs:80`), so a fall is a changed `pos`; a felled tree
 is `Empty` tiles through `Terrain::set_tile`'s dirty set. **No new saved state**: a fall changes positions
 and tiles only.
@@ -71,6 +71,9 @@ throwaway rule; never ship either).
   and wire numbers are evidence for the RULE, not for this mechanism: re-measure.
 - **Q2 (a):** the dig fells the tree as a cut does and its logs fall.
 - **Q3:** keep a SHORT seat pass (AC 12).
+- **Q4 (Wolf, 2026-10-15, after creation): he looks like a hauler while he clears.** While a miner moves a
+  stone aside, the wire reports his job as `Haul`, so both clients show the hauler's lift, carry and
+  set-down, not the dig swing. See D7.
 
 The options as offered at creation, kept for the record:
 
@@ -113,6 +116,10 @@ The options as offered at creation, kept for the record:
   hauler already holding that item's haul job is not waited for: when the miner lifts it, that hauler lets go
   (`release_claim`, carrying nothing), and the haul job is claimed again once the stone is down (AC 3). One
   owner per item at a time.
+- **D7 (Q4, the wire while clearing):** from the start of the lift run to the end of the set-down run, the
+  clearing miner's `Entity.job` is `DwarfJob::Haul`; before and after, his own `Dig`/`Channel`. **Wire diff
+  (standing AC 4): no shape change.** `DwarfJob::Haul` gains a second meaning ("a dwarf carrying a stone",
+  not only "a hauler's haul job"); `profession` stays `miner`, so a client can still tell them apart.
 
 ## Acceptance Criteria
 
@@ -141,11 +148,15 @@ The options as offered at creation, kept for the record:
     on 5 of 5, and each mutation row of Task 7 turns its named test, or the wire, RED.
 12. *(Task 0 Q3, short)* At the seat, Wolf channels a two-wide staircase 3 levels down, digs out the ground
     under one tree, and digs a one-wide tunnel 4 long with no pile. He sees nothing hanging (no block, no
-    tree, no debris) and the miner carrying stones out of his own way, in the gui and an attached tui.
+    tree, no debris) and the miner carrying stones out of his own way like a hauler (lift, carry, set down,
+    no pick swing), in the gui and an attached tui.
 13. #135 and #180 close with their red-then-green tests.
 14. With no stockpile, a miner digs a one-wide tunnel of 4 marks into rock to the end: each stone that
     blocks his next face is carried off by him, and no hauler is involved (D6, #180). RED today: he stops at
     the first stone (`lib.rs:1142-1143`).
+15. While a miner clears a stone (lift, walk, set-down) the daemon reports his `job` as `haul`, and before
+    and after it as his `dig`/`channel` (D7); the gui then plays the hauler's lift and Carry clip, never the
+    dig swing, for that stretch.
 
 ## Tasks / Subtasks
 
@@ -172,7 +183,7 @@ The options as offered at creation, kept for the record:
     (`lib.rs:3416`), which pins the old behaviour; disclose it.
   - [ ] Fixtures that say "items never fall" (`scenario.rs:1120-1121`, `simd/tests/serve.rs:2155-2158`):
     fix the comment, keep the fixture.
-- [ ] **Task 3: the miner clears his way (D6; Q1, #180)** (AC 4, 9, 14)
+- [ ] **Task 3: the miner clears his way (D6, D7; Q1, Q4, #180)** (AC 4, 9, 14, 15)
   - [ ] Make a blocked dig/channel job claimable and workable by its miner: today a job whose every work
     position holds an item has an EMPTY work set (`work_positions`, `lib.rs:1144-1147`, `:1155-1162`), so
     `claim_jobs` never claims it (reachability is checked at claim, `:479-620`). The blocking items' lift
@@ -186,6 +197,11 @@ The options as offered at creation, kept for the record:
     `release_claim` (`:1257`, a cleared stone a released miner holds is dropped by its rule), and **simd's
     save validation** (`simd/src/main.rs:568-577`, which today refuses such a save). A save taken mid-clear
     loads and finishes the clear (standing AC 3's save/load gate).
+  - [ ] D7: a public sim reader that names a clearing miner (and the item), and in `simd/src/bridge.rs`
+    `dwarf_entities` (`:181-186`) report `DwarfJob::Haul` for him while he clears (exhaustive `match`
+    kept). Tests: `serve.rs` reads `haul` on the wire for a clearing miner and `dig`/`channel` before and
+    after; a gui headless test that a miner entity with `job: Haul` + `carrying` gets `DwarfClip::Carry`
+    from `dwarf_clip` (`gui/src/project.rs:464-479`), so no clip change is needed.
   - [ ] A hauler holding the lifted item's haul job lets go when the miner lifts it (D6); pin that the item
     is later delivered to the pile (AC 3) and that no item ever has two holders.
   - [ ] The judge is AC 9 and AC 14: the staircase sweep 24 of 24 with 0 floats, the one-wide sweep, and the
@@ -214,7 +230,7 @@ The options as offered at creation, kept for the record:
     in a scratch worktree build and paste the `FLOATS RED` block (the creation RED was on `main`).
   - [ ] NEW `mutations/12-11.sh`, each row run alone after commit and named against its killing test: the
     fall removed (AC 2); a landing on an emitter allowed (AC 2, FR50); a landing on a dwarf allowed (AC 2);
-    "never higher" dropped (AC 2); the miner waits instead of clearing (AC 4, 14); the set-down allowed in
+    "never higher" dropped (AC 2); the miner waits instead of clearing (AC 4, 14); the bridge reports `Dig` while clearing (AC 15); the set-down allowed in
     the target's column (AC 4); the Q2 rule reverted (AC 5); the D4 filter
     dropped (AC 8); the chip despawn dropped (AC 10). Re-point any old row your NOTE edits break
     (`scripts/audit-mutations.py`).
@@ -232,7 +248,8 @@ The options as offered at creation, kept for the record:
 ### Scope guardrails (do NOT)
 
 - No cave-ins, and no falling terrain of any kind (AC 7). Emitters never fall (D4 prevents the case).
-- No wire, protocol, bridge, tui or client-core change; no new saved field; no new command or key.
+- No protocol, tui or client-core change; the only bridge change is D7; no new saved field; no new command
+  or key.
 - No fall animation in the gui; items keep snapping to their wire position.
 - No change to the channel rule, the dig rule, the cut rule or the pile fill order beyond Q1, Q2, D4, D6.
 - The miner never carries to the pile, never claims a haul job and never changes trade (D6).
@@ -263,9 +280,10 @@ The options as offered at creation, kept for the record:
    and fall the same way.
 5. **The cage sweep's 5 new freezes are unexplained.** A changed landing changes every later trajectory
    (12.9's sweep is chaotic in this sense), but "unexplained" is not "harmless". Dump before you pin.
-6. **The gui swing.** `dwarf_clip` (`gui/src/project.rs:464-479`) plays the Dig swing for a miner in
-   `Work` on a Dig/Channel job, carrying or not, so his 5-tick lift and set-down read as a swing; the walk
-   between reads as Carry. Check it at the seat; change the clip choice only if Wolf asks.
+6. **The gui picks the clip from `job` before `carrying`** (`dwarf_clip`, `gui/src/project.rs:464-479`):
+   `Work` on `Dig`/`Channel` is the swing whatever he holds. That is why D7 changes what the WIRE says
+   rather than the clip order: reordering would still swing through the 5-tick lift (nothing carried yet).
+   Any reader that keys on `job == haul` meaning "a hauler" must now also check `profession`.
 7. **Old mutation anchors.** Rewording the NOTEs at `lib.rs:1189`, `:1941`, `:1951` may break old rows;
    `audit-mutations.py` blocks the commit until they are re-pointed.
 
@@ -273,10 +291,11 @@ The options as offered at creation, kept for the record:
 
 - UPDATE `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`
 - UPDATE `crates/gui/src/project.rs` (`sim_will_keep`, chip despawn), `crates/gui/tests/headless.rs`
-- UPDATE `crates/simd/src/main.rs` (save validation, Task 3), `crates/simd/tests/serve.rs` (comment), `ARCHITECTURE-SPINE.md` (2026-08-09), old mutation tables per Task 7
+- UPDATE `crates/simd/src/main.rs` (save validation, Task 3), `crates/simd/tests/serve.rs` (comment + D7 test), `ARCHITECTURE-SPINE.md` (2026-08-09), old mutation tables per Task 7
 - NEW `mutations/12-11.sh`, `12-11-signoff/vehicle-card.md` (if Q3)
 - EXISTING (creation) `12-11-signoff/floats_wire.py`, `12-11-signoff/creation-prototype.patch`
-- `protocol`, `tui`, `client-core`, `simd/src/bridge.rs`: no change.
+- UPDATE `crates/simd/src/bridge.rs` (D7)
+- `protocol`, `tui`, `client-core`: no change.
 
 ### Previous story intelligence
 
@@ -337,5 +356,6 @@ python3 _bmad-output/implementation-artifacts/12-11-signoff/floats_wire.py 7461 
 
 | Date | Change |
 |---|---|
+| 2026-10-15 | Q4 RULED (Wolf): a clearing miner is reported as `Haul` on the wire, so he looks like a hauler (D7, AC 15). No protocol shape change. |
 | 2026-10-15 | Task 0 RULED (Wolf): Q1 (b) done BY THE MINER, who moves the stone aside himself and goes on digging, never to the pile; #180 folded in (D6, AC 14, Task 3 rewritten). Q2 (a). Q3 short seat. Traps found: simd's save validation refuses a carrying miner; the gui plays the dig swing for his lift. |
 | 2026-10-15 | Created on `56bfbe5`. #135 reproduced: the 12.10b staircase leaves 4-10 floating blocks in 24 of 24 sweep runs; a channel under a block and a dig under a lying stone hang it with its haul retried forever; digging a tree's ground leaves the trunk on air (92 of 259 trees are exposed). Dwarves never stay on air. `floats_wire.py` written: RED 3 of 3 on main, OK 3 of 3 on a throwaway prototype. Pure gravity regresses 12.10b (staircase 17 of 24), so Task 0 Q1 is open. Defaults D1-D5. |
