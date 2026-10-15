@@ -2669,7 +2669,7 @@ development_status:
   #   2026-10-15 run-3 patch pass 8/8 landed (gate GREEN 3581 s), pushed 18ebdac. Seat pass 1 (AC 12): Partly --
   #     one-wide stair caged a miner: #200 gui pulse (no TCP_NODELAY) fixed 5b6cb78, #201 rescue dig refused fixed
   #     3fa87ac (gate GREEN 4997 s); #169/#198/#199 parked. Seat pass 2 (Wolf) on d811a6b, his seat save: stuck
-  #     dwarf freed, pulse gone. -> done. PR on Wolf's yes.
+  #     dwarf freed, pulse gone. -> done. PR #202 opened on Wolf's yes (91c3ee1).
   12-11-nothing-floats: backlog
   12-12-the-first-goals: backlog
   12-13-ready-for-more-faces: backlog
