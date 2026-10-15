@@ -82,9 +82,10 @@ PY
 mutation "7 sim_will_keep drops ramps" gui the_dig_preview_keeps_a_ramp_cell <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_))),\n'
+# Re-pointed 2026-10-15 (12.10b run 3 patch): the Dig arm also drops trees, on a second line.
+old = '            matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_)))\n                && !crate::designate::is_tree_tile(mirror, tile)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_))),\n'))
+p.write_text(s.replace(old, '            matches!(mirror.tile(tile), Some(Tile::Solid(_)))\n                && !crate::designate::is_tree_tile(mirror, tile)\n'))
 PY
 
 mutation "8 tui bloodstone glyph is stone's" tui every_look_is_pinned <<'PY'

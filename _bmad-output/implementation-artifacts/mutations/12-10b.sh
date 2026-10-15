@@ -239,3 +239,12 @@ old = '        assert_ne!(\n            items[0].1,\n            at(10, FIX_Y + 
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        let _ = (\n            items[0].1,\n            at(10, FIX_Y + 1, FIX_Z),\n'))
 PY
+
+# 12.10b review run 3 patch: the Dig preview drops the sim's "never a tree" rule again.
+mutation "21 the dig preview lights a tree cell" gui the_dig_preview_skips_a_tree_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '                && !crate::designate::is_tree_tile(mirror, tile)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY

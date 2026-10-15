@@ -1083,7 +1083,10 @@ fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
         })
     };
     match mode {
-        DesignateMode::Dig => matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_))),
+        DesignateMode::Dig => {
+            matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_)))
+                && !crate::designate::is_tree_tile(mirror, tile)
+        }
         // 12.10b: a channel is also refused on an emitter's tile and below z 2 (D2, D3), and (as
         // since 12.7) over a tree.
         DesignateMode::Channel => {
@@ -4313,6 +4316,19 @@ mod tests {
             !sim_will_keep(&mirror, [1, 0, 2], Channel),
             "the cell standing on the trunk"
         );
+    }
+
+    /// The sim's Dig filter keeps `Solid | Ramp` but never a tree (12.10); the trunk is `Solid`.
+    #[test]
+    fn the_dig_preview_skips_a_tree_cell() {
+        use crate::designate::DesignateMode::Dig;
+        let dims = Dims { x: 2, y: 1, z: 2 };
+        let mut tiles = vec![Tile::Empty; 4];
+        tiles[0] = Tile::Solid(protocol::Material::Stone);
+        tiles[1] = Tile::Solid(protocol::Material::TreeTrunk);
+        let mirror = world(dims, tiles);
+        assert!(sim_will_keep(&mirror, [0, 0, 0], Dig), "the stone");
+        assert!(!sim_will_keep(&mirror, [1, 0, 0], Dig), "the trunk");
     }
 
     /// 12.7: the cut preview lights exactly the tree tiles the sim will catch, at the cut level.
