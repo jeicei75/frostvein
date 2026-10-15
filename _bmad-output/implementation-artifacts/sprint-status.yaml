@@ -2676,6 +2676,9 @@ development_status:
   #     forever; digging a tree's ground leaves the trunk on air (92/259 trees exposed). Dwarves never on air.
   #     floats_wire.py RED 3/3 on main, OK 3/3 on a throwaway prototype. Pure gravity regresses 12.10b (staircase
   #     17/24), so Task 0 is OPEN: Q1 channel-target item (rec. lift up top), Q2 tree (rec. fell as a cut), Q3 seat.
+  #   2026-10-15 Task 0 RULED (Wolf): Q1 (b) by the MINER: he moves a stone in his way ASIDE himself (never to the
+  #     pile; the hauler takes it later) and goes on digging; #180 FOLDED IN (one-wide tunnel, no pile). Q2 (a) a dug
+  #     tree's ground fells it like a cut. Q3 short seat. Larger than drafted; the cap is soft.
   12-12-the-first-goals: backlog
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.

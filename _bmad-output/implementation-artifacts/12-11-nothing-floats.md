@@ -59,10 +59,20 @@ throwaway rule; never ship either).
   the staircase is **24 of 24** and the cage sweep freezes **5**: `(0,4,2) (6,4,4) (10,4,0) (10,6,1)
   (15,6,1)` against the pinned `(10,4,4)` (`scenario.rs:2951`). Why those 5 freeze is NOT established.
 
-### Task 0: Q2, Q3 RULED (Wolf, 2026-10-15); Q1 OPEN
+### Task 0: RULED (Wolf, 2026-10-15)
 
-- **Ruled:** Q2 (a), the dig fells the tree as a cut does and its logs fall. Q3: keep a SHORT seat pass
-  (AC 12).
+- **Q1 (b), and the miner does it himself, #180 FOLDED IN.** Wolf: "miner seems to be lazy so would be nice
+  if miner would first move stone because he is the nearest one and then continue digging anyway in any
+  case", and: "no need to carry the stone to stockpile but move it aside .. then hauler can pick it up and
+  move it to stockpile". So a stone in a miner's way is moved by **that miner**, as a visible lift-carry-set-down step of his
+  own job, and then he digs. This covers a stone on a channel target (Q1) AND a stone that blocks his dig
+  face, e.g. in a one-wide tunnel (#180), which today waits for a hauler, and with no pile stops for good.
+  See D6. The creation prototype's Q1(b) moved the stone in the cut's own tick (no walk), so its 24 of 24
+  and wire numbers are evidence for the RULE, not for this mechanism: re-measure.
+- **Q2 (a):** the dig fells the tree as a cut does and its logs fall.
+- **Q3:** keep a SHORT seat pass (AC 12).
+
+The options as offered at creation, kept for the record:
 
 - **Q1, an item lying on a channel's target.** (a) It falls into the opened step like any item. Simplest,
   but it blocks the way down until hauled (the trap 12.10b's "block lands up top" ruling avoided):
@@ -93,6 +103,16 @@ throwaway rule; never ship either).
 - **D4:** a dig mark is refused on the cell under an emitter's tile (12.10b D3's twin), and the gui preview
   mirrors it.
 - **D5:** gui debris whose floor is emptied is removed (Task 6). Client-local, no wire.
+- **D6 (the miner clears his way, Q1 + #180):** a miner holding a dig or channel job whose way is blocked by
+  an uncarried item (one lies on his channel's target, or every work position of his job is blocked by
+  items) lifts the nearest such item (`WORK_TICKS`, like a pick-up), carries it to the nearest free cell by
+  the 12.9/12.10b drop rule from where he stands (never in the target's column, never a work position of his
+  job, never below him, no dwarf on it, walls no dwarf in), sets it down (`WORK_TICKS`), and goes back to
+  the same job. It is a step of HIS job: no haul job is claimed, his trade does not change (AD-12), and no
+  pile is needed; the pile stays the hauler's, who later hauls the stone from where it was set aside. A
+  hauler already holding that item's haul job is not waited for: when the miner lifts it, that hauler lets go
+  (`release_claim`, carrying nothing), and the haul job is claimed again once the stone is down (AC 3). One
+  owner per item at a time.
 
 ## Acceptance Criteria
 
@@ -104,7 +124,9 @@ throwaway rule; never ship either).
    FR50).
 3. A fallen item with a haul job is delivered to the pile by a hauler (the job follows the item's live
    position); no fallen item's haul job retries forever.
-4. An item lying on a channel's target ends where Task 0 Q1 rules, never floating over the opened cell.
+4. An item lying on a channel's target is carried off it by the channel's own miner before he cuts (the
+   wire shows him `carrying` it while holding the channel), and it never floats and never lands in the
+   opened step (D6).
 5. A dug-out tree ground cell leaves no trunk base over air at the end of the tick, by the rule Task 0 Q2
    rules, and the story records the rule in the spine.
 6. Over every sweep in this story, at the end of every tick every dwarf is on a standable cell or falling
@@ -117,17 +139,20 @@ throwaway rule; never ship either).
 10. In the gui, no dig debris remains over a cell that has been emptied under it (D5).
 11. `floats_wire.py` prints `FLOATS OK` on 5 of 5 fresh daemons, `way_down_wire.py` prints `WAY DOWN OK`
     on 5 of 5, and each mutation row of Task 7 turns its named test, or the wire, RED.
-12. *(Task 0 Q3)* At the seat, Wolf channels a two-wide staircase 3 levels down and digs out the ground
-    under one tree, and sees nothing hanging: no block, no tree and no debris, in the gui and in an attached
-    tui.
-13. #135 closes with its red-then-green tests.
+12. *(Task 0 Q3, short)* At the seat, Wolf channels a two-wide staircase 3 levels down, digs out the ground
+    under one tree, and digs a one-wide tunnel 4 long with no pile. He sees nothing hanging (no block, no
+    tree, no debris) and the miner carrying stones out of his own way, in the gui and an attached tui.
+13. #135 and #180 close with their red-then-green tests.
+14. With no stockpile, a miner digs a one-wide tunnel of 4 marks into rock to the end: each stone that
+    blocks his next face is carried off by him, and no hauler is involved (D6, #180). RED today: he stops at
+    the first stone (`lib.rs:1142-1143`).
 
 ## Tasks / Subtasks
 
 - [ ] **Task 1: RED tests first** (AC 1)
   - [ ] `crates/sim-core/tests/scenario.rs` (UPDATE), from the probe's tests: the channel-under-a-block case
     (AC 3, 4), the dig-under-an-item case (AC 2), the hillside tree dig (AC 5; DEFAULT_SEED `[103,2,8]` or the
-    nearest such tree to the camp), and a float counter added to
+    nearest such tree to the camp), the one-wide tunnel with no pile (AC 14), and a float counter added to
     `a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay` (`scenario.rs:3441`) that
     asserts 0 floating items and the AC 6 dwarf rule every tick (AC 9). Items placed off the natural flow go
     in through `to_save`/`from_save` (`SaveState.items`, `save.rs:25`), as the probe does.
@@ -147,13 +172,26 @@ throwaway rule; never ship either).
     (`lib.rs:3416`), which pins the old behaviour; disclose it.
   - [ ] Fixtures that say "items never fall" (`scenario.rs:1120-1121`, `simd/tests/serve.rs:2155-2158`):
     fix the comment, keep the fixture.
-- [ ] **Task 3: the channel's lying item, by Q1** (AC 4, 9)
-  - [ ] If (b): in the channel arm (`lib.rs:1833-1899`), after the block's landing, find a landing for each
-    uncarried item on `job.target` by the same rule and refusals, with the block's cell taken. If any finds
-    none, undo and retry with the rest (the existing `undo` path). Move them only once every landing is found.
-  - [ ] The judge is AC 9: the staircase sweep 24 of 24 with 0 floats, and the one-wide sweep. Then the cage
-    sweep: name the mechanism of each newly frozen run from a dump (as 12.10b Task 4 did) before you re-pin
-    `ONE_LEVEL_ISLANDS` (`scenario.rs:2951`). If one is a dwarf caged by a moved item, fix it, don't pin it.
+- [ ] **Task 3: the miner clears his way (D6; Q1, #180)** (AC 4, 9, 14)
+  - [ ] Make a blocked dig/channel job claimable and workable by its miner: today a job whose every work
+    position holds an item has an EMPTY work set (`work_positions`, `lib.rs:1144-1147`, `:1155-1162`), so
+    `claim_jobs` never claims it (reachability is checked at claim, `:479-620`). The blocking items' lift
+    cells must count, and a channel's target item must be lifted before the cut. Decide where the trigger
+    lives, and say so in a `// NOTE:`; no trade or claim-filter change (AD-12).
+  - [ ] The lift, walk and set-down reuse the haul's mechanics (`Carrying`, `WORK_TICKS` per lift and
+    set-down, `carry_items`), with the D6 landing rule. After the set-down the miner goes back to the same
+    job; a channel then cuts with its target clear, so 12.10b's landing code is unchanged.
+  - [ ] Every place that assumes "a dwarf carries only the stone of the haul job he holds" now also allows a
+    miner holding a dig/channel job: the `debug_assert` in `work_positions` (`lib.rs:1165-1168`),
+    `release_claim` (`:1257`, a cleared stone a released miner holds is dropped by its rule), and **simd's
+    save validation** (`simd/src/main.rs:568-577`, which today refuses such a save). A save taken mid-clear
+    loads and finishes the clear (standing AC 3's save/load gate).
+  - [ ] A hauler holding the lifted item's haul job lets go when the miner lifts it (D6); pin that the item
+    is later delivered to the pile (AC 3) and that no item ever has two holders.
+  - [ ] The judge is AC 9 and AC 14: the staircase sweep 24 of 24 with 0 floats, the one-wide sweep, and the
+    no-pile tunnel. Then the cage sweep: name the mechanism of each newly frozen run from a dump (as 12.10b
+    Task 4 did) before you re-pin `ONE_LEVEL_ISLANDS` (`scenario.rs:2951`). If one is a dwarf caged by a
+    moved item, fix it, don't pin it.
 - [ ] **Task 4: trees, by Q2** (AC 5)
   - [ ] If (a): extract the Cut arm's felling (`lib.rs:1753-1771`) into one helper. The Dig arm calls it
     when the cell above a completed dig target is `TreeTrunk`. The logs then fall by Task 2 in the same tick.
@@ -176,13 +214,15 @@ throwaway rule; never ship either).
     in a scratch worktree build and paste the `FLOATS RED` block (the creation RED was on `main`).
   - [ ] NEW `mutations/12-11.sh`, each row run alone after commit and named against its killing test: the
     fall removed (AC 2); a landing on an emitter allowed (AC 2, FR50); a landing on a dwarf allowed (AC 2);
-    "never higher" dropped (AC 2); the Q1 rule reverted (AC 4/9); the Q2 rule reverted (AC 5); the D4 filter
+    "never higher" dropped (AC 2); the miner waits instead of clearing (AC 4, 14); the set-down allowed in
+    the target's column (AC 4); the Q2 rule reverted (AC 5); the D4 filter
     dropped (AC 8); the chip despawn dropped (AC 10). Re-point any old row your NOTE edits break
     (`scripts/audit-mutations.py`).
 - [ ] **Task 8: seat card** (AC 12, if Q3 keeps it)
   - [ ] NEW `12-11-signoff/vehicle-card.md`, in the seat's launch form (12.10b's card is the template):
     the staircase at `[61..65, 62..63, 9]` with a BIG pile, and the tree at `[67,53,12]` (dig its ground
-    `[67,53,11]`, workable from its own level). Note the compass mirror (#169).
+    `[67,53,11]`, workable from its own level), and a one-wide tunnel 4 long with NO pile (give the cells).
+    Note the compass mirror (#169).
 - [ ] **Task 9: spine and gate**
   - [ ] `ARCHITECTURE-SPINE.md` (2026-08-09, beside its 12.10/12.10b bullets): one bullet for the fall rule, Q1 and Q2 as ruled.
   - [ ] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
@@ -192,9 +232,10 @@ throwaway rule; never ship either).
 ### Scope guardrails (do NOT)
 
 - No cave-ins, and no falling terrain of any kind (AC 7). Emitters never fall (D4 prevents the case).
-- No wire, protocol, bridge, tui or client-core change; no new saved state; no new command or key.
+- No wire, protocol, bridge, tui or client-core change; no new saved field; no new command or key.
 - No fall animation in the gui; items keep snapping to their wire position.
-- No change to the channel rule, the dig rule, the cut rule or the pile fill order beyond Q1, Q2 and D4.
+- No change to the channel rule, the dig rule, the cut rule or the pile fill order beyond Q1, Q2, D4, D6.
+- The miner never carries to the pile, never claims a haul job and never changes trade (D6).
 - No swap (12.9 Task 0 Q1b). #186, #187, #189, #199 stay where they are.
 
 ### What already exists (build on it)
@@ -210,7 +251,8 @@ throwaway rule; never ship either).
 ### Key decisions & traps
 
 1. **Gravity alone breaks the way down.** A block that falls into the step blocks the staircase (17 of 24).
-   Q1 exists for this; read the creation numbers before choosing differently.
+   Q1 exists for this. The prototype's 24 of 24 moved the stone without a walk; D6's walk changes timing,
+   so the sweeps are the judge, not the creation numbers.
 2. **`nearest_free_cell` checks `from` first and climbs ramps.** Your `refused` must reject a blocked
    `from` and any cell above the start, or a fallen stone walks back up to the rim (the prototype's dig
    probe landed it at `[62,62,9]`, the level it fell from).
@@ -221,17 +263,20 @@ throwaway rule; never ship either).
    and fall the same way.
 5. **The cage sweep's 5 new freezes are unexplained.** A changed landing changes every later trajectory
    (12.9's sweep is chaotic in this sense), but "unexplained" is not "harmless". Dump before you pin.
-6. **Old mutation anchors.** Rewording the NOTEs at `lib.rs:1189`, `:1941`, `:1951` may break old rows;
+6. **The gui swing.** `dwarf_clip` (`gui/src/project.rs:464-479`) plays the Dig swing for a miner in
+   `Work` on a Dig/Channel job, carrying or not, so his 5-tick lift and set-down read as a swing; the walk
+   between reads as Carry. Check it at the seat; change the clip choice only if Wolf asks.
+7. **Old mutation anchors.** Rewording the NOTEs at `lib.rs:1189`, `:1941`, `:1951` may break old rows;
    `audit-mutations.py` blocks the commit until they are re-pointed.
 
 ### Project Structure Notes
 
 - UPDATE `crates/sim-core/src/lib.rs`, `crates/sim-core/tests/scenario.rs`
 - UPDATE `crates/gui/src/project.rs` (`sim_will_keep`, chip despawn), `crates/gui/tests/headless.rs`
-- UPDATE `crates/simd/tests/serve.rs` (comment only), `ARCHITECTURE-SPINE.md` (2026-08-09), old mutation tables per Task 7
+- UPDATE `crates/simd/src/main.rs` (save validation, Task 3), `crates/simd/tests/serve.rs` (comment), `ARCHITECTURE-SPINE.md` (2026-08-09), old mutation tables per Task 7
 - NEW `mutations/12-11.sh`, `12-11-signoff/vehicle-card.md` (if Q3)
 - EXISTING (creation) `12-11-signoff/floats_wire.py`, `12-11-signoff/creation-prototype.patch`
-- `protocol`, `tui`, `client-core`, `simd/src`: no change.
+- `protocol`, `tui`, `client-core`, `simd/src/bridge.rs`: no change.
 
 ### Previous story intelligence
 
@@ -245,7 +290,7 @@ throwaway rule; never ship either).
 ### References
 
 - `epics.md:2729-2755` (Story 12.11), `:2422-2434` (standing ACs), FR50/FR52 (`epics.md:122-124`); #135,
-  #154; `deferred-work.md:2649-2651, 2664`
+  #180, #154; `deferred-work.md:2649-2651, 2664`
 - `lib.rs:1164-1200` (`work_positions`), `:1232-1316` (drop search, `release_claim`), `:1753-1775` (cut),
   `:1778-1906` (dig, channel), `:1909-1952` (`settle`), `:2519-2549` (designation filters), `:3416`
 - `scenario.rs:2933-3080` (cage sweep), `:3441` (staircase sweep), `:3526` (one-wide sweep), `:1101`
@@ -292,4 +337,5 @@ python3 _bmad-output/implementation-artifacts/12-11-signoff/floats_wire.py 7461 
 
 | Date | Change |
 |---|---|
+| 2026-10-15 | Task 0 RULED (Wolf): Q1 (b) done BY THE MINER, who moves the stone aside himself and goes on digging, never to the pile; #180 folded in (D6, AC 14, Task 3 rewritten). Q2 (a). Q3 short seat. Traps found: simd's save validation refuses a carrying miner; the gui plays the dig swing for his lift. |
 | 2026-10-15 | Created on `56bfbe5`. #135 reproduced: the 12.10b staircase leaves 4-10 floating blocks in 24 of 24 sweep runs; a channel under a block and a dig under a lying stone hang it with its haul retried forever; digging a tree's ground leaves the trunk on air (92 of 259 trees are exposed). Dwarves never stay on air. `floats_wire.py` written: RED 3 of 3 on main, OK 3 of 3 on a throwaway prototype. Pure gravity regresses 12.10b (staircase 17 of 24), so Task 0 Q1 is open. Defaults D1-D5. |
