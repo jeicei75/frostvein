@@ -3467,6 +3467,43 @@ fn a_fallen_stone_never_lands_on_a_dwarf() {
     assert_eq!(stone.z, site.z, "the stone did not rest beside the shaft");
 }
 
+// AC 2 / FR50: a fallen stone never rests on an emitter's tile. A stone over the campfire falls
+// onto the fire's own (standable) cell unless the landing refuses it, so it must rest beside the
+// fire, on the fire's level.
+#[test]
+fn a_fallen_stone_never_lands_on_an_emitters_tile() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let fire = world
+        .emitters()
+        .into_iter()
+        .find(|(_, _, kind)| *kind == sim_core::LightKind::Campfire)
+        .unwrap()
+        .1;
+    let above = Pos {
+        z: fire.z + 1,
+        ..fire
+    };
+    assert_eq!(world.tile(above), Some(Tile::Empty), "air over the fire");
+    assert!(is_standable(&world, fire), "the fire's cell is a landing");
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, above, ItemKind::Stone));
+    let mut world = World::from_save(save);
+    world.step();
+    let stone = world
+        .items()
+        .into_iter()
+        .find(|(item, _)| item.0 == id)
+        .unwrap()
+        .1;
+    assert_ne!(stone, fire, "the stone landed on the campfire's tile");
+    assert_eq!(
+        stone.z, fire.z,
+        "the stone did not come down beside the fire"
+    );
+}
+
 // AC 2: a fallen stone never comes to rest higher than the cell it fell from. Both cells the stone
 // could use at its own level are held by dwarves who cannot leave, and the only free standable
 // cell reachable is one level ABOVE the site, up a ramp step: the stone stays where it is.

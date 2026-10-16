@@ -19,7 +19,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        if true {\n            continue;\n        }\n'))
 PY
 
-mutation "2 a fall may land on an emitter's tile (AC 2, FR50)" sim-core a_loose_stone_falls_to_standable_ground_in_one_tick <<'PY'
+mutation "2 a fall may land on an emitter's tile (AC 2, FR50)" sim-core a_fallen_stone_never_lands_on_an_emitters_tile <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        let mut blocked = world_blocked(ecs);\n        blocked.remove(&from);\n'
