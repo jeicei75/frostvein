@@ -1800,6 +1800,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                             && (side == pos || !occupied.contains(&side))
                     })
                 };
+                // NOTE: a marked cell is refused too (the own target included): a stone set down on a
+                // mark is lifted again or drops into its step, and without this the cage sweep
+                // freezes eight runs, not five.
                 let refused = |cell: Pos| {
                     (cell.x, cell.y) == (job.target.x, job.target.y)
                         || cell.z < pos.z

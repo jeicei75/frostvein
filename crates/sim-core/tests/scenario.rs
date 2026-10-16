@@ -3426,6 +3426,148 @@ fn a_loose_stone_falls_to_standable_ground_in_one_tick() {
     );
 }
 
+/// A one-cell shaft under the staircase site: its floor is a ramp, so a dwarf at the bottom can
+/// step up onto the level-9 cells around the site. Returns (site, shaft bottom).
+fn shaft_under_the_site(world: &mut World) -> (Pos, Pos) {
+    let site = staircase_site(world);
+    let bottom = cell(site, 0, -1);
+    assert!(world.set_tile(bottom, Tile::Empty));
+    assert!(world.set_tile(cell(site, 0, -2), Tile::Ramp(Material::Stone)));
+    (site, bottom)
+}
+
+// AC 2: a fallen stone never rests on a dwarf's tile. A dwarf who cannot leave the shaft bottom
+// holds the landing, so the stone must come to rest beside it, on the site's own level.
+#[test]
+fn a_fallen_stone_never_lands_on_a_dwarf() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let (site, bottom) = shaft_under_the_site(&mut world);
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    save.dwarves[0].pos = bottom;
+    let mut world = World::from_save(save);
+    world.step();
+    assert_eq!(world.dwarves()[0].1, bottom, "the dwarf left the landing");
+    let stone = world
+        .items()
+        .into_iter()
+        .find(|(item, _)| item.0 == id)
+        .unwrap()
+        .1;
+    assert!(
+        world.dwarves().iter().all(|(_, pos, ..)| *pos != stone),
+        "the stone landed on a dwarf at {stone:?}"
+    );
+    assert_eq!(stone.z, site.z, "the stone did not rest beside the shaft");
+}
+
+// AC 2: a fallen stone never comes to rest higher than the cell it fell from. Both cells the stone
+// could use at its own level are held by dwarves who cannot leave, and the only free standable
+// cell reachable is one level ABOVE the site, up a ramp step: the stone stays where it is.
+#[test]
+fn a_fallen_stone_never_lands_above_where_it_started() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let (site, bottom) = shaft_under_the_site(&mut world);
+    let beside = cell(site, 1, 0);
+    assert!(world.set_tile(cell(site, 1, -1), Tile::Ramp(Material::Stone)));
+    for wall in [
+        cell(site, -1, 0),
+        Pos {
+            y: site.y - 1,
+            ..site
+        },
+        Pos {
+            y: site.y + 1,
+            ..site
+        },
+        Pos {
+            y: site.y - 1,
+            ..beside
+        },
+        Pos {
+            y: site.y + 1,
+            ..beside
+        },
+        cell(site, 2, 0),
+    ] {
+        assert!(world.set_tile(wall, Tile::Solid(Material::Stone)));
+    }
+    let rim = cell(site, 2, 1);
+    assert!(is_standable(&world, rim), "the cell above the wall is free");
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    save.dwarves[0].pos = bottom;
+    save.dwarves[1].pos = beside;
+    let mut world = World::from_save(save);
+    world.step();
+    assert_eq!(world.dwarves()[0].1, bottom);
+    assert_eq!(world.dwarves()[1].1, beside);
+    let stone = world
+        .items()
+        .into_iter()
+        .find(|(item, _)| item.0 == id)
+        .unwrap()
+        .1;
+    assert!(
+        stone.z <= site.z,
+        "the stone came to rest above where it started: {stone:?}"
+    );
+}
+
+// AC 4 / D6: the miner never sets the stone down in his target's column. His only work cell is east
+// of the target and the cell nearest to him, once he lifts the stone, is the target itself.
+#[test]
+fn a_clearing_miner_never_sets_the_stone_down_in_the_target_column() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    for wall in [
+        cell(site, -1, 0),
+        Pos {
+            y: site.y - 1,
+            ..site
+        },
+        Pos {
+            y: site.y + 1,
+            ..site
+        },
+    ] {
+        assert!(world.set_tile(wall, Tile::Solid(Material::Stone)));
+    }
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    let mut world = World::from_save(save);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(site, site),
+    });
+    let in_column = |world: &World| {
+        world
+            .items()
+            .into_iter()
+            .any(|(item, pos)| item.0 == id && (pos.x, pos.y) == (site.x, site.y))
+    };
+    let mut lifted = false;
+    for _ in 0..2_500 {
+        world.step();
+        lifted |= world.carrying().iter().any(|(_, item)| *item == Some(id));
+        if lifted && world.designations().is_empty() {
+            break;
+        }
+    }
+    assert!(lifted, "the miner never lifted the stone");
+    assert!(
+        world.designations().is_empty(),
+        "the channel never completed"
+    );
+    assert!(!in_column(&world), "the stone is in the target's column");
+}
+
 #[test]
 fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
