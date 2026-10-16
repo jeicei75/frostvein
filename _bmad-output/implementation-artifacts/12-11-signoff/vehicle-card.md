@@ -89,14 +89,17 @@ hauler and no pile?
 and NOT swing his pick, in the gui? (The tui draws no job, so in the tui check only that no stone
 hangs and the tunnel finishes.)
 
-Measured on the build before review (a fresh daemon, these cells, no pile, `fast4x`): all four marks
-dug by tick 757, the miner reported as `haul` while carrying.
+Measured on `86d60f4` (a fresh daemon, these cells, no pile, `fast4x`): all four marks dug by tick
+713, the miner reported as `haul` while carrying, and no stone ever landed more than a cell from him.
 
 ## Known, by design (not defects)
 
 - **Terrain never falls.** A block of rock over an empty cell stays (no cave-ins).
 - **The miner never takes a stone to the pile.** He sets it aside; with a pile, a hauler collects it
   later.
+- **In a crowded pit a miner may carry a stone up the stairs to the rim** when no nearer cell is free.
+  He walks it there; a stone never jumps more than a cell from the dwarf carrying it (your
+  "throwing stones" finding, fixed after the first sitting).
 - **Miners stay at the bottom of the staircase** (#186) once the last row is worked.
 - A dig mark is refused on the cell under the campfire or a torch, and the gui preview does not light
   it. A channel mark is refused on the campfire or a torch, and below z 2.

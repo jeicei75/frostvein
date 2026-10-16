@@ -418,6 +418,74 @@ mutation tables still apply ok  9s
 GATE GREEN  3689s
 ```
 
+Seat finding (Wolf, 2026-10-16, after the gate above): "miners are throwing stones quite wildly".
+A probe of the seat card's staircase (pile placed, delays 0, 3, 7, 12) on `3d9488b` found 1-3 stones per
+run moved 4-5 cells and 2-3 levels UP in ONE tick, from the pit floor onto the rim, the miner still in
+the pit. Mechanism (instrumented): the miner lifted, the next tick his set-down search found a cell
+(usually on the rim) but no route to its side, because the route was CLOSED TO THE OTHER DWARVES in the
+pit (207 of 251 failures: "from None", a route existed ignoring dwarves); he retried, and
+`release_claim` dropped the stone on the nearest free cell at ANY distance. A second cause: a kept
+landing was never re-searched once a stone closed its only side. No test caught it: every test read
+where stones end up, none how far one moves in a tick.
+
+Wolf ruled (AskUserQuestion) "Both guards", then, told the two causes fix it alone and that no sweep
+reaches the guards, "Fixes + all three guards", each with its own fixture:
+- Cause 1: the set-down route runs through the crew, as every job walk does (`clearing_set_down`).
+- Cause 2: a kept landing with no reachable side is searched again.
+- Guard 1: he lifts only with a set-down (else the job retries, the stone stays).
+- Guard 2: a clearing miner lets go only beside himself (`astar_neighbours`), else on his own tile.
+- Guard 3: a miner holding his stone whose set-down is taken waits and looks again, not retry. Guard 1
+  plus guard 2 alone stalled delays 7 and 12 and caged seed 13 (a stone dropped under the miner, the
+  12.9 rule); guard 3 alone held seed 13's miner still for good until cause 2 was fixed.
+- The set-down search moved into one helper, `clearing_set_down`, used before the lift and while carrying.
+
+Tests (`86d60f4`): NEW `a_carried_stone_is_always_set_down_beside_its_carrier` (the staircase, 24 delays,
+every carrier, every tick): RED on `3d9488b` from delay 0, GREEN on main `56bfbe5` and on the fix. Its
+first version left its record stale over the designation delays and so blamed haulers for jumps they
+never made (corrected in `86d60f4`; haulers set stones down beside them on main too). NEW, one per guard,
+in a walled corridor (`walled_clearing`): `a_miner_with_nowhere_to_set_a_stone_down_never_lifts_it`,
+`a_miner_who_lets_go_mid_clear_sets_the_stone_down_beside_him` (his trade changes while he carries; the
+old drop landed it 3 cells off), `a_miner_whose_set_down_side_is_taken_keeps_the_stone` (a save reloaded
+with a hauler on his only set-down side).
+
+Cage sweep re-pinned (each new run read by dump): ONE_LEVEL_ISLANDS `[(10,6,0),(12,4,1),(12,4,4),(12,6,3)]`
+(was five: (8,4,4) and (16,6,3) are freed; (12,6,3) is new, idle at [64,69,10] with no item beside him,
+his one free side 4 cells from his home, past WANDER_RADIUS: the #186 shape). UNFINISHED
+`[(6,6,2),(11,6,1)]` (was three); run to 16,000 ticks they finish at t4,080 and t4,100, slow not stuck.
+
+```text
+mutations/12-11.sh, 21 rows, env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh, after commit, alone:
+every row KILLED. New: 13 route closed to dwarves (two-wide staircase sweep), 14 a stale landing kept
+(cage sweep), 15 lift with nowhere to go, 16 let-go at any distance, 17 give up when the set-down is
+taken (each its own fixture, each read on its own assertion). Rows 7 and 7b re-pointed (the clauses
+moved into `clearing_set_down`, 12 spaces shallower).
+
+Wire on 86d60f4 (release, scratch worktree, fresh daemon each, at most 4 at a time):
+floats_wire.py 5 of 5 FLOATS OK (level 3 at tick 2714, 0 floated, 22 of 32 on the pile)
+way_down_wire.py 5 of 5 WAY DOWN OK (level 3 at tick 2192, deepest z 5, back up at tick 1388)
+(the first 7481 run printed FLOATS BROKEN: no site; its daemon could not bind, the port held by an orphan
+dev-phase `simd-nofall` daemon, so the script read that old world. Twelve orphan dev-phase daemons
+stopped; re-run on the new build: FLOATS OK.)
+Seat card sitting B (tunnel, no pile): marks dug by ticks 318, 457, 552, 713; a miner read `haul` while
+carrying in 78 deltas; the farthest a carried stone landed from its carrier: 1 cell.
+```
+
+Full gate on `86d60f4`, `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/gate.sh`:
+
+```
+cargo fmt --check           ok  0s
+cargo clippy -D warnings    ok  3s
+cargo test                  ok  616s
+cargo test (pixel guards)   ok  3243s
+tui has no sim-core edge                ok
+client-core has no sim-core edge        ok
+gui has no sim-core edge                ok
+metrics ledger tests        ok  1s
+bench tests                 ok  20s
+mutation tables still apply ok  9s
+GATE GREEN  3901s
+```
+
 ### Completion Notes List
 
 - Task 2: uncarried items fall after dwarves in ascending id order, to the nearest free cell from the column's first standable cell, never above the cell they fell from. The channel's dwarf landing check and item gravity share `first_standable_down_column`. The old unit test `a_stone_on_unstandable_ground_leaves_its_haul_job_queued_and_retried` is flipped to `a_stone_on_unstandable_ground_falls_while_its_haul_job_remains` (the premise "items never fall" is gone).
@@ -428,6 +496,7 @@ GATE GREEN  3689s
 - The first pre-commit attempt failed only under `NO_COLOR=1`: `ore_cells_and_ore_items_reach_the_capture_in_their_own_glyph_and_colour` expected ANSI escapes. It passed unchanged with `NO_COLOR` unset; every commit hook ran with `env -u NO_COLOR RUST_TEST_THREADS=1`.
 - Commits: Tasks 2, 3 and 4 are ONE commit (`6e4f9ea`): their `lib.rs` hunks interleave (the fall rule, the clearing step and `fell_tree` share `settle`, `execute_jobs` and `release_claim`). The mid-run attempt to split them was impractical because the fast gate runs `a_busy_crew_...` and the cage sweep on the working tree. No `--no-verify` anywhere.
 - `serve.rs` is NOT in the fast gate; the whole file (73 tests) was run by hand with `RUST_TEST_THREADS=2` and passed, then the two tests added afterwards were run alone.
+- Seat fix (Wolf's finding, after the first green gate): a clearing miner's set-down route runs through the crew and a stale kept landing is searched again (the two causes); he lifts only with a set-down, lets go only beside himself, and waits while holding when his set-down is taken (Wolf's guards). See the Debug Log's seat-finding entry.
 
 ### File List
 
@@ -448,6 +517,8 @@ GATE GREEN  3689s
 
 | Date | Change |
 |---|---|
+| 2026-10-16 | Orchestrator: full gate GREEN on `86d60f4` (3901 s, one test thread). Status -> review. |
+| 2026-10-16 | Seat finding (Wolf): miners threw stones up to five cells onto the pit rim. Two causes fixed (the set-down route closed to the crew, a stale kept landing) plus Wolf's three guards, each pinned; new no-throw test RED before, GREEN on main and the fix; cage pins moved; 21/21 mutations KILLED; wire 5/5 + 5/5 OK. Status back to in-progress until the gate. |
 | 2026-10-16 | Orchestrator: full gate GREEN on `40195d5` (3689 s, one test thread). Status -> review. |
 | 2026-10-16 | Orchestrator: Task 7 (16-row mutation table, all KILLED after a new emitter-landing test closed row 2; wire 5/5 FLOATS OK, 5/5 WAY DOWN OK, deliberate FLOATS RED), Task 8 (seat card rewritten, tunnel cells found and checked live), spine bullet. Wolf ruled the seed-12 pin stays (closed by a cut, #186). |
 | 2026-10-16 | Wolf ruled: `closes_last_level_exit` kept everywhere as built (fall landing, clearing set-down, released carrier's drop, hauler pile drop); the pile-drop site can change which pile cell a hauler fills. |
