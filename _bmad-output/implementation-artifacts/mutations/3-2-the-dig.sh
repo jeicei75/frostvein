@@ -14,6 +14,10 @@ old = '''                        _ => positions()
                                         terrain.tile(*pos),
                                         Some(Tile::Solid(_) | Tile::Ramp(_))
                                     ) && !is_tree(*pos)
+                                        && !emitter_tiles.contains(&Pos {
+                                            z: pos.z + 1,
+                                            ..*pos
+                                        })
                                 }
                                 DesignationKind::Channel => {
                                     terrain.is_standable(*pos)

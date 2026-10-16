@@ -2540,6 +2540,10 @@ impl World {
                                         terrain.tile(*pos),
                                         Some(Tile::Solid(_) | Tile::Ramp(_))
                                     ) && !is_tree(*pos)
+                                        && !emitter_tiles.contains(&Pos {
+                                            z: pos.z + 1,
+                                            ..*pos
+                                        })
                                 }
                                 DesignationKind::Channel => {
                                     terrain.is_standable(*pos)
@@ -3787,15 +3791,26 @@ mod tests {
         assert_eq!(world.zones().len(), 8);
         assert!(!world.zones().contains(&fire));
 
+        // The ground below the fire is no longer diggable; use adjacent rock for the unrelated
+        // designate/cancel check.
+        let dig_rock = Pos {
+            x: rock.x + 1,
+            ..rock
+        };
+        assert!(world.set_tile(dig_rock, Tile::Solid(Material::Stone)));
+        let dig_rect = super::Rect {
+            min: dig_rock,
+            max: dig_rock,
+        };
         assert_eq!(
             world.apply_command(SimCommand::Designate {
                 kind: DesignationKind::Dig,
-                rect: rock_rect
+                rect: dig_rect
             }),
             None
         );
         assert_eq!(
-            world.apply_command(SimCommand::CancelDesignation { rect: rock_rect }),
+            world.apply_command(SimCommand::CancelDesignation { rect: dig_rect }),
             None
         );
         assert_eq!(
@@ -5282,6 +5297,41 @@ mod tests {
         // A rect over both keeps the cell beside the fire and drops the fire's.
         let rect = super::Rect {
             min: fire,
+            max: beside,
+        };
+        assert_eq!(
+            world.apply_command(super::SimCommand::Designate { kind, rect }),
+            None
+        );
+        assert_eq!(world.designations(), vec![(beside, kind)]);
+    }
+
+    #[test]
+    fn a_dig_mark_is_refused_beneath_an_emitter_only() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (_, fire, _) = world.emitters()[0];
+        let under = Pos {
+            z: fire.z - 1,
+            ..fire
+        };
+        let beside = Pos {
+            x: under.x + 1,
+            ..under
+        };
+        for cell in [under, beside] {
+            assert!(world.set_tile(cell, Tile::Solid(Material::Stone)));
+        }
+        let kind = super::DesignationKind::Dig;
+        let rect = super::Rect {
+            min: under,
+            max: under,
+        };
+        assert_eq!(
+            world.apply_command(super::SimCommand::Designate { kind, rect }),
+            Some(super::Refusal::Designate { kind, rect })
+        );
+        let rect = super::Rect {
+            min: under,
             max: beside,
         };
         assert_eq!(
