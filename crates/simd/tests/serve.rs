@@ -2929,3 +2929,149 @@ fn the_default_world_holds_tetrahedrite_and_bloodstone_on_the_wire() {
         "the default world holds {tetrahedrite} tetrahedrite and {bloodstone} bloodstone cells"
     );
 }
+
+/// 12.11 D7, judged on the deltas the daemon really sent: with one miner and two channel marks, a
+/// stone lying on the second, he reads `channel` on the first, then `haul` (profession still
+/// `miner`, the stone in `carrying`) from the lift to the set-down, then `channel` on the second.
+/// Every stretch must be seen, in that order, or the test fails.
+#[test]
+fn a_clearing_miner_reads_haul_on_the_wire_and_his_own_job_before_and_after() {
+    let daemon = Daemon::spawn();
+    let mut state =
+        sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT).to_save();
+    // One miner: dwarf 4 becomes a hauler, so dwarf 2 takes both marks, the nearer one first.
+    state.dwarves[4].profession = sim_core::Profession::Hauler;
+    let (first, second) = ([61, 62, 9], [62, 62, 9]);
+    let stone = state.next_id;
+    state.next_id += 1;
+    state.items.push((
+        stone,
+        sim_core::Pos {
+            x: second[0],
+            y: second[1],
+            z: second[2],
+        },
+        sim_core::ItemKind::Stone,
+    ));
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode stone save"),
+    )
+    .expect("write stone save");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let _ = read_snapshot_after_load(&mut reader);
+    send_literal(
+        &mut writer,
+        br#"{"type":"designate","kind":"channel","rect":{"min":[61,62,9],"max":[62,62,9]}}
+"#,
+    );
+    send_speed(&mut writer, protocol::Speed::Fast4x);
+
+    let (mut before, mut during, mut after) = (false, false, false);
+    for _ in 0..2000 {
+        let delta = read_delta(&mut reader);
+        for dwarf in delta
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        {
+            match dwarf.job {
+                Some(protocol::DwarfJob::Channel { target }) if target == first => before = true,
+                Some(protocol::DwarfJob::Channel { target }) if target == second => {
+                    after |= during;
+                }
+                Some(protocol::DwarfJob::Haul) if before && dwarf.carrying == Some(stone) => {
+                    assert_eq!(
+                        dwarf.profession,
+                        Some(protocol::Profession::Miner),
+                        "tick {}: the clearing dwarf is not a miner",
+                        delta.tick
+                    );
+                    during = true;
+                }
+                _ => {}
+            }
+        }
+        if before && during && after {
+            return;
+        }
+    }
+    panic!("channel first {before}, haul while carrying {during}, channel second {after}");
+}
+
+/// 12.11 Task 3: a save taken while a miner carries a stone aside (he still holds his channel job,
+/// and there is no haul job for the stone) loads in the daemon and the clear finishes: the channel
+/// target opens, the miner reads `haul` first and no stone is left on the target.
+#[test]
+fn a_save_taken_mid_clear_loads_and_the_clear_finishes() {
+    let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
+    let site = sim_core::Pos { x: 61, y: 62, z: 9 };
+    let mut state = world.to_save();
+    let stone = state.next_id;
+    state.next_id += 1;
+    state.items.push((stone, site, sim_core::ItemKind::Stone));
+    world = sim_core::World::from_save(state);
+    world.apply_command(sim_core::SimCommand::Designate {
+        kind: sim_core::DesignationKind::Channel,
+        rect: sim_core::Rect {
+            min: site,
+            max: site,
+        },
+    });
+    let mut carrier = None;
+    for _ in 0..500 {
+        world.step();
+        carrier = world
+            .carrying()
+            .into_iter()
+            .find(|(_, item)| *item == Some(stone))
+            .map(|(dwarf, _)| dwarf);
+        if carrier.is_some() {
+            break;
+        }
+    }
+    let carrier = carrier.expect("a miner lifted the stone within 500 ticks");
+    assert!(
+        world.clearing().iter().any(|(dwarf, _)| *dwarf == carrier),
+        "the carrier is clearing"
+    );
+    let state = world.to_save();
+
+    let daemon = Daemon::spawn();
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode mid-clear save"),
+    )
+    .expect("write mid-clear save");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+    assert_eq!(loaded.tick, state.tick, "the mid-clear save did not load");
+    send_speed(&mut writer, protocol::Speed::Fast4x);
+
+    let target = [site.x, site.y, site.z];
+    let (mut hauling, mut opened) = (false, false);
+    for _ in 0..1500 {
+        let delta = read_delta(&mut reader);
+        hauling |= delta.entities.iter().any(|entity| {
+            entity.id == carrier.0
+                && entity.carrying == Some(stone)
+                && entity.job == Some(protocol::DwarfJob::Haul)
+        });
+        opened |= delta.tiles.iter().any(|change| {
+            change.pos == [target[0], target[1], target[2] - 1]
+                && change.tile == protocol::Tile::Empty
+        });
+        if hauling && opened {
+            return;
+        }
+    }
+    panic!("after the load: reads haul {hauling}, channel opened {opened}");
+}

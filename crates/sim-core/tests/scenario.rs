@@ -3468,6 +3468,92 @@ fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
     );
 }
 
+// D6: a hauler already holding the haul job of the stone a miner lifts lets go, so the stone never
+// has two holders; the haul job is claimed again once the stone is down and the stone reaches the
+// pile. On DEFAULT_SEED hauler 3 claims the job at t40 and miner 2 lifts the stone at t50.
+#[test]
+fn a_hauler_holding_the_lifted_stones_job_lets_go_and_the_stone_is_delivered_later() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let site = staircase_site(&world);
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    world = World::from_save(save);
+    let pile = rect(
+        Pos {
+            x: camp.x - 8,
+            y: camp.y + 2,
+            ..camp
+        },
+        Pos {
+            x: camp.x - 6,
+            y: camp.y + 4,
+            ..camp
+        },
+    );
+    assert_eq!(
+        world.apply_command(SimCommand::PlaceStockpile { rect: pile }),
+        None
+    );
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(site, site),
+    });
+    let mut hauler_held_first = false;
+    let mut miner_lifted = false;
+    let mut delivered = false;
+    for _ in 0..3_000 {
+        world.step();
+        let claims = world.claims();
+        let jobs = world.jobs();
+        let haulers: Vec<_> = claims
+            .iter()
+            .filter(|(_, job)| {
+                job.and_then(|job| jobs.iter().find(|candidate| candidate.id == job))
+                    .is_some_and(|job| job.kind == JobKind::Haul { item: id })
+            })
+            .map(|(dwarf, _)| *dwarf)
+            .collect();
+        let carriers: Vec<_> = world
+            .carrying()
+            .into_iter()
+            .filter(|(_, item)| *item == Some(id))
+            .map(|(dwarf, _)| dwarf)
+            .collect();
+        let miner_carries = carriers
+            .iter()
+            .any(|dwarf| world.professions().contains(&(*dwarf, Profession::Miner)));
+        assert!(
+            carriers.len() <= 1
+                && (carriers.is_empty() || haulers.iter().all(|h| carriers.contains(h))),
+            "tick {}: the stone has two holders; haulers {haulers:?}, carriers {carriers:?}",
+            world.tick()
+        );
+        if !miner_lifted && !haulers.is_empty() && carriers.is_empty() {
+            hauler_held_first = true;
+        }
+        miner_lifted |= miner_carries;
+        let at = world
+            .items()
+            .into_iter()
+            .find(|(item, _)| item.0 == id)
+            .unwrap()
+            .1;
+        if miner_lifted && carriers.is_empty() && world.zones().contains(&at) {
+            delivered = true;
+            break;
+        }
+    }
+    assert!(
+        hauler_held_first,
+        "no hauler held the stone's job before the lift"
+    );
+    assert!(miner_lifted, "the miner never lifted the stone");
+    assert!(delivered, "the stone never reached the pile");
+}
+
 #[test]
 fn a_dig_under_a_stone_does_not_leave_it_floating() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
