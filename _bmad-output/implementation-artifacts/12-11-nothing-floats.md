@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10b's creation
 
 # Story 12.11: Nothing Floats
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -221,27 +221,27 @@ The options as offered at creation, kept for the record:
   - [x] In `reconcile`'s dirty-tile loop (`project.rs:2131-2160`): a dirty tile that is now `Empty` also
     despawns the `DigChip`s of the cell above it. Headless test beside `headless.rs:990-1006`: a channel's
     chips, then a channel under them, leaves 0 chips at that cell.
-- [ ] **Task 7: the instrument, its RED and the mutation table** (AC 11)
-  - [ ] `12-11-signoff/floats_wire.py` (EXISTING, creation) is the instrument. Run it on 5 fresh release
+- [x] **Task 7: the instrument, its RED and the mutation table** (AC 11)
+  - [x] `12-11-signoff/floats_wire.py` (EXISTING, creation) is the instrument. Run it on 5 fresh release
     daemons, each started from a directory with no `frostvein.save`, at most 4 at a time. Paste each verdict
     block. Do the same with `12-10b-signoff/way_down_wire.py` (its pile was sized while blocks floated,
     `deferred-work.md:2664`; resize it only if it goes RED for want of pile).
-  - [ ] Deliberate RED of the instrument on the finished branch: rerun it with row "fall removed" applied
+  - [x] Deliberate RED of the instrument on the finished branch: rerun it with row "fall removed" applied
     in a scratch worktree build and paste the `FLOATS RED` block (the creation RED was on `main`).
-  - [ ] NEW `mutations/12-11.sh`, each row run alone after commit and named against its killing test: the
+  - [x] NEW `mutations/12-11.sh`, each row run alone after commit and named against its killing test: the
     fall removed (AC 2); a landing on an emitter allowed (AC 2, FR50); a landing on a dwarf allowed (AC 2);
     "never higher" dropped (AC 2); the miner waits instead of clearing (AC 4, 14); the bridge reports `Dig` while clearing (AC 15); the set-down allowed in
     the target's column (AC 4); the Q2 rule reverted (AC 5); the D4 filter
     dropped (AC 8); the chip despawn dropped (AC 10). Re-point any old row your NOTE edits break
     (`scripts/audit-mutations.py`).
-- [ ] **Task 8: seat card** (AC 12, if Q3 keeps it)
-  - [ ] NEW `12-11-signoff/vehicle-card.md`, in the seat's launch form (12.10b's card is the template):
+- [x] **Task 8: seat card** (AC 12, if Q3 keeps it)
+  - [x] NEW `12-11-signoff/vehicle-card.md`, in the seat's launch form (12.10b's card is the template):
     the staircase at `[61..65, 62..63, 9]` with a BIG pile, and the tree at `[67,53,12]` (dig its ground
     `[67,53,11]`, workable from its own level), and a one-wide tunnel 4 long with NO pile (give the cells).
     Note the compass mirror (#169).
-- [ ] **Task 9: spine and gate**
-  - [ ] `ARCHITECTURE-SPINE.md` (2026-08-09, beside its 12.10/12.10b bullets): one bullet for the fall rule, Q1 and Q2 as ruled.
-  - [ ] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
+- [x] **Task 9: spine and gate**
+  - [x] `ARCHITECTURE-SPINE.md` (2026-08-09, beside its 12.10/12.10b bullets): one bullet for the fall rule, Q1 and Q2 as ruled.
+  - [x] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
 
 ## Dev Notes
 
@@ -346,7 +346,10 @@ python3 _bmad-output/implementation-artifacts/12-11-signoff/floats_wire.py 7461 
 
 ### Agent Model Used
 
-GPT-6 Codex (Tasks 1-3 first pass, cut off by its usage limit); Claude Sonnet 5.5 (Tasks 2-6 finished, committed and checked).
+- Orchestrator + verifier: Claude Opus 5.5 (`claude-opus-5-5`).
+- Codex `gpt-6-sol` / high (run banner), launched from the stale skill-config default WITHOUT asking Wolf which agent to use (the orchestrator's miss). It committed Task 1 (`11b7925`) and wrote a first pass of Tasks 2-8, uncommitted, before its usage limit cut it off; the work was pinned at `refs/wip/12-11-run1`.
+- Agent A (Claude Sonnet 5.5, `claude-sonnet-5-5`), Wolf's usual pick (as in 12.2-12.10b): took the Codex tree over and finished, fixed and committed Tasks 2-6; then the seed-12 fix attempt (reverted, see below).
+- The orchestrator: Task 7 (the mutation table and every mutation run, every wire run, the deliberate RED, the emitter-landing test), Task 8 (seat card rewritten, its tunnel cells found and checked live), Task 9 (spine, full gate).
 
 ### Debug Log References
 
@@ -367,6 +370,53 @@ Tasks 2-3 busy-crew stall and the cage sweep, read by dump and per-item trace (C
 - Cage sweep `no_dwarf_is_caged_by_stones_over_the_probe_seeds` after the fixes. Frozen (was `[(10, 4, 4)]`): `(8,4,4) (10,6,0) (12,4,1) (12,4,4) (16,6,3)`. Each was read with a per-item trace (spawn, set-down, fall, with the dwarf and whether he was clearing): all are the #186 shape, an idle dwarf whose other same-level sides are rock, a drop or a loose block, with no mark and no claim left. `(8,4,4)` [69,67,7]: a block he set down himself at t1204 (clearing), a channel block at t1428, after he walked in at t1377. `(12,4,4)` [69,65,10]: his own clearing set-down at t1029 took one of two exits; a later cut took the other. `(12,4,1)` [66,60,10]: a two-cell pocket `{[66,60,10],[66,61,10]}` bordered by three blocks, two set aside by ANOTHER miner while clearing (t565, t614) and one a hauler's drop (t180); he walked in up a ramp at t630, and a CHANNEL CUT of `[66,61,10]` at t720 closed his last same-level exit (the opened step keeps him unstranded, so the cut check allows it). Closed by a cut, not a placement. `(16,6,3)` [99,62,16]: his own set-down (t3420) and a channel block (t3471) after he stopped at t3408. `(10,6,0)` [62,78,28] stood 521 ticks with nothing beside it and moved again at t3996: a pause, not a cage. No stone landed on a dwarf (the sweep's first assert). RULED (Wolf, 2026-10-16): `(12,4,1)` stays pinned. A fix was tried first (generalising `closes_last_level_exit` to every open side of the placement cell, marks counted as no exit, three variants): each one that freed `(12,4,1)` left at least one run permanently unfinished (seed 13 width 6 with its last mark `[98,60,22]` sealed by set-aside blocks, #182 mode ii; seeds 1 and 6 in the third variant), so all were reverted. The cut case is recorded on #186.
 - Unfinished (was none): `(6,6,2) (11,6,3) (12,6,6)`. SLOW, not stuck: the same runs to 16,000 ticks finish at t4,080, t4,350 and t4,444. A clearing miner walks a block aside before he cuts.
 - Mutation checks run by me after the fix was committed (each restored by re-editing the same text): fall removed (`settle` skips every item) kills `a_loose_stone_falls_to_standable_ground_in_one_tick`, `a_dig_under_a_stone_does_not_leave_it_floating` and the lib test `a_stone_on_unstandable_ground_falls_while_its_haul_job_remains`, and does NOT kill the two-wide staircase sweep (with the miner clearing, nothing is left hanging on the staircase, so its float counter does not see the fall rule). Miner waits (`clearing_item` forced `None`) kills `a_channel_miner_carries_its_target_stone_aside_before_cutting`, `a_miner_clears_a_four_mark_tunnel_without_a_pile` and `a_hauler_holding_the_lifted_stones_job_lets_go_and_the_stone_is_delivered_later`, and does NOT kill either staircase sweep. Q2 reverted (no `fell_tree` in the Dig arm) kills `digging_hillside_tree_ground_fells_the_tree`; `digging_a_marked_trees_ground_releases_its_woodcutter` survives it (a cut on a standing tree also releases its woodcutter). Hauler keeps the job at lift kills the hauler test. Bridge reporting `Dig`/`Channel` while clearing kills `a_clearing_miner_reads_haul_on_the_wire_and_his_own_job_before_and_after`. Save validation refusing a clearing miner kills `a_save_taken_mid_clear_loads_and_the_clear_finishes`. Landing on a dwarf allowed kills `a_fallen_stone_never_lands_on_a_dwarf`; "never higher" dropped kills `a_fallen_stone_never_lands_above_where_it_started`; both SURVIVED the whole suite before those two tests were written. Set-down allowed in the target's column survives alone (the marked-cell refusal covers the own target); with both clauses dropped `a_clearing_miner_never_sets_the_stone_down_in_the_target_column` fails (the mark never completes). The marked-cell clause alone dropped is killed by the cage sweep (eight frozen runs). Dig filter dropped kills `a_dig_mark_is_refused_beneath_an_emitter_only`; the gui `sim_will_keep` dig clause dropped kills `the_channel_preview_skips_an_emitters_tile_and_cells_below_z_two`; the chip clause dropped kills `channel_under_debris_removes_chips_above_the_opened_floor`.
+
+Task 7 (orchestrator), on `2fb5f84` built release in a scratch worktree (`simd -p simd --release`, cwd inside the worktree), each daemon from a fresh scratch dir, at most 4 at a time:
+
+```text
+floats_wire.py, 5 of 5 (ports 7461-7465), every block identical:
+levels worked: 4 of 4
+items floated >= 30 ticks: 0; floating at the end: 0 []
+tree: felled or supported
+items on the pile: 22 of 32
+FLOATS OK
+
+way_down_wire.py, 5 of 5 OK (7471-7474, 7476), e.g.:
+level 0: worked by tick 473 (10 channels) / level 1: 1529 / level 2: 1855 / level 3: 2099
+deepest dwarf z 5 (camp floor 9; the way down needs 5 or lower)
+back up: dwarf 4 at tick 1987
+WAY DOWN OK
+(port 7475, run beside the mutation build, printed `WAY DOWN BROKEN: the daemon closed the connection at tick 5433`;
+its daemon log says `client delta queue full; disconnecting client`, the slow-reader overload, NOT a sim result.
+Re-run alone on 7476: WAY DOWN OK, level 3 at 2376.)
+
+Deliberate RED, row "fall removed" applied in the scratch worktree only:
+levels worked: 4 of 4
+items floated >= 30 ticks: 3; floating at the end: 3 [[67, 53, 12], [67, 53, 12], [67, 53, 12]]
+FLOATS RED
+```
+
+The RED is carried by the felled tree's three logs alone: with the miner clearing his own targets, no staircase block floats even with the fall removed (agent A's finding for the sim sweep, now seen on the wire). Without the tree leg the instrument would be blind to the fall rule.
+
+`mutations/12-11.sh` (16 rows), `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh`, after commit, alone: 15 KILLED on the first run; row 2 (a fall may land on an emitter's tile) SURVIVED: no test pinned it. NEW `a_fallen_stone_never_lands_on_an_emitters_tile` (a stone over the campfire): green, and row 2 re-pointed at it, re-run alone: KILLED. Final: every row KILLED. Killers: 1 `a_loose_stone_falls_to_standable_ground_in_one_tick`, 1b `a_dig_under_a_stone_does_not_leave_it_floating`, 2 `a_fallen_stone_never_lands_on_an_emitters_tile`, 3 `a_fallen_stone_never_lands_on_a_dwarf`, 4 `a_fallen_stone_never_lands_above_where_it_started`, 5 `a_miner_clears_a_four_mark_tunnel_without_a_pile`, 5b `a_channel_miner_carries_its_target_stone_aside_before_cutting`, 6 serve `a_clearing_miner_reads_haul_on_the_wire_and_his_own_job_before_and_after`, 7 `a_clearing_miner_never_sets_the_stone_down_in_the_target_column` (column + marked-cell clauses; the column alone is equivalent), 7b the cage sweep (marked-cell clause), 8 `digging_hillside_tree_ground_fells_the_tree`, 9 `a_dig_mark_is_refused_beneath_an_emitter_only`, 9b gui `the_channel_preview_skips_an_emitters_tile_and_cells_below_z_two`, 10 gui `channel_under_debris_removes_chips_above_the_opened_floor`, 11 `a_hauler_holding_the_lifted_stones_job_lets_go_and_the_stone_is_delivered_later`, 12 serve `a_save_taken_mid_clear_loads_and_the_clear_finishes`. `audit-mutations.py`: 894 rows, every literal matches.
+
+Task 8 (orchestrator): Codex's draft card named a tunnel at `x 67..70, y 66, z 9` that was never checked (the scenario test builds its tunnel with `set_tile`). A snapshot search for a natural one-wide 4-cell run (solid, solid floor, solid non-tree sides, reachable from the camp) found none in rock at z 9; the nearest is a snowbank west of the camp, `[40..37, 63, 13]` (stone, then three snow; soil floor). Checked live on the final build (`2fb5f84`, fresh daemon, NO pile, `fast4x`, one mark at a time): marks dug by ticks 340, 479, 574, 735, a miner reported `haul` while carrying in 78 deltas.
+
+Task 9 (orchestrator), full gate on `40195d5`, `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/gate.sh`:
+
+```
+cargo fmt --check           ok  0s
+cargo clippy -D warnings    ok  2s
+cargo test                  ok  517s
+cargo test (pixel guards)   ok  3131s
+tui has no sim-core edge                ok
+client-core has no sim-core edge        ok
+gui has no sim-core edge                ok
+metrics ledger tests        ok  1s
+bench tests                 ok  20s
+mutation tables still apply ok  9s
+GATE GREEN  3689s
+```
 
 ### Completion Notes List
 
@@ -389,11 +439,17 @@ Tasks 2-3 busy-crew stall and the cage sweep, read by dump and per-item trace (C
 - `crates/gui/src/project.rs`
 - `crates/gui/tests/headless.rs`
 - `_bmad-output/implementation-artifacts/mutations/{12-5,12-7,12-9,12-10b,3-2-the-dig,3-3-the-haul-and-the-skeleton-walks}.sh` (old rows re-pointed)
+- `_bmad-output/implementation-artifacts/mutations/12-11.sh` (NEW)
+- `_bmad-output/implementation-artifacts/12-11-signoff/vehicle-card.md` (NEW)
+- `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`
+- `_bmad-output/implementation-artifacts/12-11-nothing-floats.md`, `_bmad-output/implementation-artifacts/sprint-status.yaml`
 
 ## Change Log
 
 | Date | Change |
 |---|---|
+| 2026-10-16 | Orchestrator: full gate GREEN on `40195d5` (3689 s, one test thread). Status -> review. |
+| 2026-10-16 | Orchestrator: Task 7 (16-row mutation table, all KILLED after a new emitter-landing test closed row 2; wire 5/5 FLOATS OK, 5/5 WAY DOWN OK, deliberate FLOATS RED), Task 8 (seat card rewritten, tunnel cells found and checked live), spine bullet. Wolf ruled the seed-12 pin stays (closed by a cut, #186). |
 | 2026-10-16 | Wolf ruled: `closes_last_level_exit` kept everywhere as built (fall landing, clearing set-down, released carrier's drop, hauler pile drop); the pile-drop site can change which pile cell a hauler fills. |
 | 2026-10-16 | Dev (Claude Sonnet 5.5): Tasks 2-6 done and committed. Clearing step made stable (kept stone, landing route, marked cells refused); busy-crew stall explained; cage pins `ONE_LEVEL_ISLANDS` and `UNFINISHED` re-pinned with per-run mechanisms; new tests for the fall rule, the hauler's let-go, the wire job and a mid-clear save. |
 | 2026-10-15 | Q4 RULED (Wolf): a clearing miner is reported as `Haul` on the wire, so he looks like a hauler (D7, AC 15). No protocol shape change. |
