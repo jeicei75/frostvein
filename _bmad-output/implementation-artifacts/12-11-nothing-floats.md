@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10b's creation
 
 # Story 12.11: Nothing Floats
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
