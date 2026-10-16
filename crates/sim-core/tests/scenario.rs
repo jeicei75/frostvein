@@ -4154,9 +4154,10 @@ fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
     );
 }
 
-// Wolf at the seat, 12.11: "miners are throwing stones quite wildly". RED on 3d9488b at delays 0, 3,
-// 7 and 12: a miner lifted a stone with no set-down cell, retried, and `release_claim` dropped it on
+// Wolf at the seat, 12.11: "miners are throwing stones quite wildly". RED on 3d9488b from delay 0: a
+// miner lifted a stone, found no way to a set-down side, retried, and `release_claim` dropped it on
 // the nearest free cell at any distance, up to five cells off and three levels up, on the pit rim.
+// Green on main (56bfbe5): every carrier there, haulers included, sets its stone down beside it.
 #[test]
 fn a_carried_stone_is_always_set_down_beside_its_carrier() {
     let mut thrown = Vec::new();
@@ -4164,13 +4165,36 @@ fn a_carried_stone_is_always_set_down_beside_its_carrier() {
         let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
         let site = staircase_site(&world);
         place_creation_pile(&mut world);
-        // The stones a clearing miner carried at the end of the last tick, and where (on his tile).
-        // NOTE: a hauler's delivery is not checked: on main it can already land a stone two cells
-        // off, into the pile (12.9).
+        // The stones carried at the end of the last tick, and where (on the carrier's tile). Read
+        // every tick, the designation delays included: a record left stale over them made haulers
+        // look as if they threw.
         let mut carried: BTreeMap<u32, Pos> = BTreeMap::new();
+        let mut watch = |world: &World| {
+            let items: BTreeMap<u32, Pos> = world
+                .items()
+                .into_iter()
+                .map(|(id, pos)| (id.0, pos))
+                .collect();
+            let held: BTreeSet<u32> = world
+                .carrying()
+                .into_iter()
+                .filter_map(|(_, item)| item)
+                .collect();
+            for (item, was) in &carried {
+                let now = items[item];
+                if !held.contains(item)
+                    && ((now.x - was.x).abs().max((now.y - was.y).abs()) > 1
+                        || (now.z - was.z).abs() > 1)
+                {
+                    thrown.push((delay, world.tick(), *was, now));
+                }
+            }
+            carried = held.iter().map(|item| (*item, items[item])).collect();
+        };
         for level in 0..4 {
             for _ in 0..delay {
                 world.step();
+                watch(&world);
             }
             let first = cell(site, level, -level);
             let last = Pos {
@@ -4182,38 +4206,14 @@ fn a_carried_stone_is_always_set_down_beside_its_carrier() {
                 rect: rect(first, last),
             });
             run_until(&mut world, 6_000, |world| {
-                let items: BTreeMap<u32, Pos> = world
-                    .items()
-                    .into_iter()
-                    .map(|(id, pos)| (id.0, pos))
-                    .collect();
-                let held: BTreeSet<u32> = world
-                    .carrying()
-                    .into_iter()
-                    .filter_map(|(_, item)| item)
-                    .collect();
-                let clearing: BTreeSet<u32> =
-                    world.clearing().into_iter().map(|(_, item)| item).collect();
-                for (item, was) in &carried {
-                    let now = items[item];
-                    if !held.contains(item)
-                        && ((now.x - was.x).abs().max((now.y - was.y).abs()) > 1
-                            || (now.z - was.z).abs() > 1)
-                    {
-                        thrown.push((delay, world.tick(), *was, now));
-                    }
-                }
-                carried = held
-                    .intersection(&clearing)
-                    .map(|item| (*item, items[item]))
-                    .collect();
+                watch(world);
                 no_marks_left(world)
             });
         }
     }
     assert!(
         thrown.is_empty(),
-        "stones landed more than a cell from their clearing miner (delay, tick, carrier tile, landing): {thrown:?}"
+        "stones landed more than a cell from their carrier (delay, tick, carrier tile, landing): {thrown:?}"
     );
 }
 
