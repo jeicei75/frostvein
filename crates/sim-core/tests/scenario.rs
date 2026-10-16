@@ -3367,6 +3367,232 @@ fn no_marks_left(world: &World) -> bool {
     world.designations().is_empty()
 }
 
+fn loose_items_on_air(world: &World) -> Vec<(Id, Pos)> {
+    let carried: BTreeSet<u32> = world
+        .carrying()
+        .into_iter()
+        .filter_map(|(_, item)| item)
+        .collect();
+    world
+        .items()
+        .into_iter()
+        .filter(|(id, pos)| {
+            !carried.contains(&id.0)
+                && world.tile(*pos) == Some(Tile::Empty)
+                && world.tile(Pos {
+                    z: pos.z - 1,
+                    ..*pos
+                }) == Some(Tile::Empty)
+        })
+        .collect()
+}
+
+#[test]
+#[ignore = "RED until Task 2"]
+fn a_loose_stone_falls_to_standable_ground_in_one_tick() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let shaft = Pos {
+        z: site.z - 1,
+        ..site
+    };
+    assert!(world.set_tile(shaft, Tile::Empty));
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    let mut world = World::from_save(save);
+    world.step();
+    assert_eq!(
+        world
+            .items()
+            .into_iter()
+            .find(|(item, _)| item.0 == id)
+            .unwrap()
+            .1,
+        shaft
+    );
+}
+
+#[test]
+#[ignore = "RED until Task 3"]
+fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    world = World::from_save(save);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(site, site),
+    });
+    let mut saw_miner_carry = false;
+    for _ in 0..2_000 {
+        world.step();
+        saw_miner_carry |= world.carrying().iter().any(|(dwarf, item)| {
+            *item == Some(id) && world.professions().contains(&(*dwarf, Profession::Miner))
+        });
+        if world.designations().is_empty() {
+            break;
+        }
+    }
+    assert!(
+        saw_miner_carry,
+        "channel miner never carried the target stone"
+    );
+    assert!(
+        world.designations().is_empty(),
+        "channel mark never completed"
+    );
+    assert!(
+        loose_items_on_air(&world).is_empty(),
+        "channel left floating items: {:?}",
+        loose_items_on_air(&world)
+    );
+}
+
+#[test]
+#[ignore = "RED until Task 2"]
+fn a_dig_under_a_stone_does_not_leave_it_floating() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let target = Pos {
+        z: site.z - 1,
+        ..site
+    };
+    let pit = Pos {
+        y: site.y + 1,
+        ..target
+    };
+    world.set_tile(pit, Tile::Empty);
+    let ramp = Pos {
+        x: pit.x + 1,
+        ..pit
+    };
+    world.set_tile(ramp, Tile::Empty);
+    world.set_tile(
+        Pos {
+            z: ramp.z - 1,
+            ..ramp
+        },
+        Tile::Ramp(Material::Stone),
+    );
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    let mut world = World::from_save(save);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(target, target),
+    });
+    assert!(
+        run_until(&mut world, 4_000, |world| world.tile(target)
+            == Some(Tile::Empty)),
+        "dig did not complete"
+    );
+    assert!(
+        loose_items_on_air(&world).is_empty(),
+        "dig left floating items: {:?}",
+        loose_items_on_air(&world)
+    );
+}
+
+#[test]
+#[ignore = "RED until Task 4"]
+fn digging_hillside_tree_ground_fells_the_tree() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let ground = Pos { x: 103, y: 2, z: 8 };
+    let base = Pos { z: 9, ..ground };
+    assert_eq!(world.tile(base), Some(Tile::Solid(Material::TreeTrunk)));
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(ground, ground),
+    });
+    assert!(
+        run_until(&mut world, 4_000, |world| world.tile(ground)
+            == Some(Tile::Empty)),
+        "tree ground was not dug"
+    );
+    assert_eq!(
+        world.tile(base),
+        Some(Tile::Empty),
+        "tree base remains over the dug ground"
+    );
+}
+
+#[test]
+#[ignore = "RED until Task 3"]
+fn a_miner_clears_a_four_mark_tunnel_without_a_pile() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let worker = world.dwarves()[2].1;
+    let dx = if worker.x + 10 < world.dims().x as i32 {
+        1
+    } else {
+        -1
+    };
+    for step in 1..=5 {
+        make_standable(
+            &mut world,
+            Pos {
+                x: worker.x + dx * step,
+                ..worker
+            },
+        );
+    }
+    let first = Pos {
+        x: worker.x + dx * 6,
+        ..worker
+    };
+    let last = Pos {
+        x: worker.x + dx * 9,
+        ..worker
+    };
+    for step in 6..=9 {
+        let target = Pos {
+            x: worker.x + dx * step,
+            ..worker
+        };
+        world.set_tile(
+            Pos {
+                z: target.z - 1,
+                ..target
+            },
+            Tile::Solid(Material::Stone),
+        );
+        world.set_tile(target, Tile::Solid(Material::Stone));
+        for dy in [-1, 1] {
+            world.set_tile(
+                Pos {
+                    y: target.y + dy,
+                    ..target
+                },
+                Tile::Solid(Material::Stone),
+            );
+        }
+    }
+    world.set_tile(
+        Pos {
+            x: last.x + dx,
+            ..last
+        },
+        Tile::Solid(Material::Stone),
+    );
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(first, last),
+    });
+    assert!(
+        run_until(&mut world, 4_000, |world| world.tile(last)
+            == Some(Tile::Empty)),
+        "miner stopped before the fourth mark; remaining {:?}",
+        world.designations()
+    );
+    assert!(world.zones().is_empty());
+}
+
 // RED on 015548f: the cell under a channel became a Ramp, so nothing opened and the pit below was
 // never there to walk into.
 #[test]
@@ -3438,17 +3664,21 @@ fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
 
 // RED on 015548f (0 of 24: a channel only ramps the floor, nothing opens).
 #[test]
+#[ignore = "RED until Task 3"]
 fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
     let mut worked = 0;
     let mut stalled = Vec::new();
+    let mut floated = Vec::new();
     for delay in 0..24u64 {
         let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
         let site = staircase_site(&world);
         place_creation_pile(&mut world);
         let mut levels = 0;
+        let mut air = BTreeSet::new();
         for level in 0..4 {
             for _ in 0..delay {
                 world.step();
+                air.extend(loose_items_on_air(&world));
             }
             // Each level is one row shorter and one level lower, inside the previous one.
             let first = cell(site, level, -level);
@@ -3470,10 +3700,27 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
                         })
                     })
             };
-            if !run_until(&mut world, 6_000, opened) {
+            if !run_until(&mut world, 6_000, |world| {
+                air.extend(loose_items_on_air(world));
+                for (_, pos, ..) in world.dwarves() {
+                    assert!(
+                        is_standable(world, pos)
+                            || world.tile(Pos {
+                                z: pos.z - 1,
+                                ..pos
+                            }) == Some(Tile::Empty),
+                        "dwarf on unsupported non-falling tile at tick {}: {pos:?}",
+                        world.tick()
+                    );
+                }
+                opened(world)
+            }) {
                 break;
             }
             levels = level + 1;
+        }
+        if !air.is_empty() {
+            floated.push((delay, air.len()));
         }
         if levels == 4 {
             worked += 1;
@@ -3485,6 +3732,7 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
         worked, 24,
         "staircase worked for {worked} of 24 designation delays; stalled (delay, levels done): {stalled:?}"
     );
+    assert!(floated.is_empty(), "floating items by delay: {floated:?}");
 }
 
 /// One step, panicking on the tick two dwarves share a tile or trade tiles (no swap, 12.9 Task 0

@@ -160,14 +160,14 @@ The options as offered at creation, kept for the record:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: RED tests first** (AC 1)
-  - [ ] `crates/sim-core/tests/scenario.rs` (UPDATE), from the probe's tests: the channel-under-a-block case
+- [x] **Task 1: RED tests first** (AC 1)
+  - [x] `crates/sim-core/tests/scenario.rs` (UPDATE), from the probe's tests: the channel-under-a-block case
     (AC 3, 4), the dig-under-an-item case (AC 2), the hillside tree dig (AC 5; DEFAULT_SEED `[103,2,8]` or the
     nearest such tree to the camp), the one-wide tunnel with no pile (AC 14), and a float counter added to
     `a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay` (`scenario.rs:3441`) that
     asserts 0 floating items and the AC 6 dwarf rule every tick (AC 9). Items placed off the natural flow go
     in through `to_save`/`from_save` (`SaveState.items`, `save.rs:25`), as the probe does.
-  - [ ] Run each on unchanged `56bfbe5` code and paste the failing assert lines into Debug Log References.
+  - [x] Run each on unchanged `56bfbe5` code and paste the failing assert lines into Debug Log References.
     Commit them with `#[ignore = "RED until Task N"]`, un-ignored by the commit that greens them.
 - [ ] **Task 2: items fall** (AC 2, 3, 6)
   - [ ] In `settle` (`lib.rs:1909-1952`), after the dwarves, in ascending item id: each uncarried item that
@@ -346,7 +346,20 @@ python3 _bmad-output/implementation-artifacts/12-11-signoff/floats_wire.py 7461 
 
 ### Agent Model Used
 
+GPT-6 Codex.
+
 ### Debug Log References
+
+Task 1 focused RED runs against unchanged production code (baseline `56bfbe5`):
+
+```text
+a_loose_stone_falls_to_standable_ground_in_one_tick: left Pos { x: 61, y: 62, z: 9 }, right Pos { x: 61, y: 62, z: 8 }
+a_channel_miner_carries_its_target_stone_aside_before_cutting: channel miner never carried the target stone
+a_dig_under_a_stone_does_not_leave_it_floating: dig left floating items: [(Id(10), Pos { x: 61, y: 62, z: 9 })]
+digging_hillside_tree_ground_fells_the_tree: tree base remains over the dug ground; left Some(Solid(TreeTrunk)), right Some(Empty)
+a_miner_clears_a_four_mark_tunnel_without_a_pile: miner stopped before the fourth mark; remaining [(Pos { x: 68, y: 66, z: 9 }, Dig), (Pos { x: 69, y: 66, z: 9 }, Dig), (Pos { x: 70, y: 66, z: 9 }, Dig)]
+a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay: floating items by delay: [(0, 8), (1, 8), (2, 8), (3, 6), (4, 4), (5, 5), (6, 5), (7, 5), (8, 5), (9, 9), (10, 9), (11, 10), (12, 8), (13, 8), (14, 8), (15, 8), (16, 8), (17, 8), (18, 9), (19, 8), (20, 8), (21, 8), (22, 8), (23, 6)]
+```
 
 ### Completion Notes List
 
