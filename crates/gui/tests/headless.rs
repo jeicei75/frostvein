@@ -1004,6 +1004,51 @@ fn sliced_view_does_not_spawn_dig_chips_above_the_cut() {
     );
 }
 
+#[test]
+fn channel_under_debris_removes_chips_above_the_opened_floor() {
+    let mut app = headless_app(snapshot_with_dims(
+        Dims { x: 1, y: 1, z: 3 },
+        vec![Tile::Solid(Material::Stone); 3],
+        Vec::new(),
+    ));
+    app.update();
+    apply_delta(
+        &mut app,
+        delta(
+            vec![TileChange {
+                pos: [0, 0, 2],
+                tile: Tile::Empty,
+            }],
+            Vec::new(),
+        ),
+    );
+    app.update();
+    let chips = |app: &mut App| {
+        app.world_mut()
+            .query::<&gui::project::DigChip>()
+            .iter(app.world())
+            .map(|chip| chip.0)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(chips(&mut app).len(), gui::project::CHIPS_PER_TILE);
+    apply_delta(
+        &mut app,
+        delta(
+            vec![TileChange {
+                pos: [0, 0, 1],
+                tile: Tile::Empty,
+            }],
+            Vec::new(),
+        ),
+    );
+    app.update();
+    assert!(
+        chips(&mut app)
+            .iter()
+            .all(|position| *position != [0, 0, 2])
+    );
+}
+
 /// #168: a felled pine empties its whole column in one delta. Debris lies only where something
 /// is under the emptied tile, so the foot of the trunk keeps its chips and the air above gets none.
 #[test]
