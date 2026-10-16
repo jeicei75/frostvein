@@ -2952,8 +2952,12 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // block, no mark and no claim left. Moved items are disclosed where they border the cell.
     // (8,4,4) [69,67,7]: a block he set down himself at t1204 (clearing), a channel block at t1428
     // after he walked in at t1377. (12,4,4) [69,65,10]: his own clearing set-down at t1029 took one
-    // of two exits, a later cut took the other. (12,4,1) [66,60,10]: three blocks, two of them
-    // cleared there by another miner (t565, t614), the third a hauler's drop; he walked in at t718.
+    // of two exits, a later cut took the other. (12,4,1) [66,60,10]: a two-cell pocket
+    // {[66,60,10], [66,61,10]} bordered by three blocks, two set aside by another miner (t565,
+    // t614), one a hauler's drop (t180); he walked in up a ramp at t630, and a CHANNEL CUT of
+    // [66,61,10] at t720 closed his last same-level exit (the opened step keeps him unstranded, so
+    // the cut is allowed). Closed by a cut, not a placement: pinned by Wolf's ruling (2026-10-16),
+    // because every placement rule that freed it left another run permanently unfinished.
     // (16,6,3) [99,62,16]: his own set-down (t3420) and a channel block (t3471) after he stopped at
     // t3408. (10,6,0) [62,78,28] stood 521 ticks, no item beside it, and moved again at t3996: a
     // pause, not a cage.
