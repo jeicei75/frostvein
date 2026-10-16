@@ -70,15 +70,15 @@ PY
 mutation "7 the set-down is allowed in the target's column (AC 4; column + mark clauses, the column alone is equivalent)" sim-core a_clearing_miner_never_sets_the_stone_down_in_the_target_column <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    (cell.x, cell.y) == (job.target.x, job.target.y)\n                        || cell.z < pos.z\n                        || blocked.contains(&cell)\n                        || occupied.contains(&cell)\n                        || job_positions.contains(&cell)\n                        || ecs.resource::<Designations>().0.contains_key(&cell)\n'
+old = '        (cell.x, cell.y) == (job.target.x, job.target.y)\n            || cell.z < pos.z\n            || blocked.contains(&cell)\n            || occupied.contains(&cell)\n            || job_positions.contains(&cell)\n            || ecs.resource::<Designations>().0.contains_key(&cell)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    cell.z < pos.z\n                        || blocked.contains(&cell)\n                        || occupied.contains(&cell)\n                        || job_positions.contains(&cell)\n'))
+p.write_text(s.replace(old, '        cell.z < pos.z\n            || blocked.contains(&cell)\n            || occupied.contains(&cell)\n            || job_positions.contains(&cell)\n'))
 PY
 
 mutation "7b the set-down is allowed on a marked cell (cage sweep: 8 frozen, not 5)" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        || ecs.resource::<Designations>().0.contains_key(&cell)\n'
+old = '            || ecs.resource::<Designations>().0.contains_key(&cell)\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
@@ -129,4 +129,46 @@ p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = 'if !holds_haul && !miner_clearing {'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'if !holds_haul {'))
+PY
+
+# Wolf at the seat ("miners are throwing stones quite wildly"): rows 13-17. 13 and 14 are the two
+# causes (the throws stop with them alone); 15-17 are Wolf's guards, each pinned by its own fixture.
+mutation "13 the set-down route is closed to the other dwarves (seat)" sim-core a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    let side = |landing: Pos, kept: Option<Pos>| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    let closed = closed_to_dwarves(blocked, occupied, &[pos]);\n    let blocked = &closed;\n' + old))
+PY
+
+mutation "14 a kept landing he can no longer reach is kept anyway (seat)" sim-core no_dwarf_is_caged_by_stones_over_the_probe_seeds <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        .and_then(|landing| Some((landing, side(landing, old_drop_from)?)))\n        .or_else(|| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .map(|landing| (landing, side(landing, old_drop_from)))\n        .map(|(landing, from)| from.map(|from| (landing, from)))\n        .unwrap_or_else(|| {\n'))
+PY
+
+mutation "15 a miner lifts a stone with nowhere to set it down (seat guard)" sim-core a_miner_with_nowhere_to_set_a_stone_down_never_lifts_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = 'if clearing_set_down(ecs, entity, job, pos, &lifted, &occupied).is_none() {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'if false && clearing_set_down(ecs, entity, job, pos, &lifted, &occupied).is_none() {'))
+PY
+
+mutation "16 a clearing miner's let-go searches at any distance (seat guard)" sim-core a_miner_who_lets_go_mid_clear_sets_the_stone_down_beside_him <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            let nearest = if clearing_job.is_some() {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let nearest = if false && clearing_job.is_some() {'))
+PY
+
+mutation "17 a miner holding his stone gives the job up when his set-down is taken (seat guard)" sim-core a_miner_whose_set_down_side_is_taken_keeps_the_stone <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            if carrying.is_some() {\n                *ecs.get_mut::<JobState>(entity)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false && carrying.is_some() {\n                *ecs.get_mut::<JobState>(entity)\n'))
 PY

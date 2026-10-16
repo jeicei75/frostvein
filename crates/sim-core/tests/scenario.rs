@@ -2961,8 +2961,14 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // (16,6,3) [99,62,16]: his own set-down (t3420) and a channel block (t3471) after he stopped at
     // t3408. (10,6,0) [62,78,28] stood 521 ticks, no item beside it, and moved again at t3996: a
     // pause, not a cage.
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 5] =
-        [(8, 4, 4), (10, 6, 0), (12, 4, 1), (12, 4, 4), (16, 6, 3)];
+    // 12.11 seat re-pin (was the five above; "miners are throwing stones", Wolf): a miner lifts only
+    // with a set-down, lets go only beside himself, and routes to it through the crew. (8,4,4) and
+    // (16,6,3) are gone. (12,6,3) is new, read by dump at tick 4,000: idle at [64,69,10] since t1119,
+    // no item beside him, no mark and no claim left; his sides are snow, snow and a drop, and the
+    // one free side [65,69,10] lies 4 cells from his home [61,66,10], past WANDER_RADIUS (3). The
+    // #186 shape with the radius as its fourth wall.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 4] =
+        [(10, 6, 0), (12, 4, 1), (12, 4, 4), (12, 6, 3)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
@@ -2975,7 +2981,9 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // 12.11 re-pin (was none): three 6-wide runs are SLOW, not stuck. A clearing miner walks a stone
     // aside before he cuts, and the crew finishes at t4,080 (6), t4,350 (11) and t4,444 (12), read
     // by running the same runs to 16,000 ticks.
-    const UNFINISHED: [(u64, i32, usize); 3] = [(6, 6, 2), (11, 6, 3), (12, 6, 6)];
+    // 12.11 seat re-pin (was the three above): still slow, not stuck. Run to 16,000 ticks, seed 6
+    // finishes at t4,080 and seed 11 at t4,100; seed 12 now finishes inside the 4,000.
+    const UNFINISHED: [(u64, i32, usize); 2] = [(6, 6, 2), (11, 6, 1)];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
@@ -3609,6 +3617,149 @@ fn a_clearing_miner_never_sets_the_stone_down_in_the_target_column() {
     assert!(!in_column(&world), "the stone is in the target's column");
 }
 
+/// 12.11 seat: the miner (dwarf 0) on `miner` beside a stone on a channel mark at `target`, shut in
+/// `cells` at the staircase site's level by stone walls. Every other dwarf is a hauler and there is
+/// no pile, so nobody else works; `extra` puts dwarf 1 on that cell. Returns the stone's id.
+fn walled_clearing(cells: &[Pos], target: Pos, miner: Pos, extra: Option<Pos>) -> (World, u32) {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    for cell in cells {
+        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            let side = Pos {
+                x: cell.x + dx,
+                y: cell.y + dy,
+                ..*cell
+            };
+            if !cells.contains(&side) {
+                assert!(world.set_tile(side, Tile::Solid(Material::Stone)));
+            }
+        }
+    }
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, target, ItemKind::Stone));
+    for (index, dwarf) in save.dwarves.iter_mut().enumerate() {
+        dwarf.profession = if index == 0 {
+            Profession::Miner
+        } else {
+            Profession::Hauler
+        };
+    }
+    for (index, pos) in [(0, Some(miner)), (1, extra)] {
+        if let Some(pos) = pos {
+            save.dwarves[index].pos = pos;
+            save.dwarves[index].home = pos;
+        }
+    }
+    let mut world = World::from_save(save);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(target, target),
+    });
+    (world, id)
+}
+
+/// Steps until the miner (dwarf 0) carries `stone`; panics after `limit` ticks.
+fn until_the_miner_lifts(world: &mut World, stone: u32, limit: u64) {
+    assert!(
+        run_until(world, limit, |world| world.carrying()[0].1 == Some(stone)),
+        "the miner never lifted the stone: claims {:?}, dwarves {:?}",
+        world.claims(),
+        world.dwarves()
+    );
+}
+
+// Wolf at the seat, 12.11 ("throwing stones"): a miner lifts only a stone he has somewhere to set
+// down. His whole ground is the mark and his own cell, so there is none: before the guard he lifted
+// it anyway and stood holding it.
+#[test]
+fn a_miner_with_nowhere_to_set_a_stone_down_never_lifts_it() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let target = cell(site, 1, 0);
+    let miner = cell(site, 2, 0);
+    let (mut world, stone) = walled_clearing(&[target, miner], target, miner, None);
+    let mut claimed = false;
+    for _ in 0..600 {
+        world.step();
+        claimed |= world.claims()[0].1.is_some();
+        assert_eq!(
+            world.carrying()[0].1,
+            None,
+            "tick {}: the miner lifted a stone with nowhere to set it down",
+            world.tick()
+        );
+    }
+    assert!(claimed, "the miner never claimed the channel");
+    assert!(world.items().contains(&(Id(stone), target)));
+}
+
+// A miner who lets go of his stone mid-clear (his trade changes) sets it down beside him or on his
+// own tile. Before the guard the drop searched at any distance and, with his only sides the mark and
+// a hauler shut in a pocket, landed three cells off at the corridor's end.
+#[test]
+fn a_miner_who_lets_go_mid_clear_sets_the_stone_down_beside_him() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let far = cell(site, -1, 0);
+    let target = cell(site, 1, 0);
+    let miner = cell(site, 2, 0);
+    let pocket = Pos {
+        y: site.y + 1,
+        ..miner
+    };
+    let cells = [far, site, target, miner, pocket];
+    let (mut world, stone) = walled_clearing(&cells, target, miner, Some(pocket));
+    until_the_miner_lifts(&mut world, stone, 600);
+    let at = world.dwarves()[0].1;
+    assert_eq!(at, miner, "the miner lifted from another cell");
+    let refused = world.apply_command(SimCommand::SetProfession {
+        dwarf: world.dwarves()[0].0,
+        profession: Profession::Hauler,
+    });
+    assert_eq!(refused, None);
+    let landed = world
+        .items()
+        .into_iter()
+        .find(|(item, _)| item.0 == stone)
+        .unwrap()
+        .1;
+    assert!(
+        (landed.x - at.x).abs().max((landed.y - at.y).abs()) <= 1 && (landed.z - at.z).abs() <= 1,
+        "the stone landed at {landed:?}, more than a cell from the miner on {at:?}"
+    );
+}
+
+// A miner holding his stone when a dwarf steps onto his only set-down side keeps it and looks again,
+// rather than give the job up. Before the guard he let go on the next tick, and the drop put it
+// under him, where 12.9's rule says a stone never lands.
+#[test]
+fn a_miner_whose_set_down_side_is_taken_keeps_the_stone() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let far = cell(site, -1, 0);
+    let target = cell(site, 1, 0);
+    let miner = cell(site, 2, 0);
+    let (mut world, stone) = walled_clearing(&[far, site, target, miner], target, miner, None);
+    until_the_miner_lifts(&mut world, stone, 600);
+    // A hauler now stands on the one side of the set-down cell, resting so it does not wander off.
+    let mut save = world.to_save();
+    save.dwarves[1].pos = site;
+    save.dwarves[1].home = site;
+    save.dwarves[1].cooldown = 100;
+    save.dwarves[1].path.clear();
+    let mut world = World::from_save(save);
+    for _ in 0..20 {
+        world.step();
+        assert_eq!(
+            world.carrying()[0].1,
+            Some(stone),
+            "tick {}: the miner let go of the stone while his set-down side was taken",
+            world.tick()
+        );
+    }
+}
+
 #[test]
 fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
@@ -4000,6 +4151,69 @@ fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
         }),
         "the dwarf in the pit never climbed back to z {}",
         site.z
+    );
+}
+
+// Wolf at the seat, 12.11: "miners are throwing stones quite wildly". RED on 3d9488b at delays 0, 3,
+// 7 and 12: a miner lifted a stone with no set-down cell, retried, and `release_claim` dropped it on
+// the nearest free cell at any distance, up to five cells off and three levels up, on the pit rim.
+#[test]
+fn a_carried_stone_is_always_set_down_beside_its_carrier() {
+    let mut thrown = Vec::new();
+    for delay in 0..24u64 {
+        let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+        let site = staircase_site(&world);
+        place_creation_pile(&mut world);
+        // The stones a clearing miner carried at the end of the last tick, and where (on his tile).
+        // NOTE: a hauler's delivery is not checked: on main it can already land a stone two cells
+        // off, into the pile (12.9).
+        let mut carried: BTreeMap<u32, Pos> = BTreeMap::new();
+        for level in 0..4 {
+            for _ in 0..delay {
+                world.step();
+            }
+            let first = cell(site, level, -level);
+            let last = Pos {
+                y: site.y + 1,
+                ..cell(site, 4, -level)
+            };
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: rect(first, last),
+            });
+            run_until(&mut world, 6_000, |world| {
+                let items: BTreeMap<u32, Pos> = world
+                    .items()
+                    .into_iter()
+                    .map(|(id, pos)| (id.0, pos))
+                    .collect();
+                let held: BTreeSet<u32> = world
+                    .carrying()
+                    .into_iter()
+                    .filter_map(|(_, item)| item)
+                    .collect();
+                let clearing: BTreeSet<u32> =
+                    world.clearing().into_iter().map(|(_, item)| item).collect();
+                for (item, was) in &carried {
+                    let now = items[item];
+                    if !held.contains(item)
+                        && ((now.x - was.x).abs().max((now.y - was.y).abs()) > 1
+                            || (now.z - was.z).abs() > 1)
+                    {
+                        thrown.push((delay, world.tick(), *was, now));
+                    }
+                }
+                carried = held
+                    .intersection(&clearing)
+                    .map(|item| (*item, items[item]))
+                    .collect();
+                no_marks_left(world)
+            });
+        }
+    }
+    assert!(
+        thrown.is_empty(),
+        "stones landed more than a cell from their clearing miner (delay, tick, carrier tile, landing): {thrown:?}"
     );
 }
 

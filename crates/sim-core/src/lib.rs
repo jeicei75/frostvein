@@ -1369,7 +1369,7 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
                 }
                 _ => BTreeSet::new(),
             };
-            let nearest = nearest_free_cell(terrain, &blocked, pos, |cell| {
+            let refused = |cell: Pos| {
                 occupied.contains(&cell)
                     || dwarves.contains(&cell)
                     || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
@@ -1379,7 +1379,16 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
                             || cell.z < pos.z
                             || forbidden.contains(&cell)
                     })
-            });
+            };
+            // NOTE: a clearing miner lets go only beside himself (Wolf, 12.11 seat): searched at any
+            // distance, his refusals pushed the stone up to five cells off, onto the pit rim.
+            let nearest = if clearing_job.is_some() {
+                astar_neighbours(terrain, &blocked, pos)
+                    .into_iter()
+                    .find(|cell| !refused(*cell))
+            } else {
+                nearest_free_cell(terrain, &blocked, pos, refused)
+            };
             // NOTE: the one exception to "never under a dwarf" (Wolf, 12.9 review run 2): a
             // carrier whose whole reachable ground is refused keeps the stone on its own tile
             // rather than stop the sim, since an idle dwarf carries nothing (AC10).
@@ -1673,6 +1682,90 @@ fn resolve_blocked_step(
     true
 }
 
+/// Where a clearing miner on `pos` sets his stone down, and the side of it he does that from: the
+/// nearest free cell he may leave it on, and the nearest walkable side of it he can reach. Kept from
+/// the last tick while it still holds. `None` when there is no such pair.
+fn clearing_set_down(
+    ecs: &EcsWorld,
+    entity: Entity,
+    job: Job,
+    pos: Pos,
+    blocked: &BTreeSet<Pos>,
+    occupied: &BTreeSet<Pos>,
+) -> Option<(Pos, Pos)> {
+    let terrain = ecs.resource::<Terrain>();
+    let old_landing = ecs.get::<Clearing>(entity).and_then(|clear| clear.landing);
+    let old_drop_from = ecs
+        .get::<Clearing>(entity)
+        .and_then(|clear| clear.drop_from);
+    let job_positions: BTreeSet<_> = match job.kind {
+        JobKind::Dig => side_neighbours(job.target).into_iter().collect(),
+        JobKind::Channel => astar_neighbours(terrain, &BTreeSet::new(), job.target)
+            .into_iter()
+            .collect(),
+        _ => unreachable!(),
+    };
+    let has_drop_side = |cell: Pos| {
+        side_neighbours(cell).into_iter().any(|side| {
+            is_walkable(terrain, blocked, side) && (side == pos || !occupied.contains(&side))
+        })
+    };
+    // NOTE: a marked cell is refused too (the own target included): a stone set down on a
+    // mark is lifted again or drops into its step, and without this the cage sweep
+    // freezes eight runs, not five.
+    let refused = |cell: Pos| {
+        (cell.x, cell.y) == (job.target.x, job.target.y)
+            || cell.z < pos.z
+            || blocked.contains(&cell)
+            || occupied.contains(&cell)
+            || job_positions.contains(&cell)
+            || ecs.resource::<Designations>().0.contains_key(&cell)
+            || !terrain.is_standable(cell)
+            || walls_in_a_dwarf(terrain, blocked, occupied, cell)
+            || closes_last_level_exit(terrain, blocked, occupied, cell)
+            || !has_drop_side(cell)
+    };
+    // The side he sets `landing` down from: the nearest walkable side of it he can reach.
+    // NOTE: the route runs through the other dwarves, as every job walk does (they step aside or
+    // yield on the way). Closed to them, a miner in a crowded pit found no way to any set-down
+    // side, and with no stone thrown out for him (12.11 seat) the two-wide staircase stalled.
+    let side = |landing: Pos, kept: Option<Pos>| {
+        let neighbours: BTreeSet<_> = side_neighbours(landing)
+            .into_iter()
+            .filter(|cell| is_walkable(terrain, blocked, *cell))
+            .collect();
+        kept.filter(|cell| {
+            neighbours.contains(cell)
+                && (*cell == pos
+                    || (!occupied.contains(cell)
+                        && astar(terrain, blocked, pos, &BTreeSet::from([*cell])).is_some()))
+        })
+        .or_else(|| {
+            route_to_nearest(terrain, blocked, pos, |cell| {
+                neighbours.contains(&cell) && !occupied.contains(&cell)
+            })
+            .and_then(|route| route.last().copied())
+        })
+        .or_else(|| neighbours.contains(&pos).then_some(pos))
+    };
+    // NOTE: a kept landing he can no longer reach is searched again: kept, it held a miner with
+    // his stone still for good once a stone closed its only side (cage sweep, seed 13).
+    old_landing
+        .filter(|cell| {
+            !blocked.contains(cell)
+                // NOTE: the route to the set-down side may cross the landing itself.
+                && (*cell == pos || !occupied.contains(cell))
+                && terrain.is_standable(*cell)
+                && has_drop_side(*cell)
+                && !closes_last_level_exit(terrain, blocked, occupied, *cell)
+        })
+        .and_then(|landing| Some((landing, side(landing, old_drop_from)?)))
+        .or_else(|| {
+            let landing = nearest_free_cell(terrain, blocked, pos, refused)?;
+            Some((landing, side(landing, None)?))
+        })
+}
+
 /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
 fn execute_jobs(ecs: &mut EcsWorld) {
     // Built once, before the loop borrows the world for terrain. Emitters are static; the items
@@ -1783,78 +1876,10 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         let work_positions = if let Some(item) = clearing_item {
             let terrain = ecs.resource::<Terrain>();
             if carrying.is_some() {
-                let old_landing = ecs.get::<Clearing>(entity).and_then(|clear| clear.landing);
-                let old_drop_from = ecs
-                    .get::<Clearing>(entity)
-                    .and_then(|clear| clear.drop_from);
-                let job_positions: BTreeSet<_> = match job.kind {
-                    JobKind::Dig => side_neighbours(job.target).into_iter().collect(),
-                    JobKind::Channel => astar_neighbours(terrain, &BTreeSet::new(), job.target)
-                        .into_iter()
-                        .collect(),
-                    _ => unreachable!(),
-                };
-                let has_drop_side = |cell: Pos| {
-                    side_neighbours(cell).into_iter().any(|side| {
-                        is_walkable(terrain, &blocked, side)
-                            && (side == pos || !occupied.contains(&side))
-                    })
-                };
-                // NOTE: a marked cell is refused too (the own target included): a stone set down on a
-                // mark is lifted again or drops into its step, and without this the cage sweep
-                // freezes eight runs, not five.
-                let refused = |cell: Pos| {
-                    (cell.x, cell.y) == (job.target.x, job.target.y)
-                        || cell.z < pos.z
-                        || blocked.contains(&cell)
-                        || occupied.contains(&cell)
-                        || job_positions.contains(&cell)
-                        || ecs.resource::<Designations>().0.contains_key(&cell)
-                        || !terrain.is_standable(cell)
-                        || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)
-                        || closes_last_level_exit(terrain, &blocked, &occupied, cell)
-                        || !has_drop_side(cell)
-                };
-                let landing = old_landing
-                    .filter(|cell| {
-                        !blocked.contains(cell)
-                            // NOTE: the route to the set-down side may cross the landing itself.
-                            && (*cell == pos || !occupied.contains(cell))
-                            && terrain.is_standable(*cell)
-                            && has_drop_side(*cell)
-                            && !closes_last_level_exit(terrain, &blocked, &occupied, *cell)
-                    })
-                    .or_else(|| nearest_free_cell(terrain, &blocked, pos, refused));
-                if let Some(landing) = landing {
-                    let neighbours: BTreeSet<_> = side_neighbours(landing)
-                        .into_iter()
-                        .filter(|cell| is_walkable(terrain, &blocked, *cell))
-                        .collect();
-                    let closed = closed_to_dwarves(&blocked, &occupied, &[pos]);
-                    let from = old_drop_from
-                        .filter(|cell| {
-                            neighbours.contains(cell)
-                                && (*cell == pos
-                                    || (!occupied.contains(cell)
-                                        && astar(terrain, &closed, pos, &BTreeSet::from([*cell]))
-                                            .is_some()))
-                        })
-                        .or_else(|| {
-                            route_to_nearest(terrain, &closed, pos, |cell| {
-                                neighbours.contains(&cell) && !occupied.contains(&cell)
-                            })
-                            .and_then(|route| route.last().copied())
-                        })
-                        .or_else(|| neighbours.contains(&pos).then_some(pos));
-                    if let Some(from) = from {
-                        set_down = Some((landing, from));
-                        BTreeSet::from([from])
-                    } else {
-                        BTreeSet::new()
-                    }
-                } else {
-                    BTreeSet::new()
-                }
+                set_down = clearing_set_down(ecs, entity, job, pos, &blocked, &occupied);
+                set_down
+                    .map(|(_, from)| BTreeSet::from([from]))
+                    .unwrap_or_default()
             } else {
                 let at = stones[&item];
                 astar_neighbours(terrain, &blocked, at)
@@ -1878,6 +1903,14 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         }
 
         if clearing_item.is_some() && work_positions.is_empty() {
+            // NOTE: one already holding the stone waits and looks again next tick: he lifted it
+            // with a set-down, so a dwarf has just stepped onto it or its only route. Letting go
+            // here dropped it under him, where it could wall a dwarf in (12.9's rule).
+            if carrying.is_some() {
+                *ecs.get_mut::<JobState>(entity)
+                    .expect("every dwarf has a job state") = JobState::Walk;
+                continue;
+            }
             retry_claim(ecs, entity, job.id);
             continue;
         }
@@ -1969,6 +2002,15 @@ fn execute_jobs(ecs: &mut EcsWorld) {
 
         if let Some(item) = clearing_item {
             if carrying.is_none() {
+                // He lifts only a stone he has somewhere to set down (Wolf at the seat, 12.11:
+                // "throwing stones quite wildly"). One lifted with nowhere to go left him on the next
+                // tick through `release_claim`, which dropped it up to five cells off on the pit rim.
+                let mut lifted = blocked.clone();
+                lifted.remove(&stones[&item]);
+                if clearing_set_down(ecs, entity, job, pos, &lifted, &occupied).is_none() {
+                    retry_claim(ecs, entity, job.id);
+                    continue;
+                }
                 // A hauler may hold the item's haul claim; the miner takes custody at lift.
                 let haulers: Vec<_> = ecs
                     .iter_entities()
