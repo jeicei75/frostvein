@@ -2152,10 +2152,8 @@ fn a_designated_dig_and_a_stockpile_stream_a_stone_onto_a_zone_tile() {
         let index = (x as u32 + y as u32 * dims.x + z as u32 * dims.x * dims.y) as usize;
         snapshot.tiles.get(index).copied()
     };
-    // A solid tile whose OWN floor is solid, so the stone it drops lands on standable ground and
-    // can be picked up at all, beside a standable tile that serves as both work position and
-    // stockpile. Without the floor condition the search finds overhangs, where items — which
-    // never fall — are unreachable and this test would hang on a haul that cannot happen.
+    // A solid tile whose OWN floor is solid, so the stone stays at the dig site beside a
+    // standable tile that serves as both work position and stockpile.
     let mut face = None;
     'search: for z in 1..dims.z as i32 {
         for y in 0..dims.y as i32 {

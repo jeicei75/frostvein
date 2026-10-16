@@ -141,9 +141,9 @@ mutation "15 a channel is worked from the target itself" sim-core a_channel_is_w
 import pathlib
 # Re-pointed 2026-10-13 (12.10b): work positions read `astar_neighbours`; test renamed.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            if terrain.is_standable(job.target) {\n                astar_neighbours(terrain, blocked, job.target)\n                    .into_iter()\n                    .collect()\n'
+old = '            if terrain.is_standable(job.target) {\n                let goals: BTreeSet<_> = astar_neighbours(terrain, blocked, job.target)\n                    .into_iter()\n                    .collect();\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if terrain.is_standable(job.target) {\n                BTreeSet::from([job.target])\n'))
+p.write_text(s.replace(old, '            if terrain.is_standable(job.target) {\n                let goals: BTreeSet<_> = BTreeSet::from([job.target]);\n'))
 PY
 
 mutation "16 dig_yaw ignores a channel" gui a_channelling_miner_faces_the_target_cell <<'PY'
@@ -241,9 +241,9 @@ mutation "25 a channel stone spawns under its occupant" sim-core no_dwarf_is_cag
 import pathlib
 # Re-pointed 2026-10-13 (12.10b): a channel's block no longer spawns on the target; the shape now is the landing refusing no dwarf's tile.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        || occupied.contains(&cell)\n'
+old = '                            || occupied.contains(&cell)\n                            || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                        || (occupied.contains(&cell) && false)\n'))
+p.write_text(s.replace(old, '                            || (occupied.contains(&cell) && false)\n                            || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)\n'))
 PY
 
 # #182: a refused delivery holds at Work (the ruled first form), which deadlocks a hauler standing

@@ -9,17 +9,17 @@
 mutation "1 the cut does nothing" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            if let Some((base, tiles)) = tree {\n'
+old = '    let Some((base, tiles)) = tree_of(ecs.resource::<Terrain>(), at) else {\n        return;\n    };\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if let Some((base, tiles)) = tree.filter(|_| false) {\n'))
+p.write_text(s.replace(old, '    let Some((base, tiles)) = tree_of(ecs.resource::<Terrain>(), at).filter(|_| false) else {\n        return;\n    };\n'))
 PY
 
 mutation "2 the cut removes the trunk column only" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                for tile in &tiles {\n'
+old = '    for tile in tiles {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                for tile in tiles.iter().filter(|t| t.x == base.x && t.y == base.y) {\n'))
+p.write_text(s.replace(old, '    for tile in tiles.into_iter().filter(|t| t.x == base.x && t.y == base.y) {\n'))
 PY
 
 mutation "3 the crown box is 5x5 and takes the touching neighbour's crown" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
@@ -45,25 +45,25 @@ PY
 mutation "5 the wood spawns as stone" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    ecs.spawn((Item(ItemKind::Wood), item_id, base));\n'
+old = '        ecs.spawn((Item(ItemKind::Wood), item_id, base));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    ecs.spawn((Item(ItemKind::Stone), item_id, base));\n'))
+p.write_text(s.replace(old, '        ecs.spawn((Item(ItemKind::Stone), item_id, base));\n'))
 PY
 
 mutation "5 (serve) the wood spawns as stone" simd a_cut_fells_one_whole_tree_into_wood_and_a_cut_over_nothing_is_refused <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    ecs.spawn((Item(ItemKind::Wood), item_id, base));\n'
+old = '        ecs.spawn((Item(ItemKind::Wood), item_id, base));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    ecs.spawn((Item(ItemKind::Stone), item_id, base));\n'))
+p.write_text(s.replace(old, '        ecs.spawn((Item(ItemKind::Stone), item_id, base));\n'))
 PY
 
 mutation "5b one log per tree, not per trunk cell" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                for _ in 0..trunk_cells {\n'
+old = '    for _ in 0..trunk_cells {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                for _ in 0..trunk_cells.min(1) {\n'))
+p.write_text(s.replace(old, '    for _ in 0..trunk_cells.min(1) {\n'))
 PY
 
 mutation "6 the dig filter takes tree tiles again" sim-core a_dig_mark_never_lands_on_a_tree_tile <<'PY'

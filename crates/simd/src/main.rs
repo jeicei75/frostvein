@@ -565,16 +565,27 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 if !carried_items.insert(item) {
                     bail!("save item {item} has multiple carriers");
                 }
-                // A dwarf carries a stone only while holding that stone's haul job.
+                // A miner may carry a stone aside while retaining his dig or channel job.
                 // NOTE: the carried stone's saved POSITION is deliberately not checked against
                 // its carrier's — `carry_items` re-establishes that on the next tick, so
                 // rejecting the file would refuse it over something self-healing.
-                match haul_job_for_item.get(&item) {
-                    Some(job_id) if dwarf.current_job == Some(*job_id) => {}
-                    _ => bail!(
+                let miner_clearing = dwarf.profession == sim_core::Profession::Miner
+                    && save.jobs.iter().any(|job| {
+                        dwarf.current_job == Some(job.id.0)
+                            && matches!(
+                                job.kind,
+                                sim_core::JobKind::Dig | sim_core::JobKind::Channel
+                            )
+                    });
+                let holds_haul = matches!(
+                    haul_job_for_item.get(&item),
+                    Some(job_id) if dwarf.current_job == Some(*job_id)
+                );
+                if !holds_haul && !miner_clearing {
+                    bail!(
                         "save dwarf {} carries item {item} without holding its haul job",
                         dwarf.id
-                    ),
+                    );
                 }
             }
             if !in_bounds(dwarf.pos) {

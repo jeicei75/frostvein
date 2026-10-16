@@ -295,12 +295,11 @@ PY
 mutation "load_world lets a carrying dwarf hold someone else's job" simd carrying_dwarf_without_the_matching_haul_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''                match haul_job_for_item.get(&item) {
-                    Some(job_id) if dwarf.current_job == Some(*job_id) => {}
-                    _ => bail!(
+old = '''                if !holds_haul && !miner_clearing {
+                    bail!(
                         "save dwarf {} carries item {item} without holding its haul job",
                         dwarf.id
-                    ),
+                    );
                 }
 '''
 assert old in s

@@ -85,9 +85,9 @@ PY
 mutation "7 a channel's block may land below its worker" sim-core a_channel_never_lands_its_stone_below_the_worker <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        || cell.z < pos.z\n'
+old = '                        column(cell)\n                            || cell.z < pos.z\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '                        column(cell)\n'))
 PY
 
 # Row 8 SURVIVED against the staircase sweep (first run, 2026-10-13; the Task 4 fix cleared the two

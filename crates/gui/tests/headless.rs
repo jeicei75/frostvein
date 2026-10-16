@@ -5150,6 +5150,14 @@ fn digging_outranks_carrying_in_the_clip_choice() {
         None,
     );
     assert_eq!(dwarf_clip(&stooping), DwarfClip::Walk);
+    let clearing_miner = working(
+        1,
+        [0, 0, 0],
+        JobState::Work,
+        Some(protocol::DwarfJob::Haul),
+        Some(9),
+    );
+    assert_eq!(dwarf_clip(&clearing_miner), DwarfClip::Carry);
 }
 
 fn dig_phase_of(app: &mut App, id: u32) -> gui::project::DigPhase {

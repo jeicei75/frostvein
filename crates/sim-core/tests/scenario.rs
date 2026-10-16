@@ -1117,8 +1117,7 @@ fn designate_dig_stockpile_haul_and_the_stone_reaches_the_pile_headlessly() {
         for steps in 1..=6 {
             make_standable(world, cell(steps));
         }
-        // The dug tile keeps its floor, so the stone it drops lands on standable ground. Items
-        // never fall, so without this the stone would be unreachable and the loop could not close.
+        // The dug tile keeps its floor, so the stone stays at the dig site for a local haul.
         assert!(world.set_tile(
             Pos {
                 z: target.z - 1,
@@ -2948,7 +2947,18 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // 12.10b re-pin (AC 4 ruling, a channel's block never lands below the worker): was
     // [(4, 4, 4)], now (10, 4, 4), read by dump at tick 4,000: idle at [67, 76, 28] between two
     // loose blocks and two drops, no mark and no claim left (the #186 shape again).
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 1] = [(10, 4, 4)];
+    // 12.11 re-pin (was [(10, 4, 4)]), each run read by a per-item trace at tick 4,000. All are the
+    // #186 shape: an idle dwarf on a cell whose other same-level sides are rock, a drop or a loose
+    // block, no mark and no claim left. Moved items are disclosed where they border the cell.
+    // (8,4,4) [69,67,7]: a block he set down himself at t1204 (clearing), a channel block at t1428
+    // after he walked in at t1377. (12,4,4) [69,65,10]: his own clearing set-down at t1029 took one
+    // of two exits, a later cut took the other. (12,4,1) [66,60,10]: three blocks, two of them
+    // cleared there by another miner (t565, t614), the third a hauler's drop; he walked in at t718.
+    // (16,6,3) [99,62,16]: his own set-down (t3420) and a channel block (t3471) after he stopped at
+    // t3408. (10,6,0) [62,78,28] stood 521 ticks, no item beside it, and moved again at t3996: a
+    // pause, not a cage.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 5] =
+        [(8, 4, 4), (10, 6, 0), (12, 4, 1), (12, 4, 4), (16, 6, 3)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
@@ -2958,7 +2968,10 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // channel no longer spawns a block on its target, so neither shape arises: none is left. Two
     // intermediate runs ((0, 4, 1) and (4, 4, 1)) were a worker in the pit of a level above refused
     // forever by the wall-in check read BEFORE the step was cut; the check now reads after.
-    const UNFINISHED: [(u64, i32, usize); 0] = [];
+    // 12.11 re-pin (was none): three 6-wide runs are SLOW, not stuck. A clearing miner walks a stone
+    // aside before he cuts, and the crew finishes at t4,080 (6), t4,350 (11) and t4,444 (12), read
+    // by running the same runs to 16,000 ticks.
+    const UNFINISHED: [(u64, i32, usize); 3] = [(6, 6, 2), (11, 6, 3), (12, 6, 6)];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
@@ -3388,7 +3401,6 @@ fn loose_items_on_air(world: &World) -> Vec<(Id, Pos)> {
 }
 
 #[test]
-#[ignore = "RED until Task 2"]
 fn a_loose_stone_falls_to_standable_ground_in_one_tick() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let site = staircase_site(&world);
@@ -3415,7 +3427,6 @@ fn a_loose_stone_falls_to_standable_ground_in_one_tick() {
 }
 
 #[test]
-#[ignore = "RED until Task 3"]
 fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let site = staircase_site(&world);
@@ -3444,7 +3455,11 @@ fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
     );
     assert!(
         world.designations().is_empty(),
-        "channel mark never completed"
+        "channel mark never completed: claims {:?}, carrying {:?}, dwarves {:?}, items {:?}",
+        world.claims(),
+        world.carrying(),
+        world.dwarves(),
+        world.items()
     );
     assert!(
         loose_items_on_air(&world).is_empty(),
@@ -3454,7 +3469,6 @@ fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
 }
 
 #[test]
-#[ignore = "RED until Task 2"]
 fn a_dig_under_a_stone_does_not_leave_it_floating() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let site = staircase_site(&world);
@@ -3501,7 +3515,6 @@ fn a_dig_under_a_stone_does_not_leave_it_floating() {
 }
 
 #[test]
-#[ignore = "RED until Task 4"]
 fn digging_hillside_tree_ground_fells_the_tree() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let ground = Pos { x: 103, y: 2, z: 8 };
@@ -3524,7 +3537,66 @@ fn digging_hillside_tree_ground_fells_the_tree() {
 }
 
 #[test]
-#[ignore = "RED until Task 3"]
+fn digging_a_marked_trees_ground_releases_its_woodcutter() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let ground = Pos { x: 103, y: 2, z: 8 };
+    let base = Pos { z: 9, ..ground };
+    let cut = rect(base, base);
+    let dig = rect(ground, ground);
+    assert!(
+        world
+            .apply_command(SimCommand::Designate {
+                kind: DesignationKind::Cut,
+                rect: cut
+            })
+            .is_none()
+    );
+    assert!(
+        world
+            .apply_command(SimCommand::Designate {
+                kind: DesignationKind::Dig,
+                rect: dig
+            })
+            .is_none()
+    );
+    world.step();
+    let cut_job = world
+        .jobs()
+        .into_iter()
+        .find(|job| job.kind == JobKind::Cut)
+        .expect("cut job")
+        .id;
+    let mut save = world.to_save();
+    let woodcutter = save
+        .dwarves
+        .iter_mut()
+        .find(|dwarf| dwarf.profession == sim_core::Profession::Woodcutter)
+        .expect("woodcutter");
+    woodcutter.current_job = Some(cut_job.0);
+    world = World::from_save(save);
+    assert!(
+        run_until(&mut world, 4_000, |world| world.tile(ground)
+            == Some(Tile::Empty)),
+        "ground was not dug"
+    );
+    assert_eq!(world.tile(base), Some(Tile::Empty));
+    assert!(
+        run_until(&mut world, 4_000, |world| world
+            .jobs()
+            .iter()
+            .all(|job| job.kind != JobKind::Cut)),
+        "held cut did not complete its no-tree no-op"
+    );
+    assert!(
+        world
+            .claims()
+            .into_iter()
+            .all(|(_, job)| job != Some(cut_job)),
+        "woodcutter kept the removed tree's job"
+    );
+}
+
+#[test]
 fn a_miner_clears_a_four_mark_tunnel_without_a_pile() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let worker = world.dwarves()[2].1;
@@ -3664,7 +3736,6 @@ fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
 
 // RED on 015548f (0 of 24: a channel only ramps the floor, nothing opens).
 #[test]
-#[ignore = "RED until Task 3"]
 fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
     let mut worked = 0;
     let mut stalled = Vec::new();
