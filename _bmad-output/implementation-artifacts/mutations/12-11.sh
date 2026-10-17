@@ -172,3 +172,11 @@ old = '            if carrying.is_some() {\n                *ecs.get_mut::<JobSt
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            if false && carrying.is_some() {\n                *ecs.get_mut::<JobState>(entity)\n'))
 PY
+
+mutation "18 a miner caged by one stone waits for a hauler (dig-loop seat save)" sim-core a_miner_caged_by_one_stone_carries_it_out_and_cuts <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    return caging_stone(terrain, &blocked, &stones, pos);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    return None;'))
+PY

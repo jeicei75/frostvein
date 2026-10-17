@@ -486,6 +486,49 @@ mutation tables still apply ok  9s
 GATE GREEN  3901s
 ```
 
+Seat finding (Wolf, 2026-10-16 15:04 UTC, re-sitting the card): "dwarf still got in to the loop of digging",
+at 52,64,7. His save (tick 7640) is kept at `~/frostvein-saves/12-11-dig-loop.save`. Loaded offline
+(`World::from_save`, release probe, scratch worktree) and run 3000 ticks on `97b93ac`: the pit is FROZEN,
+0 of 20 marks done and no stone moved; the pile is full (21 of 21), so no hauler moves anything. Two miners,
+two shapes, both caged:
+- Dori (id 4), in the two-cell pocket 52,63,8 / 52,64,8, is shut in by ONE stone, 43 on 53,63,8 (without it
+  he reaches 6118 cells and the camp). Stone 43 moved there from 55,63,8 (haul job 65's creation target,
+  t5466); what moved it is not in a save. His loop is the #187 shape: ten swings on channel 67 or 69, no
+  cell for the block, undo, retry, alternating. Clearing never fired: it looked only at stones on the
+  TARGET's faces, not at his own way out. This is Task 3's "a dwarf caged by a moved item: fix it".
+- Bifur (id 2), at 54,64,6, is caged by TERRAIN: a two-cell hole with no ramp up (stone 46 in the other
+  cell; without it he reaches 2 cells). Loop: a 5-tick lift, no set-down, let go (the seat guard 1,
+  correct). Likely a Dig of 53,64,6 took the floor out from under his only exit (inferred). Filed #203.
+
+Wolf ruled "fix it now", then "land and file". Fix (`44ca3fd`): `caging_stone`. When a miner's dig/channel
+faces are clear, he clears the lowest-id stone that alone shuts his pocket (<= 64 cells) in, with the same
+lift/carry/set-down as a face stone. NOTE in the helper: a pocket over 64 cells, or one shut by two stones,
+is not seen. NEW `a_miner_caged_by_one_stone_carries_it_out_and_cuts` (Dori's shape built from tiles, no
+pile): RED on `97b93ac` (the miner never lifts), GREEN on the fix. Replay of the save on the fix: Dori lifts
+43 at t7646, cuts at t7791, 9 marks done by t8948, and Bifur climbs out through a cut Dori opens. Then at
+~t8955 both miners stand head-on in a two-cell pocket that FOUR stones seal (42, 43, 52, 53; 43 is Dori's
+own set-down): the noted no-swap case, and a full pile piling stones round the pit. Filed #204.
+
+Cage sweep re-pinned: UNFINISHED `[(11,6,1)]` (was `[(6,6,2),(11,6,1)]`; seed 6 now finishes inside 4,000).
+ONE_LEVEL_ISLANDS unchanged. Every other sim-core test unchanged. Mutation row 18 (the trigger returns
+`None`) KILLED, run alone after commit.
+
+Full gate on `44ca3fd` (plus row 18 and this record), `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/gate.sh`:
+
+```
+cargo fmt --check           ok  1s
+cargo clippy -D warnings    ok  3s
+cargo test                  ok  632s
+cargo test (pixel guards)   ok  3019s
+tui has no sim-core edge                ok
+client-core has no sim-core edge        ok
+gui has no sim-core edge                ok
+metrics ledger tests        ok  0s
+bench tests                 ok  20s
+mutation tables still apply ok  9s
+GATE GREEN  3693s
+```
+
 ### Completion Notes List
 
 - Task 2: uncarried items fall after dwarves in ascending id order, to the nearest free cell from the column's first standable cell, never above the cell they fell from. The channel's dwarf landing check and item gravity share `first_standable_down_column`. The old unit test `a_stone_on_unstandable_ground_leaves_its_haul_job_queued_and_retried` is flipped to `a_stone_on_unstandable_ground_falls_while_its_haul_job_remains` (the premise "items never fall" is gone).
@@ -497,6 +540,7 @@ GATE GREEN  3901s
 - Commits: Tasks 2, 3 and 4 are ONE commit (`6e4f9ea`): their `lib.rs` hunks interleave (the fall rule, the clearing step and `fell_tree` share `settle`, `execute_jobs` and `release_claim`). The mid-run attempt to split them was impractical because the fast gate runs `a_busy_crew_...` and the cage sweep on the working tree. No `--no-verify` anywhere.
 - `serve.rs` is NOT in the fast gate; the whole file (73 tests) was run by hand with `RUST_TEST_THREADS=2` and passed, then the two tests added afterwards were run alone.
 - Seat fix (Wolf's finding, after the first green gate): a clearing miner's set-down route runs through the crew and a stale kept landing is searched again (the two causes); he lifts only with a set-down, lets go only beside himself, and waits while holding when his set-down is taken (Wolf's guards). See the Debug Log's seat-finding entry.
+- Dig-loop fix (Wolf's second seat finding): a miner whose pocket one stone shuts carries that stone out (`caging_stone`). The terrain hole (#203) and the many-stone pocket on a full pile (#204) are filed, not fixed (Wolf: "land and file").
 
 ### File List
 
@@ -517,6 +561,7 @@ GATE GREEN  3901s
 
 | Date | Change |
 |---|---|
+| 2026-10-17 | Seat finding (Wolf): a dig loop at 52,64,7. His save froze the pit: one miner caged by one moved stone, one in a terrain hole. Fixed the first (`caging_stone`, `44ca3fd`); new test RED before, GREEN after; cage UNFINISHED pin moved; row 18 KILLED. Filed #203 (terrain hole) and #204 (many-stone pocket on a full pile). Full gate GREEN (3693 s, one test thread). Status -> review. |
 | 2026-10-16 | Orchestrator: full gate GREEN on `86d60f4` (3901 s, one test thread). Status -> review. |
 | 2026-10-16 | Seat finding (Wolf): miners threw stones up to five cells onto the pit rim. Two causes fixed (the set-down route closed to the crew, a stale kept landing) plus Wolf's three guards, each pinned; new no-throw test RED before, GREEN on main and the fix; cage pins moved; 21/21 mutations KILLED; wire 5/5 + 5/5 OK. Status back to in-progress until the gate. |
 | 2026-10-16 | Orchestrator: full gate GREEN on `40195d5` (3689 s, one test thread). Status -> review. |
