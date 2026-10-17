@@ -2983,7 +2983,9 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // by running the same runs to 16,000 ticks.
     // 12.11 seat re-pin (was the three above): still slow, not stuck. Run to 16,000 ticks, seed 6
     // finishes at t4,080 and seed 11 at t4,100; seed 12 now finishes inside the 4,000.
-    const UNFINISHED: [(u64, i32, usize); 2] = [(6, 6, 2), (11, 6, 1)];
+    // 12.11 dig-loop re-pin (was (6, 6, 2) too): a miner caged by one stone carries it out
+    // (`caging_stone`), and seed 6 now finishes inside the 4,000.
+    const UNFINISHED: [(u64, i32, usize); 1] = [(11, 6, 1)];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
@@ -4083,6 +4085,92 @@ fn a_miner_clears_a_four_mark_tunnel_without_a_pile() {
         world.designations()
     );
     assert!(world.zones().is_empty());
+}
+
+// Wolf's 12.11 seat save (`12-11-dig-loop.save`, miner Dori at 52,63,8): a miner in a two-cell
+// pocket whose only exit holds a stone, the pile full, so no hauler ever takes it. His channel in
+// the pocket finds no cell for its block, is refused, and he swings at it forever. He must carry
+// the stone out of the way himself, as he does a stone on his target's face (D6).
+#[test]
+fn a_miner_caged_by_one_stone_carries_it_out_and_cuts() {
+    let dims = Dims { x: 14, y: 8, z: 4 };
+    let index = |pos: Pos| {
+        pos.x as usize
+            + pos.y as usize * dims.x as usize
+            + pos.z as usize * dims.x as usize * dims.y as usize
+    };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    for x in 0..dims.x as i32 {
+        for y in 0..dims.y as i32 {
+            for z in 0..2 {
+                tiles[index(Pos { x, y, z })] = Tile::Solid(Material::Stone);
+            }
+            // The pocket's walls: x 0..=2 is rock at the dwarf's level but for the pocket.
+            if x <= 2 {
+                tiles[index(Pos { x, y, z: 2 })] = Tile::Solid(Material::Stone);
+            }
+        }
+    }
+    let miner = Pos { x: 1, y: 3, z: 2 };
+    let target = Pos { x: 2, y: 3, z: 2 };
+    let exit = Pos { x: 3, y: 3, z: 2 };
+    tiles[index(miner)] = Tile::Empty;
+    tiles[index(target)] = Tile::Empty;
+
+    let mut save = World::generate(42, Dims::DEFAULT).to_save();
+    save.dims = dims;
+    save.tiles = tiles;
+    save.designations.clear();
+    save.zones.clear();
+    save.jobs.clear();
+    save.emitters.clear();
+    save.dwarves = vec![SavedDwarf {
+        id: 0,
+        pos: miner,
+        state: JobState::Idle,
+        home: miner,
+        cooldown: 0,
+        current_job: None,
+        work_progress: 0,
+        carrying: None,
+        identity: Identity {
+            name: DwarfName::Durin,
+            colour: DwarfColour::Red,
+        },
+        profession: Profession::Miner,
+        path: Vec::new(),
+    }];
+    save.items = vec![(1, exit, ItemKind::Stone)];
+    save.next_id = 2;
+    let mut world = World::from_save(save);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(target, target),
+    });
+
+    let mut miner_carried = false;
+    for _ in 0..1_000 {
+        world.step();
+        miner_carried |= world.carrying().iter().any(|(_, item)| *item == Some(1));
+        if world.designations().is_empty() {
+            break;
+        }
+    }
+    assert!(
+        miner_carried,
+        "the miner never lifted the stone in his exit"
+    );
+    assert!(
+        world.designations().is_empty(),
+        "the caged miner's channel never completed: dwarves {:?}, items {:?}",
+        world.dwarves(),
+        world.items()
+    );
+    assert!(
+        loose_items_on_air(&world).is_empty(),
+        "floating items: {:?}",
+        loose_items_on_air(&world)
+    );
 }
 
 // RED on 015548f: the cell under a channel became a Ramp, so nothing opened and the pit below was

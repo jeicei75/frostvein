@@ -1682,6 +1682,49 @@ fn resolve_blocked_step(
     true
 }
 
+/// The stone that alone shuts a miner on `pos` in a small pocket: the lowest id whose removal opens
+/// the pocket out. Wolf's 12.11 seat save: a miner caged by one stone, the pile full so no hauler
+/// came, swung at a refused channel forever.
+/// NOTE: a pocket larger than `CAGE_CELLS`, or one shut by two stones, is not seen.
+fn caging_stone(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    stones: &BTreeMap<u32, Pos>,
+    pos: Pos,
+) -> Option<u32> {
+    const CAGE_CELLS: usize = 64;
+    // The cells reachable from `pos`, or `None` once there are more than `CAGE_CELLS`.
+    let pocket = |closed: &BTreeSet<Pos>| {
+        let mut seen = BTreeSet::from([pos]);
+        let mut queue = VecDeque::from([pos]);
+        while let Some(cell) = queue.pop_front() {
+            for next in astar_neighbours(terrain, closed, cell) {
+                if seen.insert(next) {
+                    if seen.len() > CAGE_CELLS {
+                        return None;
+                    }
+                    queue.push_back(next);
+                }
+            }
+        }
+        Some(seen)
+    };
+    let inside = pocket(blocked)?;
+    let beside: BTreeSet<Pos> = inside
+        .iter()
+        .flat_map(|cell| astar_neighbours(terrain, &BTreeSet::new(), *cell))
+        .collect();
+    stones
+        .iter()
+        .filter(|(_, cell)| beside.contains(cell))
+        .find(|(_, cell)| {
+            let mut opened = blocked.clone();
+            opened.remove(cell);
+            pocket(&opened).is_none()
+        })
+        .map(|(id, _)| *id)
+}
+
 /// Where a clearing miner on `pos` sets his stone down, and the side of it he does that from: the
 /// nearest free cell he may leave it on, and the nearest walkable side of it he can reach. Kept from
 /// the last tick while it still holds. `None` when there is no such pair.
@@ -1817,7 +1860,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     _ => false,
                 };
                 if !blocked_faces {
-                    return None;
+                    return caging_stone(terrain, &blocked, &stones, pos);
                 }
                 let near_target = |cell: &Pos| {
                     if job.kind == JobKind::Channel {
