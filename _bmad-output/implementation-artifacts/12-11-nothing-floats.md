@@ -565,6 +565,7 @@ way_down_wire.py 5 of 5 WAY DOWN OK (deepest z 5, back up at tick 1276, was 1388
 
 | Date | Change |
 |---|---|
+| 2026-10-17 | Seat re-sit (Wolf) on `e098f71`: "no stuck anymore with old save and no flying stones .. well we need to tweak details in later stories still most likely but now it's ok". Seat PASS; detail tuning left to later stories (#203, #204 already filed). Next: code review in a fresh session. |
 | 2026-10-17 | Seat finding (Wolf): a dig loop at 52,64,7. His save froze the pit: one miner caged by one moved stone, one in a terrain hole. Fixed the first (`caging_stone`, `44ca3fd`); new test RED before, GREEN after; cage UNFINISHED pin moved; row 18 KILLED. Filed #203 (terrain hole) and #204 (many-stone pocket on a full pile). Full gate GREEN (3693 s, one test thread). Status -> review. |
 | 2026-10-16 | Orchestrator: full gate GREEN on `86d60f4` (3901 s, one test thread). Status -> review. |
 | 2026-10-16 | Seat finding (Wolf): miners threw stones up to five cells onto the pit rim. Two causes fixed (the set-down route closed to the crew, a stale kept landing) plus Wolf's three guards, each pinned; new no-throw test RED before, GREEN on main and the fix; cage pins moved; 21/21 mutations KILLED; wire 5/5 + 5/5 OK. Status back to in-progress until the gate. |
