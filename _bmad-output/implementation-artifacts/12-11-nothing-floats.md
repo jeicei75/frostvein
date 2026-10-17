@@ -529,6 +529,10 @@ mutation tables still apply ok  9s
 GATE GREEN  3693s
 ```
 
+Wire on `7d1e77c` (release, scratch worktree, fresh daemon in an empty directory each, at most 4 at a time,
+each daemon's own bind checked in its log): floats_wire.py 5 of 5 FLOATS OK (22 of 32 on the pile);
+way_down_wire.py 5 of 5 WAY DOWN OK (deepest z 5, back up at tick 1276, was 1388 on `86d60f4`).
+
 ### Completion Notes List
 
 - Task 2: uncarried items fall after dwarves in ascending id order, to the nearest free cell from the column's first standable cell, never above the cell they fell from. The channel's dwarf landing check and item gravity share `first_standable_down_column`. The old unit test `a_stone_on_unstandable_ground_leaves_its_haul_job_queued_and_retried` is flipped to `a_stone_on_unstandable_ground_falls_while_its_haul_job_remains` (the premise "items never fall" is gone).
