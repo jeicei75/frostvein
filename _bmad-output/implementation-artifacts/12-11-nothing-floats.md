@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10b's creation
 
 # Story 12.11: Nothing Floats
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -242,6 +242,102 @@ The options as offered at creation, kept for the record:
 - [x] **Task 9: spine and gate**
   - [x] `ARCHITECTURE-SPINE.md` (2026-08-09, beside its 12.10/12.10b bullets): one bullet for the fall rule, Q1 and Q2 as ruled.
   - [x] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
+
+### Review Findings
+
+Code review run 1, 2026-10-17, on `1b1b99b` (diff `56bfbe5..HEAD`, 21 files, +3,143/-124; code 7 files,
++1,667/-94). This was a fresh session. Four layers ran and none timed out. All ran cargo 1.97.1, each in its
+own `/tmp/review-<layer>` target dir.
+- Blind Hunter (Sonnet) took `sim-core/src` and gui `project.rs`.
+- Edge Case Hunter (Sonnet) took `simd`, gui `tests/` and sim-core `tests/`.
+- The Acceptance and Feature Auditors (Opus) took the whole diff, without the story file or the creation prototype.
+
+| Layer | Findings | Severity | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 10 | 4 MED, 6 LOW | `cargo test -p sim-core` (green); **no probe**, so every finding was reasoned |
+| Edge Case Hunter | 12 | 3 MED, 9 LOW | `simd` (75 green), the scenario suite (76 green, cage sweep included); **no probe or daemon**, so every finding was reasoned |
+| Acceptance Auditor | 10 | 1 HIGH, 2 MED, 7 LOW | sim-core and simd full suites (green); a save → load → step equivalence probe at every tick of a clear (**RED**); per-tick probes over the 32 cage runs and 24 staircase delays (AC 2/6 clean); floats and way-down wire, 1 fresh daemon each (OK) |
+| Feature Auditor | 4 | 1 MED, 3 LOW | hop trace (every hop WIRED); `floats_wire.py` on a fresh daemon (OK); the tunnel with no pile on the wire (4 of 4); 16 clearing stretches on the wire; tree logs probe; dig-under-emitter refusals live; tui `--z 13`; the gui chip and clip headless tests |
+
+Convergence: the cancel mid-clear drop (blind + feature + acceptance) and `haul` before the lift (edge +
+acceptance). After triage: 3 decision (all ruled, now patches), 7 patch, 9 defer, 12 dismissed. Unproven by any run: AC 10, AC 15's gui
+half and AC 8's gui half at the seat (headless only); the seat record quotes the dig-loop save sitting, not the
+card's questions 1-3, on the final code. AC 13 is a merge-time event; watch the closing-keyword trap.
+
+- [ ] [Review][Patch] **A save taken mid-clear does not step like the never-saved world** (acceptance, HIGH,
+  RAN) — standing AC 3 ("new sim state is deterministic and saved"). `Clearing { item, landing, drop_from }`
+  (`lib.rs:287`) is not in `SavedDwarf` (`save.rs:30`). On load the trigger re-inserts it with `WorkProgress(0)`
+  (`lib.rs:1901-1912`), so the lift or set-down restarts and the kept landing is lost. A probe that saves at every
+  tick of a clear diverges at save ticks 48-52 and 64-80. No `save_load.rs` test was added; the serve test proves
+  only that the clear finishes. The story's "No new saved state" holds for the fall, not for D6. The choice is the
+  save format: (a) `clearing: Option<SavedClearing>` with `#[serde(default)]`, because a pre-12.11 save has no
+  clearing miner, so `None` is exact and Wolf's kept saves still load; (b) the same field with no default, by house
+  precedent, which refuses every pre-12.11 save, `~/frostvein-saves/12-11-dig-loop.save` included; (c) file an
+  issue instead. **RULED (Wolf, 2026-10-17): (b)**, no `#[serde(default)]`; pre-12.11 saves are refused.
+- [ ] [Review][Patch] **The wire never judges AC 3: `floats_wire.py`'s pile holds 22 cells** (feature, MED,
+  RAN; acceptance + blind) — the docstring's "big enough for all 28 blocks" is false
+  (`12-11-signoff/floats_wire.py:12`). "22 of 32 on the pile" is the pile's capacity, and the other 10 stones
+  have haul jobs retrying for good. 12.10b's review deferred "resize it at 12.11", and this story did not. No sim
+  test pins AC 3 either: the flipped unit test asserts only that `z` fell. With pile layers at z 10-12, all 32 are
+  delivered. (a) a scenario test of a fallen stone delivered to the pile, and the docstring corrected; (b) (a), plus
+  the wire's pile resized so that OK needs every item on the pile (the seat card is untouched). **RULED (Wolf,
+  2026-10-17): (b).**
+- [ ] [Review][Patch] **Cage pin `(12,4,4)` is a moved-stone cage, re-pinned without a ruling** (acceptance,
+  LOW) — Task 3 says "fix it, don't pin it". Its own comment reads: his own clearing set-down took one exit, and a
+  later cut took the other. That is the same "closed by a cut" shape Wolf ruled for `(12,4,1)` (#186), but no
+  ruling names it. (a) extend the `(12,4,1)` ruling and note it on #186; (b) fix it. **RULED (Wolf, 2026-10-17):
+  (a)**, the record beside the pin and a note on #186.
+- [ ] [Review][Patch] **A cancel or a vanished job mid-clear drops the stone at any distance**
+  [`crates/sim-core/src/lib.rs:1347`] (blind + feature + acceptance, MED) — `apply_command`'s cancel removes the job
+  before `release_claim` (`lib.rs:3033-3050`), and so does the vanished-job path (`:1835`). `clearing_job` is then
+  `None`, so Wolf's "lets go only beside himself" guard is skipped and `nearest_free_cell` searches at any
+  distance. That is the "throwing stones" path. Fix: key the beside-him rule on `Clearing` alone, and the
+  target-column refusals on the job when it still exists.
+- [ ] [Review][Patch] **The wire reads `haul` while the miner walks to the stone empty-handed**
+  [`crates/sim-core/src/lib.rs:3160`] (edge + acceptance, MED) — D7 says "from the start of the lift run".
+  `Clearing` is inserted when the trigger fires (`:1905`), so in the probe he read `haul` about 40 ticks before the
+  lift began. A stone on his only mark means he never reads `channel` first. Fix: `World::clearing()` names a miner
+  only while he carries or works the lift (`JobState::Work`). The bridge then needs no change.
+- [ ] [Review][Patch] **A one-delta pick swing after every set-down** [`crates/sim-core/src/lib.rs:2076`] (feature,
+  MED, RAN) — this breaks AC 15's "never the dig swing". The set-down removes `Clearing` but leaves `JobState::Work`,
+  so the next delta reads `channel`/`dig` + `work`, which is `DwarfClip::Dig` (16 of 16 stretches on the wire). Fix:
+  set `JobState::Walk` at the set-down, as the haul pick-up does.
+- [ ] [Review][Patch] **simd's relaxed carry rule has no refusal test and accepts two holders**
+  [`crates/simd/src/main.rs:568`] (edge, MED) — dropping `profession == Miner`, or widening the `matches!`, keeps
+  every test green. A save in which miner A carries X while hauler B holds `Haul{X}` is accepted, which is the
+  two-holders state D6 forbids. Fix: refuse when another dwarf holds the item's haul job, and add serve tests for
+  the refusal side: a hauler with a dig job carrying, a miner on a cut job carrying, and the two-holders save. If
+  decision 1 saves `Clearing`, also require the carried item to equal the saved clearing item.
+- [ ] [Review][Patch] **The no-throw sweep can pass with nothing carried** [`crates/sim-core/tests/scenario.rs:4296`]
+  (edge, LOW; latent vacuity) — `run_until`'s result is ignored and nothing asserts that a stone was ever carried.
+  Fix: assert each level is worked, and assert a carried-stone count > 0.
+- [ ] [Review][Patch] **Row 7's "the column alone is equivalent" is unproven for Dig**
+  [`_bmad-output/implementation-artifacts/mutations/12-11.sh`] (acceptance, LOW, read) — for a Dig target, the cell
+  on its top is refused only by the column clause. A stone set there falls into the dug cell. Fix: add a Dig-fixture
+  test that kills the column-only mutation, or correct the Debug Log's claim if the mutation proves equivalent.
+- [ ] [Review][Patch] **The spine bullet omits `caging_stone` and the seat guards**
+  [`_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md:182`]
+  (acceptance, LOW) — the clearing trigger now has three cases, and the three guards are lift only with a set-down,
+  let go only beside himself, and wait while holding.
+- [x] [Review][Defer] **AC 6's "no dwarf on air longer than his fall" is asserted nowhere, and standable-or-falling
+  only in the staircase sweep's `run_until`** [`crates/sim-core/tests/scenario.rs:4320`] — deferred. A per-tick
+  probe over all 56 runs found 0 violations.
+- [x] [Review][Defer] **AC 7 (terrain never falls) has no test or row** — deferred; no terrain-fall code exists.
+- [x] [Review][Defer] **A clearing set-down may land on a free pile cell** [`crates/sim-core/src/lib.rs:1234`] —
+  deferred; harmless, but the guardrail and the record do not cover it.
+- [x] [Review][Defer] **`closes_last_level_exit` counts only same-level sides** [`crates/sim-core/src/lib.rs:833`] —
+  deferred. A fallen stone whose one candidate is refused hangs until the dwarf moves (D2's NOTE; Wolf ruled the
+  check kept everywhere; it is the #186 shape for an idle dwarf).
+- [x] [Review][Defer] **A one-tick flap of the trigger resets dig progress** [`crates/sim-core/src/lib.rs:1914`] —
+  deferred; reasoned only, and the kept-stone rule covers the observed ping-pong.
+- [x] [Review][Defer] **`caging_stone`'s per-tick BFS cost is unmeasured** [`crates/sim-core/src/lib.rs:1863`] —
+  deferred; the BFS is capped at 64 cells, with a few miners.
+- [x] [Review][Defer] **A dig's own spawned stone landing has no `closes_last_level_exit`** [`crates/sim-core/src/lib.rs:2240`]
+  — deferred, beside #203 (the dig's wall-in check reads pre-dig terrain).
+- [x] [Review][Defer] **The serve D7 test does not pin one dwarf across its three stages and relies on seed-fixed
+  cells** [`crates/simd/tests/serve.rs:2935`] — deferred.
+- [x] [Review][Defer] **The serve mid-clear load test's "opened" check does not pin the carrier as the cutter**
+  [`crates/simd/tests/serve.rs:1271`] — deferred.
 
 ## Dev Notes
 

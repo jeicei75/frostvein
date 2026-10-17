@@ -2682,3 +2682,15 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **No preview test uses a Torch** (`crates/gui/src/project.rs` tests): both new Stockpile asserts and the Channel emitter asserts use the Campfire only. `on_emitter` matches `Torch | Campfire`, so the behaviour is correct; only a pin is missing. (blind, read)
 - **#196 fixture is loose** (`crates/sim-core/tests/scenario.rs` `job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever`): a 6,000-tick bound on a ~1 s test, and no assert that a dwarf went low or came back up. The `low` set is passed to `step_and_watch` but never asserted. Row 15 still kills it at the level-2 stall. (edge)
 - **#196 has one deterministic guard**: with row 15 (back-out for idle blockers only) applied, the one-wide sweep stays green. Only the head-on fixture catches it, and the 1,200-run release probe behind "frozen one-wide 4 -> 0" is scratch code, not in the repo. (acceptance, RAN)
+
+## Deferred from: code review of 12-11-nothing-floats, run 1 (2026-10-17)
+
+- **AC 6 is asserted only in part** (`crates/sim-core/tests/scenario.rs:4320`, acceptance, RAN). "No dwarf on air longer than his fall" is asserted nowhere. Standable-or-falling is asserted only in the two-wide staircase sweep's `run_until`. A per-tick probe over the 32 cage runs and the 24 staircase delays found 0 violations.
+- **AC 7 (terrain never falls) has no test or mutation row** (acceptance). No terrain-fall code exists to test.
+- **A clearing set-down may land on a free stockpile cell** (`crates/sim-core/src/lib.rs:1234`, acceptance, read). Harmless, but the "never carries to the pile" guardrail and the record do not say so.
+- **`closes_last_level_exit` counts only same-level sides** (`crates/sim-core/src/lib.rs:833`, blind, read). A fallen stone whose one candidate is refused hangs until the dwarf moves. That case is D2's NOTE, and Wolf ruled the check kept everywhere. For an idle dwarf it is the #186 shape.
+- **A one-tick flap of the clearing trigger resets the miner's dig progress** (`crates/sim-core/src/lib.rs:1914`, blind, read). The kept-stone rule covers the ping-pong that was observed.
+- **`caging_stone`'s per-tick BFS cost is unmeasured** (`crates/sim-core/src/lib.rs:1863`, blind, read). The BFS is capped at 64 cells, plus one per adjacent stone, for each miner whose faces are open.
+- **A dig's own spawned stone landing has no `closes_last_level_exit`** (`crates/sim-core/src/lib.rs:2240`, blind, read). It sits beside #203.
+- **The serve D7 test does not pin one dwarf across its before/during/after stages** (`crates/simd/tests/serve.rs:2935`, edge, read). It also relies on DEFAULT_SEED cells, so a worldgen change would surface as a 2,000-delta timeout.
+- **The serve mid-clear load test's "opened" check does not pin the carrier as the cutter** (`crates/simd/tests/serve.rs:1271`, edge, read).
