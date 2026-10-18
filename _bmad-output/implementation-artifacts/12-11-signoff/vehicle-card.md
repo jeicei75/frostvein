@@ -6,6 +6,9 @@ refuses a `gui.exe` whose stamp is not HEAD.
 What you read is the world, not your key press. The sim decides where a stone falls and where a
 miner sets one aside; the gui and the tui only draw it.
 
+**Start from a fresh world.** Do not load your kept save: since the review run 1 patch pass a save written
+before 12.11 is refused by design (`missing field 'clearing'`).
+
 Two sittings, each on a **fresh daemon**: (A) the staircase and the tree, with a pile; (B) the
 tunnel, with **no pile**. A pile you placed in (A) would serve (B), so restart between them.
 
@@ -42,6 +45,8 @@ The **campfire is at `[64, 64, 9]`**.
 ## Sitting A: the staircase and the tree (with a pile)
 
 1. Press `3` and drag a big pile **south of the fire**: about `x 56..72`, `y 66..73`, at z 9. `Esc`.
+   This one-level pile holds only about 22 of the staircase's 32 stones, so stones left lying near the
+   pit once it is full are not a failure. Question 1 asks only whether anything hangs over air.
 2. Press `2` (channel) and work 12.10b's staircase north of the fire, one row at a time, each row
    after the previous row's marks are gone. Step the gui slice down with `,` when the rim hides the
    pit floor.
@@ -89,8 +94,8 @@ hauler and no pile?
 and NOT swing his pick, in the gui? (The tui draws no job, so in the tui check only that no stone
 hangs and the tunnel finishes.)
 
-Measured on `86d60f4` (a fresh daemon, these cells, no pile, `fast4x`): all four marks dug by tick
-713, the miner reported as `haul` while carrying, and no stone ever landed more than a cell from him.
+Measured on `5a8fbaf` by review run 2 (a fresh daemon, these cells, no pile, `fast4x`): all four marks dug
+by tick 735, the miner reported as `haul` while carrying, and no stone ever landed more than a cell from him.
 
 ## Known, by design (not defects)
 
@@ -101,6 +106,9 @@ Measured on `86d60f4` (a fresh daemon, these cells, no pile, `fast4x`): all four
   He walks it there; a stone never jumps more than a cell from the dwarf carrying it (your
   "throwing stones" finding, fixed after the first sitting).
 - **Miners stay at the bottom of the staircase** (#186) once the last row is worked.
+- **The last row-1 channel can wait a long time** (#187). In one staircase-plus-tree run its cut was
+  refused for about 1,800 ticks while an idle dwarf wandered. The code before this patch pass does the
+  same, so it is the open #187 loop, not a 12.11 regression.
 - A dig mark is refused on the cell under the campfire or a torch, and the gui preview does not light
   it. A channel mark is refused on the campfire or a torch, and below z 2.
 - A full pile stops the work. Drag a second pile if it fills.
