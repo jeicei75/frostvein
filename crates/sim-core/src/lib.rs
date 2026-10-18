@@ -3,7 +3,7 @@
 mod save;
 mod worldgen;
 
-pub use save::{SaveState, SavedDwarf};
+pub use save::{SaveState, SavedClearing, SavedDwarf};
 
 use std::{
     cmp::Reverse,
@@ -282,6 +282,13 @@ struct CurrentJob(Option<JobId>);
 /// nothing failing. A query asking for `&Carrying` would skip them too.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct Carrying(Option<u32>);
+
+#[derive(Component)]
+struct Clearing {
+    item: u32,
+    landing: Option<Pos>,
+    drop_from: Option<Pos>,
+}
 
 #[derive(Component)]
 struct Path(Vec<Pos>);
@@ -823,6 +830,24 @@ fn walls_in_a_dwarf(
     !after.is_empty() && !after.is_subset(&stranded(terrain, blocked, dwarves, sides))
 }
 
+/// A moved item must not close an idle dwarf's last same-level wander exit (#186).
+fn closes_last_level_exit(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    dwarves: &BTreeSet<Pos>,
+    cell: Pos,
+) -> bool {
+    terrain.is_standable(cell)
+        && dwarves.iter().any(|dwarf| {
+            side_neighbours(*dwarf).contains(&cell)
+                && side_neighbours(*dwarf)
+                    .into_iter()
+                    .filter(|side| terrain.is_standable(*side) && !blocked.contains(side))
+                    .count()
+                    == 1
+        })
+}
+
 /// The tiles a dwarf can step to from `cell`, with `cell` itself closed: where the floods of
 /// `walls_in_a_dwarf` start.
 fn sides_of(terrain: &Terrain, blocked: &BTreeSet<Pos>, cell: Pos) -> Vec<Pos> {
@@ -1126,6 +1151,26 @@ fn tree_of(terrain: &Terrain, pos: Pos) -> Option<(Pos, Vec<Pos>)> {
     Some((Pos { x, y, z: base }, tiles))
 }
 
+fn fell_tree(ecs: &mut EcsWorld, at: Pos) {
+    let Some((base, tiles)) = tree_of(ecs.resource::<Terrain>(), at) else {
+        return;
+    };
+    let mut trunk_cells = 0;
+    for tile in tiles {
+        if ecs.resource::<Terrain>().tile(tile) == Some(Tile::Solid(Material::TreeTrunk)) {
+            trunk_cells += 1;
+        }
+        let changed = ecs.resource_mut::<Terrain>().set_tile(tile, Tile::Empty);
+        debug_assert!(changed, "tree tiles are in bounds");
+    }
+    clear_paths(ecs);
+    // One log per trunk cell, all at the base (Wolf, 12.7 Task 0.2).
+    for _ in 0..trunk_cells {
+        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+        ecs.spawn((Item(ItemKind::Wood), item_id, base));
+    }
+}
+
 /// `items` holds UNCARRIED stones only — a stone in transit occupies no tile, so a carrier
 /// crossing the pile never blocks a tile for anyone else. `blocked` holds those same tiles
 /// (`blocked_cells`), so an item is never a work position and never stood on (#162): a dwarf works
@@ -1139,12 +1184,22 @@ fn work_positions(
     carrying: Option<u32>,
 ) -> BTreeSet<Pos> {
     match job.kind {
-        // NOTE: a one-wide tunnel waits at each stone until it is hauled (the stone blocks the only
-        // work position), and with no stockpile it stops there: never-drop (FR8) wins.
-        JobKind::Dig | JobKind::Cut => side_neighbours(job.target)
-            .into_iter()
-            .filter(|candidate| is_walkable(terrain, blocked, *candidate))
-            .collect(),
+        JobKind::Dig | JobKind::Cut => {
+            let goals: BTreeSet<_> = side_neighbours(job.target)
+                .into_iter()
+                .filter(|candidate| is_walkable(terrain, blocked, *candidate))
+                .collect();
+            // NOTE: a miner with no open dig face may approach an item blocking a face to lift it.
+            if goals.is_empty() && job.kind == JobKind::Dig {
+                side_neighbours(job.target)
+                    .into_iter()
+                    .filter(|candidate| items.values().any(|pos| pos == candidate))
+                    .flat_map(|item| astar_neighbours(terrain, blocked, item))
+                    .collect()
+            } else {
+                goals
+            }
+        }
         // A channel works from any tile a dwarf could step onto the target from, a ramp step
         // included (12.10b: the staircase's next level is worked from the level above or below),
         // never from the target itself. A target that is not standable has no work position and its
@@ -1154,9 +1209,18 @@ fn work_positions(
         // shape (12.9 review, #182 mode ii). It cages no dwarf.
         JobKind::Channel => {
             if terrain.is_standable(job.target) {
-                astar_neighbours(terrain, blocked, job.target)
+                let goals: BTreeSet<_> = astar_neighbours(terrain, blocked, job.target)
                     .into_iter()
-                    .collect()
+                    .collect();
+                if goals.is_empty() {
+                    astar_neighbours(terrain, &BTreeSet::new(), job.target)
+                        .into_iter()
+                        .filter(|candidate| items.values().any(|pos| pos == candidate))
+                        .flat_map(|item| astar_neighbours(terrain, blocked, item))
+                        .collect()
+                } else {
+                    goals
+                }
             } else {
                 BTreeSet::new()
             }
@@ -1186,8 +1250,8 @@ fn work_positions(
             // empty too, so the job is never claimed rather than claimed into a
             // pick-up-and-drop cycle. The stone's own tile is still standable ground, but it is
             // blocked: the hauler lifts it from a walkable 4-neighbour.
-            // NOTE: a stone whose floor was dug away is on no standable tile — items never fall —
-            // so its job retries forever. Retry is nearly free and never-drop wins (FR8).
+            // NOTE: this gate now covers only a fall with no free landing (D2); gravity normally
+            // moves the stone to standable ground before its haul is attempted again.
             match items.get(&item) {
                 // 12.10b: lifted from any tile a dwarf could step onto the stone from, a ramp step
                 // included: the blocks a staircase digs lie on the level the miner stood on.
@@ -1254,6 +1318,22 @@ fn nearest_free_cell(
     None
 }
 
+/// Where a fall down this column first meets a floor. A blocked landing is handled separately.
+fn first_standable_down_column(terrain: &Terrain, mut cell: Pos) -> Pos {
+    while !terrain.is_standable(cell)
+        && matches!(
+            terrain.tile(Pos {
+                z: cell.z - 1,
+                ..cell
+            }),
+            Some(Tile::Empty)
+        )
+    {
+        cell.z -= 1;
+    }
+    cell
+}
+
 fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     // A dwarf that stops holding a job stops carrying its stone, and drops it on the nearest tile
     // it can walk to that is not a taken stockpile cell, holds no dwarf (the carrier included) and
@@ -1264,6 +1344,13 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     // retire — from welding a stone to an idle dwarf.
     if let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) {
         let dropped_at = ecs.get::<Pos>(entity).copied();
+        // A cancel or a vanished job removes the job before this runs: the clearing miner's own
+        // rules hang on `Clearing`, and only the target's refusals need the job.
+        let clearing = ecs.get::<Clearing>(entity).is_some();
+        let clearing_job = ecs.get::<Clearing>(entity).and_then(|_| {
+            let id = ecs.get::<CurrentJob>(entity)?.0?;
+            ecs.resource::<Jobs>().by_id.get(&id).copied()
+        });
         if let (Some(pos), Some(stone)) = (dropped_at, item_entity(ecs, item)) {
             let zones = &ecs.resource::<Zones>().0;
             let occupied: BTreeSet<Pos> = uncarried_stones(ecs)
@@ -1274,11 +1361,37 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
             let blocked = world_blocked(ecs);
             let dwarves = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
             let terrain = ecs.resource::<Terrain>();
-            let nearest = nearest_free_cell(terrain, &blocked, pos, |cell| {
+            let forbidden: BTreeSet<Pos> = match clearing_job.map(|job| job.kind) {
+                Some(JobKind::Dig) => side_neighbours(clearing_job.expect("job").target)
+                    .into_iter()
+                    .collect(),
+                Some(JobKind::Channel) => {
+                    astar_neighbours(terrain, &BTreeSet::new(), clearing_job.expect("job").target)
+                        .into_iter()
+                        .collect()
+                }
+                _ => BTreeSet::new(),
+            };
+            let refused = |cell: Pos| {
                 occupied.contains(&cell)
                     || dwarves.contains(&cell)
                     || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
-            });
+                    || closes_last_level_exit(terrain, &blocked, &dwarves, cell)
+                    || (clearing && cell.z < pos.z)
+                    || clearing_job.is_some_and(|job| {
+                        (cell.x, cell.y) == (job.target.x, job.target.y)
+                            || forbidden.contains(&cell)
+                    })
+            };
+            // NOTE: a clearing miner lets go only beside himself (Wolf, 12.11 seat): searched at any
+            // distance, his refusals pushed the stone up to five cells off, onto the pit rim.
+            let nearest = if clearing {
+                astar_neighbours(terrain, &blocked, pos)
+                    .into_iter()
+                    .find(|cell| !refused(*cell))
+            } else {
+                nearest_free_cell(terrain, &blocked, pos, refused)
+            };
             // NOTE: the one exception to "never under a dwarf" (Wolf, 12.9 review run 2): a
             // carrier whose whole reachable ground is refused keeps the stone on its own tile
             // rather than stop the sim, since an idle dwarf carries nothing (AC10).
@@ -1293,6 +1406,7 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     if let Some(mut current) = ecs.get_mut::<CurrentJob>(entity) {
         current.0 = None;
     }
+    ecs.entity_mut(entity).remove::<Clearing>();
     if let Some(mut state) = ecs.get_mut::<JobState>(entity) {
         *state = JobState::Idle;
     }
@@ -1571,6 +1685,133 @@ fn resolve_blocked_step(
     true
 }
 
+/// The stone that alone shuts a miner on `pos` in a small pocket: the lowest id whose removal opens
+/// the pocket out. Wolf's 12.11 seat save: a miner caged by one stone, the pile full so no hauler
+/// came, swung at a refused channel forever.
+/// NOTE: a pocket larger than `CAGE_CELLS`, or one shut by two stones, is not seen.
+fn caging_stone(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    stones: &BTreeMap<u32, Pos>,
+    pos: Pos,
+) -> Option<u32> {
+    const CAGE_CELLS: usize = 64;
+    // The cells reachable from `pos`, or `None` once there are more than `CAGE_CELLS`.
+    let pocket = |closed: &BTreeSet<Pos>| {
+        let mut seen = BTreeSet::from([pos]);
+        let mut queue = VecDeque::from([pos]);
+        while let Some(cell) = queue.pop_front() {
+            for next in astar_neighbours(terrain, closed, cell) {
+                if seen.insert(next) {
+                    if seen.len() > CAGE_CELLS {
+                        return None;
+                    }
+                    queue.push_back(next);
+                }
+            }
+        }
+        Some(seen)
+    };
+    let inside = pocket(blocked)?;
+    let beside: BTreeSet<Pos> = inside
+        .iter()
+        .flat_map(|cell| astar_neighbours(terrain, &BTreeSet::new(), *cell))
+        .collect();
+    stones
+        .iter()
+        .filter(|(_, cell)| beside.contains(cell))
+        .find(|(_, cell)| {
+            let mut opened = blocked.clone();
+            opened.remove(cell);
+            pocket(&opened).is_none()
+        })
+        .map(|(id, _)| *id)
+}
+
+/// Where a clearing miner on `pos` sets his stone down, and the side of it he does that from: the
+/// nearest free cell he may leave it on, and the nearest walkable side of it he can reach. Kept from
+/// the last tick while it still holds. `None` when there is no such pair.
+fn clearing_set_down(
+    ecs: &EcsWorld,
+    entity: Entity,
+    job: Job,
+    pos: Pos,
+    blocked: &BTreeSet<Pos>,
+    occupied: &BTreeSet<Pos>,
+) -> Option<(Pos, Pos)> {
+    let terrain = ecs.resource::<Terrain>();
+    let old_landing = ecs.get::<Clearing>(entity).and_then(|clear| clear.landing);
+    let old_drop_from = ecs
+        .get::<Clearing>(entity)
+        .and_then(|clear| clear.drop_from);
+    let job_positions: BTreeSet<_> = match job.kind {
+        JobKind::Dig => side_neighbours(job.target).into_iter().collect(),
+        JobKind::Channel => astar_neighbours(terrain, &BTreeSet::new(), job.target)
+            .into_iter()
+            .collect(),
+        _ => unreachable!(),
+    };
+    let has_drop_side = |cell: Pos| {
+        side_neighbours(cell).into_iter().any(|side| {
+            is_walkable(terrain, blocked, side) && (side == pos || !occupied.contains(&side))
+        })
+    };
+    // NOTE: a marked cell is refused too (the own target included): a stone set down on a
+    // mark is lifted again or drops into its step, and without this the cage sweep
+    // freezes eight runs, not five.
+    let refused = |cell: Pos| {
+        (cell.x, cell.y) == (job.target.x, job.target.y)
+            || cell.z < pos.z
+            || blocked.contains(&cell)
+            || occupied.contains(&cell)
+            || job_positions.contains(&cell)
+            || ecs.resource::<Designations>().0.contains_key(&cell)
+            || !terrain.is_standable(cell)
+            || walls_in_a_dwarf(terrain, blocked, occupied, cell)
+            || closes_last_level_exit(terrain, blocked, occupied, cell)
+            || !has_drop_side(cell)
+    };
+    // The side he sets `landing` down from: the nearest walkable side of it he can reach.
+    // NOTE: the route runs through the other dwarves, as every job walk does (they step aside or
+    // yield on the way). Closed to them, a miner in a crowded pit found no way to any set-down
+    // side, and with no stone thrown out for him (12.11 seat) the two-wide staircase stalled.
+    let side = |landing: Pos, kept: Option<Pos>| {
+        let neighbours: BTreeSet<_> = side_neighbours(landing)
+            .into_iter()
+            .filter(|cell| is_walkable(terrain, blocked, *cell))
+            .collect();
+        kept.filter(|cell| {
+            neighbours.contains(cell)
+                && (*cell == pos
+                    || (!occupied.contains(cell)
+                        && astar(terrain, blocked, pos, &BTreeSet::from([*cell])).is_some()))
+        })
+        .or_else(|| {
+            route_to_nearest(terrain, blocked, pos, |cell| {
+                neighbours.contains(&cell) && !occupied.contains(&cell)
+            })
+            .and_then(|route| route.last().copied())
+        })
+        .or_else(|| neighbours.contains(&pos).then_some(pos))
+    };
+    // NOTE: a kept landing he can no longer reach is searched again: kept, it held a miner with
+    // his stone still for good once a stone closed its only side (cage sweep, seed 13).
+    old_landing
+        .filter(|cell| {
+            !blocked.contains(cell)
+                // NOTE: the route to the set-down side may cross the landing itself.
+                && (*cell == pos || !occupied.contains(cell))
+                && terrain.is_standable(*cell)
+                && has_drop_side(*cell)
+                && !closes_last_level_exit(terrain, blocked, occupied, *cell)
+        })
+        .and_then(|landing| Some((landing, side(landing, old_drop_from)?)))
+        .or_else(|| {
+            let landing = nearest_free_cell(terrain, blocked, pos, refused)?;
+            Some((landing, side(landing, None)?))
+        })
+}
+
 /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
 fn execute_jobs(ecs: &mut EcsWorld) {
     // Built once, before the loop borrows the world for terrain. Emitters are static; the items
@@ -1606,14 +1847,119 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         let carrying = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0);
         let stones = uncarried_stones(ecs);
         let blocked = blocked_cells(emitters.iter().chain(stones.values()));
-        let work_positions = work_positions(
-            ecs.resource::<Terrain>(),
-            &blocked,
-            &ecs.resource::<Zones>().0,
-            &stones,
-            job,
-            carrying,
-        );
+        // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
+        // designation and claim stay his own job through lift, carry and set-down.
+        let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {
+            carrying.or_else(|| {
+                let terrain = ecs.resource::<Terrain>();
+                let blocked_faces = match job.kind {
+                    JobKind::Channel => {
+                        stones.values().any(|cell| *cell == job.target)
+                            || astar_neighbours(terrain, &blocked, job.target).is_empty()
+                    }
+                    JobKind::Dig => side_neighbours(job.target)
+                        .into_iter()
+                        .all(|cell| !is_walkable(terrain, &blocked, cell)),
+                    _ => false,
+                };
+                if !blocked_faces {
+                    return caging_stone(terrain, &blocked, &stones, pos);
+                }
+                let near_target = |cell: &Pos| {
+                    if job.kind == JobKind::Channel {
+                        *cell == job.target
+                            || astar_neighbours(terrain, &BTreeSet::new(), job.target)
+                                .contains(cell)
+                    } else {
+                        side_neighbours(job.target).contains(cell)
+                    }
+                };
+                // NOTE: he keeps the stone he set out for. Re-picking the nearest each tick made a
+                // miner between two equidistant stones turn back at every step.
+                if let Some(kept) = ecs
+                    .get::<Clearing>(entity)
+                    .map(|clearing| clearing.item)
+                    .filter(|item| stones.get(item).is_some_and(near_target))
+                {
+                    return Some(kept);
+                }
+                stones
+                    .iter()
+                    .filter(|(_, cell)| near_target(cell))
+                    .min_by_key(|(id, cell)| {
+                        (
+                            pos.x.abs_diff(cell.x)
+                                + pos.y.abs_diff(cell.y)
+                                + pos.z.abs_diff(cell.z),
+                            **id,
+                        )
+                    })
+                    .map(|(id, _)| *id)
+            })
+        } else {
+            None
+        };
+        if let Some(item) = clearing_item {
+            if ecs
+                .get::<Clearing>(entity)
+                .is_none_or(|clearing| clearing.item != item)
+            {
+                ecs.entity_mut(entity).insert((
+                    Clearing {
+                        item,
+                        landing: None,
+                        drop_from: None,
+                    },
+                    WorkProgress(0),
+                ));
+                ecs.entity_mut(entity).remove::<Path>();
+            }
+        } else if ecs.get::<Clearing>(entity).is_some() {
+            ecs.entity_mut(entity).remove::<Clearing>();
+            ecs.entity_mut(entity).insert(WorkProgress(0));
+        }
+        let mut set_down = None;
+        let work_positions = if let Some(item) = clearing_item {
+            let terrain = ecs.resource::<Terrain>();
+            if carrying.is_some() {
+                set_down = clearing_set_down(ecs, entity, job, pos, &blocked, &occupied);
+                set_down
+                    .map(|(_, from)| BTreeSet::from([from]))
+                    .unwrap_or_default()
+            } else {
+                let at = stones[&item];
+                astar_neighbours(terrain, &blocked, at)
+                    .into_iter()
+                    .collect()
+            }
+        } else {
+            work_positions(
+                ecs.resource::<Terrain>(),
+                &blocked,
+                &ecs.resource::<Zones>().0,
+                &stones,
+                job,
+                carrying,
+            )
+        };
+        if let Some((landing, from)) = set_down {
+            let mut clear = ecs.get_mut::<Clearing>(entity).expect("clearing miner");
+            clear.landing = Some(landing);
+            clear.drop_from = Some(from);
+        }
+
+        if clearing_item.is_some() && work_positions.is_empty() {
+            // NOTE: one already holding the stone waits and looks again next tick: he lifted it
+            // with a set-down, so a dwarf has just stepped onto it or its only route. Letting go
+            // here dropped it under him, where it could wall a dwarf in (12.9's rule).
+            if carrying.is_some() {
+                *ecs.get_mut::<JobState>(entity)
+                    .expect("every dwarf has a job state") = JobState::Walk;
+                continue;
+            }
+            retry_claim(ecs, entity, job.id);
+            continue;
+        }
 
         if !work_positions.contains(&pos) {
             let mut path = ecs
@@ -1684,15 +2030,64 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             .get::<WorkProgress>(entity)
             .map(|progress| progress.0)
             .unwrap_or(0);
-        let needed = match job.kind {
-            JobKind::Dig | JobKind::Channel => DIG_WORK_TICKS,
-            JobKind::Cut => CUT_WORK_TICKS,
-            JobKind::Haul { .. } => WORK_TICKS,
+        let needed = if clearing_item.is_some() {
+            WORK_TICKS
+        } else {
+            match job.kind {
+                JobKind::Dig | JobKind::Channel => DIG_WORK_TICKS,
+                JobKind::Cut => CUT_WORK_TICKS,
+                JobKind::Haul { .. } => WORK_TICKS,
+            }
         };
         if progress < needed {
             *ecs.get_mut::<JobState>(entity)
                 .expect("every dwarf has a job state") = JobState::Work;
             ecs.entity_mut(entity).insert(WorkProgress(progress + 1));
+            continue;
+        }
+
+        if let Some(item) = clearing_item {
+            if carrying.is_none() {
+                // He lifts only a stone he has somewhere to set down (Wolf at the seat, 12.11:
+                // "throwing stones quite wildly"). One lifted with nowhere to go left him on the next
+                // tick through `release_claim`, which dropped it up to five cells off on the pit rim.
+                let mut lifted = blocked.clone();
+                lifted.remove(&stones[&item]);
+                if clearing_set_down(ecs, entity, job, pos, &lifted, &occupied).is_none() {
+                    retry_claim(ecs, entity, job.id);
+                    continue;
+                }
+                // A hauler may hold the item's haul claim; the miner takes custody at lift.
+                let haulers: Vec<_> = ecs
+                    .iter_entities()
+                    .filter(|other| other.contains::<Dwarf>())
+                    .filter(|other| other.id() != entity)
+                    .filter(|other| {
+                        other
+                            .get::<CurrentJob>()
+                            .and_then(|current| current.0)
+                            .and_then(|id| ecs.resource::<Jobs>().by_id.get(&id))
+                            .is_some_and(|held| held.kind == JobKind::Haul { item })
+                    })
+                    .map(|other| other.id())
+                    .collect();
+                for hauler in haulers {
+                    release_claim(ecs, hauler);
+                }
+                ecs.get_mut::<Carrying>(entity).expect("carrying slot").0 = Some(item);
+                ecs.entity_mut(entity).insert(WorkProgress(0));
+                ecs.entity_mut(entity).remove::<Path>();
+            } else if let (Some((landing, _)), Some(stone)) = (set_down, item_entity(ecs, item)) {
+                *ecs.get_mut::<Pos>(stone).expect("item position") = landing;
+                ecs.get_mut::<Carrying>(entity).expect("carrying slot").0 = None;
+                ecs.entity_mut(entity).remove::<Clearing>();
+                // Walking, as after a haul's pick-up: left in `Work`, the next delta read his own
+                // job + work, one frame of the dig swing (AC 15).
+                *ecs.get_mut::<JobState>(entity)
+                    .expect("every dwarf has a job state") = JobState::Walk;
+                ecs.entity_mut(entity).insert(WorkProgress(0));
+                ecs.entity_mut(entity).remove::<Path>();
+            }
             continue;
         }
 
@@ -1721,6 +2116,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     let landing = drop_cell(&targets, pos, |cell| {
                         occupied.contains(&cell)
                             || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)
+                            || closes_last_level_exit(terrain, &blocked, &occupied, cell)
                     });
                     // Every pile cell beside the hauler is refused (#182): it lets go and the job
                     // retries after the cooldown, as a refused channel does. Holding deadlocked
@@ -1751,24 +2147,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         }
 
         if job.kind == JobKind::Cut {
-            let tree = tree_of(ecs.resource::<Terrain>(), job.target);
-            if let Some((base, tiles)) = tree {
-                let mut trunk_cells = 0;
-                for tile in &tiles {
-                    let terrain = ecs.resource::<Terrain>();
-                    if terrain.tile(*tile) == Some(Tile::Solid(Material::TreeTrunk)) {
-                        trunk_cells += 1;
-                    }
-                    let changed = ecs.resource_mut::<Terrain>().set_tile(*tile, Tile::Empty);
-                    debug_assert!(changed, "tree tiles are in bounds");
-                }
-                clear_paths(ecs);
-                // One log per trunk cell, all at the base (Wolf, 12.7 Task 0.2).
-                for _ in 0..trunk_cells {
-                    let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-                    ecs.spawn((Item(ItemKind::Wood), item_id, base));
-                }
-            }
+            fell_tree(ecs, job.target);
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
             release_claim(ecs, entity);
@@ -1861,18 +2240,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             let terrain = ecs.resource::<Terrain>();
             let mut dwarves = occupied.clone();
             if dwarves.remove(&job.target) {
-                let mut fall = job.target;
-                while !terrain.is_standable(fall)
-                    && matches!(
-                        terrain.tile(Pos {
-                            z: fall.z - 1,
-                            ..fall
-                        }),
-                        Some(Tile::Empty)
-                    )
-                {
-                    fall.z -= 1;
-                }
+                let fall = first_standable_down_column(terrain, job.target);
                 dwarves.insert(fall);
             }
             let column = |cell: Pos| (cell.x, cell.y) == (job.target.x, job.target.y);
@@ -1898,6 +2266,15 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             landing = found;
         }
         clear_paths(ecs);
+        if job.kind == JobKind::Dig {
+            let above = Pos {
+                z: job.target.z + 1,
+                ..job.target
+            };
+            if ecs.resource::<Terrain>().tile(above) == Some(Tile::Solid(Material::TreeTrunk)) {
+                fell_tree(ecs, above);
+            }
+        }
         let item_id = ecs.resource_mut::<IdAllocator>().allocate();
         ecs.spawn((Item(yielded), item_id, landing));
         ecs.resource_mut::<Jobs>().remove(job.id);
@@ -1907,7 +2284,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
 }
 
 fn settle(ecs: &mut EcsWorld) {
-    // Items never move in this system, so one set serves the whole call.
+    // Dwarves move first; their new positions must refuse item landings this tick.
     let blocked = world_blocked(ecs);
     let mut occupied = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
     let mut dwarves: Vec<_> = ecs
@@ -1938,8 +2315,7 @@ fn settle(ecs: &mut EcsWorld) {
             } else {
                 Some(below)
             };
-            // NOTE: with no free tile the faller stays put this tick and tries again; "no dwarf
-            // on air" is 12.11's.
+            // NOTE: with no free tile the dwarf stays put this tick and tries again.
             let Some(landing) = landing else { continue };
             *ecs.get_mut::<Pos>(entity)
                 .expect("every dwarf has a position") = landing;
@@ -1948,7 +2324,42 @@ fn settle(ecs: &mut EcsWorld) {
             ecs.entity_mut(entity).remove::<Path>();
         }
     }
-    // NOTE: gravity is deliberately limited to one level per dwarf per tick; items never fall.
+    // Items fall by id, after dwarves, so each landing sees earlier item moves.
+    for (item, from) in uncarried_stones(ecs) {
+        let falling = {
+            let terrain = ecs.resource::<Terrain>();
+            !terrain.is_standable(from)
+                && matches!(
+                    terrain.tile(Pos {
+                        z: from.z - 1,
+                        ..from
+                    }),
+                    Some(Tile::Empty)
+                )
+        };
+        if !falling {
+            continue;
+        }
+        let mut blocked = world_blocked(ecs);
+        blocked.remove(&from);
+        let dwarves = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
+        let terrain = ecs.resource::<Terrain>();
+        let start = first_standable_down_column(terrain, from);
+        let landing = nearest_free_cell(terrain, &blocked, start, |cell| {
+            cell.z > from.z
+                || blocked.contains(&cell)
+                || dwarves.contains(&cell)
+                || !terrain.is_standable(cell)
+                || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
+                || closes_last_level_exit(terrain, &blocked, &dwarves, cell)
+        });
+        // NOTE: a fall with no reachable free landing stays at its old cell and retries next tick.
+        if let (Some(landing), Some(entity)) = (landing, item_entity(ecs, item)) {
+            *ecs.get_mut::<Pos>(entity)
+                .expect("every item has a position") = landing;
+        }
+    }
+    // NOTE: dwarf gravity is one level per tick; an item takes its whole open column in one tick.
 }
 
 /// Exclusive and LAST in the chain, not merely after `settle`: a carried stone sits on its
@@ -2258,6 +2669,11 @@ impl World {
                         .get::<Path>()
                         .map(|path| path.0.clone())
                         .unwrap_or_default(),
+                    clearing: entity.get::<Clearing>().map(|clear| SavedClearing {
+                        item: clear.item,
+                        landing: clear.landing,
+                        drop_from: clear.drop_from,
+                    }),
                 })
             })
             .collect();
@@ -2363,6 +2779,13 @@ impl World {
             }
             if !dwarf.path.is_empty() {
                 world.ecs.entity_mut(entity).insert(Path(dwarf.path));
+            }
+            if let Some(clear) = dwarf.clearing {
+                world.ecs.entity_mut(entity).insert(Clearing {
+                    item: clear.item,
+                    landing: clear.landing,
+                    drop_from: clear.drop_from,
+                });
             }
         }
         for (id, pos, kind) in items {
@@ -2540,6 +2963,10 @@ impl World {
                                         terrain.tile(*pos),
                                         Some(Tile::Solid(_) | Tile::Ramp(_))
                                     ) && !is_tree(*pos)
+                                        && !emitter_tiles.contains(&Pos {
+                                            z: pos.z + 1,
+                                            ..*pos
+                                        })
                                 }
                                 DesignationKind::Channel => {
                                     terrain.is_standable(*pos)
@@ -2746,6 +3173,24 @@ impl World {
             .collect();
         carrying.sort_by_key(|(id, _)| *id);
         carrying
+    }
+
+    /// Miners currently clearing an item while retaining their dig or channel claim: from the start
+    /// of the lift run to the set-down (D7). Not while he walks to the stone empty-handed.
+    pub fn clearing(&self) -> Vec<(Id, u32)> {
+        let mut clearing: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| {
+                let item = entity.get::<Clearing>()?.item;
+                let lifting = *entity.get::<JobState>()? == JobState::Work;
+                let carrying = entity.get::<Carrying>()?.0 == Some(item);
+                (lifting || carrying).then_some((*entity.get::<Id>()?, item))
+            })
+            .collect();
+        clearing.sort_by_key(|(id, _)| *id);
+        clearing
     }
 
     /// Sorted ascending by dwarf `Id`. A sibling reader like `carrying()`; `dwarves()` stays as is.
@@ -3413,12 +3858,11 @@ mod tests {
     }
 
     #[test]
-    fn a_stone_on_unstandable_ground_leaves_its_haul_job_queued_and_retried() {
+    fn a_stone_on_unstandable_ground_falls_while_its_haul_job_remains() {
         let mut world = World::generate(42, Dims::DEFAULT);
         let cell = corridor(&mut world);
         place_stockpile(&mut world, cell(4));
-        // Items never fall, so a stone whose floor was dug away has no standable position and
-        // no work position with it.
+        // A stone whose floor was dug away falls while its haul job follows its id.
         let stranded = Pos {
             x: 20,
             y: 20,
@@ -3442,10 +3886,7 @@ mod tests {
 
         assert_eq!(world.jobs().len(), 1, "the unreachable job was dropped");
         assert_eq!(world.jobs()[0].kind, JobKind::Haul { item: 12 });
-        assert!(world.jobs()[0].retry_after > 0, "the job was never retried");
-        assert!(world.claims().iter().all(|(_, job)| job.is_none()));
-        assert!(world.carrying().iter().all(|(_, item)| item.is_none()));
-        assert_eq!(world.items(), vec![(super::Id(12), stranded)]);
+        assert!(world.items()[0].1.z < stranded.z, "the stone did not fall");
     }
 
     #[test]
@@ -3787,15 +4228,26 @@ mod tests {
         assert_eq!(world.zones().len(), 8);
         assert!(!world.zones().contains(&fire));
 
+        // The ground below the fire is no longer diggable; use adjacent rock for the unrelated
+        // designate/cancel check.
+        let dig_rock = Pos {
+            x: rock.x + 1,
+            ..rock
+        };
+        assert!(world.set_tile(dig_rock, Tile::Solid(Material::Stone)));
+        let dig_rect = super::Rect {
+            min: dig_rock,
+            max: dig_rock,
+        };
         assert_eq!(
             world.apply_command(SimCommand::Designate {
                 kind: DesignationKind::Dig,
-                rect: rock_rect
+                rect: dig_rect
             }),
             None
         );
         assert_eq!(
-            world.apply_command(SimCommand::CancelDesignation { rect: rock_rect }),
+            world.apply_command(SimCommand::CancelDesignation { rect: dig_rect }),
             None
         );
         assert_eq!(
@@ -5282,6 +5734,41 @@ mod tests {
         // A rect over both keeps the cell beside the fire and drops the fire's.
         let rect = super::Rect {
             min: fire,
+            max: beside,
+        };
+        assert_eq!(
+            world.apply_command(super::SimCommand::Designate { kind, rect }),
+            None
+        );
+        assert_eq!(world.designations(), vec![(beside, kind)]);
+    }
+
+    #[test]
+    fn a_dig_mark_is_refused_beneath_an_emitter_only() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let (_, fire, _) = world.emitters()[0];
+        let under = Pos {
+            z: fire.z - 1,
+            ..fire
+        };
+        let beside = Pos {
+            x: under.x + 1,
+            ..under
+        };
+        for cell in [under, beside] {
+            assert!(world.set_tile(cell, Tile::Solid(Material::Stone)));
+        }
+        let kind = super::DesignationKind::Dig;
+        let rect = super::Rect {
+            min: under,
+            max: under,
+        };
+        assert_eq!(
+            world.apply_command(super::SimCommand::Designate { kind, rect }),
+            Some(super::Refusal::Designate { kind, rect })
+        );
+        let rect = super::Rect {
+            min: under,
             max: beside,
         };
         assert_eq!(

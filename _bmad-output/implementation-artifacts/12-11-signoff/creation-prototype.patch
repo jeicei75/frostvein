@@ -1,0 +1,323 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 5ea9e71..620fac8 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1887,6 +1887,29 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                             || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
+                     })
+                 };
++            // PROBE (12.11 option b): items lying on the target are lifted out up top too.
++            let lying: Vec<u32> = stones
++                .iter()
++                .filter(|(_, p)| **p == job.target)
++                .map(|(id, _)| *id)
++                .collect();
++            let mut lifted = Vec::new();
++            let found = found.and_then(|first| {
++                let mut taken = blocked.clone();
++                taken.insert(first);
++                for item in &lying {
++                    let cell = nearest_free_cell(terrain, &taken, pos, |cell| {
++                        column(cell)
++                            || cell.z < pos.z
++                            || taken.contains(&cell)
++                            || occupied.contains(&cell)
++                            || walls_in_a_dwarf(terrain, &taken, &dwarves, cell)
++                    })?;
++                    taken.insert(cell);
++                    lifted.push((*item, cell));
++                }
++                Some(first)
++            });
+             let Some(found) = found else {
+                 for (cell, old) in undo {
+                     let old = old.expect("a changed cell was in bounds");
+@@ -1895,8 +1918,37 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 retry_claim(ecs, entity, job.id);
+                 continue;
+             };
++            for (item, cell) in lifted {
++                if let Some(stone) = item_entity(ecs, item) {
++                    *ecs.get_mut::<Pos>(stone).expect("pos") = cell;
++                }
++            }
+             landing = found;
+         }
++        // PROBE (12.11 creation, throwaway): a dig under a trunk fells its tree as a cut would.
++        let above = Pos {
++            z: changed_pos.z + 1,
++            ..changed_pos
++        };
++        if job.kind == JobKind::Dig
++            && ecs.resource::<Terrain>().tile(above) == Some(Tile::Solid(Material::TreeTrunk))
++        {
++            if let Some((base, tiles)) = tree_of(ecs.resource::<Terrain>(), above) {
++                let trunks = tiles
++                    .iter()
++                    .filter(|t| {
++                        ecs.resource::<Terrain>().tile(**t) == Some(Tile::Solid(Material::TreeTrunk))
++                    })
++                    .count();
++                for tile in &tiles {
++                    ecs.resource_mut::<Terrain>().set_tile(*tile, Tile::Empty);
++                }
++                for _ in 0..trunks {
++                    let item_id = ecs.resource_mut::<IdAllocator>().allocate();
++                    ecs.spawn((Item(ItemKind::Wood), item_id, base));
++                }
++            }
++        }
+         clear_paths(ecs);
+         let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+         ecs.spawn((Item(yielded), item_id, landing));
+@@ -1949,6 +2001,38 @@ fn settle(ecs: &mut EcsWorld) {
+         }
+     }
+     // NOTE: gravity is deliberately limited to one level per dwarf per tick; items never fall.
++    // PROBE (12.11 creation, throwaway): an unsupported item drops to the first standable cell
++    // under it, or the nearest free one from there.
++    let falling: Vec<(u32, Pos)> = {
++        let terrain = ecs.resource::<Terrain>();
++        uncarried_stones(ecs)
++            .into_iter()
++            .filter(|(_, p)| {
++                !terrain.is_standable(*p)
++                    && matches!(terrain.tile(Pos { z: p.z - 1, ..*p }), Some(Tile::Empty))
++            })
++            .collect()
++    };
++    for (item, from) in falling {
++        let blocked = world_blocked(ecs);
++        let dwarves = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
++        let terrain = ecs.resource::<Terrain>();
++        let mut land = from;
++        while !terrain.is_standable(land)
++            && matches!(terrain.tile(Pos { z: land.z - 1, ..land }), Some(Tile::Empty))
++        {
++            land.z -= 1;
++        }
++        let found = nearest_free_cell(terrain, &blocked, land, |cell| {
++            (cell != from && blocked.contains(&cell))
++                || dwarves.contains(&cell)
++                || !terrain.is_standable(cell)
++                || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
++        });
++        if let (Some(found), Some(stone)) = (found, item_entity(ecs, item)) {
++            *ecs.get_mut::<Pos>(stone).expect("pos") = found;
++        }
++    }
+ }
+ 
+ /// Exclusive and LAST in the chain, not merely after `settle`: a carried stone sits on its
+diff --git a/crates/sim-core/tests/probe_floats.rs b/crates/sim-core/tests/probe_floats.rs
+new file mode 100644
+index 0000000..1b6110f
+--- /dev/null
++++ b/crates/sim-core/tests/probe_floats.rs
+@@ -0,0 +1,206 @@
++// THROWAWAY probe for 12.11 story creation. Not committed.
++use std::collections::{BTreeMap, BTreeSet};
++
++use sim_core::{DesignationKind, Dims, Material, Pos, Rect, SimCommand, Tile, World};
++
++fn rect(min: Pos, max: Pos) -> Rect {
++    Rect { min, max }
++}
++fn below(p: Pos) -> Pos {
++    Pos { z: p.z - 1, ..p }
++}
++fn cell(o: Pos, dx: i32, dz: i32) -> Pos {
++    Pos { x: o.x + dx, z: o.z + dz, ..o }
++}
++fn standable(w: &World, p: Pos) -> bool {
++    w.tile(p) == Some(Tile::Empty) && matches!(w.tile(below(p)), Some(Tile::Solid(_) | Tile::Ramp(_)))
++}
++fn is_rock(w: &World, p: Pos) -> bool {
++    matches!(w.tile(p), Some(Tile::Solid(m)) if !matches!(m, Material::TreeTrunk | Material::TreeFoliage))
++}
++fn floating_items(w: &World) -> Vec<(u32, Pos)> {
++    let carried: BTreeSet<u32> = w.carrying().into_iter().filter_map(|(_, c)| c).collect();
++    w.items()
++        .into_iter()
++        .filter(|(id, p)| !carried.contains(&id.0) && !standable(w, *p))
++        .map(|(id, p)| (id.0, p))
++        .collect()
++}
++fn floating_trunks(w: &World) -> Vec<Pos> {
++    let d = w.dims();
++    let mut out = vec![];
++    for z in 1..d.z as i32 {
++        for y in 0..d.y as i32 {
++            for x in 0..d.x as i32 {
++                let p = Pos { x, y, z };
++                if w.tile(p) == Some(Tile::Solid(Material::TreeTrunk)) && w.tile(below(p)) == Some(Tile::Empty) {
++                    out.push(p);
++                }
++            }
++        }
++    }
++    out
++}
++#[derive(Default, Debug)]
++struct Watch {
++    item_float_ticks: BTreeMap<u32, u64>,
++    dwarf_air_streak: BTreeMap<u32, u64>,
++    max_dwarf_air: u64,
++}
++impl Watch {
++    fn look(&mut self, w: &World) {
++        for (id, _) in floating_items(w) {
++            *self.item_float_ticks.entry(id).or_default() += 1;
++        }
++        for (id, p, ..) in w.dwarves() {
++            let s = self.dwarf_air_streak.entry(id.0).or_default();
++            if standable(w, p) { *s = 0 } else { *s += 1; self.max_dwarf_air = self.max_dwarf_air.max(*s) }
++        }
++    }
++}
++
++fn staircase_site(world: &World) -> Pos {
++    let camp = world.camp_origin();
++    let emitters: Vec<Pos> = world.emitters().into_iter().map(|(_, p, _)| p).collect();
++    let mut best: Option<(i32, Pos)> = None;
++    for y in camp.y - 20..camp.y + 20 {
++        for x in camp.x - 20..camp.x + 20 {
++            let fits = (-1..6).all(|dx| {
++                (-1..=1).all(|dy| {
++                    let pos = Pos { x: x + dx, y: y + dy, z: camp.z };
++                    standable(world, pos) && !emitters.contains(&pos) && (1..7).all(|d| is_rock(world, cell(pos, 0, -d)))
++                })
++            });
++            let distance = (x - camp.x).abs() + (y - camp.y).abs();
++            if fits && distance > 3 && best.is_none_or(|(n, _)| distance < n) {
++                best = Some((distance, Pos { x, y, z: camp.z }));
++            }
++        }
++    }
++    best.unwrap().1
++}
++fn pile(world: &mut World) {
++    let camp = world.camp_origin();
++    assert_eq!(
++        world.apply_command(SimCommand::PlaceStockpile {
++            rect: rect(Pos { x: camp.x - 8, y: camp.y + 2, ..camp }, Pos { x: camp.x + 8, y: camp.y + 9, ..camp }),
++        }),
++        None
++    );
++}
++
++/// A: the 12.10b two-wide staircase (natural play), all 24 delays.
++#[test]
++fn probe_a_staircase() {
++    let mut runs_with_float = 0;
++    let mut worst = 0;
++    let mut stuck_at_end = 0;
++    let mut max_air = 0;
++    for delay in 0..24u64 {
++        let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++        let site = staircase_site(&world);
++        pile(&mut world);
++        let mut watch = Watch::default();
++        for level in 0..4 {
++            for _ in 0..delay { world.step(); watch.look(&world); }
++            let first = cell(site, level, -level);
++            let last = Pos { y: site.y + 1, ..cell(site, 4, -level) };
++            world.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: rect(first, last) });
++            for _ in 0..6000 {
++                if world.designations().is_empty() { break; }
++                world.step();
++                watch.look(&world);
++            }
++        }
++        for _ in 0..3000 { world.step(); watch.look(&world); }
++        let f = floating_items(&world);
++        if !watch.item_float_ticks.is_empty() { runs_with_float += 1; }
++        worst = worst.max(watch.item_float_ticks.values().copied().max().unwrap_or(0));
++        if !f.is_empty() { stuck_at_end += 1; }
++        max_air = max_air.max(watch.max_dwarf_air);
++        println!("delay {delay}: floated items {:?} still floating at end {:?} max dwarf air streak {}", watch.item_float_ticks, f, watch.max_dwarf_air);
++    }
++    println!("PROBE A: runs with a floating item {runs_with_float}/24, still floating after +3000 ticks {stuck_at_end}/24, longest float {worst} ticks, longest dwarf-on-air streak {max_air}");
++}
++
++/// B: channel the cell a previous channel's block landed on (natural).
++#[test]
++fn probe_b_channel_under_its_neighbours_block() {
++    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++    let site = staircase_site(&world);
++    pile(&mut world);
++    world.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: rect(site, site) });
++    while !world.designations().is_empty() { world.step(); assert!(world.tick() < 4000); }
++    let (id, landed) = world.items()[0];
++    println!("block {id:?} landed at {landed:?}, standable {}", standable(&world, landed));
++    let r = world.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: rect(landed, landed) });
++    println!("channel on the block's cell: refusal {r:?}");
++    let mut watch = Watch::default();
++    for _ in 0..4000 { world.step(); watch.look(&world); }
++    println!("PROBE B: marks left {:?}; item float ticks {:?}; floating at end {:?}; jobs {:?}", world.designations(), watch.item_float_ticks, floating_items(&world), world.jobs());
++}
++
++/// C: dig the cell under a lying item (fixture via save).
++#[test]
++fn probe_c_dig_under_an_item() {
++    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++    let site = staircase_site(&world);
++    // no pile: the item must stay put until the dig completes
++
++    // A trench beside a raised block: dig target T at site.z-1 worked from a pit cell at site.z-1.
++    let t = below(site); // rock under site
++    let pit = Pos { y: site.y + 1, ..t };
++    world.set_tile(pit, Tile::Empty); // pit floor under is rock (staircase site has rock 6 deep)
++    // a ramp up from the pit so it is reachable: make a ramp under the cell beside pit at +x
++    let ramp_cell = Pos { x: pit.x + 1, ..pit };
++    world.set_tile(ramp_cell, Tile::Empty);
++    world.set_tile(below(ramp_cell), Tile::Ramp(Material::Stone));
++    let mut save = world.to_save();
++    let next = save.next_id;
++    save.next_id += 1;
++    save.items.push((next, site, sim_core::ItemKind::Stone));
++    let mut world = World::from_save(save);
++    println!("item at {site:?} standable {} ; dig target {t:?} {:?}", standable(&world, site), world.tile(t));
++    let r = world.apply_command(SimCommand::Designate { kind: DesignationKind::Dig, rect: rect(t, t) });
++    println!("dig refusal {r:?}");
++    let mut watch = Watch::default();
++    for _ in 0..4000 { world.step(); watch.look(&world); }
++    println!("PROBE C: target now {:?}; marks {:?}; item float ticks {:?}; floating at end {:?}; items {:?}", world.tile(t), world.designations(), watch.item_float_ticks, floating_items(&world), world.items());
++}
++
++/// D: trees on DEFAULT_SEED whose ground cell can be dug from a side cell at its own level (natural).
++#[test]
++fn probe_d_hillside_trees() {
++    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++    let d = world.dims();
++    let mut bases = vec![];
++    for z in 1..d.z as i32 {
++        for y in 0..d.y as i32 {
++            for x in 0..d.x as i32 {
++                let p = Pos { x, y, z };
++                if world.tile(p) == Some(Tile::Solid(Material::TreeTrunk)) && world.tile(below(p)) != Some(Tile::Solid(Material::TreeTrunk)) {
++                    bases.push(p);
++                }
++            }
++        }
++    }
++    let diggable: Vec<Pos> = bases
++        .iter()
++        .copied()
++        .filter(|b| {
++            let g = below(*b);
++            [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|(dx, dy)| standable(&world, Pos { x: g.x + dx, y: g.y + dy, z: g.z }))
++        })
++        .collect();
++    println!("PROBE D: {} trees, {} with a ground cell diggable from its own level; first {:?}; floating trunks at gen {}", bases.len(), diggable.len(), diggable.first(), floating_trunks(&world).len());
++    // dig the first one's ground and watch
++    if let Some(b) = diggable.first().copied() {
++        let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
++        let g = below(b);
++        let r = world.apply_command(SimCommand::Designate { kind: DesignationKind::Dig, rect: rect(g, g) });
++        println!("dig {g:?} ({:?}) refusal {r:?}", world.tile(g));
++        for _ in 0..4000 { world.step(); if world.tile(g) == Some(Tile::Empty) { break; } }
++        for _ in 0..50 { world.step(); }
++        println!("PROBE D: ground now {:?} at tick {}; floating trunks {:?}", world.tile(g), world.tick(), floating_trunks(&world));
++    }
++}

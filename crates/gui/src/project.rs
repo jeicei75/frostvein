@@ -1077,15 +1077,16 @@ fn preview_cells(
 /// `Tile::Ramp` (never a tree; 12.10), channel and stockpile keep standable cells off a fire (a
 /// channel not over a tree or below z 2), and both drop the remainder in silence.
 fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
-    let on_emitter = || {
+    let on_emitter = |at| {
         mirror.entities().any(|entity| {
-            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == tile
+            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == at
         })
     };
     match mode {
         DesignateMode::Dig => {
             matches!(mirror.tile(tile), Some(Tile::Solid(_) | Tile::Ramp(_)))
                 && !crate::designate::is_tree_tile(mirror, tile)
+                && !on_emitter([tile[0], tile[1], tile[2] + 1])
         }
         // 12.10b: a channel is also refused on an emitter's tile and below z 2 (D2, D3), and (as
         // since 12.7) over a tree.
@@ -1093,10 +1094,10 @@ fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
             client_core::is_standable(mirror, tile)
                 && tile[2] >= 2
                 && !crate::designate::is_tree_tile(mirror, [tile[0], tile[1], tile[2] - 1])
-                && !on_emitter()
+                && !on_emitter(tile)
         }
         // The sim keeps `is_walkable` cells: standable and not an emitter's tile.
-        DesignateMode::Stockpile => client_core::is_standable(mirror, tile) && !on_emitter(),
+        DesignateMode::Stockpile => client_core::is_standable(mirror, tile) && !on_emitter(tile),
         // Cut previews the WHOLE box (12.8 §2); `preview_appearance` tells the trees it will mark
         // from the rest. Clear removes rather than designates; there is nothing for the sim to filter.
         DesignateMode::Cut | DesignateMode::Clear | DesignateMode::None => true,
@@ -2130,8 +2131,10 @@ pub fn reconcile(
 
     if !rebuild_terrain {
         for position in dirty_tiles {
+            let emptied = matches!(mirror.tile(*position), Some(Tile::Empty));
+            let above = [position[0], position[1], position[2] + 1];
             for (entity, chip) in chips.iter() {
-                if chip.0 == *position {
+                if chip.0 == *position || (emptied && chip.0 == above) {
                     commands.entity(entity).despawn();
                 }
             }
@@ -2139,7 +2142,7 @@ pub fn reconcile(
             // in the air, as a felled pine's crown did (#168).
             let below = [position[0], position[1], position[2] - 1];
             if position[2] <= slice.level()
-                && matches!(mirror.tile(*position), Some(Tile::Empty))
+                && emptied
                 && matches!(mirror.tile(below), Some(Tile::Solid(_) | Tile::Ramp(_)))
             {
                 for offset in chip_offsets() {
@@ -4194,7 +4197,7 @@ mod tests {
     /// too (the sim's `is_walkable`; 12.10b review run 2), but not below z 2.
     #[test]
     fn the_channel_preview_skips_an_emitters_tile_and_cells_below_z_two() {
-        use crate::designate::DesignateMode::{Channel, Stockpile};
+        use crate::designate::DesignateMode::{Channel, Dig, Stockpile};
         let dims = Dims { x: 3, y: 1, z: 4 };
         let mut tiles = vec![Tile::Empty; 12];
         let at = |x: usize, z: usize| x + z * 3;
@@ -4234,6 +4237,11 @@ mod tests {
             "the sim's stockpile filter drops the campfire's tile"
         );
         assert!(sim_will_keep(&mirror, [0, 0, 2], Stockpile));
+        assert!(
+            !sim_will_keep(&mirror, [1, 0, 1], Dig),
+            "under the campfire"
+        );
+        assert!(sim_will_keep(&mirror, [0, 0, 1], Dig));
 
         // Only the floor at z 0: the standable cell at z 1 has no cell two below it.
         let mut low = tiles;

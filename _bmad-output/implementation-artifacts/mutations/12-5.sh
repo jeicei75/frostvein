@@ -5,9 +5,9 @@
 mutation "the bridge sends no job" simd deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
-old = '                .map(|job| dwarf_job(*job)),\n'
+old = '                    .map(|job| dwarf_job(*job))\n            },\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                .map(|job| dwarf_job(*job))\n                .filter(|_| false),\n'))
+p.write_text(s.replace(old, '                    .map(|job| dwarf_job(*job))\n                    .filter(|_| false)\n            },\n'))
 PY
 
 mutation "the bridge sends no carried stone" simd deltas_label_a_miners_dig_a_haulers_haul_and_the_stone_he_carries <<'PY'

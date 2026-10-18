@@ -14,6 +14,10 @@ old = '''                        _ => positions()
                                         terrain.tile(*pos),
                                         Some(Tile::Solid(_) | Tile::Ramp(_))
                                     ) && !is_tree(*pos)
+                                        && !emitter_tiles.contains(&Pos {
+                                            z: pos.z + 1,
+                                            ..*pos
+                                        })
                                 }
                                 DesignationKind::Channel => {
                                     terrain.is_standable(*pos)
@@ -941,10 +945,10 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: 3.3's tree and haul work widened the change tuple with `yields_stone`
 # and added a Haul arm, which rotted this anchor. The seam is unchanged.
 old = '''        clear_paths(ecs);
-        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+        if job.kind == JobKind::Dig {
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        let item_id = ecs.resource_mut::<IdAllocator>().allocate();\n'))
+p.write_text(s.replace(old, '        if job.kind == JobKind::Dig {\n'))
 PY
 
 mutation "each claim search gets a fresh node budget" sim-core a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on <<'PY'

@@ -179,6 +179,26 @@ graph LR
   loose item lifted, from any cell a dwarf could step onto the target from,
   ramp steps included. A channel mark is refused on an emitter's tile and
   where `z < 2`.
+- **Amended 2026-10-16 (Story 12.11):** after dwarves settle, an uncarried
+  item over empty ground falls down its column in item-id order, in the same
+  tick, to the first standable cell; where that cell is taken it rests on the
+  nearest free cell no higher than it started, never on an emitter's tile,
+  a dwarf's tile or another item, and never walling a dwarf in. Emitters and
+  terrain never fall (no cave-ins). A miner whose dig or channel is blocked
+  by an item (one on the channel's target, or on every work cell) lifts it,
+  carries it aside and sets it down himself, then resumes his own job: no
+  haul job, no pile, no trade change (Wolf, Q1(b) + #180); the wire reports
+  his job as `haul` from the lift to the set-down (Q4). He also clears the
+  one stone that alone shuts him in a small pocket (`caging_stone`, at most
+  64 cells; Wolf's dig-loop seat save). Three guards from the seat (Wolf:
+  "throwing stones"): he lifts only with a set-down ready, he lets go only
+  beside himself and never below him (a cancel included), and while his
+  set-down side is taken he holds the stone and waits. Wherever an item is put down (a
+  fall, a set-aside, a released carrier's drop, a hauler's pile drop) it
+  never takes an idle dwarf's last same-level exit (Wolf: kept everywhere,
+  so a hauler may skip such a pile cell). Digging the ground under a tree
+  fells it as a cut does (Q2(a)). A dig mark is refused under an emitter's
+  tile.
 
 ### AD-17 — The evidence ladder for a real renderer
 

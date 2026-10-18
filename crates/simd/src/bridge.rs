@@ -158,6 +158,7 @@ fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Ent
     let claims = world.claims();
     let jobs = world.jobs();
     let carrying = world.carrying();
+    let clearing = world.clearing();
     world
         .dwarves()
         .into_iter()
@@ -178,12 +179,16 @@ fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Ent
                 .iter()
                 .find(|(profession_id, _)| *profession_id == id)
                 .map(|(_, profession)| profession_out(*profession)),
-            job: claims
-                .iter()
-                .find(|(claim_id, _)| *claim_id == id)
-                .and_then(|(_, claim)| *claim)
-                .and_then(|job_id| jobs.iter().find(|job| job.id == job_id))
-                .map(|job| dwarf_job(*job)),
+            job: if clearing.iter().any(|(miner, _)| *miner == id) {
+                Some(protocol::DwarfJob::Haul)
+            } else {
+                claims
+                    .iter()
+                    .find(|(claim_id, _)| *claim_id == id)
+                    .and_then(|(_, claim)| *claim)
+                    .and_then(|job_id| jobs.iter().find(|job| job.id == job_id))
+                    .map(|job| dwarf_job(*job))
+            },
             carrying: carrying
                 .iter()
                 .find(|(carrier_id, _)| *carrier_id == id)
