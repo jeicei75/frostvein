@@ -3900,6 +3900,15 @@ fn a_miner_whose_channel_is_cancelled_mid_clear_never_sets_the_stone_down_below_
     assert!(world.set_tile(cell(site, 3, 0), Tile::Empty));
     assert!(world.set_tile(step, Tile::Empty));
     assert!(world.set_tile(cell(site, 3, -2), Tile::Ramp(Material::Stone)));
+    // Its only way up is his tile: a step that also led out to open ground would be his way out,
+    // and filling it would wall him in, a refusal of its own.
+    for dy in [-1, 0, 1] {
+        let up = Pos {
+            y: site.y + dy,
+            ..cell(site, 3 + (dy == 0) as i32, 0)
+        };
+        assert!(world.set_tile(up, Tile::Solid(Material::Stone)));
+    }
     assert!(is_standable(&world, step), "the step is not open");
     let refused = world.apply_command(SimCommand::CancelDesignation {
         rect: rect(target, target),
