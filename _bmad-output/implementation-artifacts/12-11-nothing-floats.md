@@ -19,8 +19,9 @@ so that the world never shows stones hanging or trees standing on air.
 `12-11-signoff/` and the board edit. Epic 12's standing ACs (`epics.md:2422-2434`) bind this story and are
 not restated. **No wire shape change** (standing AC 4; D7 reuses `DwarfJob::Haul` for a clearing miner): an item's `pos` is resent in full on every delta
 (`protocol/src/lib.rs:254-258, 296`; `simd/src/bridge.rs:80`), so a fall is a changed `pos`; a felled tree
-is `Empty` tiles through `Terrain::set_tile`'s dirty set. **No new saved state**: a fall changes positions
-and tiles only.
+is `Empty` tiles through `Terrain::set_tile`'s dirty set. **No new saved state for a fall**: it changes positions
+and tiles only. The one new saved field is `SavedDwarf.clearing` (D6, `31c0b16`), required by Wolf's review run 1
+ruling (b), so a pre-12.11 save is refused.
 
 ## Found at creation (2026-10-15, on `56bfbe5`)
 
@@ -417,8 +418,8 @@ free space reclaimed), run 1's leftover layer caches included.
 ### Scope guardrails (do NOT)
 
 - No cave-ins, and no falling terrain of any kind (AC 7). Emitters never fall (D4 prevents the case).
-- No protocol, tui or client-core change; the only bridge change is D7; no new saved field; no new command
-  or key.
+- No protocol, tui or client-core change; the only bridge change is D7; no new saved field but `SavedDwarf.clearing`
+  (review run 1, ruling (b)); no new command or key.
 - No fall animation in the gui; items keep snapping to their wire position.
 - No change to the channel rule, the dig rule, the cut rule or the pile fill order beyond Q1, Q2, D4, D6.
 - The miner never carries to the pile, never claims a haul job and never changes trade (D6).
