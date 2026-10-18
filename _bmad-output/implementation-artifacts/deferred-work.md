@@ -2699,3 +2699,16 @@ story) and #194 (`route:undecided`); they are not repeated here.
 
 - **A kept clearing landing is re-checked against only part of the set-down rules** (`crates/sim-core/src/lib.rs:1799-1807`, acceptance + edge, read). The kept-landing filter re-checks blocked, occupied, standable, drop side and last exit, but not `walls_in_a_dwarf`, the target column, `job_positions`, marked cells or `z < pos.z`. A landing that turns illegal between the lift and the set-down is used anyway: a dwarf steps into a pocket it closes, or Wolf marks the cell. simd validates neither `SavedClearing.landing` nor `drop_from`, which a real save never gets wrong. The sweeps found no violation.
 - **simd's mid-clear positive control covers only the carry tick** (`crates/simd/tests/serve.rs:3138`, edge, RAN). The committed test saves at the first carried tick only, so a validator that refused a walk-to-stone or lift-phase save would stay green. The edge layer's probe loaded a real DEFAULT_SEED save at every tick of a clear: 73 clearing ticks, 28 carry ticks, 0 refused.
+
+## Deferred from: code review of 12-12-the-first-goals, run 1 (2026-10-18)
+
+- **AC 1 has no pinning test** (`crates/sim-core/tests/scenario.rs:5101`, acceptance, RAN). Nothing asserts that a fresh world's `goals()`, or the first delta's goals, have progress 0 and nothing completed. A live probe confirmed both on a real daemon.
+- **AC 4's "logged reason" is not asserted** (`crates/simd/src/main.rs:1050`, `:1076`, edge + acceptance, RAN). The two refusal tests check only `is_none()`. The log lines were seen live.
+- **The Snapshot is pinned order-insensitively** (`crates/protocol/src/lib.rs:523-527`, acceptance, read). It uses a `serde_json::Value` compare, so "goals after tick" on `Snapshot` is unpinned. This is pre-existing practice; the Delta is byte-exact.
+- **The real-daemon goal test never checks `completed`** (`crates/simd/tests/serve.rs:3243`, edge, read). `completed` is pinned only in the `bridge.rs` unit test and in sim-core save_load.
+- **The ring test counts naively and skips AC 11's no-retry clause** (`crates/sim-core/tests/scenario.rs:5192`, acceptance, read). It counts any item on a zone cell, carried items and stacks included. Row 13 still kills it. It goes with Review Decision 1 if that one is closed now.
+- **The tui goal row clips silently at narrow widths** (`crates/tui/src/view.rs:445`, edge, read). There is no ellipsis. The longest line is 72 columns.
+- **The gui goal readout may overlap the designate hint in a narrow window** (`crates/gui/src/ingest.rs:1932`, edge, read). The readout is bottom-right, the hint bottom-left. Not observed.
+- **Per-tick item scans are unmeasured** (`crates/sim-core/src/lib.rs:409`, `:444`, blind, read). `split_stored` runs in `create_haul_jobs` and again in `advance_goals`, plus once per Snapshot/Delta via `goals()`.
+- **`World::from_save` does not bound `goals_completed`** (`crates/sim-core/src/lib.rs:2818`, blind, read). Only simd bounds it (`crates/simd/src/main.rs:375`). Any other loader would accept a count past the chain and report every goal done.
+- **`goal_lines`' `{:>2}` misaligns the `/` at progress 100 or more** (`crates/client-core/src/lib.rs:112`, blind, read). Cosmetic.

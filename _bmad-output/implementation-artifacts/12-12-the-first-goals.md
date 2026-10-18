@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -262,6 +262,104 @@ The options as offered at creation, kept for the record:
     `Goal` on snapshot and delta.
   - [x] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
 
+### Review Findings
+
+Code review run 1 (2026-10-18, diff `60955ef..813c218`). There were four layers: Blind Hunter and Edge Case
+Hunter on Sonnet, Acceptance Auditor and Feature Auditor on Opus. **No layer timed out.** Each layer built in
+its own `/tmp/review-<layer>`.
+- **Blind (sim-core, client-core):** ran every sim-core and client-core test, `scenario` included (84 ok).
+- **Edge:** ran the protocol, simd, tui and client-core tests, a live daemon with `tui --frames`, and live save
+  refusals at `goals_completed` = 4, -1, null, 2^32 and missing.
+- **Acceptance:** ran every AC's pinning tests, `goals_wire.py` (5/5 `GOALS OK`), live AC 1 and AC 4 probes, and a
+  scratch boulder probe.
+- **Feature:** traced every hop and found all WIRED; ran `goals_wire.py` (3/3 `GOALS OK`), a save/load across
+  daemons, and a replay of the seat card over the wire (sitting A completes, sitting B's ring fills 20/20 at tick
+  2763).
+
+**Coverage holes:**
+- No layer ran the full gui headless/capture suites or the full simd serve suite. 8 gui goal/HUD tests and simd's
+  goal and refusal tests ran; the full gate covers the rest on `c53c050`, and no code changed after it.
+- The mutation table was not executed (reviews may not run payloads).
+- AC 10 (seat) is open.
+
+- [x] [Review][Decision] **AC 11 holds only while the enclosed hole touches no rock, drop or map edge** — RESOLVED (Wolf, 2026-10-18): option (a), close it now; became the Patch below. Severity
+  MED. Sources: Acceptance (RAN) and Blind (read): a convergence.
+  - **The rule:** `pile_targets`' flood (`crates/sim-core/src/lib.rs:842-846`) calls a non-pile ground cell "open"
+    as soon as any flooded cell has a same-z side neighbour that is neither pile nor standable.
+  - **What it does:** a hole inside a pile ring that also touches ONE rock cell, a pit or a drop is treated as a
+    way in. The middle of the band fills first and seals the free cells, as on `6dffa0d`.
+  - **Measured** (scratch probe, release): the committed ring test's setup, plus one `Solid(Stone)` at the fire's
+    west neighbour inside the unzoned hole. Without the boulder: `free []`, 6 haul jobs. With it: `free
+    [(63,63,9),(65,63,9),(63,65,9),(65,65,9)]`, `loose 10`, `haul jobs 10`, retrying forever. The failure is
+    silent, the same class Q3 folded in.
+  - **Disclosure:** the NOTE (`lib.rs:812-817`) discloses only "a hole in a pile on a ledge". The spine bullet
+    (`ARCHITECTURE-SPINE.md:212`) and the Completion Notes state the fix with no limit.
+  - **Not a regression:** on `main` every such ring sealed. The limit comes from the rule's design (agent A's form
+    had it), not from the 17x-tick early exit.
+  - **Options:**
+    - **(a) Close it now.** A hole is a pocket when its flood runs dry, whatever borders it. A cheap early exit
+      that keeps that: "open" once the flood leaves the zone's x/y bounding box, or hits the cap. A hole ringed
+      by the pile cannot leave the box. Use the boulder probe as the RED, re-measure the tick cost against
+      0.265 ms, and strengthen the ring test while there (see the deferred ring-test item).
+    - **(b) Narrow and file.** Correct the NOTE, the spine bullet and the record to state the rock/drop limit, and
+      file a `bug` + `route:story` issue.
+- [ ] [Review][Patch] **Close AC 11 for holes that touch rock, a drop or the map edge** [`crates/sim-core/src/lib.rs:842-846`, NOTE `:812-821`] — Severity MED, from Decision 1 (a).
+  - Change the rule so a hole is a pocket when its flood runs dry, whatever borders it. Candidate cheap exit: "open" once the flood leaves the zone's x/y bounding box or hits the cap.
+  - RED first: the Acceptance Auditor's boulder probe (the committed ring setup plus one `Solid(Stone)` at the fire's west neighbour), committed as a scenario test.
+  - Re-measure the release tick cost against 0.265 ms mean / 0 ticks > 10 ms.
+  - Strengthen `a_pile_round_enclosed_ground_still_fills_every_cell` to count by `split_stored` and to assert AC 11's no-retry clause (the deferred ring-test item).
+  - Add a mutation row and re-mutate.
+  - Bring the NOTE, the spine bullet (`ARCHITECTURE-SPINE.md:212`) and the record into line.
+- [ ] [Review][Patch] **The seat card leaves no spare tetrahedrite** [`12-12-signoff/vehicle-card.md:71-74`] —
+  Severity MED. Source: Feature (RAN, card replayed over the wire).
+  - The card digs exactly 10 ore cells (3+2+1+4) for a target of 10. "The next one at `[69,79,14]`" is one of the
+    10.
+  - The replay's tick 10000 read tetrahedrite 9, loose 0, marks 0; the 10th was in a hauler's hands.
+  - One missed drag cell or one stranded ore stops the chain at 9/10 for good, and the card names no next step.
+    Name one or two spare tetrahedrite cells, or the dig to make if it sits at 9.
+- [ ] [Review][Patch] **The card's pile figures come from single-z rects; the gui's stockpile drag follows the
+  surface** [`12-12-signoff/vehicle-card.md`; `crates/gui/src/designate.rs:193`] — Severity LOW, in the file
+  patched above. Source: Feature (read).
+  - The replay matched the card's 67 cells only because it also used single-z rects.
+  - Say on the card that the cell counts are approximate at the seat.
+- [ ] [Review][Patch] **Two record claims do not reproduce**
+  [`12-12-the-first-goals.md:412`, `:431`] — Severity LOW. Patched rather than deferred: a false record invents
+  scope later. Source: Acceptance (RAN) and Feature (RAN).
+  - **The "runs in 2 s instead of 22 s" claim for the determinism test:** with the old 21x21x21 pile restored in a
+    scratch copy, it runs 5.3 s on HEAD against 6.4 s on main (debug). Dropping the pile hid no flood cost; the
+    stated reason is wrong.
+  - **"Identical on all five ... 9817 deltas":** the 4 connect-at-once re-runs give 9814, with identical tick
+    lines. The completion ticks depend on the connect tick: 2056/9618 at connect tick 1, and 1847/9828 at connect
+    tick 6 (Feature's 3/3).
+- [x] [Review][Defer] **AC 1 has no pinning test** [`crates/sim-core/tests/scenario.rs:5101`] — deferred.
+  - Acceptance RAN a live probe: the snapshot and the first deltas carry progress 0 and none completed.
+  - The chain test checks kind/target only, after 6 ticks with piles placed.
+- [x] [Review][Defer] **AC 4's "logged reason" is not asserted** [`crates/simd/src/main.rs:1050`, `:1076`] —
+  deferred. The tests check `is_none()` only. Edge and Acceptance both saw the log lines live (missing field; "save
+  has 4 goals completed; the chain has 3").
+- [x] [Review][Defer] **The Snapshot is pinned by an order-insensitive `Value` compare, not byte-exact**
+  [`crates/protocol/src/lib.rs:523-527`] — deferred, pre-existing practice. The Delta is byte-exact.
+- [x] [Review][Defer] **The real-daemon goal test never checks `completed`**
+  [`crates/simd/tests/serve.rs:3243`] — deferred. `completed` is pinned in `bridge.rs` and in sim-core
+  save_load.
+- [x] [Review][Defer] **The ring test counts naively and skips AC 11's "no haul job retries forever"**
+  [`crates/sim-core/tests/scenario.rs:5192`] — deferred.
+  - It counts any item on a zone cell, carried items and stacks included, against Key decision 1.
+  - Row 13 still kills it.
+  - If Decision 1 is (a), the patch pass takes this with it.
+- [x] [Review][Defer] **The tui goal row clips silently at narrow widths** [`crates/tui/src/view.rs:445`] —
+  deferred. The longest line is 72 columns and fits 80.
+- [x] [Review][Defer] **The gui goal readout may overlap the designate hint in a narrow window**
+  [`crates/gui/src/ingest.rs:1932`] — deferred. Not observed; the readout is bottom-right and the hint is
+  bottom-left.
+- [x] [Review][Defer] **Per-tick item scans are unmeasured** [`crates/sim-core/src/lib.rs:409`, `:444`] —
+  deferred. `split_stored` runs in `create_haul_jobs` and again in `advance_goals`, plus once per Snapshot/Delta
+  via `goals()`. All of it is linear in items.
+- [x] [Review][Defer] **`World::from_save` does not bound `goals_completed`** [`crates/sim-core/src/lib.rs:2818`]
+  — deferred. simd is the only loader and bounds it at `crates/simd/src/main.rs:375`.
+- [x] [Review][Defer] **`goal_lines`' `{:>2}` misaligns the `/` at progress 100 or more**
+  [`crates/client-core/src/lib.rs:112`] — deferred, cosmetic.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -483,3 +581,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-18 | Task 0 Q1 RULED 10/10/1 and Q2 RULED (A), Wolf: "1 ok 2 ok". Q3 open. |
 | 2026-10-18 | Task 0 Q3 RULED: fold the pile-ring defect in (Wolf: "fold it"); Task 2b, AC 11, a mutation row, a seat step. |
 | 2026-10-18 | Dev (Sonnet 5.5 agents A and B, Opus orchestrating): Tasks 1-9 done. Goals in sim-core, on the wire, in both clients; pile-ring fix (early-exit flood after a 17x tick regression); mutation table 15/15 KILLED; wire 5/5 OK and a deliberate RED; seat card. Full gate GREEN on `c53c050`. Status -> review. |
+| 2026-10-18 | Code review run 1 on `813c218` (4 layers, none timed out): 0 HIGH. 1 MED decision: AC 11 seals again when the hole touches rock or a drop. Wolf ruled (a), close it now. 4 patches left as action items; 10 defer. Status -> in-progress. |
