@@ -97,6 +97,9 @@ impl MarkTally {
     }
 }
 
+/// Rows reserved below the map: goal, roster, status, hint.
+pub const FOOTER_ROWS: u16 = 4;
+
 pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer) -> MarkTally {
     let designation_glyphs = [
         designation_cell(protocol::DesignationKind::Dig).glyph,
@@ -104,9 +107,10 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
         designation_cell(protocol::DesignationKind::Cut).glyph,
     ];
     let zone_glyph = zone_cell().glyph;
-    // NOTE: the bottom three rows are roster, status and hint text. The cut mark's ASCII `/` also
+    // NOTE: the footer rows are goal, roster, status and hint text. The cut mark's ASCII `/` also
     // appears in the status row's `z 1/2`, so counting there would invent a mark.
-    let map_cells = usize::from(framebuffer.w) * usize::from(framebuffer.h.saturating_sub(3));
+    let map_cells =
+        usize::from(framebuffer.w) * usize::from(framebuffer.h.saturating_sub(FOOTER_ROWS));
     MarkTally {
         z: state.z,
         drawn_designations: framebuffer
@@ -241,13 +245,13 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
     // NOTE: deliberate — below two rows there is no map to draw, so a 1-row terminal renders
     // blank rather than a lone status line (which is what it did before the status/hint split).
     // A terminal this small cannot show the game; pinned by `one_row_terminal_renders_blank` so
-    // the behaviour is a decision rather than an accident of `map_h = h - 3`.
-    if w == 0 || h < 3 {
+    // the behaviour is a decision rather than an accident of `map_h = h - FOOTER_ROWS`.
+    if w == 0 || h < FOOTER_ROWS {
         return framebuffer;
     }
 
-    // Three rows are reserved below the map: roster, status, hint.
-    let map_h = h - 3;
+    // FOOTER_ROWS rows are reserved below the map: goal, roster, status, hint.
+    let map_h = h - FOOTER_ROWS;
     for sy in 0..map_h {
         let wy = state.camera.1 + i64::from(sy) - i64::from(map_h) / 2;
         for sx in 0..w {
@@ -438,6 +442,23 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         }
         status
     };
+    let goal_y = h - 4;
+    let goal_row = client_core::goal_row_text(mirror.goals());
+    let goal_cells = goal_row
+        .head
+        .chars()
+        .map(|glyph| Cell {
+            glyph,
+            fg: STATUS_TEXT,
+        })
+        .chain(goal_row.done.chars().map(|glyph| Cell {
+            glyph,
+            fg: zone_cell().fg,
+        }));
+    for (x, cell) in (0..w).zip(goal_cells) {
+        framebuffer.cells[usize::from(x) + usize::from(goal_y) * usize::from(w)] = cell;
+    }
+
     let roster_y = h - 3;
     let roster = mirror
         .entities()
@@ -679,7 +700,7 @@ fn move_cursor(state: &mut ViewState, dx: i64, dy: i64, dims: Dims, viewport: (u
     state.cursor.1 = (state.cursor.1 + dy).clamp(0, max_y);
 
     let (w, h) = viewport;
-    let map_h = h.saturating_sub(3);
+    let map_h = h.saturating_sub(FOOTER_ROWS);
     if w == 0 || map_h == 0 {
         state.camera = state.cursor;
         return;
@@ -1034,27 +1055,82 @@ mod tests {
         }
     }
 
+    fn goal(
+        kind: protocol::ItemKind,
+        target: u32,
+        progress: u32,
+        completed: bool,
+    ) -> protocol::Goal {
+        protocol::Goal {
+            kind,
+            target,
+            progress,
+            completed,
+        }
+    }
+
+    /// 12.12: the goal row sits above the roster, grey for the current goal and pile green for the
+    /// done part, as `12-12-signoff/draft.md` has it.
+    #[test]
+    fn the_goal_row_sits_above_the_roster_in_grey_and_pile_green() {
+        use protocol::ItemKind::{Bloodstone, Tetrahedrite, Wood};
+        let mut snapshot = empty_snapshot(Dims { x: 3, y: 3, z: 1 });
+        snapshot.goals = vec![
+            goal(Wood, 10, 10, true),
+            goal(Tetrahedrite, 10, 3, false),
+            goal(Bloodstone, 1, 0, false),
+        ];
+        let framebuffer = render(&mirror(&snapshot), &normal_state((1, 1), 0), 60, 8);
+
+        let row: String = (0..60).map(|x| framebuffer.cell(x, 4).glyph).collect();
+        assert!(
+            row.starts_with("goal 2 of 3: tetrahedrite 3/10   done: wood 10/10"),
+            "{row:?}"
+        );
+        assert_eq!(framebuffer.cell(0, 4).fg, STATUS_TEXT);
+        assert_eq!(framebuffer.cell(33, 4).glyph, 'd');
+        assert_eq!(framebuffer.cell(33, 4).fg, zone_cell().fg);
+        let status: String = (0..60).map(|x| framebuffer.cell(x, 6).glyph).collect();
+        assert!(status.starts_with("tick 0  normal"), "{status:?}");
+
+        snapshot.goals = vec![
+            goal(Wood, 10, 12, true),
+            goal(Tetrahedrite, 10, 10, true),
+            goal(Bloodstone, 1, 1, true),
+        ];
+        let framebuffer = render(&mirror(&snapshot), &normal_state((1, 1), 0), 80, 8);
+        let row: String = (0..80).map(|x| framebuffer.cell(x, 4).glyph).collect();
+        assert!(
+            row.starts_with(
+                "all goals done - play on: wood 12/10  tetrahedrite 10/10  bloodstone 1/1"
+            ),
+            "{row:?}"
+        );
+        assert_eq!(framebuffer.cell(0, 4).fg, STATUS_TEXT);
+        assert_eq!(framebuffer.cell(26, 4).fg, zone_cell().fg);
+    }
+
     #[test]
     fn one_row_terminal_renders_blank() {
-        // Pins the `h < 3` early return as a decision, not an accident of `map_h = h - 3`.
-        // Before the status/hint split a 1-row terminal drew a status line; it now draws
-        // nothing, because three rows are reserved (roster, status, hint) and no map row is
-        // left. Asserted at h = 0..2, with h = 3 as the control proving the guard is not simply
-        // always-blank.
+        // Pins the `h < FOOTER_ROWS` early return as a decision, not an accident of
+        // `map_h = h - FOOTER_ROWS`. Before the status/hint split a 1-row terminal drew a status
+        // line; it now draws nothing, because four rows are reserved (goal, roster, status, hint)
+        // and no map row is left. Asserted at h = 0..3, with h = 4 as the control proving the
+        // guard is not simply always-blank.
         let dims = Dims { x: 3, y: 3, z: 1 };
         let snapshot = empty_snapshot(dims);
         let state = normal_state((1, 1), 0);
-        for h in [0, 1, 2] {
+        for h in [0, 1, 2, 3] {
             let framebuffer = render(&mirror(&snapshot), &state, 10, h);
             assert!(
                 framebuffer.cells.iter().all(|cell| *cell == BLANK),
                 "h={h} should render blank"
             );
         }
-        let framebuffer = render(&mirror(&snapshot), &state, 10, 3);
+        let framebuffer = render(&mirror(&snapshot), &state, 10, 4);
         assert!(
             framebuffer.cells.iter().any(|cell| *cell != BLANK),
-            "h=3 must still draw the status and hint rows"
+            "h=4 must still draw the status and hint rows"
         );
     }
 
@@ -1071,7 +1147,7 @@ mod tests {
         snapshot.tiles[index(dims, 2, 2, 2)] = Tile::Solid(Material::Ice);
         let state = normal_state((2, 1), 2);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 7, 5);
+        let framebuffer = render(&mirror(&snapshot), &state, 7, 6);
         let expected = [
             (' ', (8, 10, 14)),
             ('█', (86, 92, 104)),
@@ -1086,6 +1162,13 @@ mod tests {
             (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
             ('▲', (86, 92, 104)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
+            (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
             (' ', (8, 10, 14)),
@@ -1150,7 +1233,7 @@ mod tests {
         ];
         let state = normal_state((2, 1), 1);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &state, 5, 6);
 
         assert_eq!(
             framebuffer.cell(1, 1),
@@ -1258,7 +1341,7 @@ mod tests {
             },
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
 
         assert_eq!(
             framebuffer.cell(1, 1),
@@ -1310,7 +1393,7 @@ mod tests {
             carrying: None,
         }];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
 
         assert_eq!(framebuffer.cell(1, 1), carrier_cell());
         assert_eq!(framebuffer.cell(3, 1), BLANK);
@@ -1327,12 +1410,12 @@ mod tests {
         // The stone one level up must not count towards the dwarf's cell: the count has to use
         // the same z filter the draw does.
         snapshot.items[0].pos = [1, 1, 2];
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
         assert_eq!(framebuffer.cell(1, 1).glyph, '☺');
 
         snapshot.items[0].pos = [1, 1, 1];
         snapshot.entities.clear();
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
         assert_eq!(framebuffer.cell(1, 1).glyph, '*');
     }
 
@@ -1355,7 +1438,7 @@ mod tests {
             },
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
 
         assert_eq!(framebuffer.cell(1, 1), stored_item_cell());
         assert_eq!(framebuffer.cell(2, 1), zone_cell());
@@ -1381,7 +1464,7 @@ mod tests {
             },
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
 
         assert_eq!(framebuffer.cell(3, 1), wood_item_cell());
         assert_eq!(framebuffer.cell(1, 1), stored_wood_item_cell());
@@ -1417,7 +1500,7 @@ mod tests {
             },
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
 
         assert_eq!(framebuffer.cell(1, 1), stored_tetrahedrite_item_cell());
         assert_eq!(framebuffer.cell(2, 1), stored_bloodstone_item_cell());
@@ -1520,7 +1603,7 @@ mod tests {
             },
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((1, 1), 0), 3, 5);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((1, 1), 0), 3, 6);
 
         assert_eq!(framebuffer.cell(1, 1).glyph, '⚇');
         assert_eq!(
@@ -1689,7 +1772,7 @@ mod tests {
         ];
         let state = normal_state((1, 0), 0);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 3, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 3, 5);
 
         // The glyph is deliberately the same for both: what must differ is the colour, so
         // assert on `fg` alone. Comparing whole cells would also pass on a glyph change.
@@ -1709,7 +1792,7 @@ mod tests {
         snapshot.tiles[index(dims, 1, 0, 3)] = Tile::Solid(Material::Snow);
         let state = normal_state((1, 0), 7);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 4, 4);
+        let framebuffer = render(&mirror(&snapshot), &state, 4, 5);
 
         assert_eq!(
             framebuffer.cell(1, 0),
@@ -1798,9 +1881,9 @@ mod tests {
                 // 80-wide framebuffer and asserting `<= 80` cannot fail — an over-long hint
                 // would be silently truncated into a pass. At 120 the full hint survives, so
                 // the width assertion below is the real guard AC10 asks for.
-                let framebuffer = render(&mirror(&snapshot), &state, 120, 3);
+                let framebuffer = render(&mirror(&snapshot), &state, 120, 4);
                 let hint: String = (0..120)
-                    .map(|x| framebuffer.cell(x, 2).glyph)
+                    .map(|x| framebuffer.cell(x, 3).glyph)
                     .collect::<String>()
                     .trim_end()
                     .to_string();
@@ -1871,13 +1954,13 @@ mod tests {
             // test guards still holds with room to spare.
             let expected = format!("tick 9999999  {wire_name}  z 19/31  dwarves 5  N up");
 
-            let framebuffer = render(&mirror(&snapshot), &state, 80, 3);
+            let framebuffer = render(&mirror(&snapshot), &state, 80, 4);
             let rendered_width = (0..80)
-                .take_while(|x| framebuffer.cell(*x, 1).fg == STATUS_TEXT)
+                .take_while(|x| framebuffer.cell(*x, 2).fg == STATUS_TEXT)
                 .count();
             let expected_width = expected.chars().count();
             let rendered: String = (0..expected_width as u16)
-                .map(|x| framebuffer.cell(x, 1).glyph)
+                .map(|x| framebuffer.cell(x, 2).glyph)
                 .collect();
 
             assert!(
@@ -1887,7 +1970,7 @@ mod tests {
             assert_eq!(rendered_width, expected_width);
             assert_eq!(rendered, expected);
             // The LAST character of the line, pinning that nothing was truncated off the tail.
-            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 1).glyph, 'p');
+            assert_eq!(framebuffer.cell((expected_width - 1) as u16, 2).glyph, 'p');
         }
     }
 
@@ -2169,7 +2252,7 @@ mod tests {
         snapshot.tiles[index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         let state = normal_state((0, 0), 0);
 
-        let framebuffer = render(&mirror(&snapshot), &state, 5, 5);
+        let framebuffer = render(&mirror(&snapshot), &state, 5, 6);
 
         assert_eq!(framebuffer.cell(2, 1).glyph, '█');
         for (x, y) in [(0, 0), (1, 0), (2, 0), (0, 1), (1, 1)] {

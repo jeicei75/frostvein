@@ -1921,3 +1921,93 @@ fn the_trade_words_survive_no_color() {
         plain[1]
     );
 }
+
+/// 12.12 (AC 7): the goal row follows the daemon's `goals` frame by frame. The stub sends a
+/// snapshot, then a delta with wood at 4/10, one that completes wood, and one that completes the
+/// chain; each frame's goal row is the draft's text.
+#[test]
+fn the_goal_row_changes_on_the_delta_that_changes_goals() {
+    use protocol::ItemKind::{Bloodstone, Tetrahedrite, Wood};
+    let goal = |kind, target, progress, completed| protocol::Goal {
+        kind,
+        target,
+        progress,
+        completed,
+    };
+    let chain = |wood: (u32, bool), tetra: (u32, bool), blood: (u32, bool)| {
+        vec![
+            goal(Wood, 10, wood.0, wood.1),
+            goal(Tetrahedrite, 10, tetra.0, tetra.1),
+            goal(Bloodstone, 1, blood.0, blood.1),
+        ]
+    };
+    let stages = [
+        chain((4, false), (0, false), (0, false)),
+        chain((10, true), (3, false), (0, false)),
+        chain((12, true), (10, true), (1, true)),
+    ];
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind goals stub");
+    let port = listener.local_addr().unwrap().port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("3")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui capture");
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream.write_all(snapshot_line().as_bytes()).unwrap();
+        for (offset, goals) in stages.into_iter().enumerate() {
+            let delta = protocol::Delta {
+                msg_type: protocol::MessageType::Delta,
+                tick: SNAPSHOT_TICK + 1 + offset as u64,
+                tiles: Vec::new(),
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: protocol::Speed::Normal,
+                refusals: Vec::new(),
+                goals,
+            };
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .unwrap();
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    let status = child.wait().unwrap();
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    server.join().unwrap();
+    assert!(status.success(), "tui exited with {status}: {stderr}");
+    let rows: Vec<String> = stdout
+        .lines()
+        .map(strip_ansi)
+        .map(|line| line.trim_end().to_string())
+        .filter(|line| line.starts_with("goal ") || line.starts_with("all goals done"))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            "goal 1 of 3: wood 4/10",
+            "goal 2 of 3: tetrahedrite 3/10   done: wood 10/10",
+            "all goals done - play on: wood 12/10  tetrahedrite 10/10  bloodstone 1/1",
+        ]
+    );
+}
