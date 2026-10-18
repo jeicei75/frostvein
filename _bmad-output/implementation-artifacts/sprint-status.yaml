@@ -2670,7 +2670,7 @@ development_status:
   #     one-wide stair caged a miner: #200 gui pulse (no TCP_NODELAY) fixed 5b6cb78, #201 rescue dig refused fixed
   #     3fa87ac (gate GREEN 4997 s); #169/#198/#199 parked. Seat pass 2 (Wolf) on d811a6b, his seat save: stuck
   #     dwarf freed, pulse gone. -> done. PR #202 opened on Wolf's yes (91c3ee1).
-  12-11-nothing-floats: in-progress
+  12-11-nothing-floats: done
   #   Created 2026-10-15 on 56bfbe5. #135 REPRODUCED (premise "unreproduced" stale): the 12.10b staircase sweep
   #     leaves 4-10 floating blocks in 24/24 runs; channel under a block / dig under a stone hang it, haul retried
   #     forever; digging a tree's ground leaves the trunk on air (92/259 trees exposed). Dwarves never on air.

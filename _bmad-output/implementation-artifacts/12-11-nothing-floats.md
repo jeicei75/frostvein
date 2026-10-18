@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10b's creation
 
 # Story 12.11: Nothing Floats
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -462,6 +462,11 @@ GATE GREEN  3762s
 Still unproven live: AC 12 and the gui half of AC 15 (the re-sit from a fresh world, `12-11-signoff/vehicle-card.md`),
 AC 10 and the gui half of AC 8 (headless only). AC 13 happens at merge.
 
+**Seat re-sit (Wolf, 2026-10-18, fresh world, on `413af47`, PR #205): AC 12 met, with one dwarf parked.** Wolf: "one
+dwarf got still stuck but need to move forward.. it was narrow deep tunnel down". No save was kept, so the shape is
+unknown. It is filed as #206 with the #186/#187/#203/#204 candidates to rule in or out. Status -> done; the merge is
+Wolf's.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -866,6 +871,7 @@ GATE GREEN  3673s
 
 | Date | Change |
 |---|---|
+| 2026-10-18 | Seat re-sit (Wolf) from a fresh world on `413af47`: one dwarf stuck in a narrow, deep tunnel down. Wolf: "need to move forward". Filed #206 (no save, shape unknown). AC 12 met. Status -> done; PR #205 waits for Wolf's merge. |
 | 2026-10-18 | Review run 2 patch pass (fresh session, Opus 5.5): all 3 `[Review][Patch]` items landed (`69d0db5`..`b0b72a4`). "Never below him" pinned by a pit-step fixture (the first fixture's step led out to open ground, so `walls_in_a_dwarf` refused it and row 25 SURVIVED; walled to a dead end, row 25 KILLED at its own line). Record names `SavedDwarf.clearing`; seat card refreshed for a fresh-world re-sit. 38 of 38 mutation rows KILLED. Full gate GREEN on `b0b72a4` (3762 s). Status stays in-progress: the seat re-sit (AC 12, AC 15 gui half) is unrun. |
 | 2026-10-18 | Code review run 2 on `5a8fbaf` (fresh session, 4 layers, diff `1b1b99b..5a8fbaf`): 9 of 10 closure rows audited CLOSED, row 4 REWORK (the 'never below him' let-go clause is unpinned: deleting it keeps 83 of 83 scenario tests green). 0 HIGH, 1 MED + 2 LOW patch, 2 defer, 8 dismissed. Stopping rule fired: no round 3; next is a fresh-world seat re-sit. 3 patches left as action items. Status -> in-progress. |
 | 2026-10-18 | Review run 1 patch pass (fresh session, Opus 5.5): all 10 `[Review][Patch]` items landed (`31c0b16`..`c051bf0`). `Clearing` saved as a REQUIRED field (Wolf's (b)); serde read a missing `Option` as `None`, so `deserialize_with` makes pre-12.11 saves refused. simd refuses non-miner, cut-job, wrong-stone and two-holder clearing saves. Cancel mid-clear drops beside him; `haul` only from the lift; Walk after the set-down. AC 3 pinned in the sim and judged by the wire (pile over four levels, 32 of 32). Row 7's "column alone is equivalent" was FALSE for a dig (row 7c). (12,4,4) pinned under the (12,4,1) ruling, #186 noted. 16 new/changed mutation rows KILLED; wire 5/5 + 5/5 OK, deliberate RED 22 of 32. Status -> review (round 2). |
