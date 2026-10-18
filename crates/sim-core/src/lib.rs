@@ -815,6 +815,10 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
 /// at 4 x the zone size + 16 cells: a flood that reaches the cap is open ground. One that runs dry
 /// is a pocket only if every cell beside it is a pile cell. A hole in a pile on a ledge, with a
 /// drop or rock beside it as well, reads as open ground and seals as before.
+///
+/// The flood stops at the first cell beside rock, a drop or the map edge (a same-z neighbour that
+/// is neither pile nor standable, which the flood could never reach): this runs on every haul
+/// claim and delivery, and flooding to the cap each time cost 17x the tick (12.12 Task 2b).
 fn pile_targets(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -823,7 +827,7 @@ fn pile_targets(
     let cap = 4 * zones.len() + 16;
     // Loose stones and haulers move, so they do not fence ground off: only terrain does.
     let no_items = BTreeSet::new();
-    // Ground cells already flooded: true when their flood reached the cap (open ground).
+    // Ground cells already flooded: true when their flood found open ground.
     let mut ground: BTreeMap<Pos, bool> = BTreeMap::new();
     let mut open_ground = |start: Pos| -> bool {
         if let Some(&open) = ground.get(&start) {
@@ -831,8 +835,16 @@ fn pile_targets(
         }
         let mut seen = BTreeSet::from([start]);
         let mut flood = VecDeque::from([start]);
+        let mut open = false;
         while let Some(cell) = flood.pop_front() {
-            if seen.len() >= cap {
+            // Any boundary but the zone (rock, a drop, the map edge) is ground a dwarf can use,
+            // just a small one; a flood that runs dry inside the zone alone is a pocket.
+            if seen.len() >= cap
+                || side_neighbours(cell)
+                    .iter()
+                    .any(|n| !zones.contains(n) && !terrain.is_standable(*n))
+            {
+                open = true;
                 break;
             }
             for n in astar_neighbours(terrain, &no_items, cell) {
@@ -841,14 +853,6 @@ fn pile_targets(
                 }
             }
         }
-        // A flood that ran dry is a pocket only if the zone alone walls it in; any other
-        // boundary (rock, a drop, the map edge) is ground a dwarf can use, just a small one.
-        let open = seen.len() >= cap
-            || seen.iter().any(|&cell| {
-                side_neighbours(cell)
-                    .iter()
-                    .any(|n| !seen.contains(n) && !zones.contains(n))
-            });
         for cell in seen {
             ground.insert(cell, open);
         }
