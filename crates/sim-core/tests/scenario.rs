@@ -2969,6 +2969,9 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // no item beside him, no mark and no claim left; his sides are snow, snow and a drop, and the
     // one free side [65,69,10] lies 4 cells from his home [61,66,10], past WANDER_RADIUS (3). The
     // #186 shape with the radius as its fourth wall.
+    // 12.11 review run 1 (Wolf, 2026-10-17): (12,4,4) stays pinned under the (12,4,1) ruling. His
+    // own clearing set-down took one exit, but a channel cut closed the last one, so it is closed
+    // by a cut, not a placement; noted on #186.
     const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 4] =
         [(10, 6, 0), (12, 4, 1), (12, 4, 4), (12, 6, 3)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so

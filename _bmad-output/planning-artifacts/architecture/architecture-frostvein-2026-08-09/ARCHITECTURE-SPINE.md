@@ -188,7 +188,12 @@ graph LR
   by an item (one on the channel's target, or on every work cell) lifts it,
   carries it aside and sets it down himself, then resumes his own job: no
   haul job, no pile, no trade change (Wolf, Q1(b) + #180); the wire reports
-  his job as `haul` for that stretch (Q4). Wherever an item is put down (a
+  his job as `haul` from the lift to the set-down (Q4). He also clears the
+  one stone that alone shuts him in a small pocket (`caging_stone`, at most
+  64 cells; Wolf's dig-loop seat save). Three guards from the seat (Wolf:
+  "throwing stones"): he lifts only with a set-down ready, he lets go only
+  beside himself and never below him (a cancel included), and while his
+  set-down side is taken he holds the stone and waits. Wherever an item is put down (a
   fall, a set-aside, a released carrier's drop, a hauler's pile drop) it
   never takes an idle dwarf's last same-level exit (Wolf: kept everywhere,
   so a hauler may skip such a pile cell). Digging the ground under a tree
