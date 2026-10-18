@@ -301,3 +301,12 @@ old = '            match items.get(&item) {'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            match items.get(&item).map(|_| &job.target) {'))
 PY
+
+# 12.11 review run 2 patch pass: row 25 re-closes row 4 (16b pinned "beside him", not "never below him").
+mutation "25 a cancelled miner may set his stone down below him (review run 2 MED, REWORK of row 4)" sim-core a_miner_whose_channel_is_cancelled_mid_clear_never_sets_the_stone_down_below_him <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    || (clearing && cell.z < pos.z)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
