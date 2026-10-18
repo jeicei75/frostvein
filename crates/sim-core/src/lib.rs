@@ -7413,6 +7413,14 @@ mod tests {
             .expect("dwarf zero exists")
             .id();
         world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(107);
+        // The carrier stands on that cell, so the carried item lies on the pile; read before the
+        // step, which may walk him off it.
+        *world.ecs.get_mut::<Pos>(entity).unwrap() = pile[3];
+        assert_eq!(
+            goal_progress(&world),
+            vec![(2, false), (1, false), (0, false)],
+            "a carried item on a pile cell is not stored"
+        );
 
         world.step();
 

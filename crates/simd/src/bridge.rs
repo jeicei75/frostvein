@@ -730,17 +730,32 @@ mod tests {
 
     #[test]
     fn snapshot_and_delta_carry_the_goal_chain_as_hand_written_wire_values() {
-        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
-        let goal = |kind, target| protocol::Goal {
+        // Wood done and stocked, one tetrahedrite stored: progress and completion both differ
+        // from a fresh world's zeros, so neither can be hardwired.
+        let mut save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        for x in 0..11 {
+            let pos = sim_core::Pos { x, y: 0, z: 1 };
+            let kind = if x < 10 {
+                sim_core::ItemKind::Wood
+            } else {
+                sim_core::ItemKind::Tetrahedrite
+            };
+            save.zones.push(pos);
+            save.items.push((save.next_id, pos, kind));
+            save.next_id += 1;
+        }
+        save.goals_completed = 1;
+        let mut world = sim_core::World::from_save(save);
+        let goal = |kind, target, progress, completed| protocol::Goal {
             kind,
             target,
-            progress: 0,
-            completed: false,
+            progress,
+            completed,
         };
         let expected = vec![
-            goal(protocol::ItemKind::Wood, 10),
-            goal(protocol::ItemKind::Tetrahedrite, 10),
-            goal(protocol::ItemKind::Bloodstone, 1),
+            goal(protocol::ItemKind::Wood, 10, 10, true),
+            goal(protocol::ItemKind::Tetrahedrite, 10, 1, false),
+            goal(protocol::ItemKind::Bloodstone, 1, 0, false),
         ];
         assert_eq!(snapshot(&world, protocol::Speed::Normal).goals, expected);
         assert_eq!(
