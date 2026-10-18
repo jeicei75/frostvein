@@ -53,6 +53,22 @@ pub const DIG_WORK_TICKS: u32 = 50;
 pub const CUT_WORK_TICKS: u32 = 50;
 const RETRY_COOLDOWN: u64 = 20;
 
+/// The first-session goal chain (12.12, FR47), in order: store this many of each kind.
+pub const GOALS: [(ItemKind, u32); 3] = [
+    (ItemKind::Wood, 10),
+    (ItemKind::Tetrahedrite, 10),
+    (ItemKind::Bloodstone, 1),
+];
+
+/// One goal as the wire reads it. `progress` is the STORED count of `kind` (3.3's rule), live.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Goal {
+    pub kind: ItemKind,
+    pub target: u32,
+    pub progress: u32,
+    pub completed: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Material {
     Stone,
@@ -3135,6 +3151,19 @@ impl World {
             .0
             .iter()
             .map(|(&pos, &kind)| (pos, kind))
+            .collect()
+    }
+
+    /// RED stub (Task 1): all three goals, nothing counted, nothing completed.
+    pub fn goals(&self) -> Vec<Goal> {
+        GOALS
+            .iter()
+            .map(|&(kind, target)| Goal {
+                kind,
+                target,
+                progress: 0,
+                completed: false,
+            })
             .collect()
     }
 
@@ -7235,5 +7264,150 @@ mod tests {
         }
         world.step();
         assert_eq!(world.dwarves()[0].2, JobState::Walk);
+    }
+
+    // ---- 12.12 goals: a world with hand-placed items on a pile ----
+
+    /// A pile of `n` cells along y 0 at z 1 (x 0..n), zoned. Nothing is loose, so no haul job
+    /// exists and the items stay where they are put.
+    fn goal_pile(world: &mut World, n: i32) -> Vec<Pos> {
+        let cells: Vec<Pos> = (0..n).map(|x| at(x, 0, 1)).collect();
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .extend(cells.iter().copied());
+        cells
+    }
+
+    fn put_item(world: &mut World, id: u32, kind: super::ItemKind, pos: Pos) {
+        world.ecs.spawn((super::Item(kind), super::Id(id), pos));
+    }
+
+    fn goal_progress(world: &World) -> Vec<(u32, bool)> {
+        world
+            .goals()
+            .iter()
+            .map(|goal| (goal.progress, goal.completed))
+            .collect()
+    }
+
+    #[test]
+    #[ignore = "RED until Task 2"]
+    fn goal_progress_counts_stored_items_only() {
+        use super::ItemKind::{Bloodstone, Stone, Tetrahedrite, Wood};
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 6);
+        // Stored: wood 100 on cell 0, wood 102 on cell 1, tetrahedrite 104 on cell 4.
+        put_item(&mut world, 100, Wood, pile[0]);
+        put_item(&mut world, 102, Wood, pile[1]);
+        put_item(&mut world, 104, Tetrahedrite, pile[4]);
+        // A second item on one cell is not stored.
+        put_item(&mut world, 101, Wood, pile[0]);
+        // A wood above a LOWER-id stone on its cell is not stored; the stone is, but is no goal.
+        put_item(&mut world, 99, Stone, pile[2]);
+        put_item(&mut world, 105, Wood, pile[2]);
+        // A loose item (off the zone) is not stored.
+        put_item(&mut world, 103, Wood, at(20, 0, 1));
+        put_item(&mut world, 106, Bloodstone, at(21, 0, 1));
+        // A carried item sitting on a zone cell is not stored.
+        put_item(&mut world, 107, Wood, pile[3]);
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(107);
+
+        world.step();
+
+        assert_eq!(
+            goal_progress(&world),
+            vec![(2, false), (1, false), (0, false)],
+            "progress is the stored count of each kind"
+        );
+    }
+
+    #[test]
+    #[ignore = "RED until Task 2"]
+    fn a_completed_goal_stays_completed_when_its_stock_leaves() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 10);
+        for (i, cell) in pile.iter().enumerate() {
+            put_item(&mut world, 100 + i as u32, super::ItemKind::Wood, *cell);
+        }
+        world.step();
+        assert_eq!(goal_progress(&world)[0], (10, true));
+
+        // The pile is removed: the count follows the stock down, the goal stays done.
+        world.ecs.resource_mut::<super::Zones>().0.clear();
+        world.step();
+        assert_eq!(goal_progress(&world)[0], (0, true));
+
+        // Re-zone, then move one item off its cell: still done, progress is what is stored.
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .extend(pile.iter().copied());
+        let moved = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(100)))
+            .expect("item 100 exists")
+            .id();
+        *world.ecs.get_mut::<Pos>(moved).unwrap() = at(30, 0, 1);
+        world.step();
+        assert_eq!(goal_progress(&world)[0], (9, true));
+    }
+
+    #[test]
+    #[ignore = "RED until Task 2"]
+    fn a_goal_completes_only_after_the_ones_ahead_of_it() {
+        use super::ItemKind::{Bloodstone, Tetrahedrite};
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 11);
+        put_item(&mut world, 100, Bloodstone, pile[0]);
+        for i in 0..10 {
+            put_item(&mut world, 101 + i, Tetrahedrite, pile[1 + i as usize]);
+        }
+        world.step();
+        // Bloodstone is stored and its count is met, yet nothing ahead of it is done.
+        assert_eq!(
+            goal_progress(&world),
+            vec![(0, false), (10, false), (1, false)],
+            "bloodstone stored first must not complete"
+        );
+    }
+
+    #[test]
+    #[ignore = "RED until Task 2"]
+    fn the_chain_cascades_in_one_tick() {
+        use super::ItemKind::{Bloodstone, Tetrahedrite, Wood};
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 21);
+        put_item(&mut world, 100, Bloodstone, pile[0]);
+        for i in 0..10 {
+            put_item(&mut world, 101 + i, Tetrahedrite, pile[1 + i as usize]);
+        }
+        // Wood is one short: nothing completes, the later stock waits.
+        for i in 0..9 {
+            put_item(&mut world, 120 + i, Wood, pile[11 + i as usize]);
+        }
+        world.step();
+        assert_eq!(
+            goal_progress(&world),
+            vec![(9, false), (10, false), (1, false)]
+        );
+
+        // The tenth wood lands on the last pile cell: all three complete on that one tick (D2).
+        put_item(&mut world, 129, Wood, pile[20]);
+        world.step();
+        assert_eq!(
+            goal_progress(&world),
+            vec![(10, true), (10, true), (1, true)],
+            "goal 1 meeting its target completes goals 2 and 3, whose stock is already there"
+        );
     }
 }

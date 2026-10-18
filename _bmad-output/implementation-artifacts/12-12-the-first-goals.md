@@ -368,7 +368,18 @@ python3 _bmad-output/implementation-artifacts/12-12-signoff/goals_wire.py 7461 4
 
 ### Agent Model Used
 
+- Agent A (Claude Sonnet 5.5, claude-sonnet-5-5), Wolf's pick (2026-10-18): Tasks 1 (sim), 2b, 2, 3.
+
 ### Debug Log References
+
+RED lines (run with `--ignored` on a stub `World::goals()` that returns the three goals with progress 0, none completed; the stub is replaced by Task 2):
+
+- `goal_progress_counts_stored_items_only` (lib.rs unit): `left: [(0, false), (0, false), (0, false)]` / `right: [(2, false), (1, false), (0, false)]`, "progress is the stored count of each kind"
+- `a_completed_goal_stays_completed_when_its_stock_leaves` (lib.rs unit): `left: (0, false)` / `right: (10, true)`
+- `a_goal_completes_only_after_the_ones_ahead_of_it` (lib.rs unit): `left: [(0, false), (0, false), (0, false)]` / `right: [(0, false), (10, false), (1, false)]`, "bloodstone stored first must not complete"
+- `the_chain_cascades_in_one_tick` (lib.rs unit): `left: [(0, false), (0, false), (0, false)]` / `right: [(9, false), (10, false), (1, false)]`
+- `the_default_world_completes_the_goal_chain_with_scripted_commands` (scenario.rs): `tick 333: Wood progress 0 but 1 are stored`
+- `a_pile_round_enclosed_ground_still_fills_every_cell` (scenario.rs, Task 2b, on `6dffa0d` pile_targets): `the ring sealed itself: 35 of 44 cells filled, last at tick 4245 (now 12000); 9 free pile cells [...] while 17 stones lie loose and 17 haul jobs retry` (a stall of 7,755 ticks, not a slow fill; the limit is now 9,000)
 
 ### Completion Notes List
 
