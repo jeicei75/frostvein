@@ -2687,7 +2687,7 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: in-progress
+  12-12-the-first-goals: review
   #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
   #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
   #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
@@ -2696,6 +2696,9 @@ development_status:
   #     (`pile_targets` counts enclosed ground as a way in); 8 haul jobs retried forever. Not this story's (Q3).
   #     Task 0 RULED 2026-10-18 (Wolf): Q1 10 wood / 10 tetrahedrite / 1 bloodstone; Q2 draft (A); Q3 pile-ring
   #     defect FOLDED IN (Task 2b, AC 11). Defaults D1-D4 (live progress, cascade, refuse pre-12.12 saves, chain-done derived).
+  #   DEV 2026-10-18 (Sonnet 5.5 agents, Opus orchestrating): Tasks 1-9 done; pile-ring fix cost 17x the tick at
+  #     first, fixed by an early-exit flood; mutations/12-12.sh 15/15 KILLED; wire 5/5 OK + deliberate RED; full gate
+  #     GREEN on c53c050 (3914s). -> review. Code review in a FRESH session; AC 10 seat is Wolf's (vehicle-card.md).
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional

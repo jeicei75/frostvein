@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -256,11 +256,11 @@ The options as offered at creation, kept for the record:
     or three compact piles near the camp, plus one short step where Wolf rings the fire with a pile (its 4
     neighbours left out) and sees it fill to the last cell (AC 11). Note the compass mirror (#169) and that a
     pre-12.12 save is refused.
-- [ ] **Task 9: spine and gate**
+- [x] **Task 9: spine and gate**
   - [x] `ARCHITECTURE-SPINE.md` (2026-08-09): one bullet, next to the 12.11 one: goals are sim state,
     progress is the stored count by 3.3's rule, the chain is sticky and cascades, and the wire carries
     `Goal` on snapshot and delta.
-  - [ ] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
+  - [x] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
 
 ## Dev Notes
 
@@ -445,12 +445,34 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 - **Task 7, deliberate wire RED (orchestrator):** row 4 (`let mut done = 0;`) built in a scratch worktree at `86f369a`, one fresh release daemon: the chain completes at tick 9,618, then phase 2 removes a pile and `FAULT tick 9624: wood un-completed (completed at 2056)`, `FAULT tick 9624: tetrahedrite un-completed (completed at 9618)`, `FAULT tick 9624: bloodstone un-completed (completed at 9618)` (and every tick after), `GOALS RED`, exit 1, `delta queue full` 0.
 - **Task 8, seat card (orchestrator):** `12-12-signoff/vehicle-card.md`, the plan's digs as 10 row drags, 3 rect piles near the fire (67 cells), the 3 cuts, and a sitting B ring (5 x 5 round the fire, its 4 side neighbours cleared: 20 cells). A scratch release probe of exactly those drags from tick 30: sitting A wood at tick 1,957, tetrahedrite and bloodstone at 10,294, every mark gone; sitting B 20 of 20 filled by tick 3,030.
 
+- **Task 9, the full gate (orchestrator), on `c53c050`, `RUST_TEST_THREADS=1 scripts/gate.sh`, rc 0:**
+
+  ```
+  cargo fmt --check           ok  0s
+  cargo clippy -D warnings    ok  2s
+  cargo test                  ok  773s
+  cargo test (pixel guards)   ok  3101s
+  tui has no sim-core edge                ok
+  client-core has no sim-core edge        ok
+  gui has no sim-core edge                ok
+  metrics ledger tests        ok  0s
+  bench tests                 ok  19s
+  mutation tables still apply ok  10s
+  GATE GREEN  3914s
+  ```
+
 ### File List
 
 - `crates/sim-core/src/lib.rs` (goals, stored helper, `pile_targets` entrance rule, unit tests), `crates/sim-core/src/save.rs`, `crates/sim-core/tests/scenario.rs` (chain test, ring test, determinism reader), `crates/sim-core/tests/save_load.rs`
 - `crates/simd/src/main.rs` (load bound and two tests)
 - (Agent B, Task 4) `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs`, `crates/simd/tests/serve.rs`, `_bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh`, and the `Snapshot`/`Delta` literals in `crates/client-core`, `crates/tui`, `crates/gui` (src and tests)
 - (Agent B, Task 5) `crates/client-core/src/lib.rs`, `crates/client-core/tests/mirror.rs`, `crates/tui/src/view.rs`, `crates/tui/src/main.rs`, `crates/tui/tests/client.rs`, `crates/gui/src/ingest.rs`, `crates/gui/src/appearance.rs`
+- (Agent B, Task 4, literals) also `crates/gui/src/capture.rs`, `crates/gui/src/pick.rs`, `crates/gui/src/project.rs`, `crates/gui/tests/capture.rs`, `crates/gui/tests/headless.rs`
+- (Agents A and B, re-pointed rows) `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`, `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
+- `_bmad-output/implementation-artifacts/mutations/12-12.sh` (new, 15 rows)
+- `_bmad-output/implementation-artifacts/12-12-signoff/vehicle-card.md` (new)
+- `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, `_bmad-output/implementation-artifacts/metrics/12-12-the-first-goals.md`
 - `_bmad-output/implementation-artifacts/12-12-the-first-goals.md`
 
 ## Change Log
@@ -460,3 +482,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-18 | Story created on `60955ef`: chain reachability measured on the wire (4 target sets), `goals_wire.py` RED 3/3 on main, look draft written, pile-ring defect found; Task 0 Q1-Q3 open. |
 | 2026-10-18 | Task 0 Q1 RULED 10/10/1 and Q2 RULED (A), Wolf: "1 ok 2 ok". Q3 open. |
 | 2026-10-18 | Task 0 Q3 RULED: fold the pile-ring defect in (Wolf: "fold it"); Task 2b, AC 11, a mutation row, a seat step. |
+| 2026-10-18 | Dev (Sonnet 5.5 agents A and B, Opus orchestrating): Tasks 1-9 done. Goals in sim-core, on the wire, in both clients; pile-ring fix (early-exit flood after a 17x tick regression); mutation table 15/15 KILLED; wire 5/5 OK and a deliberate RED; seat card. Full gate GREEN on `c53c050`. Status -> review. |
