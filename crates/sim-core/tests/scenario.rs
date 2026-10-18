@@ -5155,11 +5155,11 @@ fn the_default_world_completes_the_goal_chain_with_scripted_commands() {
 
 /// The creation shape (12.12 Q3): a pile band ringing the campfire, with the fire's 4 neighbours
 /// left out of the zone. Those 4 cells and the fire are walkable ground the zone surrounds.
-/// Chebyshev distance 1..=3 from the fire, minus the 4 side neighbours: 44 pile cells.
+/// Chebyshev distance 1..=2 from the fire, minus the 4 side neighbours: 20 pile cells.
 fn ring_pile(fire: Pos) -> Vec<Pos> {
     let mut cells = Vec::new();
-    for dy in -3..=3i32 {
-        for dx in -3..=3i32 {
+    for dy in -2..=2i32 {
+        for dx in -2..=2i32 {
             let ring = dx.abs().max(dy.abs());
             let hole = dx.abs() + dy.abs() == 1;
             if ring >= 1 && !hole {
@@ -5175,7 +5175,6 @@ fn ring_pile(fire: Pos) -> Vec<Pos> {
 }
 
 #[test]
-#[ignore = "RED until Task 2b"]
 fn a_pile_round_enclosed_ground_still_fills_every_cell() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let fire = world.camp_origin();
@@ -5189,14 +5188,14 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
         }
     }
     let pile = ring_pile(fire);
-    assert_eq!(pile.len(), 44);
+    assert_eq!(pile.len(), 20);
     let rects: Vec<Rect> = pile.iter().map(|&cell| rect(cell, cell)).collect();
     assert_eq!(world.place_stockpile(&rects), None, "the ring was refused");
 
-    // 52 loose stones in four rows south of the ring, more than there are pile cells.
+    // 26 loose stones in two rows south of the ring, more than there are pile cells.
     let mut save = world.to_save();
     let mut id = save.next_id;
-    for y in fire.y + 7..=fire.y + 10 {
+    for y in fire.y + 5..=fire.y + 6 {
         for x in fire.x - 6..fire.x + 7 {
             save.items
                 .push((id, Pos { x, y, z: fire.z }, ItemKind::Stone));
@@ -5204,7 +5203,7 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
         }
     }
     save.next_id = id;
-    assert!(save.items.len() >= 52);
+    assert!(save.items.len() >= 26);
     let mut world = World::from_save(save);
 
     let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
@@ -5217,7 +5216,7 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
     };
     let mut last_rise = 0;
     let mut best = 0;
-    let end = world.tick() + 9_000;
+    let end = world.tick() + 6_000;
     while world.tick() < end && best < pile.len() {
         world.step();
         let now = stored(&world);

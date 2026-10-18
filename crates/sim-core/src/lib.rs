@@ -770,20 +770,62 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
 /// walled in by taken ones (an item lies on them) is no target, so it cannot hold the deepest
 /// layer and stop every delivery to the cells a hauler can still reach.
 ///
+/// A walkable non-pile neighbour is a way in only if it reaches ground outside the pile (12.12 Q3):
+/// a pile ringing the campfire surrounds the fire's neighbours, and counting those as ways in let
+/// the middle of the band fill first and seal the free cells off from every hauler.
+///
 /// NOTE: a pile cell this never reaches (no walkable non-pile ground around its part of the zone)
 /// is not a target; such a zone takes no deliveries. Cells are joined by same-z 4-neighbours only.
+/// "Outside" is a flood over non-pile walkable ground, ramps included (`astar_neighbours`), capped
+/// at 4 x the zone size + 16 cells: a flood that reaches the cap is open ground. One that runs dry
+/// is a pocket only if every cell beside it is a pile cell. A hole in a pile on a ledge, with a
+/// drop or rock beside it as well, reads as open ground and seals as before.
 fn pile_targets(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
     zones: &BTreeSet<Pos>,
 ) -> BTreeMap<Pos, u32> {
+    let cap = 4 * zones.len() + 16;
+    // Loose stones and haulers move, so they do not fence ground off: only terrain does.
+    let no_items = BTreeSet::new();
+    // Ground cells already flooded: true when their flood reached the cap (open ground).
+    let mut ground: BTreeMap<Pos, bool> = BTreeMap::new();
+    let mut open_ground = |start: Pos| -> bool {
+        if let Some(&open) = ground.get(&start) {
+            return open;
+        }
+        let mut seen = BTreeSet::from([start]);
+        let mut flood = VecDeque::from([start]);
+        while let Some(cell) = flood.pop_front() {
+            if seen.len() >= cap {
+                break;
+            }
+            for n in astar_neighbours(terrain, &no_items, cell) {
+                if !zones.contains(&n) && seen.insert(n) {
+                    flood.push_back(n);
+                }
+            }
+        }
+        // A flood that ran dry is a pocket only if the zone alone walls it in; any other
+        // boundary (rock, a drop, the map edge) is ground a dwarf can use, just a small one.
+        let open = seen.len() >= cap
+            || seen.iter().any(|&cell| {
+                side_neighbours(cell)
+                    .iter()
+                    .any(|n| !seen.contains(n) && !zones.contains(n))
+            });
+        for cell in seen {
+            ground.insert(cell, open);
+        }
+        open
+    };
     let mut depth: BTreeMap<Pos, u32> = BTreeMap::new();
     let mut queue = VecDeque::new();
     for &cell in zones {
         if is_walkable(terrain, blocked, cell)
             && side_neighbours(cell)
                 .iter()
-                .any(|n| !zones.contains(n) && is_walkable(terrain, blocked, *n))
+                .any(|n| !zones.contains(n) && is_walkable(terrain, blocked, *n) && open_ground(*n))
         {
             depth.insert(cell, 1);
             queue.push_back(cell);

@@ -161,12 +161,12 @@ The options as offered at creation, kept for the record:
   - [ ] Each is committed RED with `#[ignore = "RED until Task N"]`, with its failing line pasted into the Debug
     Log; it is un-ignored by the commit that greens it.
 - [ ] **Task 2b: a pile that encloses ground still fills (Q3)** (AC 11)
-  - [ ] RED first (Task 1's rule): a scenario test that lays a pile band round a walkable hole that is not
+  - [x] RED first (Task 1's rule): a scenario test that lays a pile band round a walkable hole that is not
     zoned, with haulers outside the band and at least as many items as pile cells. The creation shape (the
     map above) is the reference: the campfire's ring with its 4 neighbours left out of the zone. Build it
     with `make_standable` (`scenario.rs:12`) or on DEFAULT_SEED's camp. Its failing assert must show the
     seal, i.e. a free pile cell left with a loose item whose haul job keeps retrying, not merely a slow fill.
-  - [ ] Fix in `pile_targets` (`lib.rs:759-787`): a walkable non-zone neighbour counts as a way into the
+  - [x] Fix in `pile_targets` (`lib.rs:759-787`): a walkable non-zone neighbour counts as a way into the
     pile only if it connects to walkable ground outside the zone without crossing it. Ground that the zone
     surrounds then seeds no depth-1 layer, so the cells next to the hole are the deepest and fill first. The
     creation's throwaway did this with a capped flood (4 × zone size + 16 cells) over non-zone walkable
@@ -174,7 +174,7 @@ The options as offered at creation, kept for the record:
   - [ ] `pile_targets` runs on every haul claim and delivery (`lib.rs:1238`, `:2115`). Measure the max tick
     time before and after, with a scratch probe in release on a quiet machine, as 12.9 did (32 runs, max
     8.54 ms, 0 over 10 ms; `12-9-one-dwarf-per-tile.md:689`, probe not committed). Paste both.
-  - [ ] Non-enclosing piles must not change: the two-wide and one-wide staircase sweeps
+  - [x] Non-enclosing piles must not change: the two-wide and one-wide staircase sweeps
     (`scenario.rs:4660`, `:4766`), the cage sweep and the walking skeleton stay green with NO re-pin
     (expected, because every entrance of such a pile already reaches open ground; inferred, not measured).
     Any pin that moves is a finding: name its mechanism from a dump before re-pinning it.
@@ -379,9 +379,11 @@ RED lines (run with `--ignored` on a stub `World::goals()` that returns the thre
 - `a_goal_completes_only_after_the_ones_ahead_of_it` (lib.rs unit): `left: [(0, false), (0, false), (0, false)]` / `right: [(0, false), (10, false), (1, false)]`, "bloodstone stored first must not complete"
 - `the_chain_cascades_in_one_tick` (lib.rs unit): `left: [(0, false), (0, false), (0, false)]` / `right: [(9, false), (10, false), (1, false)]`
 - `the_default_world_completes_the_goal_chain_with_scripted_commands` (scenario.rs): `tick 333: Wood progress 0 but 1 are stored`
-- `a_pile_round_enclosed_ground_still_fills_every_cell` (scenario.rs, Task 2b, on `6dffa0d` pile_targets): `the ring sealed itself: 35 of 44 cells filled, last at tick 4245 (now 12000); 9 free pile cells [...] while 17 stones lie loose and 17 haul jobs retry` (a stall of 7,755 ticks, not a slow fill; the limit is now 9,000)
+- `a_pile_round_enclosed_ground_still_fills_every_cell` (scenario.rs, Task 2b, on `6dffa0d` pile_targets): `the ring sealed itself: 35 of 44 cells filled, last at tick 4245 (now 12000); 9 free pile cells [...] while 17 stones lie loose and 17 haul jobs retry` (a stall of 7,755 ticks, not a slow fill). The committed ring is the smaller one (Chebyshev 1..=2, 20 cells, 26 loose stones; the 44-cell ring took 195 s in debug): on `6dffa0d` it reads `the ring sealed itself: 16 of 20 cells filled, last at tick 1378 (now 9000); 4 free pile cells [(63,63,9) (65,63,9) (63,65,9) (65,65,9)] while 10 stones lie loose and 10 haul jobs retry`; fixed, 20 of 20 at tick 1,864 (16 s in debug).
 
 ### Completion Notes List
+
+- **Task 2b, a finding: the first two forms of the entrance rule moved pins.** The creation's throwaway (a flood over same-z non-zone walkable ground, items blocking, cap 4 x zone + 16) moved 8 of 84 scenario tests (e.g. `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire`: 0 pick-ups after t=2500 against the pinned 80; `a_full_stockpile_never_stacks_uncarried_stones`: zone (62,62,9) not full). Mechanism, from a dump of the 24-cell pile: the camp is a small hollow, walled by rock and trees, with fewer than 112 same-z walkable cells outside the zone, so every real entrance flooded dry under the cap and read as a pocket. Following ramps (`astar_neighbours`) fixed 7 of 8. The 8th (`a_carried_stone_is_always_set_down_beside_its_carrier`, delay 20, two stones landing 3 cells from the carrier at ticks 2337/2574) came from loose stones: they were walls in the flood, so ground fenced by loose stones read as a pocket and lost its depth-1 seeds, which changed the fill order (grids at tick 2300/2336 differ old vs new on row y=66). A third failure was the pre-commit gate's two `lib.rs` unit tests (`haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile`, `a_stone_at_a_pit_rim_is_lifted_from_the_ramp_below`): on a tiny fixture every walkable cell outside the one-cell zone is fewer than the cap, so a plain cap reads ordinary ground as a pocket. The final rule floods with terrain only (no items, no dwarves; they move), over ramps, cap 4 x zone + 16, and a flood that runs dry is a pocket only if every cell beside it is a pile cell (rock, a drop or the map edge beside it makes it open ground). With it the lib unit tests (91 passed, 5 ignored = the RED goal tests) and the whole `scenario` suite is green (83 passed, 1 ignored = the chain test) and NO pin was re-pinned.
 
 ### File List
 
