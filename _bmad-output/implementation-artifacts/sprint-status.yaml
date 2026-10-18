@@ -2694,8 +2694,8 @@ development_status:
   #     daemons (plan kept as plan-10-10-1.json); 5/5/1 ~6k, 8/8/2 ~18k, 10/10/3 ~25k. RED 3/3 on main (no `goals`).
   #     NEW defect found by the probe: a pile RINGING the campfire seals its inner cells from every hauler
   #     (`pile_targets` counts enclosed ground as a way in); 8 haul jobs retried forever. Not this story's (Q3).
-  #     Task 0 OPEN: Q1 targets (rec. 10 wood / 10 tetrahedrite / 1 bloodstone), Q2 look draft (rec. A), Q3 file the
-  #     pile-ring defect. Defaults D1-D4 (live progress, cascade, refuse pre-12.12 saves, chain-done derived).
+  #     Task 0 RULED 2026-10-18 (Wolf): Q1 10 wood / 10 tetrahedrite / 1 bloodstone; Q2 draft (A); Q3 pile-ring
+  #     defect FOLDED IN (Task 2b, AC 11). Defaults D1-D4 (live progress, cascade, refuse pre-12.12 saves, chain-done derived).
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional

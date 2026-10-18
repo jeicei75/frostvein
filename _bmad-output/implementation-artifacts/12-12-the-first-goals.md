@@ -58,23 +58,27 @@ full resend). For example:
   dropped the stock (wood 12→9, tetrahedrite 10→5), so the run is not vacuous. An earlier form that planned
   while the daemon ran was once dropped by it (`client delta queue full`, a truncated line); the final form
   pauses on connect and drains deltas on a thread, and reports a dropped reader as `GOALS BROKEN`.
-- **A pile ringing the campfire seals itself (new defect, NOT this story's; Task 0 Q3).** The probe's first
+- **A pile ringing the campfire seals itself (new defect, FOLDED IN by Task 0 Q3: Task 2b, AC 11).** The probe's first
   planner laid the pile round the fire and left the fire's 4 neighbours out. The middle of the band filled
   first and cut 8 free pile cells and the 4 fire-side cells off from every hauler. Delivery A* finished
   with "no path" over 16,037 cells, with no budget exhaustion. 8 haul jobs were then retried forever, both
   haulers idled, and the chain stalled at 6 of 10 tetrahedrite, 4 runs out of 4. The root is that `pile_targets`
   (`lib.rs:759-771`) counts any walkable non-zone neighbour as a way in, including ground the zone
   surrounds. A throwaway fix in `pile_targets` (an entrance must connect to ground outside the zone)
-  refilled 54 of 58 on that geometry, against 50 without it. The instrument now lays compact piles that
-  enclose nothing.
+  refilled 54 of 58 on that geometry, against 50 without it (from a re-fill of the save's pile; the 4 left
+  loose were the probe's own misplacement on an unreachable ledge). The instrument lays compact piles that
+  enclose nothing, so it judges the goals, not this defect; Task 2b's test judges the defect.
+  Creation geometry (z 9, `F` the campfire `[64,64,9]`, `#` a filled pile cell, `o` a free one, `.` walkable;
+  rows y 62-66): `..#####o###.` / `.#####o.o##.` / `.####o.F.o#.` / `.#####o.o##.` / ` .#####o##.`
 - **Extra logs.** A planned dig under a trunk fells that tree too (12.11 Q2), so 17 logs reach the pile where
   12 were planned. Size piles with slack.
 
-### Task 0: Q1 and Q2 RULED (Wolf, 2026-10-18); Q3 open
+### Task 0: RULED (Wolf, 2026-10-18)
 
 - **Q1 RULED (b): 10 wood, 10 tetrahedrite, 1 bloodstone** ("1 ok"). `plan-10-10-1.json` is the plan.
 - **Q2 RULED (A): the draft as written** ("2 ok"). No banner.
-- Q3: Wolf asked why "file" was recommended; open.
+- **Q3 RULED: fold it in** ("fold it"), against the creation recommendation to file it. It fails silently
+  (idle haulers, haul jobs retried forever) and it sits on AC 10's seat path. Task 2b, AC 11.
 
 The options as offered at creation, kept for the record:
 
@@ -133,11 +137,15 @@ The options as offered at creation, kept for the record:
 10. At the seat (Task 0 Q2 approved first), Wolf completes the chain in play on a fresh world, in the gui with an
     attached tui. He sees each goal complete and the chain announced, and play goes on (success
     criterion 3, UX-DR22 closing half).
+11. A pile that surrounds walkable ground outside the zone (the creation ring round the fire) still fills
+    every pile cell a hauler can deliver to: with at least as many items as pile cells, no free pile cell is
+    left while an item lies loose, and no haul job retries forever. Pile layouts that enclose nothing fill in
+    the same order as today (Q3).
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf rules Q1-Q3** and approves the draft (AC 10's opening half). Q1 (10/10/1) and Q2 (A)
-  RULED 2026-10-18 and recorded; Q3 open.
+- [x] **Task 0: Wolf rules Q1-Q3** and approves the draft (AC 10's opening half). RULED 2026-10-18:
+  Q1 10/10/1, Q2 (A), Q3 fold in.
 - [ ] **Task 1: RED tests first** (standing AC 2)
   - [ ] `crates/sim-core/src/lib.rs` unit tests (they can reach private `Zones`, as `lib.rs:4480` does), in a
     world with hand-placed items on a pile: progress counts stored only (carried, loose and a second item on
@@ -152,6 +160,24 @@ The options as offered at creation, kept for the record:
     long the test takes in debug.
   - [ ] Each is committed RED with `#[ignore = "RED until Task N"]`, with its failing line pasted into the Debug
     Log; it is un-ignored by the commit that greens it.
+- [ ] **Task 2b: a pile that encloses ground still fills (Q3)** (AC 11)
+  - [ ] RED first (Task 1's rule): a scenario test that lays a pile band round a walkable hole that is not
+    zoned, with haulers outside the band and at least as many items as pile cells. The creation shape (the
+    map above) is the reference: the campfire's ring with its 4 neighbours left out of the zone. Build it
+    with `make_standable` (`scenario.rs:12`) or on DEFAULT_SEED's camp. Its failing assert must show the
+    seal, i.e. a free pile cell left with a loose item whose haul job keeps retrying, not merely a slow fill.
+  - [ ] Fix in `pile_targets` (`lib.rs:759-787`): a walkable non-zone neighbour counts as a way into the
+    pile only if it connects to walkable ground outside the zone without crossing it. Ground that the zone
+    surrounds then seeds no depth-1 layer, so the cells next to the hole are the deepest and fill first. The
+    creation's throwaway did this with a capped flood (4 × zone size + 16 cells) over non-zone walkable
+    ground. Bound the flood the same way and state the cap in a `// NOTE:`.
+  - [ ] `pile_targets` runs on every haul claim and delivery (`lib.rs:1238`, `:2115`). Measure the max tick
+    time before and after, with a scratch probe in release on a quiet machine, as 12.9 did (32 runs, max
+    8.54 ms, 0 over 10 ms; `12-9-one-dwarf-per-tile.md:689`, probe not committed). Paste both.
+  - [ ] Non-enclosing piles must not change: the two-wide and one-wide staircase sweeps
+    (`scenario.rs:4660`, `:4766`), the cage sweep and the walking skeleton stay green with NO re-pin
+    (expected, because every entrance of such a pile already reaches open ground; inferred, not measured).
+    Any pin that moves is a finding: name its mechanism from a dump before re-pinning it.
 - [ ] **Task 2: goals in the sim** (AC 1-3)
   - [ ] Extract the stored rule from `create_haul_jobs` (`lib.rs:389-410`) into ONE helper that both
     callers use, e.g. `fn stored_items(ecs: &EcsWorld) -> BTreeMap<u32, Pos>` over `uncarried_stones`.
@@ -219,15 +245,17 @@ The options as offered at creation, kept for the record:
     stock drops (AC 3; the wire's phase 2 FAULT); order ignored (AC 3, AC 6; bloodstone is stored at tick
     6,352, before tetrahedrite completes at 9,828); no cascade (AC 3 unit); `to_save` drops `goals_completed` (AC 4);
     the load bound dropped (AC 4); the bridge reports `progress: 0` (AC 5); the Mirror drops `goals` (Task 5
-    test); the tui row ignores `completed`; the gui readout ignores `completed`.
+    test); the tui row ignores `completed`; the gui readout ignores `completed`; the Task 2b entrance rule
+    reverted (AC 11, the ring test).
   - [ ] One deliberate wire RED on the finished branch: rerun `goals_wire.py` with the "un-completes" row
     applied in a scratch worktree build, and paste its `FAULT` lines and `GOALS RED`.
 - [ ] **Task 8: seat card** (AC 10)
   - [ ] NEW `12-12-signoff/vehicle-card.md`, in the seat's launch form. Use a fresh world, with fast4x allowed.
     Give the trees `[65,56,10] [61,74,13] [65,73,12]`, the tetrahedrite vein at `[77,64,11]` (its tunnel cells
     from the plan file) and the next one at `[69,79,14]`, and the bloodstone `[55,83,13]` with its tunnel. Use two
-    or three compact piles near the camp, **not ringing the fire** (the Q3 defect). Note the compass
-    mirror (#169) and that a pre-12.12 save is refused.
+    or three compact piles near the camp, plus one short step where Wolf rings the fire with a pile (its 4
+    neighbours left out) and sees it fill to the last cell (AC 11). Note the compass mirror (#169) and that a
+    pre-12.12 save is refused.
 - [ ] **Task 9: spine and gate**
   - [ ] `ARCHITECTURE-SPINE.md` (2026-08-09): one bullet, next to the 12.11 one: goals are sim state,
     progress is the stored count by 3.3's rule, the chain is sticky and cascades, and the wire carries
@@ -240,8 +268,8 @@ The options as offered at creation, kept for the record:
 
 - No new command, refusal, key or tui input. Goals cannot be skipped, reset or reordered.
 - No reward and no use of resources (PRD non-goal). No fail state; play never pauses or ends.
-- No change to hauling, the pile fill order, digging or cutting. The pile-ring defect is Q3's, and is
-  untouched unless Wolf folds it in. #186/#187/#199/#203/#204/#206 stay where they are.
+- No change to hauling, the pile fill order, digging or cutting beyond Task 2b's entrance rule in
+  `pile_targets`. #186/#187/#199/#203/#204/#206 stay where they are.
 - No goal logic in a client: clients print the wire's `goals`; "chain done" is "every goal completed"
   (D4), which is display, not a rule.
 - No `Default` on wire types and no `#[serde(default)]` on `goals` or `goals_completed`.
@@ -271,8 +299,8 @@ The options as offered at creation, kept for the record:
 5. **Stock leaves a pile in natural play:** a clearing miner may lift a stored item (`clearing_item`,
    `lib.rs:1852-1901`, picks among all uncarried items), and `settle` drops items whose floor is dug. This is
    why AC 3 is load-bearing.
-6. **Don't ring the fire with a pile** in tests, cards or scripts (Found at creation). The scenario test's
-   piles are the plan's, which were checked non-enclosing.
+6. **Two piles, two judges.** The chain test and `goals_wire.py` use non-enclosing piles (the plan's), so a
+   regression of Task 2b cannot masquerade as a goals failure; only the ring test (AC 11) judges the seal.
 7. **Snapshot literals.** About 66 sites; the field is required on purpose (AD-6 strictness). Budget for
    the edit; don't dodge it.
 
@@ -352,3 +380,4 @@ python3 _bmad-output/implementation-artifacts/12-12-signoff/goals_wire.py 7461 4
 |---|---|
 | 2026-10-18 | Story created on `60955ef`: chain reachability measured on the wire (4 target sets), `goals_wire.py` RED 3/3 on main, look draft written, pile-ring defect found; Task 0 Q1-Q3 open. |
 | 2026-10-18 | Task 0 Q1 RULED 10/10/1 and Q2 RULED (A), Wolf: "1 ok 2 ok". Q3 open. |
+| 2026-10-18 | Task 0 Q3 RULED: fold the pile-ring defect in (Wolf: "fold it"); Task 2b, AC 11, a mutation row, a seat step. |
