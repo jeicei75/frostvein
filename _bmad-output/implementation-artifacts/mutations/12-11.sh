@@ -160,9 +160,9 @@ PY
 mutation "16 a clearing miner's let-go searches at any distance (seat guard)" sim-core a_miner_who_lets_go_mid_clear_sets_the_stone_down_beside_him <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            let nearest = if clearing_job.is_some() {'
+old = '            let nearest = if clearing {'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let nearest = if false && clearing_job.is_some() {'))
+p.write_text(s.replace(old, '            let nearest = if false && clearing {'))
 PY
 
 mutation "17 a miner holding his stone gives the job up when his set-down is taken (seat guard)" sim-core a_miner_whose_set_down_side_is_taken_keeps_the_stone <<'PY'

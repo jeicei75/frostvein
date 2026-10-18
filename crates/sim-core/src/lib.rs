@@ -1344,6 +1344,9 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     // retire — from welding a stone to an idle dwarf.
     if let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) {
         let dropped_at = ecs.get::<Pos>(entity).copied();
+        // A cancel or a vanished job removes the job before this runs: the clearing miner's own
+        // rules hang on `Clearing`, and only the target's refusals need the job.
+        let clearing = ecs.get::<Clearing>(entity).is_some();
         let clearing_job = ecs.get::<Clearing>(entity).and_then(|_| {
             let id = ecs.get::<CurrentJob>(entity)?.0?;
             ecs.resource::<Jobs>().by_id.get(&id).copied()
@@ -1374,15 +1377,15 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
                     || dwarves.contains(&cell)
                     || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
                     || closes_last_level_exit(terrain, &blocked, &dwarves, cell)
+                    || (clearing && cell.z < pos.z)
                     || clearing_job.is_some_and(|job| {
                         (cell.x, cell.y) == (job.target.x, job.target.y)
-                            || cell.z < pos.z
                             || forbidden.contains(&cell)
                     })
             };
             // NOTE: a clearing miner lets go only beside himself (Wolf, 12.11 seat): searched at any
             // distance, his refusals pushed the stone up to five cells off, onto the pit rim.
-            let nearest = if clearing_job.is_some() {
+            let nearest = if clearing {
                 astar_neighbours(terrain, &blocked, pos)
                     .into_iter()
                     .find(|cell| !refused(*cell))
@@ -2078,6 +2081,10 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 *ecs.get_mut::<Pos>(stone).expect("item position") = landing;
                 ecs.get_mut::<Carrying>(entity).expect("carrying slot").0 = None;
                 ecs.entity_mut(entity).remove::<Clearing>();
+                // Walking, as after a haul's pick-up: left in `Work`, the next delta read his own
+                // job + work, one frame of the dig swing (AC 15).
+                *ecs.get_mut::<JobState>(entity)
+                    .expect("every dwarf has a job state") = JobState::Walk;
                 ecs.entity_mut(entity).insert(WorkProgress(0));
                 ecs.entity_mut(entity).remove::<Path>();
             }
@@ -3168,13 +3175,19 @@ impl World {
         carrying
     }
 
-    /// Miners currently clearing an item while retaining their dig or channel claim.
+    /// Miners currently clearing an item while retaining their dig or channel claim: from the start
+    /// of the lift run to the set-down (D7). Not while he walks to the stone empty-handed.
     pub fn clearing(&self) -> Vec<(Id, u32)> {
         let mut clearing: Vec<_> = self
             .ecs
             .iter_entities()
             .filter(|entity| entity.contains::<Dwarf>())
-            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<Clearing>()?.item)))
+            .filter_map(|entity| {
+                let item = entity.get::<Clearing>()?.item;
+                let lifting = *entity.get::<JobState>()? == JobState::Work;
+                let carrying = entity.get::<Carrying>()?.0 == Some(item);
+                (lifting || carrying).then_some((*entity.get::<Id>()?, item))
+            })
             .collect();
         clearing.sort_by_key(|(id, _)| *id);
         clearing

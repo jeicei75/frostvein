@@ -3734,6 +3734,136 @@ fn a_miner_who_lets_go_mid_clear_sets_the_stone_down_beside_him() {
     );
 }
 
+// 12.11 review run 1: a cancel removes the job BEFORE `release_claim`, so the beside-him guard,
+// keyed on the job, was skipped and the drop searched at any distance. The let-go above keeps its job.
+#[test]
+fn a_miner_whose_channel_is_cancelled_mid_clear_sets_the_stone_down_beside_him() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let far = cell(site, -1, 0);
+    let target = cell(site, 1, 0);
+    let miner = cell(site, 2, 0);
+    let (mut world, stone) = walled_clearing(&[far, site, target, miner], target, miner, None);
+    until_the_miner_lifts(&mut world, stone, 600);
+    let at = world.dwarves()[0].1;
+    assert_eq!(at, miner, "the miner lifted from another cell");
+    // A hauler now stands on the mark, his one side, resting so it does not wander off: every cell
+    // beside him is refused, so the stone stays on his own tile.
+    let mut save = world.to_save();
+    save.dwarves[1].pos = target;
+    save.dwarves[1].home = target;
+    save.dwarves[1].cooldown = 100;
+    save.dwarves[1].path.clear();
+    let mut world = World::from_save(save);
+    let refused = world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(target, target),
+    });
+    assert_eq!(refused, None);
+    assert_eq!(
+        world.carrying()[0].1,
+        None,
+        "the cancel left him holding it"
+    );
+    let landed = world
+        .items()
+        .into_iter()
+        .find(|(item, _)| item.0 == stone)
+        .unwrap()
+        .1;
+    assert!(
+        (landed.x - at.x).abs().max((landed.y - at.y).abs()) <= 1 && (landed.z - at.z).abs() <= 1,
+        "the stone landed at {landed:?}, more than a cell from the miner on {at:?}"
+    );
+}
+
+/// DEFAULT_SEED with a stone on a one-cell channel mark at the staircase site. Returns the stone.
+fn a_stone_on_a_channel_mark() -> (World, u32) {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, site, ItemKind::Stone));
+    let mut world = World::from_save(save);
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Channel,
+        rect: rect(site, site),
+    });
+    (world, id)
+}
+
+// D7 / AC 15, 12.11 review run 1: `clearing()` (the wire's `haul`) names a miner from the start of
+// the lift run to the set-down, not while he walks to the stone empty-handed.
+#[test]
+fn a_miner_reads_as_clearing_only_while_he_lifts_or_carries() {
+    let (mut world, stone) = a_stone_on_a_channel_mark();
+    let (mut lifting, mut carrying) = (false, false);
+    while !world.designations().is_empty() {
+        assert!(world.tick() < 2_000, "the channel never completed");
+        world.step();
+        let held: BTreeMap<Id, Option<u32>> = world.carrying().into_iter().collect();
+        let states: BTreeMap<Id, JobState> = world
+            .dwarves()
+            .into_iter()
+            .map(|(id, _, state, _)| (id, state))
+            .collect();
+        for (miner, item) in world.clearing() {
+            assert_eq!(item, stone);
+            if held[&miner] == Some(item) {
+                carrying = true;
+            } else {
+                assert_eq!(
+                    states[&miner],
+                    JobState::Work,
+                    "tick {}: dwarf {miner:?} reads as clearing, holding nothing and not lifting",
+                    world.tick()
+                );
+                lifting = true;
+            }
+        }
+    }
+    assert!(lifting, "no miner read as clearing during his lift run");
+    assert!(
+        carrying,
+        "no miner read as clearing while he carried the stone"
+    );
+}
+
+// AC 15, 12.11 review run 1: the set-down leaves him walking, as a haul's pick-up does. Left in
+// `Work`, the next delta read `channel` + `work`: one frame of the dig swing.
+#[test]
+fn a_miner_who_sets_his_stone_down_is_walking_not_working() {
+    let (mut world, stone) = a_stone_on_a_channel_mark();
+    let mut carrier = None;
+    let mut set_down = false;
+    while !world.designations().is_empty() && !set_down {
+        assert!(world.tick() < 2_000, "the channel never completed");
+        world.step();
+        let now = world
+            .carrying()
+            .into_iter()
+            .find(|(_, item)| *item == Some(stone))
+            .map(|(id, _)| id);
+        if let (Some(miner), None) = (carrier, now) {
+            let state = world
+                .dwarves()
+                .into_iter()
+                .find(|(id, ..)| *id == miner)
+                .unwrap()
+                .2;
+            assert_eq!(
+                state,
+                JobState::Walk,
+                "tick {}: set down while working",
+                world.tick()
+            );
+            set_down = true;
+        }
+        carrier = now;
+    }
+    assert!(set_down, "the miner never set the stone down");
+}
+
 // A miner holding his stone when a dwarf steps onto his only set-down side keeps it and looks again,
 // rather than give the job up. Before the guard he let go on the next tick, and the drop put it
 // under him, where 12.9's rule says a stone never lands.
