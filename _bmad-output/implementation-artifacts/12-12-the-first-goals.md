@@ -70,7 +70,13 @@ full resend). For example:
 - **Extra logs.** A planned dig under a trunk fells that tree too (12.11 Q2), so 17 logs reach the pile where
   12 were planned. Size piles with slack.
 
-### Task 0: OPEN (Wolf rules before dev)
+### Task 0: Q1 and Q2 RULED (Wolf, 2026-10-18); Q3 open
+
+- **Q1 RULED (b): 10 wood, 10 tetrahedrite, 1 bloodstone** ("1 ok"). `plan-10-10-1.json` is the plan.
+- **Q2 RULED (A): the draft as written** ("2 ok"). No banner.
+- Q3: Wolf asked why "file" was recommended; open.
+
+The options as offered at creation, kept for the record:
 
 - **Q1, the targets** (hardcoded constants, FR47). Measured above. **(b) is recommended:** 10 wood, 10
   tetrahedrite, 1 bloodstone, at about 10,000 scripted ticks (about 4 min at fast4x). The one gem is the
@@ -130,9 +136,8 @@ full resend). For example:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf rules Q1-Q3** and approves the draft (AC 10's opening half). Record the rulings
-  here and in `draft.md`; regenerate the plan file if Q1 changes the targets
-  (`goals_wire.py PORT 40000 --wood W --mineral M --gem G --plan-out ...`, on a fresh daemon).
+- [ ] **Task 0: Wolf rules Q1-Q3** and approves the draft (AC 10's opening half). Q1 (10/10/1) and Q2 (A)
+  RULED 2026-10-18 and recorded; Q3 open.
 - [ ] **Task 1: RED tests first** (standing AC 2)
   - [ ] `crates/sim-core/src/lib.rs` unit tests (they can reach private `Zones`, as `lib.rs:4480` does), in a
     world with hand-placed items on a pile: progress counts stored only (carried, loose and a second item on
@@ -346,3 +351,4 @@ python3 _bmad-output/implementation-artifacts/12-12-signoff/goals_wire.py 7461 4
 | Date | Change |
 |---|---|
 | 2026-10-18 | Story created on `60955ef`: chain reachability measured on the wire (4 target sets), `goals_wire.py` RED 3/3 on main, look draft written, pile-ring defect found; Task 0 Q1-Q3 open. |
+| 2026-10-18 | Task 0 Q1 RULED 10/10/1 and Q2 RULED (A), Wolf: "1 ok 2 ok". Q3 open. |

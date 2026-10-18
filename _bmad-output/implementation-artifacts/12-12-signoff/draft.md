@@ -1,5 +1,7 @@
 # 12.12 look draft: the goal display and the chain announcement (for Wolf's approval, Task 0)
 
+**APPROVED by Wolf as drafted, option (A), 2026-10-18** ("2 ok"). Targets ruled 10 / 10 / 1 (Q1). No banner.
+
 A cheap text mock (standing AC 7). Nothing here is built yet. Slots are today's HUD slots, measured
 from `crates/gui/src/ingest.rs`, `crates/gui/src/designate.rs` and `crates/tui/src/view.rs` on
 `60955ef`. The targets shown are the recommended ones (Task 0 Q1: 10 wood, 10 tetrahedrite, 1
