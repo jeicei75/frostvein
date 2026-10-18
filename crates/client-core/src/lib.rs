@@ -463,6 +463,7 @@ mod tests {
             }],
             speed: Speed::Normal,
             tick: 9,
+            goals: Vec::new(),
         }
     }
 
@@ -484,6 +485,7 @@ mod tests {
             speed: Speed::Fast,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
 
         assert_eq!(mirror.tile([1, 0, 0]), Some(Tile::Solid(Material::Stone)));
@@ -517,12 +519,14 @@ mod tests {
             speed: Speed::Fast,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
 
         let replacement = Snapshot {
             tick: 11,
             entities: Vec::new(),
             items: Vec::new(),
+            goals: Vec::new(),
             ..snapshot()
         };
         mirror.apply_snapshot(replacement).unwrap();
@@ -532,6 +536,7 @@ mod tests {
         assert_eq!(mirror.tick(), 11);
         let error = Mirror::from_snapshot(Snapshot {
             tiles: vec![Tile::Empty],
+            goals: Vec::new(),
             ..snapshot()
         })
         .unwrap_err()
@@ -548,6 +553,7 @@ mod tests {
                 z: 4,
             },
             tiles: Vec::new(),
+            goals: Vec::new(),
             ..snapshot()
         });
 
@@ -626,6 +632,7 @@ mod tests {
             speed: Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
 
         assert_eq!(mirror.changes().spawned, vec![8]);

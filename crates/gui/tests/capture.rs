@@ -352,6 +352,7 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 7,
+        goals: Vec::new(),
     };
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
@@ -387,6 +388,7 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
             speed: Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
     app.update();
     assert!(
@@ -417,6 +419,7 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
             speed: Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
     app.update();
     assert!(
@@ -434,6 +437,7 @@ fn at_tick_capture_waits_for_the_mirror_tick_and_reports_an_exhausted_budget() {
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 7,
+        goals: Vec::new(),
     };
     let mut exhausted = App::new();
     exhausted
@@ -469,6 +473,7 @@ fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 0,
+        goals: Vec::new(),
     };
     let mut app = App::new();
     app.add_plugins(MinimalPlugins)
@@ -543,6 +548,7 @@ fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
             speed: Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -567,6 +573,7 @@ fn draw_count_instrument_follows_projected_marks_from_live_ingest() {
             speed: Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -610,6 +617,7 @@ fn the_capture_fails_when_the_mirror_holds_marks_the_scene_does_not_draw() {
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 0,
+        goals: Vec::new(),
     };
     initial.designations = vec![Designation {
         pos: [0, 0, 1],
@@ -719,6 +727,7 @@ fn the_lantern_sweep_sees_terrain_that_exists_only_as_chunk_meshes() {
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 0,
+        goals: Vec::new(),
     };
 
     let mut app = App::new();
@@ -798,6 +807,7 @@ fn static_world_skips_the_motion_assertions_on_an_at_tick_capture() {
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 7,
+        goals: Vec::new(),
     };
     let out = env::temp_dir().join(format!(
         "frostvein-static-at-tick-{}.png",
@@ -827,6 +837,7 @@ fn static_world_skips_the_motion_assertions_on_an_at_tick_capture() {
             speed: Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
     // The assertions run at the moment the capture is requested. Reaching this line at all is the
     // result: with the flag honoured on one arm only, this update panicked.

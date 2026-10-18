@@ -3203,3 +3203,93 @@ fn a_save_taken_mid_clear_loads_and_the_clear_finishes() {
     }
     panic!("after the load: reads haul {hauling}, channel opened {opened}");
 }
+
+/// The stored count of `kind` as 3.3's rule reads it from ONE message's own `items`, `zones` and
+/// `carrying`: uncarried, on a zone cell, and the lowest id on that cell. Independent of the sim.
+fn stored_count(
+    items: &[protocol::Item],
+    zones: &[protocol::Zone],
+    entities: &[protocol::Entity],
+    kind: protocol::ItemKind,
+) -> u32 {
+    let carried: Vec<u32> = entities
+        .iter()
+        .filter_map(|entity| entity.carrying)
+        .collect();
+    let mut lowest: std::collections::BTreeMap<[i32; 3], &protocol::Item> = Default::default();
+    for item in items {
+        if carried.contains(&item.id) || !zones.iter().any(|zone| zone.pos == item.pos) {
+            continue;
+        }
+        let slot = lowest.entry(item.pos).or_insert(item);
+        if item.id < slot.id {
+            *slot = item;
+        }
+    }
+    lowest.values().filter(|item| item.kind == kind).count() as u32
+}
+
+fn progress(goals: &[protocol::Goal], kind: protocol::ItemKind) -> u32 {
+    goals
+        .iter()
+        .find(|goal| goal.kind == kind)
+        .unwrap()
+        .progress
+}
+
+/// AC 5 on a real daemon: a loaded world with items on a pile sends `progress` above 0, and it is
+/// the stored count of that same message. A stacked pair on one cell counts once.
+#[test]
+fn a_loaded_pile_reports_its_stored_count_as_goal_progress_in_the_snapshot_and_the_next_delta() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    let (first, second) = (state.dwarves[0].pos, state.dwarves[1].pos);
+    assert_ne!(first, second, "the fixture needs two distinct pile cells");
+    state.zones = vec![first, second];
+    // Wood 10 and 11 are a stacked pair on `first`; tetrahedrite 12 is alone on `second`.
+    state.items = vec![
+        (10, first, sim_core::ItemKind::Wood),
+        (11, first, sim_core::ItemKind::Wood),
+        (12, second, sim_core::ItemKind::Tetrahedrite),
+    ];
+    state.next_id = 13;
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode pile save"),
+    )
+    .expect("write pile save");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+
+    use protocol::ItemKind::{Tetrahedrite, Wood};
+    assert_eq!(loaded.goals.len(), 3);
+    assert_eq!(
+        progress(&loaded.goals, Wood),
+        1,
+        "the stacked pair counts once"
+    );
+    assert_eq!(progress(&loaded.goals, Tetrahedrite), 1);
+    for kind in [Wood, Tetrahedrite] {
+        assert_eq!(
+            progress(&loaded.goals, kind),
+            stored_count(&loaded.items, &loaded.zones, &loaded.entities, kind)
+        );
+    }
+    let delta = read_delta(&mut reader);
+    let wood = progress(&delta.goals, Wood);
+    let tetrahedrite = progress(&delta.goals, Tetrahedrite);
+    assert!(wood + tetrahedrite > 0, "the delta lost the stored stock");
+    assert_eq!(
+        wood,
+        stored_count(&delta.items, &delta.zones, &delta.entities, Wood)
+    );
+    assert_eq!(
+        tetrahedrite,
+        stored_count(&delta.items, &delta.zones, &delta.entities, Tetrahedrite)
+    );
+}

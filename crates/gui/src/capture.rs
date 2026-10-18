@@ -2068,6 +2068,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .expect("a hand-built snapshot must load")
     }
@@ -2114,6 +2115,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .expect("an empty hand-built snapshot must load");
         assert!(
@@ -2230,6 +2232,7 @@ mod tests {
             items: Vec::new(),
             speed: protocol::Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .expect("a hand-built tree snapshot must load");
 
@@ -2399,6 +2402,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
 

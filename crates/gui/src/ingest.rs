@@ -3127,6 +3127,7 @@ mod tests {
                 items: Vec::new(),
                 speed: Speed::Normal,
                 tick: 0,
+                goals: Vec::new(),
             },
         )
     }
@@ -3225,6 +3226,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 1_000,
+            goals: Vec::new(),
         };
         capture
             .world_mut()
@@ -3264,6 +3266,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick,
+            goals: Vec::new(),
         };
         let (early, _sender, _server) = configured_app_with_snapshot(&[], snapshot(0));
         let (late, _sender, _server) = configured_app_with_snapshot(&[], snapshot(1_000));
@@ -3357,6 +3360,7 @@ mod tests {
             items: Vec::new(),
             speed,
             tick,
+            goals: Vec::new(),
         }
     }
 
@@ -3464,6 +3468,7 @@ mod tests {
                 speed: Speed::Paused,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             }))))
             .unwrap();
         // Two frames: one ingests the delta into the mirror, the next reads the mirror's speed.
@@ -3628,6 +3633,7 @@ mod tests {
                 speed: Speed::Paused,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             }))))
             .unwrap();
         app.update();
@@ -3711,6 +3717,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
+            goals: Vec::new(),
         }
     }
 
@@ -4016,6 +4023,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             refusals,
+            goals: Vec::new(),
         };
         sender
             .send(Ok(WireMessage::Delta(Box::new(delta(1, vec![expected])))))
@@ -4487,6 +4495,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         };
         let intensity = |app: &mut App| {
             app.world_mut()
@@ -5414,6 +5423,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         };
         let parsed = super::parse_args_from(
             ["--select", "2"]
@@ -5507,6 +5517,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         };
         let exit_after_one_frame = |id: &str| {
             let (mut app, _sender, _server) = configured_app_with_snapshot(
@@ -5561,6 +5572,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         };
         let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
         app.update();
@@ -5687,6 +5699,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         };
         let (mut app, _sender, _server) = configured_app_with_snapshot(&[], snapshot);
         app.update();
@@ -5885,6 +5898,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         };
         let (mut app, _sender, server) = configured_app_with_snapshot(
             &[
@@ -6306,6 +6320,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         }
     }
 
@@ -6362,6 +6377,7 @@ mod tests {
                     speed: Speed::Normal,
 
                     refusals: Vec::new(),
+                    goals: Vec::new(),
                 }))))
                 .unwrap();
             app.update();
@@ -7327,6 +7343,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         let (sender, receiver) = mpsc::sync_channel(2);
@@ -7346,6 +7363,7 @@ mod tests {
                     speed: Speed::Normal,
 
                     refusals: Vec::new(),
+                    goals: Vec::new(),
                 }))))
                 .unwrap();
         }
@@ -7381,6 +7399,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         let (sender, receiver) = mpsc::sync_channel(1);
@@ -7396,6 +7415,7 @@ mod tests {
                 speed: Speed::Normal,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             }))))
             .unwrap();
         let mut app = App::new();
@@ -7437,6 +7457,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         let (sender, receiver) = mpsc::sync_channel(1);
@@ -7451,6 +7472,7 @@ mod tests {
                 items: Vec::new(),
                 speed: Speed::Normal,
                 tick: 2,
+                goals: Vec::new(),
             }))))
             .unwrap();
         let mut app = App::new();
@@ -7492,6 +7514,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         let (sender, receiver) = mpsc::sync_channel(2);
@@ -7512,7 +7535,7 @@ mod tests {
                 "type":"snapshot", "dims":{"x":2,"y":1,"z":1},
                 "tiles":[{"solid":"ice"},"empty"],
                 "entities":[{"id":7,"kind":"dwarf","pos":[1,0,0],"state":"idle","light":null}],
-                "designations":[], "zones":[], "items":[], "speed":"normal", "tick":4
+                "designations":[], "zones":[], "items":[], "speed":"normal", "tick":4, "goals":[]
             }"#,
         )
         .unwrap();
@@ -7520,7 +7543,7 @@ mod tests {
             r#"{
                 "type":"delta", "tick":5,
                 "tiles":[{"pos":[0,0,0],"tile":{"solid":"ice"}}],
-                "entities":[], "designations":[], "zones":[], "items":[], "speed":"normal"
+                "entities":[], "designations":[], "zones":[], "items":[], "speed":"normal", "goals":[]
             }"#,
         )
         .unwrap();

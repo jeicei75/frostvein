@@ -9,7 +9,7 @@ const SNAPSHOT_WIRE: &str = r#"{
         {"id":2,"kind":"torch","pos":[1,0,0],"state":"idle","light":"torch"}
     ],
     "designations":[{"pos":[0,0,0],"kind":"dig"}], "zones":[], "items":[],
-    "speed":"normal", "tick":9
+    "speed":"normal", "tick":9, "goals":[]
 }"#;
 
 const FIRST_DELTA_WIRE: &str = r#"{
@@ -20,26 +20,26 @@ const FIRST_DELTA_WIRE: &str = r#"{
         {"id":2,"kind":"torch","pos":[1,0,0],"state":"idle","light":"torch"}
     ],
     "designations":[], "zones":[{"pos":[1,0,0]}],
-    "items":[{"id":9,"pos":[0,0,0],"kind":"stone"}], "speed":"fast"
+    "items":[{"id":9,"pos":[0,0,0],"kind":"stone"}], "speed":"fast", "goals":[]
 }"#;
 
 const SECOND_DELTA_WIRE: &str = r#"{
     "type":"delta", "tick":11, "tiles":[],
     "entities":[{"id":7,"kind":"dwarf","pos":[1,0,0],"state":"walk","light":null}],
-    "designations":[], "zones":[], "items":[], "speed":"fast"
+    "designations":[], "zones":[], "items":[], "speed":"fast", "goals":[]
 }"#;
 
 const THIRD_DELTA_WIRE: &str = r#"{
     "type":"delta", "tick":12,
     "tiles":[{"pos":[0,0,0],"tile":{"ramp":"snow"}}],
     "entities":[{"id":7,"kind":"dwarf","pos":[1,0,0],"state":"walk","light":null}],
-    "designations":[], "zones":[], "items":[], "speed":"fast"
+    "designations":[], "zones":[], "items":[], "speed":"fast", "goals":[]
 }"#;
 
 const RESET_SNAPSHOT_WIRE: &str = r#"{
     "type":"snapshot", "dims":{"x":1,"y":1,"z":1}, "tiles":["empty"],
     "entities":[{"id":99,"kind":"campfire","pos":[0,0,0],"state":"idle","light":"campfire"}],
-    "designations":[], "zones":[], "items":[], "speed":"paused", "tick":20
+    "designations":[], "zones":[], "items":[], "speed":"paused", "tick":20, "goals":[]
 }"#;
 
 #[test]

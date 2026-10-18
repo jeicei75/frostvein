@@ -31,6 +31,7 @@ fn snapshot_line() -> String {
         items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
+        goals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -54,6 +55,7 @@ fn delta_line_with_speed(tick: u64, speed: protocol::Speed) -> String {
         speed,
 
         refusals: Vec::new(),
+        goals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -236,6 +238,7 @@ fn capture_frames_refusing(refusal: Option<protocol::Refusal>) -> Vec<String> {
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
                 refusals: Vec::new(),
+                goals: Vec::new(),
             };
             if let Some(refusal) = refusal
                 && tick == 9
@@ -570,6 +573,7 @@ fn mark_snapshot_line() -> String {
         items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
+        goals: Vec::new(),
     };
     let mut line = serde_json::to_string(&snapshot).unwrap();
     line.extend(std::iter::repeat_n(' ', 16 * 1024 - 1 - line.len()));
@@ -626,6 +630,7 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 speed: protocol::Speed::Normal,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             };
             prelude.push_str(&format!("{}\n", serde_json::to_string(&delta).unwrap()));
         }
@@ -676,6 +681,7 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 speed: protocol::Speed::Normal,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -829,6 +835,7 @@ fn capture_dig_replay(changes: bool) -> String {
                 speed: protocol::Speed::Normal,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -1029,6 +1036,7 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
             items: items.clone(),
             speed: protocol::Speed::Normal,
             tick: 7,
+            goals: Vec::new(),
         };
         let mut stream = accept_with_timeout(&listener);
         stream
@@ -1046,6 +1054,7 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
                 speed: protocol::Speed::Normal,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -1228,6 +1237,7 @@ fn capture_haul_replay(changes: bool) -> String {
                 speed: protocol::Speed::Normal,
 
                 refusals: Vec::new(),
+                goals: Vec::new(),
             };
             stream
                 .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
@@ -1351,6 +1361,7 @@ fn moving_snapshot_line(x: i32) -> String {
         items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
+        goals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -1370,6 +1381,7 @@ fn moving_delta_line(tick: u64, x: i32) -> String {
         speed: protocol::Speed::Normal,
 
         refusals: Vec::new(),
+        goals: Vec::new(),
     };
     format!(
         "{}\n",
@@ -1524,6 +1536,7 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
             speed: protocol::Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         };
         stream
             .write_all(
@@ -1730,6 +1743,7 @@ fn capture_roster_with(no_color: bool, at_work: bool) -> String {
             items: Vec::new(),
             speed: protocol::Speed::Normal,
             tick: SNAPSHOT_TICK,
+            goals: Vec::new(),
         };
         stream
             .write_all(
@@ -1751,6 +1765,7 @@ fn capture_roster_with(no_color: bool, at_work: bool) -> String {
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
                 refusals: Vec::new(),
+                goals: Vec::new(),
             };
             stream
                 .write_all(

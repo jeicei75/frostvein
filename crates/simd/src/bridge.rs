@@ -35,6 +35,7 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
         items: items_out(world),
         speed,
         tick: world.tick(),
+        goals: goals_out(world),
     }
 }
 
@@ -79,9 +80,22 @@ pub fn delta(
             .collect(),
         items: items_out(world),
         speed,
-
+        goals: goals_out(world),
         refusals,
     }
+}
+
+fn goals_out(world: &sim_core::World) -> Vec<protocol::Goal> {
+    world
+        .goals()
+        .into_iter()
+        .map(|goal| protocol::Goal {
+            kind: item_kind_out(goal.kind),
+            target: goal.target,
+            progress: goal.progress,
+            completed: goal.completed,
+        })
+        .collect()
 }
 
 fn items_out(world: &sim_core::World) -> Vec<protocol::Item> {
@@ -712,6 +726,27 @@ mod tests {
             }
         }
         assert!(saw_solid, "world must contain at least one solid tile");
+    }
+
+    #[test]
+    fn snapshot_and_delta_carry_the_goal_chain_as_hand_written_wire_values() {
+        let mut world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let goal = |kind, target| protocol::Goal {
+            kind,
+            target,
+            progress: 0,
+            completed: false,
+        };
+        let expected = vec![
+            goal(protocol::ItemKind::Wood, 10),
+            goal(protocol::ItemKind::Tetrahedrite, 10),
+            goal(protocol::ItemKind::Bloodstone, 1),
+        ];
+        assert_eq!(snapshot(&world, protocol::Speed::Normal).goals, expected);
+        assert_eq!(
+            delta(&mut world, protocol::Speed::Normal, Vec::new()).goals,
+            expected
+        );
     }
 
     #[test]

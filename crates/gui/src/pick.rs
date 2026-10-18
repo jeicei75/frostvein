@@ -534,6 +534,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap()
     }
@@ -552,6 +553,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         assert_eq!(
@@ -822,6 +824,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap()
     }

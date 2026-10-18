@@ -721,6 +721,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         }
     }
 
