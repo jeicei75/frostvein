@@ -278,12 +278,12 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<Carrying>()?.0.filter(|_| false))))\n'))
 PY
 
-mutation "23b the no-throw sweep's level assert: a miner never clears (review LOW)" sim-core a_carried_stone_is_always_set_down_beside_its_carrier <<'PY'
+mutation "23b the no-throw sweep's level assert: no dwarf ever claims a job (review LOW)" sim-core a_carried_stone_is_always_set_down_beside_its_carrier <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = 'let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {'
+old = '            if trade(job.kind) != **profession {'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'let clearing_item = if false && matches!(job.kind, JobKind::Dig | JobKind::Channel) {'))
+p.write_text(s.replace(old, '            if true || trade(job.kind) != **profession {'))
 PY
 
 mutation "24 the fall is removed: a fallen stone's haul is never delivered (review MED, AC 3)" sim-core a_fallen_stone_with_a_haul_job_is_delivered_to_the_pile <<'PY'
@@ -292,4 +292,12 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        if !falling {\n            continue;\n        }\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        if true {\n            continue;\n        }\n'))
+PY
+
+mutation "24b a fallen stone's haul reads its stale job target, not its live position (review MED, AC 3)" sim-core a_fallen_stone_with_a_haul_job_is_delivered_to_the_pile <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            match items.get(&item) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            match items.get(&item).map(|_| &job.target) {'))
 PY

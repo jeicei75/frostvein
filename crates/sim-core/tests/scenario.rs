@@ -3630,16 +3630,18 @@ fn a_clearing_miner_never_sets_the_stone_down_in_the_target_column() {
 fn a_clearing_miner_never_sets_the_stone_down_on_his_dig_targets_top() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let site = staircase_site(&world);
+    // From the site's own cell: one cell east, dwarf 4 spawns on `at(4, 0, 0)`.
     let at = |dx: i32, dy: i32, dz: i32| Pos {
-        x: site.x + 1 + dx,
+        x: site.x + dx,
         y: site.y + dy,
         z: site.z + dz,
     };
     let (miner, face, target, beyond) = (at(0, 0, 0), at(1, 0, 0), at(2, 0, 0), at(3, 0, 1));
-    // The target's top keeps a second same-level exit, `aside`, so a stone set beyond it never
-    // closes the last one of a miner standing there (#186).
+    // The target's top keeps a second same-level exit, `aside`, and `beyond` and `aside` each have
+    // one more of their own, so no stone set on any of the three closes the last exit of a miner
+    // standing beside it (#186). Then only the column clause refuses the target's top.
     let aside = at(2, 1, 1);
-    let mut solid = vec![target, at(3, 0, 0), at(2, 1, 0)];
+    let mut solid = vec![target, at(3, 0, 0), at(2, 1, 0), at(4, 0, 0), at(2, 2, 0)];
     for (dx, dy) in [(-1, 0), (0, -1), (0, 1), (1, -1), (1, 1), (2, -1)] {
         solid.extend([at(dx, dy, 0), at(dx, dy, 1)]);
     }
@@ -3664,6 +3666,8 @@ fn a_clearing_miner_never_sets_the_stone_down_on_his_dig_targets_top() {
         },
         beyond,
         aside,
+        at(4, 0, 1),
+        at(2, 2, 1),
     ] {
         assert_eq!(world.tile(cell), Some(Tile::Empty), "{cell:?} is not open");
     }
@@ -3674,7 +3678,8 @@ fn a_clearing_miner_never_sets_the_stone_down_on_his_dig_targets_top() {
     for (index, dwarf) in save.dwarves.iter_mut().enumerate() {
         assert!(
             !solid.contains(&dwarf.pos),
-            "dwarf {index} is inside the fixture"
+            "dwarf {index} is inside the fixture at {:?}",
+            dwarf.pos
         );
         dwarf.profession = if index == 0 {
             Profession::Miner
