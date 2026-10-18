@@ -500,6 +500,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             },
             profession: Profession::Miner,
             path: Vec::new(),
+            clearing: None,
         },
         SavedDwarf {
             id: 1,
@@ -516,6 +517,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             },
             profession: Profession::Miner,
             path: Vec::new(),
+            clearing: None,
         },
     ];
     save.designations = vec![
@@ -622,6 +624,7 @@ fn save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end() {
         identity: Identity { name, colour },
         profession: Profession::Miner,
         path: Vec::new(),
+        clearing: None,
     };
     let mut save = World::generate(42, dims).to_save();
     save.tick = 100;
@@ -785,5 +788,83 @@ fn a_world_saved_before_12_10_loads_ore_less_and_ticks() {
     assert!(
         !world.tiles().iter().any(ore),
         "loading must not regenerate ore"
+    );
+}
+
+// 12.11 review run 1 (HIGH): a save taken at ANY tick of a miner's clear (walk to the stone, lift,
+// carry, set-down) steps exactly like the never-saved world. The stone lies on a channel mark at
+// DEFAULT_SEED's staircase site, so the mark's miner must carry it aside before he cuts.
+#[test]
+fn a_world_saved_at_every_tick_of_a_clear_loads_and_steps_identically() {
+    let site = Pos { x: 61, y: 62, z: 9 };
+    let fixture = || {
+        let mut save = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).to_save();
+        let id = save.next_id;
+        save.next_id += 1;
+        save.items.push((id, site, ItemKind::Stone));
+        let mut world = World::from_save(save);
+        assert_eq!(world.tile(site), Some(Tile::Empty), "the site moved");
+        assert_eq!(
+            world.apply_command(SimCommand::Designate {
+                kind: DesignationKind::Channel,
+                rect: Rect {
+                    min: site,
+                    max: site,
+                },
+            }),
+            None
+        );
+        (world, id)
+    };
+    // The window: from the miner's claim to the mark's completion.
+    let (mut control, stone) = fixture();
+    while control.claims().iter().all(|(_, held)| held.is_none()) {
+        assert!(control.tick() < 500, "no miner ever claimed the channel");
+        control.step();
+    }
+    let first = control.tick();
+    let mut carried = false;
+    while !control.designations().is_empty() {
+        assert!(
+            control.tick() < first + 2_000,
+            "the channel never completed"
+        );
+        control.step();
+        carried |= control
+            .carrying()
+            .iter()
+            .any(|(_, held)| *held == Some(stone));
+    }
+    let last = control.tick();
+    assert!(
+        carried,
+        "the miner never carried the stone, so no clear was saved"
+    );
+
+    let mut diverged = Vec::new();
+    for save_tick in first..last {
+        let (mut control, _) = fixture();
+        while control.tick() < save_tick {
+            control.step();
+        }
+        let mut loaded = World::from_save(control.to_save());
+        for _ in save_tick..last + 20 {
+            loaded.step();
+            control.step();
+            if loaded.dwarves() != control.dwarves()
+                || loaded.items() != control.items()
+                || loaded.carrying() != control.carrying()
+                || loaded.claims() != control.claims()
+                || loaded.clearing() != control.clearing()
+            {
+                diverged.push((save_tick, control.tick()));
+                break;
+            }
+        }
+    }
+    assert!(
+        diverged.is_empty(),
+        "saves taken mid-clear diverged from the never-saved world (save tick, first diverged \
+         tick): {diverged:?}"
     );
 }

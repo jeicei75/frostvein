@@ -558,6 +558,23 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                     );
                 }
             }
+            let digs_or_channels = dwarf.profession == sim_core::Profession::Miner
+                && save.jobs.iter().any(|job| {
+                    dwarf.current_job == Some(job.id.0)
+                        && matches!(
+                            job.kind,
+                            sim_core::JobKind::Dig | sim_core::JobKind::Channel
+                        )
+                });
+            if let Some(clear) = dwarf.clearing
+                && !digs_or_channels
+            {
+                bail!(
+                    "save dwarf {} clears item {} without holding a miner's dig or channel job",
+                    dwarf.id,
+                    clear.item
+                );
+            }
             if let Some(item) = dwarf.carrying {
                 if !item_ids.contains(&item) {
                     bail!("save dwarf {} carries missing item {item}", dwarf.id);
@@ -569,14 +586,8 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 // NOTE: the carried stone's saved POSITION is deliberately not checked against
                 // its carrier's — `carry_items` re-establishes that on the next tick, so
                 // rejecting the file would refuse it over something self-healing.
-                let miner_clearing = dwarf.profession == sim_core::Profession::Miner
-                    && save.jobs.iter().any(|job| {
-                        dwarf.current_job == Some(job.id.0)
-                            && matches!(
-                                job.kind,
-                                sim_core::JobKind::Dig | sim_core::JobKind::Channel
-                            )
-                    });
+                let miner_clearing =
+                    digs_or_channels && dwarf.clearing.is_some_and(|clear| clear.item == item);
                 let holds_haul = matches!(
                     haul_job_for_item.get(&item),
                     Some(job_id) if dwarf.current_job == Some(*job_id)
@@ -584,6 +595,19 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 if !holds_haul && !miner_clearing {
                     bail!(
                         "save dwarf {} carries item {item} without holding its haul job",
+                        dwarf.id
+                    );
+                }
+                // One holder per item (D6): the lift releases any hauler holding its haul job.
+                if miner_clearing
+                    && haul_job_for_item.get(&item).is_some_and(|job_id| {
+                        save.dwarves
+                            .iter()
+                            .any(|other| other.current_job == Some(*job_id))
+                    })
+                {
+                    bail!(
+                        "save item {item} is carried aside by dwarf {} while another holds its haul job",
                         dwarf.id
                     );
                 }
@@ -981,6 +1005,35 @@ mod tests {
         fs::remove_file(&path).expect("remove save fixture");
 
         assert!(old.is_none(), "a pre-12.9 save without paths was loaded");
+        assert!(current.is_some(), "a current save must load");
+    }
+
+    /// 12.11 review run 1 (Wolf): `SavedDwarf.clearing` has no serde default, so a pre-12.11 save
+    /// (no `clearing` on its dwarves) fails to decode and is refused.
+    #[test]
+    fn loading_refuses_a_pre_12_11_save_without_dwarf_clearing() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-11-pre-clearing-save-{}.json",
+            std::process::id()
+        ));
+        let save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        let mut json = serde_json::to_value(&save).unwrap();
+        let dwarves = json["dwarves"].as_array_mut().unwrap();
+        assert!(!dwarves.is_empty());
+        for dwarf in dwarves {
+            assert!(dwarf.as_object_mut().unwrap().remove("clearing").is_some());
+        }
+        fs::write(&path, serde_json::to_vec(&json).unwrap()).expect("write old save fixture");
+        let old = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        // Positive control: the same save with its clearing fields loads.
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write current save fixture");
+        let current = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(
+            old.is_none(),
+            "a pre-12.11 save without clearing was loaded"
+        );
         assert!(current.is_some(), "a current save must load");
     }
 

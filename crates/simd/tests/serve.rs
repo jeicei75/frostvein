@@ -1570,6 +1570,134 @@ fn carrying_dwarf_without_the_matching_haul_job_save_is_logged_and_the_daemon_ke
     );
 }
 
+/// 12.11 review run 1: a save of DEFAULT_SEED in which a miner holds his channel job and carries
+/// the stone that lay on its target aside (a `clearing` naming it, no haul job). Returns the save,
+/// the carrier's index in `dwarves`, and the stone.
+fn mid_clear_save() -> (sim_core::SaveState, usize, u32) {
+    let mut state =
+        sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT).to_save();
+    let site = sim_core::Pos { x: 61, y: 62, z: 9 };
+    let stone = state.next_id;
+    state.next_id += 1;
+    state.items.push((stone, site, sim_core::ItemKind::Stone));
+    let mut world = sim_core::World::from_save(state);
+    world.apply_command(sim_core::SimCommand::Designate {
+        kind: sim_core::DesignationKind::Channel,
+        rect: sim_core::Rect {
+            min: site,
+            max: site,
+        },
+    });
+    while !world
+        .carrying()
+        .iter()
+        .any(|(_, item)| *item == Some(stone))
+    {
+        assert!(
+            world.tick() < 500,
+            "no miner lifted the stone within 500 ticks"
+        );
+        world.step();
+    }
+    let state = world.to_save();
+    let carrier = state
+        .dwarves
+        .iter()
+        .position(|dwarf| dwarf.carrying == Some(stone))
+        .expect("the carrier is saved");
+    assert_eq!(
+        state.dwarves[carrier].clearing.map(|clear| clear.item),
+        Some(stone),
+        "the carrier is saved clearing the stone"
+    );
+    (state, carrier, stone)
+}
+
+#[test]
+fn a_clearing_save_whose_carrier_is_a_hauler_is_logged_and_the_daemon_keeps_ticking() {
+    let (mut state, carrier, stone) = mid_clear_save();
+    state.dwarves[carrier].profession = sim_core::Profession::Hauler;
+    let id = state.dwarves[carrier].id;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!(
+            "save dwarf {id} clears item {stone} without holding a miner's dig or channel job"
+        ),
+    );
+}
+
+#[test]
+fn a_clearing_save_whose_miner_holds_a_cut_job_is_logged_and_the_daemon_keeps_ticking() {
+    let (mut state, carrier, stone) = mid_clear_save();
+    let job = state.dwarves[carrier]
+        .current_job
+        .expect("the carrier holds his channel");
+    state
+        .jobs
+        .iter_mut()
+        .find(|held| held.id.0 == job)
+        .expect("the channel job is saved")
+        .kind = sim_core::JobKind::Cut;
+    let id = state.dwarves[carrier].id;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!(
+            "save dwarf {id} clears item {stone} without holding a miner's dig or channel job"
+        ),
+    );
+}
+
+#[test]
+fn a_clearing_save_carrying_another_stone_than_it_clears_is_logged_and_the_daemon_keeps_ticking() {
+    let (mut state, carrier, stone) = mid_clear_save();
+    let other = state.next_id;
+    state.next_id += 1;
+    state
+        .items
+        .push((other, state.dwarves[carrier].pos, sim_core::ItemKind::Stone));
+    state.dwarves[carrier]
+        .clearing
+        .as_mut()
+        .expect("clearing")
+        .item = other;
+    let id = state.dwarves[carrier].id;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!("save dwarf {id} carries item {stone} without holding its haul job"),
+    );
+}
+
+/// D6: one holder per item. A hauler holding the haul job of the stone a clearing miner carries is
+/// the two-holders state the lift's `release_claim` exists to prevent.
+#[test]
+fn a_clearing_save_whose_stone_has_a_held_haul_job_is_logged_and_the_daemon_keeps_ticking() {
+    let (mut state, carrier, stone) = mid_clear_save();
+    let hauler = state
+        .dwarves
+        .iter()
+        .position(|dwarf| {
+            dwarf.profession == sim_core::Profession::Hauler && dwarf.current_job.is_none()
+        })
+        .expect("an idle hauler");
+    let job = state.next_job_id;
+    state.next_job_id += 1;
+    state
+        .jobs
+        .push(haul_job(job, stone, state.dwarves[carrier].pos));
+    state.dwarves[hauler].current_job = Some(job);
+    let id = state.dwarves[carrier].id;
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!(
+            "save item {stone} is carried aside by dwarf {id} while another holds its haul job"
+        ),
+    );
+}
+
 #[test]
 fn job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();

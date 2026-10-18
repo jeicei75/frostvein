@@ -46,4 +46,19 @@ pub struct SavedDwarf {
     // and simd logs and refuses the load. There is no migration. Every dwarf's path is saved, an
     // idle dwarf's exit path included, so a detour or back-off survives a load.
     pub path: Vec<Pos>,
+    // NOTE: REQUIRED, with no migration (Wolf, 12.11 review run 1): a pre-12.11 save fails to
+    // decode and simd logs and refuses the load. serde reads a missing `Option` field as `None`
+    // even without `#[serde(default)]`; `deserialize_with` turns that off. Without the field a
+    // load restarted a lift or set-down and lost the kept landing.
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub clearing: Option<SavedClearing>,
+}
+
+/// A miner carrying a stone out of his own way (12.11 D6): the stone, and where he sets it down
+/// from where, once chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedClearing {
+    pub item: u32,
+    pub landing: Option<Pos>,
+    pub drop_from: Option<Pos>,
 }

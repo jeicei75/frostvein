@@ -3,7 +3,7 @@
 mod save;
 mod worldgen;
 
-pub use save::{SaveState, SavedDwarf};
+pub use save::{SaveState, SavedClearing, SavedDwarf};
 
 use std::{
     cmp::Reverse,
@@ -2662,6 +2662,11 @@ impl World {
                         .get::<Path>()
                         .map(|path| path.0.clone())
                         .unwrap_or_default(),
+                    clearing: entity.get::<Clearing>().map(|clear| SavedClearing {
+                        item: clear.item,
+                        landing: clear.landing,
+                        drop_from: clear.drop_from,
+                    }),
                 })
             })
             .collect();
@@ -2767,6 +2772,13 @@ impl World {
             }
             if !dwarf.path.is_empty() {
                 world.ecs.entity_mut(entity).insert(Path(dwarf.path));
+            }
+            if let Some(clear) = dwarf.clearing {
+                world.ecs.entity_mut(entity).insert(Clearing {
+                    item: clear.item,
+                    landing: clear.landing,
+                    drop_from: clear.drop_from,
+                });
             }
         }
         for (id, pos, kind) in items {
