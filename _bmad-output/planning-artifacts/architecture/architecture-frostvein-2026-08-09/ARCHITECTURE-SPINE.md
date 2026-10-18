@@ -199,6 +199,18 @@ graph LR
   so a hauler may skip such a pile cell). Digging the ground under a tree
   fells it as a cut does (Q2(a)). A dig mark is refused under an emitter's
   tile.
+- **Amended 2026-10-18 (Story 12.12):** the first-session goals are sim
+  state: a fixed chain, 10 wood, then 10 tetrahedrite, then 1 bloodstone
+  (Wolf, Q1). A goal's progress is the STORED count of its kind by 3.3's
+  rule (uncarried, on a pile cell, the lowest id on that cell), read live; at
+  the end of each tick the next goal completes while its count meets its
+  target, so stock already stored for later goals completes them in the same
+  tick. Completion is sticky (stock leaving a pile never undoes it) and is
+  saved (`goals_completed`; older saves are refused). Snapshot and delta both
+  carry all three `Goal { kind, target, progress, completed }` in chain
+  order; clients only print them. A pile cell's way in must reach ground
+  outside the pile, so a pile ringing walkable ground (the campfire's
+  neighbours) no longer seals itself (Q3).
 
 ### AD-17 — The evidence ladder for a real renderer
 

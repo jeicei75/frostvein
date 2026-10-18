@@ -238,8 +238,8 @@ The options as offered at creation, kept for the record:
     removal for: [...]`.
   - [x] `tui --frames` is the human's view of the same thing: `tui 7461 --frames 2 --z 9` against a live
     daemon prints the goal row (`goal 1 of 3: wood 0/10` at boot).
-- [ ] **Task 7: deliberate RED and the mutation table**
-  - [ ] NEW `mutations/12-12.sh`. Run each row alone after commit and name its killing test or the wire.
+- [x] **Task 7: deliberate RED and the mutation table**
+  - [x] NEW `mutations/12-12.sh`. Run each row alone after commit and name its killing test or the wire.
     Rows: progress counts loose items too (AC 2; the wire's `progress ... oracle` FAULT); progress counts a
     second item on a cell (AC 2 unit); progress counts carried items (AC 2 unit); a goal un-completes when
     stock drops (AC 3; the wire's phase 2 FAULT); order ignored (AC 3, AC 6; bloodstone is stored at tick
@@ -247,17 +247,17 @@ The options as offered at creation, kept for the record:
     the load bound dropped (AC 4); the bridge reports `progress: 0` (AC 5); the Mirror drops `goals` (Task 5
     test); the tui row ignores `completed`; the gui readout ignores `completed`; the Task 2b entrance rule
     reverted (AC 11, the ring test).
-  - [ ] One deliberate wire RED on the finished branch: rerun `goals_wire.py` with the "un-completes" row
+  - [x] One deliberate wire RED on the finished branch: rerun `goals_wire.py` with the "un-completes" row
     applied in a scratch worktree build, and paste its `FAULT` lines and `GOALS RED`.
-- [ ] **Task 8: seat card** (AC 10)
-  - [ ] NEW `12-12-signoff/vehicle-card.md`, in the seat's launch form. Use a fresh world, with fast4x allowed.
+- [x] **Task 8: seat card** (AC 10)
+  - [x] NEW `12-12-signoff/vehicle-card.md`, in the seat's launch form. Use a fresh world, with fast4x allowed.
     Give the trees `[65,56,10] [61,74,13] [65,73,12]`, the tetrahedrite vein at `[77,64,11]` (its tunnel cells
     from the plan file) and the next one at `[69,79,14]`, and the bloodstone `[55,83,13]` with its tunnel. Use two
     or three compact piles near the camp, plus one short step where Wolf rings the fire with a pile (its 4
     neighbours left out) and sees it fill to the last cell (AC 11). Note the compass mirror (#169) and that a
     pre-12.12 save is refused.
 - [ ] **Task 9: spine and gate**
-  - [ ] `ARCHITECTURE-SPINE.md` (2026-08-09): one bullet, next to the 12.11 one: goals are sim state,
+  - [x] `ARCHITECTURE-SPINE.md` (2026-08-09): one bullet, next to the 12.11 one: goals are sim state,
     progress is the stored count by 3.3's rule, the chain is sticky and cascades, and the wire carries
     `Goal` on snapshot and delta.
   - [ ] `RUST_TEST_THREADS=1 scripts/gate.sh`, full and green, before review.
@@ -436,6 +436,14 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
   Only the end-state lines vary (two variants): runs 7511/7515 leave 4 tetrahedrite loose, 7512-7514 leave 3, with the haulers at different cells. The wire's ticks differ from the chain test's (1,847 / 9,828) because the daemon's connect snapshot is now tick 1 (tick 6 at creation): the crew stands elsewhere, so 6 of the 78 pile cells differ (`--plan-out` diffed against `plan-10-10-1.json`: digs and cuts identical). The sim itself did not move: a release probe of the scenario path on `985b7b7` and on `736da92` both give wood 1,847, tetrahedrite 9,828, bloodstone 9,828 (stored 6,352).
   `tui 7521 --frames 2 --z 9` against a fresh daemon prints `goal 1 of 3: wood 0/10` in the trade grey (150,160,170) at tick 1 and tick 2.
 - **Orchestrator, Task 5:** the goal row was drawn at `h - 4`, a second literal beside `FOOTER_ROWS`; now `h - FOOTER_ROWS`.
+
+- **Task 7, the mutation table (orchestrator): `mutations/12-12.sh`, 15 rows, all KILLED** (run alone after commit, `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh`). The first run on `86f369a` killed 13 and found TWO SURVIVORS, both weak tests, both fixed in `1ff0a19` and re-mutated alone:
+  - row 3 "progress counts carried items": `goal_progress_counts_stored_items_only`'s carried clause was vacuous, because the step's `carry_items` moved the carried item onto its carrier, off the pile. The carrier now stands on the pile cell and the test reads progress before the step; KILLED at the new assert `a carried item on a pile cell is not stored` (not by an earlier one).
+  - row 9 "the bridge reports progress 0": the bridge unit test read a fresh world, where every progress is 0 and nothing is completed. It now loads a save with 10 wood and 1 tetrahedrite stored and `goals_completed: 1`, expecting (10, done) (1, not) (0, not); KILLED. (9b, the same sabotage against `serve.rs`, was KILLED on the first run.)
+  Killers: 1, 2, 3 `goal_progress_counts_stored_items_only`; 4 `a_completed_goal_stays_completed_when_its_stock_leaves`; 5 `a_goal_completes_only_after_the_ones_ahead_of_it`; 5b the chain test; 6 `the_chain_cascades_in_one_tick`; 7 `save_load_with_a_goal_done_and_the_next_in_progress_matches_never_saved`; 8 `loading_refuses_goals_completed_beyond_the_chain`; 9 the bridge test; 9b `a_loaded_pile_reports_its_stored_count_as_goal_progress_in_the_snapshot_and_the_next_delta`; 10 `a_deltas_goals_reach_the_mirror_and_a_snapshot_resets_them`; 11 the tui `--frames` test `the_goal_row_changes_on_the_delta_that_changes_goals`; 12 `the_goal_list_follows_the_mirrors_goals_in_the_approved_colours`; 13 `a_pile_round_enclosed_ground_still_fills_every_cell`.
+- **The five older rows re-pointed by agents A and B, re-run alone:** 4 KILLED (2.4 x3, 2.3 "delta bridge hardcodes normal speed"). **3.3's "every stone on a zone tile counts as stored" SURVIVED, and it ALREADY survives on `main`:** the same sabotage, applied by hand to `60955ef` and to `86f369a`, leaves `two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack` green (1 passed on both). Not a 12.12 regression and not fixed here (3.3's test, out of scope); the clause it sabotages is now killed by 12.12 row 2.
+- **Task 7, deliberate wire RED (orchestrator):** row 4 (`let mut done = 0;`) built in a scratch worktree at `86f369a`, one fresh release daemon: the chain completes at tick 9,618, then phase 2 removes a pile and `FAULT tick 9624: wood un-completed (completed at 2056)`, `FAULT tick 9624: tetrahedrite un-completed (completed at 9618)`, `FAULT tick 9624: bloodstone un-completed (completed at 9618)` (and every tick after), `GOALS RED`, exit 1, `delta queue full` 0.
+- **Task 8, seat card (orchestrator):** `12-12-signoff/vehicle-card.md`, the plan's digs as 10 row drags, 3 rect piles near the fire (67 cells), the 3 cuts, and a sitting B ring (5 x 5 round the fire, its 4 side neighbours cleared: 20 cells). A scratch release probe of exactly those drags from tick 30: sitting A wood at tick 1,957, tetrahedrite and bloodstone at 10,294, every mark gone; sitting B 20 of 20 filled by tick 3,030.
 
 ### File List
 
