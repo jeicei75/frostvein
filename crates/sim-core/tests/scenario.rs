@@ -2059,6 +2059,7 @@ fn same_seed_and_commands_remain_deterministic() {
     let mut second = World::generate(42, Dims::DEFAULT);
     let channel_pos = first.dwarves()[0].1;
     let trunk = nearest_trunk_beside_open_ground(&first);
+    let camp = first.camp_origin();
     let commands = [
         SimCommand::Designate {
             kind: DesignationKind::Cut,
@@ -2068,22 +2069,30 @@ fn same_seed_and_commands_remain_deterministic() {
             kind: DesignationKind::Channel,
             rect: rect(channel_pos, channel_pos),
         },
+        // 12.12: this was a 21 x 21 x 21 pile from the origin, and with it no log was stored in the
+        // window (not in 1,500 ticks either). A pile at the camp stores the felled
+        // wood by tick ~290, so `goals` compares a real count.
         SimCommand::PlaceStockpile {
             rect: rect(
-                Pos { x: 0, y: 0, z: 0 },
                 Pos {
-                    x: 20,
-                    y: 20,
-                    z: 20,
+                    x: camp.x + 3,
+                    y: camp.y + 3,
+                    ..camp
+                },
+                Pos {
+                    x: camp.x + 5,
+                    y: camp.y + 5,
+                    ..camp
                 },
             ),
         },
     ];
     for command in commands {
-        first.apply_command(command);
+        assert_eq!(first.apply_command(command), None);
         second.apply_command(command);
     }
 
+    let mut most_wood_stored = 0;
     for tick in 0..400 {
         if tick == 60 {
             let command = SimCommand::SetProfession {
@@ -2117,7 +2126,11 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
         assert_eq!(first.zones(), second.zones());
+        assert_eq!(first.goals(), second.goals());
+        most_wood_stored = most_wood_stored.max(first.goals()[0].progress);
     }
+    // THE GUARD (12.12): `goals` compared a real count, not zeros.
+    assert!(most_wood_stored > 0, "no wood was ever stored in 400 ticks");
     // THE GUARD: the cut was felled inside the window, so `item_kinds` compared real wood.
     assert!(
         first
@@ -5025,8 +5038,10 @@ const CHAIN_PILES: [&[(i32, i32, i32)]; 3] = [
 ];
 
 const CHAIN_SNAPSHOT_TICK: u64 = 6;
-/// Pinned at the measured completion tick plus a disclosed margin; see the Debug Log of 12.12.
-const CHAIN_BOUND_TICK: u64 = 20_000;
+/// Measured: wood completes at tick 1,847, tetrahedrite and (by the cascade, bloodstone was stored
+/// at 6,352) bloodstone at 9,828, the same ticks as the wire oracle. Pinned at 10,500: a 672-tick
+/// (6.8%) margin, which is what the unpaused wire form drifted by (10,454).
+const CHAIN_BOUND_TICK: u64 = 10_500;
 
 fn at3((x, y, z): (i32, i32, i32)) -> Pos {
     Pos { x, y, z }
@@ -5050,7 +5065,6 @@ fn stored_by_kind(world: &World) -> BTreeMap<ItemKind, u32> {
 }
 
 #[test]
-#[ignore = "RED until Task 2"]
 fn the_default_world_completes_the_goal_chain_with_scripted_commands() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     for _ in 0..CHAIN_SNAPSHOT_TICK {

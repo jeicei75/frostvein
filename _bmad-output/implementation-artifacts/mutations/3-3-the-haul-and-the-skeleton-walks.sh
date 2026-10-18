@@ -408,7 +408,7 @@ PY
 mutation "every stone on a zone tile counts as stored" sim-core two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = """            if zones.contains(&pos) && occupied.insert(pos) {"""
+old = """        if zones.contains(&pos) && occupied.insert(pos) {"""
 assert old in s
-p.write_text(s.replace(old, """            if zones.contains(&pos) {"""))
+p.write_text(s.replace(old, """        if zones.contains(&pos) {"""))
 PY

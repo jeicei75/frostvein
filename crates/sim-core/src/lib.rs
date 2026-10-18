@@ -399,31 +399,66 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
     }
 }
 
+/// 3.3's rule, in ONE place (the goals count by it too): an item is STORED iff it is not carried,
+/// stands on a stockpile tile, AND is the LOWEST-ID uncarried item on that tile. Everything else
+/// uncarried is LOOSE, with its position. Amended at 3.3's review (Wolf's call).
+///
+/// The lowest-id clause still recognizes extra stones in an older save as loose. New retry drops
+/// avoid making a stack; the pick-up leg waits for a free stockpile tile. `uncarried_stones` is
+/// ascending by item id, so "first seen per tile" IS "lowest id".
+fn split_stored(ecs: &EcsWorld) -> (BTreeSet<u32>, Vec<(u32, Pos)>) {
+    let zones = &ecs.resource::<Zones>().0;
+    let mut occupied: BTreeSet<Pos> = BTreeSet::new();
+    let mut stored: BTreeSet<u32> = BTreeSet::new();
+    let mut loose = Vec::new();
+    for (id, pos) in uncarried_stones(ecs) {
+        if zones.contains(&pos) && occupied.insert(pos) {
+            stored.insert(id);
+        } else {
+            loose.push((id, pos));
+        }
+    }
+    (stored, loose)
+}
+
+/// How many goals of `GOALS` are done, in order. Never goes down.
+#[derive(Resource)]
+struct GoalsCompleted(u32);
+
+/// The stored count (`split_stored`) of every item kind.
+fn stored_by_kind(ecs: &EcsWorld) -> BTreeMap<ItemKind, u32> {
+    let (stored, _) = split_stored(ecs);
+    let mut counts = BTreeMap::new();
+    for entity in ecs.iter_entities() {
+        if let (Some(item), Some(id)) = (entity.get::<Item>(), entity.get::<Id>())
+            && stored.contains(&id.0)
+        {
+            *counts.entry(item.0).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+/// Completes the next goal while its stored count meets its target, so a chain whose later stock
+/// is already there finishes in one tick (12.12 D2). A completed goal stays completed.
+fn advance_goals(ecs: &mut EcsWorld) {
+    let stored = stored_by_kind(ecs);
+    let mut done = ecs.resource::<GoalsCompleted>().0;
+    while let Some(&(kind, target)) = GOALS.get(done as usize) {
+        if stored.get(&kind).copied().unwrap_or(0) < target {
+            break;
+        }
+        done += 1;
+    }
+    ecs.resource_mut::<GoalsCompleted>().0 = done;
+}
+
 /// Exclusive, because retiring a claimed job calls `release_claim`. It sits inside the chained
 /// schedule, so a paused daemon takes new stockpiles and designations but derives no work from
 /// them — 3.2's line, extended to stones unchanged.
 fn create_haul_jobs(ecs: &mut EcsWorld) {
-    let (stored, loose, any_zone) = {
-        let zones = &ecs.resource::<Zones>().0;
-        // AC3, as amended at 3.3's review (Wolf's call): a stone is STORED iff it is not carried,
-        // stands on a stockpile tile, AND is the LOWEST-ID uncarried stone on that tile. Everything
-        // else uncarried is LOOSE.
-        //
-        // The lowest-id clause still recognizes extra stones in an older save as loose. New
-        // retry drops avoid making a stack; the pick-up leg waits for a free stockpile tile.
-        // `uncarried_stones` is ascending by item id, so "first seen per tile" IS "lowest id".
-        let mut occupied: BTreeSet<Pos> = BTreeSet::new();
-        let mut stored: BTreeSet<u32> = BTreeSet::new();
-        let mut loose = Vec::new();
-        for (id, pos) in uncarried_stones(ecs) {
-            if zones.contains(&pos) && occupied.insert(pos) {
-                stored.insert(id);
-            } else {
-                loose.push((id, pos));
-            }
-        }
-        (stored, loose, !zones.is_empty())
-    };
+    let (stored, loose) = split_stored(ecs);
+    let any_zone = !ecs.resource::<Zones>().0.is_empty();
 
     // Retire first. The only way a stored stone still has a job is a stockpile placed over a
     // loose stone while a dwarf walks to it — so its holder is by definition not yet carrying
@@ -2420,8 +2455,9 @@ fn settle(ecs: &mut EcsWorld) {
     // NOTE: dwarf gravity is one level per tick; an item takes its whole open column in one tick.
 }
 
-/// Exclusive and LAST in the chain, not merely after `settle`: a carried stone sits on its
-/// carrier's tile at the end of every tick no matter which system moved the carrier.
+/// Exclusive and LAST of the movers, not merely after `settle`: a carried stone sits on its
+/// carrier's tile at the end of every tick no matter which system moved the carrier. Only
+/// `advance_goals` follows it, because it must judge final positions.
 fn carry_items(ecs: &mut EcsWorld) {
     let mut carriers: Vec<_> = ecs
         .iter_entities()
@@ -2596,6 +2632,7 @@ fn assemble(
     jobs: Jobs,
     designations: BTreeMap<Pos, DesignationKind>,
     zones: BTreeSet<Pos>,
+    goals_completed: u32,
 ) -> World {
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
@@ -2605,6 +2642,7 @@ fn assemble(
     ecs.insert_resource(Camp(camp_origin));
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
+    ecs.insert_resource(GoalsCompleted(goals_completed));
     ecs.insert_resource(jobs);
     ecs.insert_resource(Terrain {
         dims,
@@ -2622,6 +2660,7 @@ fn assemble(
             settle,
             wander,
             carry_items,
+            advance_goals,
         )
             .chain(),
     );
@@ -2669,6 +2708,7 @@ impl World {
             Jobs::default(),
             BTreeMap::new(),
             BTreeSet::new(),
+            0,
         );
         // Identity has its own stream so it never shifts a spawn position.
         let mut identity_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY);
@@ -2767,6 +2807,7 @@ impl World {
             next_job_id: job_resource.next_id,
             items,
             emitters,
+            goals_completed: self.ecs.resource::<GoalsCompleted>().0,
         }
     }
 
@@ -2786,6 +2827,7 @@ impl World {
             next_job_id,
             items,
             emitters,
+            goals_completed,
         } = save;
         let mut job_resource = Jobs {
             next_id: next_job_id,
@@ -2809,6 +2851,7 @@ impl World {
             job_resource,
             designations.into_iter().collect(),
             zones.into_iter().collect(),
+            goals_completed,
         );
         for dwarf in dwarves {
             let current_job = dwarf.current_job.map(JobId);
@@ -3196,15 +3239,21 @@ impl World {
             .collect()
     }
 
-    /// RED stub (Task 1): all three goals, nothing counted, nothing completed.
+    /// The goal chain, in order, with progress read live: the STORED count of each goal's kind
+    /// (3.3's rule). `completed` is decided at the end of each tick (`advance_goals`) and is sticky.
+    // NOTE: while the daemon is paused nothing ticks, so a pile placed over enough logs reads
+    // `10/10` here and stays uncompleted until the next tick (12.12 D1).
     pub fn goals(&self) -> Vec<Goal> {
+        let stored = stored_by_kind(&self.ecs);
+        let done = self.ecs.resource::<GoalsCompleted>().0 as usize;
         GOALS
             .iter()
-            .map(|&(kind, target)| Goal {
+            .enumerate()
+            .map(|(i, &(kind, target))| Goal {
                 kind,
                 target,
-                progress: 0,
-                completed: false,
+                progress: stored.get(&kind).copied().unwrap_or(0),
+                completed: i < done,
             })
             .collect()
     }
@@ -7335,7 +7384,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "RED until Task 2"]
     fn goal_progress_counts_stored_items_only() {
         use super::ItemKind::{Bloodstone, Stone, Tetrahedrite, Wood};
         let mut world = World::generate(42, Dims::DEFAULT);
@@ -7372,7 +7420,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "RED until Task 2"]
     fn a_completed_goal_stays_completed_when_its_stock_leaves() {
         let mut world = World::generate(42, Dims::DEFAULT);
         let pile = goal_pile(&mut world, 10);
@@ -7405,7 +7452,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "RED until Task 2"]
     fn a_goal_completes_only_after_the_ones_ahead_of_it() {
         use super::ItemKind::{Bloodstone, Tetrahedrite};
         let mut world = World::generate(42, Dims::DEFAULT);
@@ -7424,7 +7470,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "RED until Task 2"]
     fn the_chain_cascades_in_one_tick() {
         use super::ItemKind::{Bloodstone, Tetrahedrite, Wood};
         let mut world = World::generate(42, Dims::DEFAULT);

@@ -372,6 +372,13 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
                 save.tick
             );
         }
+        if save.goals_completed as usize > sim_core::GOALS.len() {
+            bail!(
+                "save has {} goals completed; the chain has {}",
+                save.goals_completed,
+                sim_core::GOALS.len()
+            );
+        }
         let in_bounds = |pos: sim_core::Pos| {
             pos.x >= 0
                 && pos.y >= 0
@@ -1035,6 +1042,54 @@ mod tests {
             "a pre-12.11 save without clearing was loaded"
         );
         assert!(current.is_some(), "a current save must load");
+    }
+
+    /// 12.12 D3: `SaveState.goals_completed` has no serde default, so a pre-12.12 save (no count)
+    /// fails to decode and is refused.
+    #[test]
+    fn loading_refuses_a_pre_12_12_save_without_goals_completed() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-12-pre-goals-save-{}.json",
+            std::process::id()
+        ));
+        let save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        let mut json = serde_json::to_value(&save).unwrap();
+        assert!(
+            json.as_object_mut()
+                .unwrap()
+                .remove("goals_completed")
+                .is_some()
+        );
+        fs::write(&path, serde_json::to_vec(&json).unwrap()).expect("write old save fixture");
+        let old = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        // Positive control: the same save with its count loads.
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write current save fixture");
+        let current = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(old.is_none(), "a pre-12.12 save without goals was loaded");
+        assert!(current.is_some(), "a current save must load");
+    }
+
+    /// 12.12 D3: a save that claims more goals done than the chain has is refused.
+    #[test]
+    fn loading_refuses_goals_completed_beyond_the_chain() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-12-12-goals-bound-save-{}.json",
+            std::process::id()
+        ));
+        let mut save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        // Positive control: the whole chain done is a valid save.
+        save.goals_completed = sim_core::GOALS.len() as u32;
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write chain-done fixture");
+        let whole = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        save.goals_completed += 1;
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write beyond-chain fixture");
+        let beyond = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(whole.is_some(), "a save with the chain done must load");
+        assert!(beyond.is_none(), "a save beyond the chain was loaded");
     }
 
     /// 12.9 review: `SavedDwarf.path` is range-checked like every other saved position. A path

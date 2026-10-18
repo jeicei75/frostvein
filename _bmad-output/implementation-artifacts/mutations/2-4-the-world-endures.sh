@@ -37,11 +37,13 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: `assemble` gained designation and zone arguments, and the save
 # destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
 old = '''            zones.into_iter().collect(),
+            goals_completed,
         );
         for dwarf in dwarves {
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
+            goals_completed,
         );
         world.schedule = Schedule::default();
         world.schedule.add_systems(advance_tick);
@@ -55,10 +57,12 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: `assemble` gained designation and zone arguments, and the save
 # destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
 old = '''            emitters,
+            goals_completed,
         } = save;
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''            emitters,
+            goals_completed,
         } = save;
         let tiles = World::generate(seed, dims).to_save().tiles;
 '''))
@@ -78,11 +82,13 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: `assemble` gained designation and zone arguments, and the save
 # destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
 old = '''            zones.into_iter().collect(),
+            goals_completed,
         );
         for dwarf in dwarves {
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
+            goals_completed,
         );
         {
             let mut terrain = world.ecs.resource_mut::<Terrain>();

@@ -186,6 +186,63 @@ fn save_load_then_tick_matches_never_saved() {
     }
 }
 
+/// 12.12 AC 4: a world with one goal completed and the next one in progress. The completed goal's
+/// stock is then removed, so only the saved `goals_completed` (not a recount) can say it is done.
+#[test]
+fn save_load_with_a_goal_done_and_the_next_in_progress_matches_never_saved() {
+    let at = |x: i32| Pos { x, y: 0, z: 1 };
+    let build = || {
+        let mut save = World::generate(42, Dims::DEFAULT).to_save();
+        let mut id = save.next_id;
+        // Ten logs stored on cells 0..10 and four tetrahedrite on cells 20..24.
+        for x in (0..10).chain(20..24) {
+            let kind = if x < 10 {
+                ItemKind::Wood
+            } else {
+                ItemKind::Tetrahedrite
+            };
+            save.items.push((id, at(x), kind));
+            save.zones.push(at(x));
+            id += 1;
+        }
+        save.next_id = id;
+        World::from_save(save)
+    };
+    let mut saved = build();
+    let mut control = build();
+    for world in [&mut saved, &mut control] {
+        world.step();
+        let goals = world.goals();
+        assert!(goals[0].completed && goals[0].progress == 10, "{goals:?}");
+        // Remove the wood's pile: the goal stays done and its count follows the stock down.
+        world.apply_command(SimCommand::RemoveStockpile {
+            rect: Rect {
+                min: at(0),
+                max: at(9),
+            },
+        });
+        world.step();
+    }
+    // THE GUARD: wood done with no stock left, tetrahedrite in progress and not done.
+    let goals = saved.goals();
+    assert!(goals[0].completed && goals[0].progress == 0, "{goals:?}");
+    assert!(
+        !goals[1].completed && goals[1].progress == 4,
+        "the next goal must be in progress: {goals:?}"
+    );
+
+    let mut loaded = World::from_save(saved.to_save());
+    assert_eq!(loaded.goals(), saved.goals());
+    for _ in 0..200 {
+        loaded.step();
+        control.step();
+        assert_eq!(loaded.goals(), control.goals());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.zones(), control.zones());
+    }
+}
+
 #[test]
 fn a_world_saved_after_a_reassignment_loads_with_the_new_trade_and_steps_identically() {
     let mut saved = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);

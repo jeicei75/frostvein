@@ -146,19 +146,19 @@ The options as offered at creation, kept for the record:
 
 - [x] **Task 0: Wolf rules Q1-Q3** and approves the draft (AC 10's opening half). RULED 2026-10-18:
   Q1 10/10/1, Q2 (A), Q3 fold in.
-- [ ] **Task 1: RED tests first** (standing AC 2)
-  - [ ] `crates/sim-core/src/lib.rs` unit tests (they can reach private `Zones`, as `lib.rs:4480` does), in a
+- [x] **Task 1: RED tests first** (standing AC 2)
+  - [x] `crates/sim-core/src/lib.rs` unit tests (they can reach private `Zones`, as `lib.rs:4480` does), in a
     world with hand-placed items on a pile: progress counts stored only (carried, loose and a second item on
     a cell excluded); a completed goal stays completed after its pile is removed; the cascade (D2); order
     (bloodstone stored first does not complete bloodstone).
-  - [ ] `crates/sim-core/tests/scenario.rs`: `the_default_world_completes_the_goal_chain_with_scripted_commands`
+  - [x] `crates/sim-core/tests/scenario.rs`: `the_default_world_completes_the_goal_chain_with_scripted_commands`
     (AC 6). It steps a fresh DEFAULT_SEED world to the plan's `snapshot_tick` and applies the plan's digs
     (one `Designate` dig per cell), cuts and pile cells (one `PlaceStockpile` of 1-cell rects), as literals
     ported from the JSON. Then `run_until` the chain is done. On EVERY tick it checks the goals against an
     oracle built in the test from public readers only (`items()`, `item_kinds()`, `carrying()`, `zones()`;
     lowest id per cell). Pin the bound at the measured completion tick plus a disclosed margin, and say how
     long the test takes in debug.
-  - [ ] Each is committed RED with `#[ignore = "RED until Task N"]`, with its failing line pasted into the Debug
+  - [x] Each is committed RED with `#[ignore = "RED until Task N"]`, with its failing line pasted into the Debug
     Log; it is un-ignored by the commit that greens it.
 - [ ] **Task 2b: a pile that encloses ground still fills (Q3)** (AC 11)
   - [x] RED first (Task 1's rule): a scenario test that lays a pile band round a walkable hole that is not
@@ -178,26 +178,26 @@ The options as offered at creation, kept for the record:
     (`scenario.rs:4660`, `:4766`), the cage sweep and the walking skeleton stay green with NO re-pin
     (expected, because every entrance of such a pile already reaches open ground; inferred, not measured).
     Any pin that moves is a finding: name its mechanism from a dump before re-pinning it.
-- [ ] **Task 2: goals in the sim** (AC 1-3)
-  - [ ] Extract the stored rule from `create_haul_jobs` (`lib.rs:389-410`) into ONE helper that both
+- [x] **Task 2: goals in the sim** (AC 1-3)
+  - [x] Extract the stored rule from `create_haul_jobs` (`lib.rs:389-410`) into ONE helper that both
     callers use, e.g. `fn stored_items(ecs: &EcsWorld) -> BTreeMap<u32, Pos>` over `uncarried_stones`.
     `create_haul_jobs` keeps its `loose` list from the same pass or the complement. Do not make a second
     copy of the lowest-id clause.
-  - [ ] `pub const GOALS: [(ItemKind, u32); 3]` holds Q1's targets in chain order; `#[derive(Resource)] struct
+  - [x] `pub const GOALS: [(ItemKind, u32); 3]` holds Q1's targets in chain order; `#[derive(Resource)] struct
     GoalsCompleted(u32)` counts the goals done, in order;
     `pub struct Goal { pub kind: ItemKind, pub target: u32, pub progress: u32, pub completed: bool }`
     (Debug, Clone, Copy, PartialEq, Eq); `pub fn goals(&self) -> Vec<Goal>`, with progress computed live (D1).
-  - [ ] `fn advance_goals(ecs: &mut EcsWorld)`: while the next goal's stored count meets its target, mark it
+  - [x] `fn advance_goals(ecs: &mut EcsWorld)`: while the next goal's stored count meets its target, mark it
     completed (D2). Chain it AFTER `carry_items` (`lib.rs:2556-2569`), because positions are final only
     then, and rewrite `carry_items`' "Exclusive and LAST" doc (`:2365-2366`).
-- [ ] **Task 3: save** (AC 4)
-  - [ ] `SaveState.goals_completed: u32` (`save.rs:9-27`), with no serde default and a NOTE like the items
+- [x] **Task 3: save** (AC 4)
+  - [x] `SaveState.goals_completed: u32` (`save.rs:9-27`), with no serde default and a NOTE like the items
     one (`:23-24`). Fill it in `to_save` (`lib.rs:2640-2713`), destructure it in `from_save` (`:2715-2731`)
     and insert the resource beside `assemble` (`:2527-2571`).
-  - [ ] simd `load_world_from` (`main.rs:344-716`): `bail!` when `goals_completed > GOALS.len()`. Add two
+  - [x] simd `load_world_from` (`main.rs:344-716`): `bail!` when `goals_completed > GOALS.len()`. Add two
     tests beside `loading_refuses_a_pre_12_11_save_without_dwarf_clearing` (`main.rs:1014`): pre-12.12 and
     out-of-range.
-  - [ ] `save_load.rs`: a sibling of `save_load_then_tick_matches_never_saved` (`:10-187`) saved with one
+  - [x] `save_load.rs`: a sibling of `save_load_then_tick_matches_never_saved` (`:10-187`) saved with one
     goal completed and the next one's progress above 0. Assert both before saving, so the test is not
     vacuous, and compare `goals()` for 200 ticks. Add `goals()` to the reader list of
     `same_seed_and_commands_remain_deterministic` (`scenario.rs:2057-2129`); its window must show progress
@@ -379,13 +379,27 @@ RED lines (run with `--ignored` on a stub `World::goals()` that returns the thre
 - `a_goal_completes_only_after_the_ones_ahead_of_it` (lib.rs unit): `left: [(0, false), (0, false), (0, false)]` / `right: [(0, false), (10, false), (1, false)]`, "bloodstone stored first must not complete"
 - `the_chain_cascades_in_one_tick` (lib.rs unit): `left: [(0, false), (0, false), (0, false)]` / `right: [(9, false), (10, false), (1, false)]`
 - `the_default_world_completes_the_goal_chain_with_scripted_commands` (scenario.rs): `tick 333: Wood progress 0 but 1 are stored`
+- `same_seed_and_commands_remain_deterministic` (scenario.rs, the new `goals()` guard), on the original 21 x 21 x 21 pile: `no wood was ever stored in 400 ticks` (also none in 1,500)
+- `loading_refuses_goals_completed_beyond_the_chain` (simd main.rs): `a save beyond the chain was loaded`
+- `save_load_with_a_goal_done_and_the_next_in_progress_matches_never_saved` (save_load.rs): green on arrival (the field did not exist before Task 3); sabotage `to_save` writing `goals_completed: 0` turns it RED at `assertion left == right` (`completed: false` against `completed: true` on the loaded world)
+- `loading_refuses_a_pre_12_12_save_without_goals_completed` (simd main.rs): green on arrival, for the same reason (the serde refusal needs the new field); its positive control loads the current save
 - `a_pile_round_enclosed_ground_still_fills_every_cell` (scenario.rs, Task 2b, on `6dffa0d` pile_targets): `the ring sealed itself: 35 of 44 cells filled, last at tick 4245 (now 12000); 9 free pile cells [...] while 17 stones lie loose and 17 haul jobs retry` (a stall of 7,755 ticks, not a slow fill). The committed ring is the smaller one (Chebyshev 1..=2, 20 cells, 26 loose stones; the 44-cell ring took 195 s in debug): on `6dffa0d` it reads `the ring sealed itself: 16 of 20 cells filled, last at tick 1378 (now 9000); 4 free pile cells [(63,63,9) (65,63,9) (63,65,9) (65,65,9)] while 10 stones lie loose and 10 haul jobs retry`; fixed, 20 of 20 at tick 1,864 (16 s in debug).
 
 ### Completion Notes List
 
+- **Task 2, goals.** `split_stored(ecs)` is the ONE copy of 3.3's stored rule (`create_haul_jobs` and the goals both call it); `stored_by_kind` counts it per kind; `advance_goals` runs after `carry_items` and cascades (D2); `World::goals()` reads progress live (D1, with the `// NOTE:`). `GoalsCompleted` is a resource, `assemble` takes `goals_completed` (0 from `generate`). `carry_items`' doc now says "LAST of the movers ... Only `advance_goals` follows it".
+- **Task 1 / chain test (AC 6), numbers.** `the_default_world_completes_the_goal_chain_with_scripted_commands` measured completion at wood tick 1,847; tetrahedrite tick 9,828; bloodstone tick 9,828 (it was stored at 6,352, so it completes by the cascade in the same tick). These equal the wire oracle's ticks (`oracle: 10 wood stored by tick 1847`, `10 tetrahedrite ... 9828`). Bound pinned at 10,500: a margin of 672 ticks (6.8%), chosen because the unpaused wire form drifted to 10,454. The test takes about 206 s in debug (about 10,030 ticks plus 200). It checks, every tick, progress == the oracle's stored count for all three goals, no goal completed before the one ahead, no goal un-completing, and each completion at a stock that meets its target; 200 ticks after the chain the tick has climbed and all three are still done.
+- **`same_seed_and_commands_remain_deterministic` changed beyond the `goals()` reader.** Its 21 x 21 x 21 pile from the origin stored no log in the 400-tick window (nor in 1,500), so the required "progress above 0" guard could not hold. I replaced that pile with a 3 x 3 pile at camp + (3..5, 3..5): wood is stored from tick 290 (4 logs by 432) and the test now runs in 2 s instead of 22 s. The test lost its giant-pile coverage; nothing else asserted on that pile in this test.
+- **Task 3.** `SaveState.goals_completed` (no serde default), filled in `to_save`, destructured in `from_save`; simd refuses `goals_completed > GOALS.len()` before reading positions.
+- **Task 2b tick cost: NOT measured here (the orchestrator measures it).** One thing to look at: `pile_targets` floods up to `4 x zone + 16` cells per distinct neighbouring ground component, so a very large zone (the 9,261-cell cube that `same_seed...` used to place) makes each call cost a flood of up to ~37,000 cells.
+
 - **Task 2b, a finding: the first two forms of the entrance rule moved pins.** The creation's throwaway (a flood over same-z non-zone walkable ground, items blocking, cap 4 x zone + 16) moved 8 of 84 scenario tests (e.g. `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire`: 0 pick-ups after t=2500 against the pinned 80; `a_full_stockpile_never_stacks_uncarried_stones`: zone (62,62,9) not full). Mechanism, from a dump of the 24-cell pile: the camp is a small hollow, walled by rock and trees, with fewer than 112 same-z walkable cells outside the zone, so every real entrance flooded dry under the cap and read as a pocket. Following ramps (`astar_neighbours`) fixed 7 of 8. The 8th (`a_carried_stone_is_always_set_down_beside_its_carrier`, delay 20, two stones landing 3 cells from the carrier at ticks 2337/2574) came from loose stones: they were walls in the flood, so ground fenced by loose stones read as a pocket and lost its depth-1 seeds, which changed the fill order (grids at tick 2300/2336 differ old vs new on row y=66). A third failure was the pre-commit gate's two `lib.rs` unit tests (`haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile`, `a_stone_at_a_pit_rim_is_lifted_from_the_ramp_below`): on a tiny fixture every walkable cell outside the one-cell zone is fewer than the cap, so a plain cap reads ordinary ground as a pocket. The final rule floods with terrain only (no items, no dwarves; they move), over ramps, cap 4 x zone + 16, and a flood that runs dry is a pocket only if every cell beside it is a pile cell (rock, a drop or the map edge beside it makes it open ground). With it the lib unit tests (91 passed, 5 ignored = the RED goal tests) and the whole `scenario` suite is green (83 passed, 1 ignored = the chain test) and NO pin was re-pinned.
 
 ### File List
+
+- `crates/sim-core/src/lib.rs` (goals, stored helper, `pile_targets` entrance rule, unit tests), `crates/sim-core/src/save.rs`, `crates/sim-core/tests/scenario.rs` (chain test, ring test, determinism reader), `crates/sim-core/tests/save_load.rs`
+- `crates/simd/src/main.rs` (load bound and two tests)
+- `_bmad-output/implementation-artifacts/12-12-the-first-goals.md`
 
 ## Change Log
 
