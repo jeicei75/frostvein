@@ -442,7 +442,7 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         }
         status
     };
-    let goal_y = h - 4;
+    let goal_y = h - FOOTER_ROWS;
     let goal_row = client_core::goal_row_text(mirror.goals());
     let goal_cells = goal_row
         .head

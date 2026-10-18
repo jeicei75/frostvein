@@ -231,12 +231,12 @@ The options as offered at creation, kept for the record:
     `appearance.rs:454`; gold `#D6A42C`). Re-pin the HUD census (`ingest.rs:4075`, `:4119`: 6 → 7) and the
     production text set (`:6111-6142`). Add a headless test that the spans change when the mirror's goals
     change (pattern: roster `:3721`). If Q2 is (B), add the banner and its own test.
-- [ ] **Task 6: the instrument** (AC 9)
-  - [ ] `12-12-signoff/goals_wire.py` (EXISTING, creation) is the instrument. Run it on 5 fresh release
+- [x] **Task 6: the instrument** (AC 9)
+  - [x] `12-12-signoff/goals_wire.py` (EXISTING, creation) is the instrument. Run it on 5 fresh release
     daemons, each from a directory with no `frostvein.save`, at most 4 at a time, with Q1's targets. Paste
     each verdict block, including `goal: ... completed at tick`, `phase 2` and `stock dropped after the
     removal for: [...]`.
-  - [ ] `tui --frames` is the human's view of the same thing: `tui 7461 --frames 2 --z 9` against a live
+  - [x] `tui --frames` is the human's view of the same thing: `tui 7461 --frames 2 --z 9` against a live
     daemon prints the goal row (`goal 1 of 3: wood 0/10` at boot).
 - [ ] **Task 7: deliberate RED and the mutation table**
   - [ ] NEW `mutations/12-12.sh`. Run each row alone after commit and name its killing test or the wire.
@@ -422,6 +422,20 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 - **Task 2b, a finding: the first two forms of the entrance rule moved pins.** The creation's throwaway (a flood over same-z non-zone walkable ground, items blocking, cap 4 x zone + 16) moved 8 of 84 scenario tests (e.g. `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire`: 0 pick-ups after t=2500 against the pinned 80; `a_full_stockpile_never_stacks_uncarried_stones`: zone (62,62,9) not full). Mechanism, from a dump of the 24-cell pile: the camp is a small hollow, walled by rock and trees, with fewer than 112 same-z walkable cells outside the zone, so every real entrance flooded dry under the cap and read as a pocket. Following ramps (`astar_neighbours`) fixed 7 of 8. The 8th (`a_carried_stone_is_always_set_down_beside_its_carrier`, delay 20, two stones landing 3 cells from the carrier at ticks 2337/2574) came from loose stones: they were walls in the flood, so ground fenced by loose stones read as a pocket and lost its depth-1 seeds, which changed the fill order (grids at tick 2300/2336 differ old vs new on row y=66). A third failure was the pre-commit gate's two `lib.rs` unit tests (`haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile`, `a_stone_at_a_pit_rim_is_lifted_from_the_ramp_below`): on a tiny fixture every walkable cell outside the one-cell zone is fewer than the cap, so a plain cap reads ordinary ground as a pocket. The final rule floods with terrain only (no items, no dwarves; they move), over ramps, cap 4 x zone + 16, and a flood that runs dry is a pocket only if every cell beside it is a pile cell (rock, a drop or the map edge beside it makes it open ground). With it the lib unit tests (91 passed, 5 ignored = the RED goal tests) and the whole `scenario` suite is green (83 passed, 1 ignored = the chain test) and NO pin was re-pinned.
 - **Task 4 (Agent B), the wire.** `protocol::Goal` plus `goals` on `Snapshot` (after `tick`) and `Delta` (after `speed`, before `refusals`), no `Default`, no serde default, always serialized. `bridge::goals_out` is the one mapper, used by `snapshot()` and `delta()`. 90 `Snapshot {`/`Delta {` literals gained `goals: Vec::new()` (a script that matched braces; `cargo check --workspace --all-targets` then passed), and the JSON fixtures that are parsed (client-core `tests/mirror.rs`, tui `main.rs`, gui `ingest.rs`) gained `"goals":[]`; the python bench fixtures are not parsed by Rust and were left. The serve test uses two zone cells at the dwarves' tiles (a pair of wood on one, tetrahedrite alone on the other) and computes the stored count from the SAME message's `items`/`zones`/`carrying`. Mutation row re-pointed: `2-3-master-of-time.sh` "delta bridge hardcodes normal speed" (its anchor `speed,\n\n        refusals` became `speed,\n        goals: goals_out(world),\n        refusals`).
 - **Task 5 (Agent B), the clients.** client-core: `Mirror` stores `goals` (named in `apply_delta`'s destructure and set in `replace`) with a `goals()` getter; `goal_kind_text`, `goals_all_done`, `goals_title_text`, `goal_lines` (the gui list, with a `GoalState`) and `goal_row_text` (the tui row as a grey `head` and a green `done`) sit above `Changes`, beside `refusal_text`. They only format the daemon's `goals`; "all done" is every `completed` (display, D4), and the "current" goal is the first not completed. tui: `FOOTER_ROWS` (4) replaces the three `3`s (`tally_marks`, `render`'s `h < 3` guard and `map_h`, `move_cursor`); the goal row sits at `h - 4`. Two choices the draft left open: the chain-done line is `all goals done - play on: ` in grey and the counts in the pile green (the whole done part is green), and the gui title `goals` is white. gui: `GoalReadout` (bottom 16 px, right 16 px, `Hud`, `ClientLocal`, `GlobalZIndex(i32::MAX - 16)`), spans rebuilt only when they change, colours in `appearance.rs` (`GOAL_DONE_COLOR` 88,190,118; `GOAL_ALL_DONE_COLOR` D6A42C; current white; later `TRADE_TEXT_COLOR`). Numbers in the lines follow the draft's columns exactly (`{kind:<12}  {progress:>2} / {target}`). The gui test lives in `ingest.rs` beside the roster test (the "headless" pattern of `:3721`), not in `tests/headless.rs`.
+
+- **Task 6, the instrument (orchestrator): `GOALS OK` on 5 of 5 fresh release daemons** (`985b7b7`, built in a scratch worktree, each daemon in its own empty directory, 4 then 1 at a time, ports 7511-7515, every daemon reaped by PID, `delta queue full` 0 times in every daemon log). The verdict block, identical on all five:
+  ```
+  wood: oracle reached 10 at tick 2056; goal completed at tick 2056
+  tetrahedrite: oracle reached 10 at tick 9618; goal completed at tick 9618
+  bloodstone: oracle reached 1 at tick 6566; goal completed at tick 9618
+  goals: 9817 deltas carried goals; 0 faults
+  play continued to tick 9818 (200 ticks after the chain)
+  stock dropped after the removal for: ['wood', 'tetrahedrite', 'bloodstone']
+  GOALS OK
+  ```
+  Only the end-state lines vary (two variants): runs 7511/7515 leave 4 tetrahedrite loose, 7512-7514 leave 3, with the haulers at different cells. The wire's ticks differ from the chain test's (1,847 / 9,828) because the daemon's connect snapshot is now tick 1 (tick 6 at creation): the crew stands elsewhere, so 6 of the 78 pile cells differ (`--plan-out` diffed against `plan-10-10-1.json`: digs and cuts identical). The sim itself did not move: a release probe of the scenario path on `985b7b7` and on `736da92` both give wood 1,847, tetrahedrite 9,828, bloodstone 9,828 (stored 6,352).
+  `tui 7521 --frames 2 --z 9` against a fresh daemon prints `goal 1 of 3: wood 0/10` in the trade grey (150,160,170) at tick 1 and tick 2.
+- **Orchestrator, Task 5:** the goal row was drawn at `h - 4`, a second literal beside `FOOTER_ROWS`; now `h - FOOTER_ROWS`.
 
 ### File List
 
