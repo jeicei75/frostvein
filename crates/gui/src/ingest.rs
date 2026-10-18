@@ -781,6 +781,7 @@ pub fn projection_systems(app: &mut App) {
                 setup_lighting_readout,
                 setup_clock_readout,
                 setup_name_readout,
+                setup_goal_readout,
                 refuse_select_of_a_missing_dwarf,
             ),
         )
@@ -816,6 +817,7 @@ pub fn projection_systems(app: &mut App) {
         .add_systems(Update, update_slice_readout.after(ProjectionSet))
         .add_systems(Update, update_clock_readout.after(ProjectionSet))
         .add_systems(Update, update_name_readout.after(ProjectionSet))
+        .add_systems(Update, update_goal_readout.after(ProjectionSet))
         .add_systems(Update, report_trade_changes.after(ingest_messages));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
@@ -1901,6 +1903,87 @@ fn update_name_readout(
     mut shown: Local<Vec<(String, Color)>>,
 ) {
     let spans = name_readout_spans(&mirror.0, selected.0);
+    if spans == *shown {
+        return;
+    }
+    for root in &readout {
+        commands
+            .entity(root)
+            .despawn_children()
+            .with_children(|root| {
+                for (text, color) in &spans {
+                    root.spawn((
+                        TextSpan::new(text.clone()),
+                        TextFont::from_font_size(22.0),
+                        TextColor(*color),
+                        ClientLocal,
+                    ));
+                }
+            });
+    }
+    *shown = spans;
+}
+
+/// 12.12: the goal list, bottom-right: a title line, then one line per goal. Text lives in
+/// `TextSpan` children, one per colour; the root is empty.
+#[derive(Component)]
+pub struct GoalReadout;
+
+fn setup_goal_readout(mut commands: Commands) {
+    commands.spawn((
+        Text::new(""),
+        TextFont::from_font_size(22.0),
+        TextColor(Color::WHITE),
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: px(16),
+            right: px(16),
+            ..Default::default()
+        },
+        GlobalZIndex(i32::MAX - 16),
+        GoalReadout,
+        Hud,
+        ClientLocal,
+    ));
+}
+
+/// The coloured pieces of the goal list, read from the MIRROR: the daemon's `goals` and nothing
+/// else. Done goals are pile green, the current one white, later ones grey; the title turns gold
+/// once every goal is done.
+fn goal_readout_spans(mirror: &Mirror) -> Vec<(String, Color)> {
+    let goals = mirror.goals();
+    if goals.is_empty() {
+        return Vec::new();
+    }
+    let title_color = if client_core::goals_all_done(goals) {
+        crate::appearance::GOAL_ALL_DONE_COLOR
+    } else {
+        Color::WHITE
+    };
+    let mut spans = vec![(
+        format!("{}\n", client_core::goals_title_text(goals)),
+        title_color,
+    )];
+    let lines = client_core::goal_lines(goals);
+    for (index, (state, line)) in lines.iter().enumerate() {
+        let color = match state {
+            client_core::GoalState::Done => crate::appearance::GOAL_DONE_COLOR,
+            client_core::GoalState::Current => Color::WHITE,
+            client_core::GoalState::Later => crate::appearance::TRADE_TEXT_COLOR,
+        };
+        let newline = if index + 1 < lines.len() { "\n" } else { "" };
+        spans.push((format!("{line}{newline}"), color));
+    }
+    spans
+}
+
+fn update_goal_readout(
+    mut commands: Commands,
+    mirror: Res<MirrorResource>,
+    readout: Query<bevy::prelude::Entity, With<GoalReadout>>,
+    mut shown: Local<Vec<(String, Color)>>,
+) {
+    let spans = goal_readout_spans(&mirror.0);
     if spans == *shown {
         return;
     }
@@ -3759,6 +3842,113 @@ mod tests {
         );
     }
 
+    /// The goal list's spans, in order: `(text, colour)` per `TextSpan` child of the readout.
+    fn goal_spans(app: &mut App) -> Vec<(String, [u8; 3])> {
+        let world = app.world_mut();
+        let root = world
+            .query_filtered::<bevy::prelude::Entity, With<super::GoalReadout>>()
+            .single(world)
+            .unwrap();
+        let children: Vec<_> = world
+            .entity(root)
+            .get::<bevy::prelude::Children>()
+            .map(|children| children.iter().collect())
+            .unwrap_or_default();
+        children
+            .into_iter()
+            .map(|child| {
+                let entity = world.entity(*child);
+                (
+                    entity.get::<bevy::prelude::TextSpan>().unwrap().0.clone(),
+                    bevy::color::ColorToPacked::to_u8_array_no_alpha(
+                        entity
+                            .get::<bevy::prelude::TextColor>()
+                            .unwrap()
+                            .0
+                            .to_srgba(),
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    /// 12.12 AC8. Captures hide every HUD element, so the evidence is this test: the goal list is
+    /// the daemon's `goals` in the approved colours, it follows a delta, and the title turns gold
+    /// once every goal is done.
+    #[test]
+    fn the_goal_list_follows_the_mirrors_goals_in_the_approved_colours() {
+        use protocol::{Goal, ItemKind};
+        const GREEN: [u8; 3] = [88, 190, 118];
+        const WHITE: [u8; 3] = [255, 255, 255];
+        const GREY: [u8; 3] = [150, 160, 170];
+        const GOLD: [u8; 3] = [0xD6, 0xA4, 0x2C];
+        let goals = |wood: (u32, bool), tetra: (u32, bool), blood: (u32, bool)| {
+            [
+                (ItemKind::Wood, 10, wood),
+                (ItemKind::Tetrahedrite, 10, tetra),
+                (ItemKind::Bloodstone, 1, blood),
+            ]
+            .map(|(kind, target, (progress, completed))| Goal {
+                kind,
+                target,
+                progress,
+                completed,
+            })
+            .to_vec()
+        };
+        let mut snapshot = snapshot_at_tick(0, Speed::Normal);
+        snapshot.goals = goals((4, false), (0, false), (0, false));
+        let (mut app, sender, _server) = configured_app_with_snapshot(&[], snapshot);
+        app.update();
+        let span = |text: &str, rgb| (text.to_owned(), rgb);
+        // Independent oracle: the approved draft's lines and colours, written out.
+        assert_eq!(
+            goal_spans(&mut app),
+            vec![
+                span("goals\n", WHITE),
+                span("[ ] wood           4 / 10\n", WHITE),
+                span("[ ] tetrahedrite   0 / 10\n", GREY),
+                span("[ ] bloodstone     0 / 1", GREY),
+            ]
+        );
+        let delta = |tick, goals| Delta {
+            goals,
+            ..entity_delta(tick, Vec::new())
+        };
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta(
+                1,
+                goals((10, true), (3, false), (0, false)),
+            )))))
+            .unwrap();
+        app.update();
+        assert_eq!(
+            goal_spans(&mut app),
+            vec![
+                span("goals\n", WHITE),
+                span("[x] wood          10 / 10\n", GREEN),
+                span("[ ] tetrahedrite   3 / 10\n", WHITE),
+                span("[ ] bloodstone     0 / 1", GREY),
+            ]
+        );
+        sender
+            .send(Ok(WireMessage::Delta(Box::new(delta(
+                2,
+                goals((12, true), (10, true), (1, true)),
+            )))))
+            .unwrap();
+        app.update();
+        assert_eq!(
+            goal_spans(&mut app),
+            vec![
+                span("all goals done - play on\n", GOLD),
+                span("[x] wood          12 / 10\n", GREEN),
+                span("[x] tetrahedrite  10 / 10\n", GREEN),
+                span("[x] bloodstone     1 / 1", GREEN),
+            ]
+        );
+    }
+
     /// 12.2 AC6, as 12.6 reshaped it. Captures hide every HUD element, so the evidence is this
     /// test: the name line shows the SELECTED dwarf's name in his tunic colour, a second grey line
     /// gives his trade and the key, and Escape (no selection) brings the roster back.
@@ -4078,8 +4268,8 @@ mod tests {
             keys.release_all();
             keys.clear();
         };
-        // Slice, lighting, clock, the selected dwarf's name and the designate hint.
-        assert_eq!(visibilities(&mut app).len(), 6);
+        // Slice, lighting, clock, the selected dwarf's name, the goal list and the designate hint.
+        assert_eq!(visibilities(&mut app).len(), 7);
         press_h(&mut app);
         assert!(
             visibilities(&mut app)
@@ -4117,7 +4307,7 @@ mod tests {
                 .iter(app.world())
                 .copied()
                 .collect::<Vec<_>>();
-            visibilities.len() == 6
+            visibilities.len() == 7
                 && visibilities
                     .iter()
                     .all(|visibility| *visibility == bevy::prelude::Visibility::Hidden)
@@ -6145,6 +6335,8 @@ mod tests {
             "22:00   elapsed 0d 00:00   speed normal".to_string(),
             "".to_string(),
             // The selected dwarf's name line, empty with no selection.
+            "".to_string(),
+            // The goal list root; its text lives in spans.
             "".to_string(),
             "F4 haze on  F5 dof on  F6 bloom on  F7 ao on  fxaa on  F8 sun on  F9 ambient on  F10 campfire on  F11 torches on  F12 lanterns on"
                 .to_string(),
