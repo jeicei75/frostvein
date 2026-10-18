@@ -180,3 +180,108 @@ old = '                    return caging_stone(terrain, &blocked, &stones, pos);
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    return None;'))
 PY
+
+# 12.11 review run 1 patch pass: rows 19-24 and 7c/16b. Each names the finding it pins.
+mutation "19 a load drops the saved clearing (review HIGH, standing AC 3)" sim-core a_world_saved_at_every_tick_of_a_clear_loads_and_steps_identically <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            if let Some(clear) = dwarf.clearing {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if let Some(clear) = None::<SavedClearing> {\n'))
+PY
+
+mutation "19b a pre-12.11 save decodes with no clearing (review HIGH, Wolf's ruling b)" simd loading_refuses_a_pre_12_11_save_without_dwarf_clearing <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/save.rs'); s = p.read_text()
+old = '    #[serde(deserialize_with = "Option::deserialize")]\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "20 simd lets a hauler clear (review MED)" simd a_clearing_save_whose_carrier_is_a_hauler_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            let digs_or_channels = dwarf.profession == sim_core::Profession::Miner\n                && save.jobs'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let digs_or_channels = save.jobs'))
+PY
+
+mutation "20b simd lets a cut job clear (review MED)" simd a_clearing_save_whose_miner_holds_a_cut_job_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                            sim_core::JobKind::Dig | sim_core::JobKind::Channel\n                        )\n                });\n            if let Some(clear) = dwarf.clearing\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                            sim_core::JobKind::Dig | sim_core::JobKind::Channel | sim_core::JobKind::Cut\n                        )\n                });\n            if let Some(clear) = dwarf.clearing\n'))
+PY
+
+mutation "20c simd lets a clearing miner carry another stone (review MED)" simd a_clearing_save_carrying_another_stone_than_it_clears_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = 'digs_or_channels && dwarf.clearing.is_some_and(|clear| clear.item == item);'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'digs_or_channels && dwarf.clearing.is_some();'))
+PY
+
+mutation "20d simd accepts two holders (review MED, D6)" simd a_clearing_save_whose_stone_has_a_held_haul_job_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                if miner_clearing\n                    && haul_job_for_item'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                if false && miner_clearing\n                    && haul_job_for_item'))
+PY
+
+mutation "16b a cancelled miner's let-go is keyed on the job again (review MED)" sim-core a_miner_whose_channel_is_cancelled_mid_clear_sets_the_stone_down_beside_him <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            let nearest = if clearing {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let nearest = if clearing_job.is_some() {'))
+PY
+
+mutation "21 clearing() names a miner walking to the stone empty-handed (review MED, D7)" sim-core a_miner_reads_as_clearing_only_while_he_lifts_or_carries <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                (lifting || carrying).then_some((*entity.get::<Id>()?, item))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                (lifting || carrying || item > 0).then_some((*entity.get::<Id>()?, item))'))
+PY
+
+mutation "21b clearing() names a miner only while he carries, not during the lift run (D7 other side)" sim-core a_miner_reads_as_clearing_only_while_he_lifts_or_carries <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                (lifting || carrying).then_some((*entity.get::<Id>()?, item))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                (carrying && !lifting || carrying).then_some((*entity.get::<Id>()?, item))'))
+PY
+
+mutation "22 the set-down leaves him working (review MED, AC 15)" sim-core a_miner_who_sets_his_stone_down_is_walking_not_working <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                *ecs.get_mut::<JobState>(entity)\n                    .expect("every dwarf has a job state") = JobState::Walk;\n                ecs.entity_mut(entity).insert(WorkProgress(0));\n                ecs.entity_mut(entity).remove::<Path>();\n            }\n            continue;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                ecs.entity_mut(entity).insert(WorkProgress(0));\n                ecs.entity_mut(entity).remove::<Path>();\n            }\n            continue;\n'))
+PY
+
+mutation "7c the column clause ALONE dropped, dig (review LOW: row 7's equivalence claim)" sim-core a_clearing_miner_never_sets_the_stone_down_on_his_dig_targets_top <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        (cell.x, cell.y) == (job.target.x, job.target.y)\n            || cell.z < pos.z\n            || blocked.contains(&cell)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        cell.z < pos.z\n            || blocked.contains(&cell)\n'))
+PY
+
+mutation "23 the no-throw sweep goes blind to carrying (review LOW: latent vacuity)" sim-core a_carried_stone_is_always_set_down_beside_its_carrier <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<Carrying>()?.0)))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<Carrying>()?.0.filter(|_| false))))\n'))
+PY
+
+mutation "23b the no-throw sweep's level assert: a miner never clears (review LOW)" sim-core a_carried_stone_is_always_set_down_beside_its_carrier <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = 'let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'let clearing_item = if false && matches!(job.kind, JobKind::Dig | JobKind::Channel) {'))
+PY

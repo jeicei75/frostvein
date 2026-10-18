@@ -3621,7 +3621,99 @@ fn a_clearing_miner_never_sets_the_stone_down_in_the_target_column() {
     assert!(!in_column(&world), "the stone is in the target's column");
 }
 
-/// 12.11 seat: the miner (dwarf 0) on `miner` beside a stone on a channel mark at `target`, shut in
+/// Row 7's "the column alone is equivalent" was unproven for a dig (12.11 review run 1): a dig's
+// target is solid at the miner's level, so the cell on its top is refused by the column clause
+// ALONE. Here that cell is the miner's nearest set-down: the stone lies on the dig's one face, and
+// ramp floors let him step up onto the target's top. Checked every tick, since after the dig a
+// stone set there falls and can leave the column again.
+#[test]
+fn a_clearing_miner_never_sets_the_stone_down_on_his_dig_targets_top() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let at = |dx: i32, dy: i32, dz: i32| Pos {
+        x: site.x + 1 + dx,
+        y: site.y + dy,
+        z: site.z + dz,
+    };
+    let (miner, face, target, beyond) = (at(0, 0, 0), at(1, 0, 0), at(2, 0, 0), at(3, 0, 1));
+    // The target's top keeps a second same-level exit, `aside`, so a stone set beyond it never
+    // closes the last one of a miner standing there (#186).
+    let aside = at(2, 1, 1);
+    let mut solid = vec![target, at(3, 0, 0), at(2, 1, 0)];
+    for (dx, dy) in [(-1, 0), (0, -1), (0, 1), (1, -1), (1, 1), (2, -1)] {
+        solid.extend([at(dx, dy, 0), at(dx, dy, 1)]);
+    }
+    for cell in &solid {
+        world.set_tile(*cell, Tile::Solid(Material::Stone));
+    }
+    for cell in [miner, face] {
+        world.set_tile(
+            Pos {
+                z: cell.z - 1,
+                ..cell
+            },
+            Tile::Ramp(Material::Stone),
+        );
+    }
+    for cell in [
+        miner,
+        face,
+        Pos {
+            z: target.z + 1,
+            ..target
+        },
+        beyond,
+        aside,
+    ] {
+        assert_eq!(world.tile(cell), Some(Tile::Empty), "{cell:?} is not open");
+    }
+    let mut save = world.to_save();
+    let stone = save.next_id;
+    save.next_id += 1;
+    save.items.push((stone, face, ItemKind::Stone));
+    for (index, dwarf) in save.dwarves.iter_mut().enumerate() {
+        assert!(
+            !solid.contains(&dwarf.pos),
+            "dwarf {index} is inside the fixture"
+        );
+        dwarf.profession = if index == 0 {
+            Profession::Miner
+        } else {
+            Profession::Hauler
+        };
+    }
+    save.dwarves[0].pos = miner;
+    save.dwarves[0].home = miner;
+    let mut world = World::from_save(save);
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(target, target),
+        }),
+        None
+    );
+    let mut lifted = false;
+    while !world.designations().is_empty() {
+        assert!(world.tick() < 1_000, "the dig never completed");
+        world.step();
+        let held = world.carrying()[0].1 == Some(stone);
+        lifted |= held;
+        let lies = world
+            .items()
+            .into_iter()
+            .find(|(item, _)| item.0 == stone)
+            .unwrap()
+            .1;
+        assert!(
+            held || (lies.x, lies.y) != (target.x, target.y),
+            "tick {}: the stone lies at {lies:?}, in the dig target's column",
+            world.tick()
+        );
+    }
+    assert!(lifted, "the miner never lifted the stone");
+}
+
+// 12.11 seat: the miner (dwarf 0) on `miner` beside a stone on a channel mark at `target`, shut in
 /// `cells` at the staircase site's level by stone walls. Every other dwarf is a hauler and there is
 /// no pile, so nobody else works; `extra` puts dwarf 1 on that cell. Returns the stone's id.
 fn walled_clearing(cells: &[Pos], target: Pos, miner: Pos, extra: Option<Pos>) -> (World, u32) {
@@ -4390,6 +4482,7 @@ fn a_carried_stone_is_always_set_down_beside_its_carrier() {
         // every tick, the designation delays included: a record left stale over them made haulers
         // look as if they threw.
         let mut carried: BTreeMap<u32, Pos> = BTreeMap::new();
+        let mut carries = 0;
         let mut watch = |world: &World| {
             let items: BTreeMap<u32, Pos> = world
                 .items()
@@ -4410,6 +4503,10 @@ fn a_carried_stone_is_always_set_down_beside_its_carrier() {
                     thrown.push((delay, world.tick(), *was, now));
                 }
             }
+            carries += held
+                .iter()
+                .filter(|item| !carried.contains_key(item))
+                .count();
             carried = held.iter().map(|item| (*item, items[item])).collect();
         };
         for level in 0..4 {
@@ -4426,11 +4523,16 @@ fn a_carried_stone_is_always_set_down_beside_its_carrier() {
                 kind: DesignationKind::Channel,
                 rect: rect(first, last),
             });
-            run_until(&mut world, 6_000, |world| {
-                watch(world);
-                no_marks_left(world)
-            });
+            assert!(
+                run_until(&mut world, 6_000, |world| {
+                    watch(world);
+                    no_marks_left(world)
+                }),
+                "delay {delay}: level {level} was never worked"
+            );
         }
+        // Latent vacuity (12.11 review run 1): with nothing carried, nothing can be thrown.
+        assert!(carries > 0, "delay {delay}: no stone was ever carried");
     }
     assert!(
         thrown.is_empty(),
