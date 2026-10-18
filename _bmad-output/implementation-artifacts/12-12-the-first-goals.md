@@ -281,6 +281,7 @@ its own `/tmp/review-<layer>`.
   goal and refusal tests ran; the full gate covers the rest on `c53c050`, and no code changed after it.
 - The mutation table was not executed (reviews may not run payloads).
 - AC 10 (seat) is open.
+- After triage, `scripts/reap-build-caches.sh --tmp-only --force` reaped 9 directories under /tmp (39.1 GB listed) and reclaimed 20.3 GB of free space. Review cost row: $18.58, 404 turns (`49ee8e6`).
 
 - [x] [Review][Decision] **AC 11 holds only while the enclosed hole touches no rock, drop or map edge** — RESOLVED (Wolf, 2026-10-18): option (a), close it now; became the Patch below. Severity
   MED. Sources: Acceptance (RAN) and Blind (read): a convergence.
