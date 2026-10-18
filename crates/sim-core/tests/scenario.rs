@@ -3876,6 +3876,47 @@ fn a_miner_whose_channel_is_cancelled_mid_clear_sets_the_stone_down_beside_him()
     );
 }
 
+// 12.11 review run 2: the let-go above refuses every side, so the stone always landed on his own
+// tile and "never below him" went unpinned. Here an opened pit step is his one free neighbour.
+#[test]
+fn a_miner_whose_channel_is_cancelled_mid_clear_never_sets_the_stone_down_below_him() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let far = cell(site, -1, 0);
+    let target = cell(site, 1, 0);
+    let miner = cell(site, 2, 0);
+    let step = cell(site, 3, -1);
+    let (mut world, stone) = walled_clearing(&[far, site, target, miner], target, miner, None);
+    until_the_miner_lifts(&mut world, stone, 600);
+    let at = world.dwarves()[0].1;
+    assert_eq!(at, miner, "the miner lifted from another cell");
+    // The hauler rests on the mark, his one side, and the step a channel opened lies east of him.
+    let mut save = world.to_save();
+    save.dwarves[1].pos = target;
+    save.dwarves[1].home = target;
+    save.dwarves[1].cooldown = 100;
+    save.dwarves[1].path.clear();
+    let mut world = World::from_save(save);
+    assert!(world.set_tile(cell(site, 3, 0), Tile::Empty));
+    assert!(world.set_tile(step, Tile::Empty));
+    assert!(world.set_tile(cell(site, 3, -2), Tile::Ramp(Material::Stone)));
+    assert!(is_standable(&world, step), "the step is not open");
+    let refused = world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(target, target),
+    });
+    assert_eq!(refused, None);
+    assert_eq!(
+        world.carrying()[0].1,
+        None,
+        "the cancel left him holding it"
+    );
+    assert!(
+        world.items().contains(&(Id(stone), at)),
+        "the stone left the miner's tile on {at:?}: {:?}",
+        world.items().into_iter().find(|(item, _)| item.0 == stone)
+    );
+}
+
 /// DEFAULT_SEED with a stone on a one-cell channel mark at the staircase site. Returns the stone.
 fn a_stone_on_a_channel_mark() -> (World, u32) {
     let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
