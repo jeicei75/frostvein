@@ -9,8 +9,10 @@ It drives two routes to #135 at once, reading the daemon's own deltas at fast4x:
   STAIR: 12.10b's two-wide staircase (the site and levels of `12-10b-signoff/way_down_wire.py`: the
       nearest 7x3 block of standable cells at the camp's level with 6 solid non-tree cells under each,
       DEFAULT_SEED [61,62,9]), channelled 4 levels deep one level at a time, with a 17x8 pile on the
-      camp's far side (big enough for all 28 blocks once none of them float). A channel's block lands
-      up top beside its worker (12.10b), which is often a cell a later level channels under.
+      camp's far side, dragged over FOUR levels (cz..cz+3) because the ground there is uneven: at cz
+      alone it held 22 cells, fewer than the items, and the rest retried for good (12.11 review run
+      1). A channel's block lands up top beside its worker (12.10b), which is often a cell a later
+      level channels under.
   TREE: one dig under a tree. From the snapshot it picks the trunk base nearest the camp whose ground
       cell (the solid cell under the base) has a standable side neighbour on its own level, more than
       12 from the site, and marks a dig on that ground cell.
@@ -19,8 +21,10 @@ An item FLOATS when it lies uncarried on an `empty` cell over an `empty` cell. A
 trunk base stands over an `empty` cell. A float shorter than GRACE (30) ticks is not counted, so a
 fall in progress is not one. One line per level and per event, then the counts and one verdict:
   `FLOATS OK` (exit 0): all 4 levels worked, the tree's ground cell was dug, no item floated for GRACE
-      ticks or longer, no trunk base was left over air, and at least one block reached the pile;
-  `FLOATS RED` (exit 1): something floated, or a level or the tree dig was never worked;
+      ticks or longer, no trunk base was left over air, and EVERY item reached the pile (AC 3: a
+      fallen item is delivered; the run waits for it until TICKS);
+  `FLOATS RED` (exit 1): something floated, a level or the tree dig was never worked, or an item
+      never reached the pile;
   `FLOATS BROKEN: ...` (exit 2): no daemon, no snapshot, no site, no tree, an unreadable line, or the
       daemon stalled or closed before TICKS.
 Exit 0 alone is not a result: read the counts.
@@ -132,7 +136,8 @@ def send(obj):
 
 
 py = cy + 2 if sy < cy else cy - 9
-send({"type": "place_stockpile", "rects": [{"min": [cx - 8, py, cz], "max": [cx + 8, py + 7, cz]}]})
+send({"type": "place_stockpile",
+      "rects": [{"min": [cx - 8, py, z], "max": [cx + 8, py + 7, z]} for z in range(cz, cz + 4)]})
 
 
 def level_targets(level):
@@ -188,9 +193,8 @@ try:
             level += 1
             if level < LEVELS:
                 designate("channel", level_targets(level)[0], level_targets(level)[-1])
-            else:
-                stair_done = tick
-        if level == LEVELS and tree_float is not None and tick - stair_done >= 600:
+        on_pile = sum(1 for i, p in items.items() if p in zones and i not in carried)
+        if level == LEVELS and tree_float is not None and on_pile == len(items):
             break
         if tick - sent_at >= limit:
             break
@@ -209,6 +213,7 @@ print(f"levels worked: {level} of {LEVELS}")
 print(f"items floated >= {GRACE} ticks: {len(floated)}; floating at the end: {len(still)} {still[:10]}")
 print(f"tree: {tree_float or 'ground NEVER DUG'}")
 print(f"items on the pile: {on_pile} of {len(items)}")
-ok = level == LEVELS and not floated and tree_float == "felled or supported" and on_pile > 0
+ok = (level == LEVELS and not floated and tree_float == "felled or supported"
+      and on_pile == len(items) > 0)
 print("FLOATS OK" if ok else "FLOATS RED")
 sys.exit(0 if ok else 1)

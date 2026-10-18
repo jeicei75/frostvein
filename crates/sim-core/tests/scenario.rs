@@ -4114,6 +4114,63 @@ fn a_hauler_holding_the_lifted_stones_job_lets_go_and_the_stone_is_delivered_lat
     assert!(delivered, "the stone never reached the pile");
 }
 
+// AC 3 (12.11 review run 1: no sim test pinned it). The OLD world: a haul job created while the
+// stone lay on its ground, its target that ground. The floor then goes out from under it; the stone
+// falls a level, and a hauler lifts it from its live position (the ramp under it is the step up)
+// and delivers it. Before 12.11 it hung over air and its job retried for good.
+#[test]
+fn a_fallen_stone_with_a_haul_job_is_delivered_to_the_pile() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let site = staircase_site(&world);
+    let ground = cell(site, 2, 0);
+    let mut save = world.to_save();
+    let stone = save.next_id;
+    save.next_id += 1;
+    save.items.push((stone, ground, ItemKind::Stone));
+    let mut world = World::from_save(save);
+    place_creation_pile(&mut world);
+    world.step();
+    let job = world
+        .jobs()
+        .into_iter()
+        .find(|job| job.kind == JobKind::Haul { item: stone })
+        .expect("the stone has a haul job");
+    assert_eq!(
+        job.target, ground,
+        "the haul job was made with the stone on its ground"
+    );
+    assert!(
+        world.claims().iter().all(|(_, held)| *held != Some(job.id)),
+        "a hauler already holds the job, so it was not made in the old world"
+    );
+    let below = cell(ground, 0, -1);
+    assert!(world.set_tile(below, Tile::Empty));
+    assert!(world.set_tile(cell(ground, 0, -2), Tile::Ramp(Material::Stone)));
+    world.step();
+    assert!(
+        world.items().contains(&(Id(stone), below)),
+        "the stone did not fall a level: {:?}",
+        world.items().into_iter().find(|(id, _)| id.0 == stone)
+    );
+    let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
+    let delivered = run_until(&mut world, 3_000, |world| {
+        world
+            .carrying()
+            .iter()
+            .all(|(_, held)| *held != Some(stone))
+            && world
+                .items()
+                .iter()
+                .any(|(id, at)| id.0 == stone && zones.contains(at))
+    });
+    assert!(
+        delivered,
+        "the fallen stone never reached the pile: {:?}, jobs {:?}",
+        world.items().into_iter().find(|(id, _)| id.0 == stone),
+        world.jobs()
+    );
+}
+
 #[test]
 fn a_dig_under_a_stone_does_not_leave_it_floating() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);

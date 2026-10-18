@@ -285,3 +285,11 @@ old = 'let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'let clearing_item = if false && matches!(job.kind, JobKind::Dig | JobKind::Channel) {'))
 PY
+
+mutation "24 the fall is removed: a fallen stone's haul is never delivered (review MED, AC 3)" sim-core a_fallen_stone_with_a_haul_job_is_delivered_to_the_pile <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        if !falling {\n            continue;\n        }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if true {\n            continue;\n        }\n'))
+PY
