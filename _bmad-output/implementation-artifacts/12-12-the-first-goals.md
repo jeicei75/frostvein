@@ -202,17 +202,17 @@ The options as offered at creation, kept for the record:
     vacuous, and compare `goals()` for 200 ticks. Add `goals()` to the reader list of
     `same_seed_and_commands_remain_deterministic` (`scenario.rs:2057-2129`); its window must show progress
     above 0 (assert it).
-- [ ] **Task 4: wire** (AC 5)
-  - [ ] `protocol`: `Goal`, then `goals` on `Snapshot` (after `tick`) and on `Delta` (after `speed`). Re-pin
+- [x] **Task 4: wire** (AC 5)
+  - [x] `protocol`: `Goal`, then `goals` on `Snapshot` (after `tick`) and on `Delta` (after `speed`). Re-pin
     `WIRE`/`DELTA_WIRE` (`protocol/src/lib.rs:313-334`) and the byte-exact delta at `:370`, and add one goal
     literal test.
-  - [ ] `simd/src/bridge.rs`: `snapshot()` (`:1-39`) and `delta()` (`:46-85`) fill `goals` from
+  - [x] `simd/src/bridge.rs`: `snapshot()` (`:1-39`) and `delta()` (`:46-85`) fill `goals` from
     `world.goals()` through `item_kind_out` (`:109-116`). A bridge unit test checks goals against
     hand-written wire values.
-  - [ ] `serve.rs`: write a save with items on pile cells (a stacked pair on one cell included) and load it
+  - [x] `serve.rs`: write a save with items on pile cells (a stacked pair on one cell included) and load it
     (`read_snapshot_after_load`, `:197`). The snapshot and the next delta carry `progress` above 0, and that
     equals the stored count the test computes from the same message's `items`, `zones` and `carrying`.
-  - [ ] Every `Snapshot {`/`Delta {` literal in the workspace gains the field. That is mechanical, about 66 Snapshot sites, mostly in gui
+  - [x] Every `Snapshot {`/`Delta {` literal in the workspace gains the field. That is mechanical, about 66 Snapshot sites, mostly in gui
     tests. A shared test helper is fine; a `Default` derive on the wire types is not.
 - [ ] **Task 5: clients** (AC 7, 8)
   - [ ] `client-core`: `Mirror` stores `goals` and gets a `goals()` getter. NAME `goals` in `apply_delta`'s
@@ -369,6 +369,7 @@ python3 _bmad-output/implementation-artifacts/12-12-signoff/goals_wire.py 7461 4
 ### Agent Model Used
 
 - Agent A (Claude Sonnet 5.5, claude-sonnet-5-5), Wolf's pick (2026-10-18): Tasks 1 (sim), 2b, 2, 3.
+- Agent B (Claude Sonnet 5.5, claude-sonnet-5-5), Wolf's pick (2026-10-18): Tasks 4, 5.
 
 ### Debug Log References
 
@@ -385,6 +386,13 @@ RED lines (run with `--ignored` on a stub `World::goals()` that returns the thre
 - `loading_refuses_a_pre_12_12_save_without_goals_completed` (simd main.rs): green on arrival, for the same reason (the serde refusal needs the new field); its positive control loads the current save
 - `a_pile_round_enclosed_ground_still_fills_every_cell` (scenario.rs, Task 2b, on `6dffa0d` pile_targets): `the ring sealed itself: 35 of 44 cells filled, last at tick 4245 (now 12000); 9 free pile cells [...] while 17 stones lie loose and 17 haul jobs retry` (a stall of 7,755 ticks, not a slow fill). The committed ring is the smaller one (Chebyshev 1..=2, 20 cells, 26 loose stones; the 44-cell ring took 195 s in debug): on `6dffa0d` it reads `the ring sealed itself: 16 of 20 cells filled, last at tick 1378 (now 9000); 4 free pile cells [(63,63,9) (65,63,9) (63,65,9) (65,65,9)] while 10 stones lie loose and 10 haul jobs retry`; fixed, 20 of 20 at tick 1,864 (16 s in debug).
 
+Task 4 (Agent B). None of these can be RED on unchanged code: each needs the new `goals` field to compile. Each is shown RED by a one-line sabotage of COMMITTED code (restored with `git checkout --`):
+
+- `refusal_wire_is_literal_and_empty_delta_wire_is_unchanged` (protocol; WIRE/DELTA_WIRE/byte-exact delta re-pinned, plus a goals-before-refusals order assert): moving `goals` after `refusals` in `Delta` turns it RED at `goals sit after speed and before refusals` (the byte-exact delta alone could NOT see it: an empty `refusals` is skipped, so the bytes are identical; the order assert was added for that reason)
+- `a_goal_is_literal_on_the_wire` (protocol): green on arrival; it shares `Goal` with the WIRE literals above, which carry the same four keys
+- `snapshot_and_delta_carry_the_goal_chain_as_hand_written_wire_values` (simd bridge): `target: 1` in `goals_out` -> `left: [Goal { kind: Wood, target: 1, ...}, ...]` / `right: [Goal { kind: Wood, target: 10, ...}, ...]`
+- `a_loaded_pile_reports_its_stored_count_as_goal_progress_in_the_snapshot_and_the_next_delta` (simd serve.rs): `progress: 0` in `goals_out` -> `assertion left == right failed: the stacked pair counts once` / `left: 0` / `right: 1`
+
 ### Completion Notes List
 
 - **Task 2, goals.** `split_stored(ecs)` is the ONE copy of 3.3's stored rule (`create_haul_jobs` and the goals both call it); `stored_by_kind` counts it per kind; `advance_goals` runs after `carry_items` and cascades (D2); `World::goals()` reads progress live (D1, with the `// NOTE:`). `GoalsCompleted` is a resource, `assemble` takes `goals_completed` (0 from `generate`). `carry_items`' doc now says "LAST of the movers ... Only `advance_goals` follows it".
@@ -400,11 +408,13 @@ RED lines (run with `--ignored` on a stub `World::goals()` that returns the thre
 - **Task 2b on real terrain (orchestrator).** The ring test flattens the ground round the camp, so the fix was also checked on the real shape: the 58-cell zone of the creation run that sealed (run 7476's save) placed fresh on DEFAULT_SEED with the plan's digs and cuts. `60955ef`: 50 of 58 filled, 8 items loose, unchanged from tick 9,006 to 12,006. `736da92` and the early-exit fix: 58 of 58 at tick 10,006, 0 loose. (Loading the sealed SAVE itself stays at 50/58 on every rule: its 8 free cells are reachable only through filled cells, the documented no-target case; no entrance rule can reopen a pile that already sealed.)
 
 - **Task 2b, a finding: the first two forms of the entrance rule moved pins.** The creation's throwaway (a flood over same-z non-zone walkable ground, items blocking, cap 4 x zone + 16) moved 8 of 84 scenario tests (e.g. `a_stockpile_around_the_campfire_never_zones_or_receives_the_fire`: 0 pick-ups after t=2500 against the pinned 80; `a_full_stockpile_never_stacks_uncarried_stones`: zone (62,62,9) not full). Mechanism, from a dump of the 24-cell pile: the camp is a small hollow, walled by rock and trees, with fewer than 112 same-z walkable cells outside the zone, so every real entrance flooded dry under the cap and read as a pocket. Following ramps (`astar_neighbours`) fixed 7 of 8. The 8th (`a_carried_stone_is_always_set_down_beside_its_carrier`, delay 20, two stones landing 3 cells from the carrier at ticks 2337/2574) came from loose stones: they were walls in the flood, so ground fenced by loose stones read as a pocket and lost its depth-1 seeds, which changed the fill order (grids at tick 2300/2336 differ old vs new on row y=66). A third failure was the pre-commit gate's two `lib.rs` unit tests (`haul_work_positions_gate_both_legs_on_a_free_standable_pile_tile`, `a_stone_at_a_pit_rim_is_lifted_from_the_ramp_below`): on a tiny fixture every walkable cell outside the one-cell zone is fewer than the cap, so a plain cap reads ordinary ground as a pocket. The final rule floods with terrain only (no items, no dwarves; they move), over ramps, cap 4 x zone + 16, and a flood that runs dry is a pocket only if every cell beside it is a pile cell (rock, a drop or the map edge beside it makes it open ground). With it the lib unit tests (91 passed, 5 ignored = the RED goal tests) and the whole `scenario` suite is green (83 passed, 1 ignored = the chain test) and NO pin was re-pinned.
+- **Task 4 (Agent B), the wire.** `protocol::Goal` plus `goals` on `Snapshot` (after `tick`) and `Delta` (after `speed`, before `refusals`), no `Default`, no serde default, always serialized. `bridge::goals_out` is the one mapper, used by `snapshot()` and `delta()`. 90 `Snapshot {`/`Delta {` literals gained `goals: Vec::new()` (a script that matched braces; `cargo check --workspace --all-targets` then passed), and the JSON fixtures that are parsed (client-core `tests/mirror.rs`, tui `main.rs`, gui `ingest.rs`) gained `"goals":[]`; the python bench fixtures are not parsed by Rust and were left. The serve test uses two zone cells at the dwarves' tiles (a pair of wood on one, tetrahedrite alone on the other) and computes the stored count from the SAME message's `items`/`zones`/`carrying`. Mutation row re-pointed: `2-3-master-of-time.sh` "delta bridge hardcodes normal speed" (its anchor `speed,\n\n        refusals` became `speed,\n        goals: goals_out(world),\n        refusals`).
 
 ### File List
 
 - `crates/sim-core/src/lib.rs` (goals, stored helper, `pile_targets` entrance rule, unit tests), `crates/sim-core/src/save.rs`, `crates/sim-core/tests/scenario.rs` (chain test, ring test, determinism reader), `crates/sim-core/tests/save_load.rs`
 - `crates/simd/src/main.rs` (load bound and two tests)
+- (Agent B, Task 4) `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs`, `crates/simd/tests/serve.rs`, `_bmad-output/implementation-artifacts/mutations/2-3-master-of-time.sh`, and the `Snapshot`/`Delta` literals in `crates/client-core`, `crates/tui`, `crates/gui` (src and tests)
 - `_bmad-output/implementation-artifacts/12-12-the-first-goals.md`
 
 ## Change Log

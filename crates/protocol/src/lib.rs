@@ -385,6 +385,10 @@ mod tests {
         plain.refusals.push(refusal);
         let encoded = serde_json::to_string(&plain).unwrap();
         assert!(encoded.contains(&format!(r#""refusals":[{literal}]"#)));
+        assert!(
+            encoded.find(r#""goals""#) < encoded.find(r#""refusals""#),
+            "goals sit after speed and before refusals"
+        );
         assert_eq!(serde_json::from_str::<Delta>(&encoded).unwrap(), plain);
     }
 
