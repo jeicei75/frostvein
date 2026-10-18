@@ -409,6 +409,9 @@ What they do not prove:
   - A validator that refused the walk-to-stone or lift phase would stay green.
   - The edge probe loaded a real save at every tick of a clear, and 0 of 73 were refused, so there is no defect today.
 
+After triage, `scripts/reap-build-caches.sh --tmp-only --force` reaped 19 `/tmp` directories (37.3 GB listed, 20.5 GB
+free space reclaimed), run 1's leftover layer caches included.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
