@@ -375,7 +375,7 @@ What they do not prove:
 - **AC 10** and the gui half of **AC 8**: headless only.
 - **AC 13** happens at merge.
 
-- [ ] [Review][Patch] **The "never below him" let-go clause is pinned by no test** [`crates/sim-core/src/lib.rs:1380`]
+- [x] [Review][Patch] **The "never below him" let-go clause is pinned by no test** [`crates/sim-core/src/lib.rs:1380`]
   (acceptance, MED, RAN; REWORK of row 4)
   - Deleting `|| (clearing && cell.z < pos.z)` keeps the whole scenario suite green, 83 of 83, and no
     `12-11.sh` row targets it.
@@ -385,11 +385,11 @@ What they do not prove:
     spine bullet, and nothing would notice.
   - Fix: a fixture where the cancelled miner has a free lower neighbour and every same-level side refused, RED with
     the clause deleted, plus a mutation row.
-- [ ] [Review][Patch] **The story record still says "no new saved state"**
+- [x] [Review][Patch] **The story record still says "no new saved state"**
   [`_bmad-output/implementation-artifacts/12-11-nothing-floats.md:22`, `:351`] (acceptance, LOW, read)
   - Since `31c0b16`, `SavedDwarf.clearing` is a required field by Wolf's ruling (b).
   - Correct both lines. The guardrail line "no new saved field" should name the one exception.
-- [ ] [Review][Patch] **Refresh the seat card for the re-sit**
+- [x] [Review][Patch] **Refresh the seat card for the re-sit**
   [`_bmad-output/implementation-artifacts/12-11-signoff/vehicle-card.md:44`, `:92-106`] (feature, LOW, RAN; three
   findings merged)
   - Add a "Known, by design" line for #187: in a staircase-plus-tree run, the last row-1 cut was refused for about
@@ -412,6 +412,55 @@ What they do not prove:
 
 After triage, `scripts/reap-build-caches.sh --tmp-only --force` reaped 19 `/tmp` directories (37.3 GB listed, 20.5 GB
 free space reclaimed), run 1's leftover layer caches included.
+
+**Run 2 patch pass, 2026-10-18 (fresh session, Opus 5.5): all 3 landed** in `69d0db5`, `502cb90`, `db0e8c0`
+(row 25), `4f3fcd7` (record), `b0b72a4` (seat card). Production code is unchanged: this pass is one test, one
+mutation row and two documents.
+
+- **The new test's first fixture could not go RED.** `a_miner_whose_channel_is_cancelled_mid_clear_never_sets_the_stone_down_below_him`
+  (`69d0db5`) opened a pit step east of the miner, but from the step the ramp also led up to open ground outside the
+  walled corridor. The step was his way out, so `walls_in_a_dwarf` refused it before the z clause could.
+- Row 25 SURVIVED on the first table run. A probe in a scratch worktree showed the cause: with the clause deleted,
+  the step was `walls=true`, so the stone stayed on his tile.
+- `502cb90` walls the step's three other upper exits, so his tile is its only way up. The step is then refused by
+  the z clause alone. The probe goes RED with `the stone left the miner's tile on Pos { x: 63, y: 62, z: 9 }:
+  Some((Id(10), Pos { x: 64, y: 62, z: 8 }))`, one level down.
+- The "no new saved state" lines (`:22`, the guardrail) now name `SavedDwarf.clearing`. The line in run 1's finding
+  quotes the old claim and is left as written.
+- The seat card gained four things: a fresh-world start (a pre-12.11 save is refused), the one-level pile's ~22 of 32
+  note, the tunnel figure t735 on `5a8fbaf` (review run 2's measurement; the sim is unchanged since), and #187 under
+  "Known, by design".
+
+| Item | Fix written for | Then tested from | Pre-existing-state fixture | Rework |
+|---|---|---|---|---|
+| 1 never below him (MED) | the job-gone let-go with a free LOWER neighbour | the same-level side: `..._sets_the_stone_down_beside_him` unchanged and green, row 16b still kills it; and the job-held path (`a_miner_who_lets_go_mid_clear_...`) green in the full gate | the walled corridor at the staircase site after a real lift (DEFAULT_SEED), plus a pit step as a channel leaves one (air over a ramp, `[64,62,8]`), a dead end whose only way up is the miner's tile | **REWORK** (row 4 of run 1: "beside him" pinned, "never below him" not) |
+| 2 record "no new saved state" (LOW) | the record | n/a: no code | `:22` and the guardrail line name `SavedDwarf.clearing`, ruling (b) | no |
+| 3 seat card refresh (LOW) | the card | n/a: no code | fresh world, pile ~22/32, t735 on `5a8fbaf`, #187 line | no |
+
+**Mutations.** Command: `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh mutations/12-11.sh`, the whole table
+(the script has no row filter), run after commit.
+- Final run: **38 of 38 KILLED**. Row 25 (the clause deleted) dies at the test's own panic line, `scenario.rs:3922`.
+- Exclusivity is UNVERIFIED: the full suite was not run with the clause deleted.
+
+Full gate on `b0b72a4`, `RUST_TEST_THREADS=1 scripts/gate.sh` (exit 0):
+
+```
+frostvein gate
+  cargo fmt --check           ok  0s
+  cargo clippy -D warnings    ok  2s
+  cargo test                  ok  633s
+  cargo test (pixel guards)   ok  3084s
+  tui has no sim-core edge                ok
+  client-core has no sim-core edge        ok
+  gui has no sim-core edge                ok
+  metrics ledger tests        ok  0s
+  bench tests                 ok  21s
+  mutation tables still apply ok  13s
+GATE GREEN  3762s
+```
+
+Still unproven live: AC 12 and the gui half of AC 15 (the re-sit from a fresh world, `12-11-signoff/vehicle-card.md`),
+AC 10 and the gui half of AC 8 (headless only). AC 13 happens at merge.
 
 ## Dev Notes
 
@@ -817,6 +866,7 @@ GATE GREEN  3673s
 
 | Date | Change |
 |---|---|
+| 2026-10-18 | Review run 2 patch pass (fresh session, Opus 5.5): all 3 `[Review][Patch]` items landed (`69d0db5`..`b0b72a4`). "Never below him" pinned by a pit-step fixture (the first fixture's step led out to open ground, so `walls_in_a_dwarf` refused it and row 25 SURVIVED; walled to a dead end, row 25 KILLED at its own line). Record names `SavedDwarf.clearing`; seat card refreshed for a fresh-world re-sit. 38 of 38 mutation rows KILLED. Full gate GREEN on `b0b72a4` (3762 s). Status stays in-progress: the seat re-sit (AC 12, AC 15 gui half) is unrun. |
 | 2026-10-18 | Code review run 2 on `5a8fbaf` (fresh session, 4 layers, diff `1b1b99b..5a8fbaf`): 9 of 10 closure rows audited CLOSED, row 4 REWORK (the 'never below him' let-go clause is unpinned: deleting it keeps 83 of 83 scenario tests green). 0 HIGH, 1 MED + 2 LOW patch, 2 defer, 8 dismissed. Stopping rule fired: no round 3; next is a fresh-world seat re-sit. 3 patches left as action items. Status -> in-progress. |
 | 2026-10-18 | Review run 1 patch pass (fresh session, Opus 5.5): all 10 `[Review][Patch]` items landed (`31c0b16`..`c051bf0`). `Clearing` saved as a REQUIRED field (Wolf's (b)); serde read a missing `Option` as `None`, so `deserialize_with` makes pre-12.11 saves refused. simd refuses non-miner, cut-job, wrong-stone and two-holder clearing saves. Cancel mid-clear drops beside him; `haul` only from the lift; Walk after the set-down. AC 3 pinned in the sim and judged by the wire (pile over four levels, 32 of 32). Row 7's "column alone is equivalent" was FALSE for a dig (row 7c). (12,4,4) pinned under the (12,4,1) ruling, #186 noted. 16 new/changed mutation rows KILLED; wire 5/5 + 5/5 OK, deliberate RED 22 of 32. Status -> review (round 2). |
 | 2026-10-17 | Seat re-sit (Wolf) on `e098f71`: "no stuck anymore with old save and no flying stones .. well we need to tweak details in later stories still most likely but now it's ok". Seat PASS; detail tuning left to later stories (#203, #204 already filed). Next: code review in a fresh session. |
