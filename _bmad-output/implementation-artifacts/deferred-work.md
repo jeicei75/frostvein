@@ -2694,3 +2694,8 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **A dig's own spawned stone landing has no `closes_last_level_exit`** (`crates/sim-core/src/lib.rs:2240`, blind, read). It sits beside #203.
 - **The serve D7 test does not pin one dwarf across its before/during/after stages** (`crates/simd/tests/serve.rs:2935`, edge, read). It also relies on DEFAULT_SEED cells, so a worldgen change would surface as a 2,000-delta timeout.
 - **The serve mid-clear load test's "opened" check does not pin the carrier as the cutter** (`crates/simd/tests/serve.rs:1271`, edge, read).
+
+## Deferred from: code review of 12-11-nothing-floats, run 2 (2026-10-18)
+
+- **A kept clearing landing is re-checked against only part of the set-down rules** (`crates/sim-core/src/lib.rs:1799-1807`, acceptance + edge, read). The kept-landing filter re-checks blocked, occupied, standable, drop side and last exit, but not `walls_in_a_dwarf`, the target column, `job_positions`, marked cells or `z < pos.z`. A landing that turns illegal between the lift and the set-down is used anyway: a dwarf steps into a pocket it closes, or Wolf marks the cell. simd validates neither `SavedClearing.landing` nor `drop_from`, which a real save never gets wrong. The sweeps found no violation.
+- **simd's mid-clear positive control covers only the carry tick** (`crates/simd/tests/serve.rs:3138`, edge, RAN). The committed test saves at the first carried tick only, so a validator that refused a walk-to-stone or lift-phase save would stay green. The edge layer's probe loaded a real DEFAULT_SEED save at every tick of a clear: 73 clearing ticks, 28 carry ticks, 0 refused.

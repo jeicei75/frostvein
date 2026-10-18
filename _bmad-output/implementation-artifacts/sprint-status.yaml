@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-17
+# last_updated: 2026-10-18
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-17
+last_updated: 2026-10-18
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2670,7 +2670,7 @@ development_status:
   #     one-wide stair caged a miner: #200 gui pulse (no TCP_NODELAY) fixed 5b6cb78, #201 rescue dig refused fixed
   #     3fa87ac (gate GREEN 4997 s); #169/#198/#199 parked. Seat pass 2 (Wolf) on d811a6b, his seat save: stuck
   #     dwarf freed, pulse gone. -> done. PR #202 opened on Wolf's yes (91c3ee1).
-  12-11-nothing-floats: review
+  12-11-nothing-floats: in-progress
   #   Created 2026-10-15 on 56bfbe5. #135 REPRODUCED (premise "unreproduced" stale): the 12.10b staircase sweep
   #     leaves 4-10 floating blocks in 24/24 runs; channel under a block / dig under a stone hang it, haul retried
   #     forever; digging a tree's ground leaves the trunk on air (92/259 trees exposed). Dwarves never on air.
@@ -2683,6 +2683,10 @@ development_status:
   #     the never-saved world: `Clearing` unsaved, standing AC 3), 5 MED, LOW tail. Wolf ruled: save it with NO serde
   #     default (pre-12.11 saves refused); AC 3 sim pin + wire pile resized; (12,4,4) under the (12,4,1) ruling.
   #     10 patches LEFT AS ACTION ITEMS for a fresh bmad-review-patch session. 9 defer. -> in-progress.
+  #   2026-10-18 run-1 patch pass 10/10 (gate GREEN on c051bf0). Code review run 2 on 5a8fbaf (4 layers; edge
+  #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
+  #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
+  #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
   12-12-the-first-goals: backlog
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.

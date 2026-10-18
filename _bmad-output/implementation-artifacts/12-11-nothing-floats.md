@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.10b's creation
 
 # Story 12.11: Nothing Floats
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -342,6 +342,72 @@ Log's "Review run 1 patch pass" entry.
   cells** [`crates/simd/tests/serve.rs:2935`] — deferred.
 - [x] [Review][Defer] **The serve mid-clear load test's "opened" check does not pin the carrier as the cutter**
   [`crates/simd/tests/serve.rs:1271`] — deferred.
+
+**Code review run 2, 2026-10-18, on `5a8fbaf`** (fresh session; diff `1b1b99b..5a8fbaf`, the run-1 patch pass, 13
+files, +967/-33; code 3 files). It used the same layer setup as run 1: cargo 1.97.1 in each layer's own
+`/tmp/review-<layer>` target dir. Blind Hunter took `sim-core/src`. Edge Case Hunter took simd, sim-core `tests/`,
+`mutations/12-11.sh` and `floats_wire.py`. The two Opus auditors took the whole diff, with the story file.
+
+**Delta vs run 1.**
+- NEW findings after triage: 0 HIGH, 1 MED, 2 LOW to patch, 2 LOW to defer.
+- REWORK: 1. Closure-table row 4 (cancel mid-clear) is HALF-CLOSED. "Beside him" is pinned, but "never below him" is not.
+- The other 9 rows were audited CLOSED by the acceptance layer. It ran their tests and four sabotages, and forked 2,163
+  save→load copies of a live world with 0 divergences.
+- Raw findings: 13 (blind 3, edge 3 plus 3 wire hypotheses, acceptance 4, feature 3). 8 were dismissed.
+- **The stopping rule fires**: no new finding is HIGH, so the audit ends here. The next spend goes to the seat, not
+  to round 3.
+
+| Layer | Findings | Severity (after triage) | Ran |
+| --- | --- | --- | --- |
+| Blind Hunter | 3 | 0 kept (all dismissed) | a save→load→step probe at every tick t = 1..399 of a channel-mark clear, full `to_save` compared for 60 ticks (green) |
+| Edge Case Hunter | 3 + 3 wire hypotheses | 1 LOW defer, 1 LOW defer folded in; rest dismissed | simd `load_world_from` on a real save at every tick of a clear (73 clearing, 28 carry ticks, 0 refused); every `12-11.sh` payload applied to a scratch copy (all apply). **Partial coverage**: it went silent 8 min, answered the check-in by reporting early, and ran no wire and no mutation kill. The other layers ran both. |
+| Acceptance Auditor | 4 | 1 MED patch (REWORK), 1 LOW patch, 1 LOW defer, 1 to the live gate | closure-table audit; 2,163 save→load forks (0 diverged; the probe goes RED at 48-52/64-80 when the load drops `Clearing`); 4 sabotages; Wolf's real pre-12.11 save refused live (`missing field 'clearing'`), positive control with `clearing: null` loads; `floats_wire.py` OK 32 of 32; `way_down_wire.py` OK |
+| Feature Auditor | 3 | 1 LOW patch (3 merged) | hop table, every hop WIRED; live per-delta traces of the tunnel, 3 staircases, staircase plus tree; a mid-clear save through the daemon loaded into a fresh daemon (identical to the never-saved run); a cancel mid-carry (stone one cell from him); `floats_wire.py` OK 32 of 32; the same tracer on a `1b1b99b` binary goes RED (3 of 3 set-down swings, 12 empty-handed `haul` deltas); gui headless clip tests 4 of 4 |
+
+What the runs prove: on the final code, live on the wire, a miner walks to the stone as `dig`/`channel`. He reads
+`haul` from the lift to the set-down and walks after it, and he never sets a stone down more than a cell away (cancel
+included). A mid-clear save resumes exactly, and a pre-12.11 save is refused.
+
+What they do not prove:
+- **AC 12** and the gui half of **AC 15**: the seat PASS (2026-10-17, `e098f71`) predates this patch pass. It ran on
+  a save that is now refused by design, so a re-sit must start from a fresh world.
+- **AC 10** and the gui half of **AC 8**: headless only.
+- **AC 13** happens at merge.
+
+- [ ] [Review][Patch] **The "never below him" let-go clause is pinned by no test** [`crates/sim-core/src/lib.rs:1380`]
+  (acceptance, MED, RAN; REWORK of row 4)
+  - Deleting `|| (clearing && cell.z < pos.z)` keeps the whole scenario suite green, 83 of 83, and no
+    `12-11.sh` row targets it.
+  - The cancel fixture refuses every side, so the stone always lands on his own tile.
+  - `astar_neighbours(pos)` includes ramp-down cells. A miner on a pit step who loses his job mid-clear (cancel,
+    vanished job, trade change) could drop the stone one level down into the opened step, breaking D6, AC 4 and the
+    spine bullet, and nothing would notice.
+  - Fix: a fixture where the cancelled miner has a free lower neighbour and every same-level side refused, RED with
+    the clause deleted, plus a mutation row.
+- [ ] [Review][Patch] **The story record still says "no new saved state"**
+  [`_bmad-output/implementation-artifacts/12-11-nothing-floats.md:22`, `:351`] (acceptance, LOW, read)
+  - Since `31c0b16`, `SavedDwarf.clearing` is a required field by Wolf's ruling (b).
+  - Correct both lines. The guardrail line "no new saved field" should name the one exception.
+- [ ] [Review][Patch] **Refresh the seat card for the re-sit**
+  [`_bmad-output/implementation-artifacts/12-11-signoff/vehicle-card.md:44`, `:92-106`] (feature, LOW, RAN; three
+  findings merged)
+  - Add a "Known, by design" line for #187: in a staircase-plus-tree run, the last row-1 cut was refused for about
+    1,800 ticks while an idle dwarf wandered. `1b1b99b` behaves the same, so this patch did not cause it.
+  - Re-measure the tunnel figure. It says "all four marks dug by tick 713" on `86d60f4`, but HEAD finishes at t735.
+  - Say that sitting A's one-level pile (`x 56..72, y 66..73, z 9`) holds about 22 of 32 stones, so stones left
+    lying there are not an AC 3 failure. The ruling left the card's pile as it was.
+  - State that the re-sit starts from a fresh world, since the kept save is refused.
+- [x] [Review][Defer] **A kept clearing landing is re-checked against only part of the set-down rules**
+  [`crates/sim-core/src/lib.rs:1799-1807`] (acceptance + edge, LOW, read) — deferred, pre-existing (12.11 dev)
+  - The kept filter skips `walls_in_a_dwarf`, the target column, `job_positions`, marked cells and `z < pos.z`. A
+    landing that turns illegal between lift and set-down is used anyway: a dwarf steps into a pocket it closes, or
+    Wolf marks the cell.
+  - simd validates neither `landing` nor `drop_from`.
+  - The sweeps found no violation.
+- [x] [Review][Defer] **simd's mid-clear positive control covers only the carry tick**
+  [`crates/simd/tests/serve.rs:3138`] (edge, LOW, RAN) — deferred
+  - A validator that refused the walk-to-stone or lift phase would stay green.
+  - The edge probe loaded a real save at every tick of a clear, and 0 of 73 were refused, so there is no defect today.
 
 ## Dev Notes
 
@@ -747,6 +813,7 @@ GATE GREEN  3673s
 
 | Date | Change |
 |---|---|
+| 2026-10-18 | Code review run 2 on `5a8fbaf` (fresh session, 4 layers, diff `1b1b99b..5a8fbaf`): 9 of 10 closure rows audited CLOSED, row 4 REWORK (the 'never below him' let-go clause is unpinned: deleting it keeps 83 of 83 scenario tests green). 0 HIGH, 1 MED + 2 LOW patch, 2 defer, 8 dismissed. Stopping rule fired: no round 3; next is a fresh-world seat re-sit. 3 patches left as action items. Status -> in-progress. |
 | 2026-10-18 | Review run 1 patch pass (fresh session, Opus 5.5): all 10 `[Review][Patch]` items landed (`31c0b16`..`c051bf0`). `Clearing` saved as a REQUIRED field (Wolf's (b)); serde read a missing `Option` as `None`, so `deserialize_with` makes pre-12.11 saves refused. simd refuses non-miner, cut-job, wrong-stone and two-holder clearing saves. Cancel mid-clear drops beside him; `haul` only from the lift; Walk after the set-down. AC 3 pinned in the sim and judged by the wire (pile over four levels, 32 of 32). Row 7's "column alone is equivalent" was FALSE for a dig (row 7c). (12,4,4) pinned under the (12,4,1) ruling, #186 noted. 16 new/changed mutation rows KILLED; wire 5/5 + 5/5 OK, deliberate RED 22 of 32. Status -> review (round 2). |
 | 2026-10-17 | Seat re-sit (Wolf) on `e098f71`: "no stuck anymore with old save and no flying stones .. well we need to tweak details in later stories still most likely but now it's ok". Seat PASS; detail tuning left to later stories (#203, #204 already filed). Next: code review in a fresh session. |
 | 2026-10-17 | Seat finding (Wolf): a dig loop at 52,64,7. His save froze the pit: one miner caged by one moved stone, one in a terrain hole. Fixed the first (`caging_stone`, `44ca3fd`); new test RED before, GREEN after; cage UNFINISHED pin moved; row 18 KILLED. Filed #203 (terrain hole) and #204 (many-stone pocket on a full pile). Full gate GREEN (3693 s, one test thread). Status -> review. |
