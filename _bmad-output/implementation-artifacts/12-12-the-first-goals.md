@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
