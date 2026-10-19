@@ -508,7 +508,7 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 
 - **Task 2, goals.** `split_stored(ecs)` is the ONE copy of 3.3's stored rule (`create_haul_jobs` and the goals both call it); `stored_by_kind` counts it per kind; `advance_goals` runs after `carry_items` and cascades (D2); `World::goals()` reads progress live (D1, with the `// NOTE:`). `GoalsCompleted` is a resource, `assemble` takes `goals_completed` (0 from `generate`). `carry_items`' doc now says "LAST of the movers ... Only `advance_goals` follows it".
 - **Task 1 / chain test (AC 6), numbers.** `the_default_world_completes_the_goal_chain_with_scripted_commands` measured completion at wood tick 1,847; tetrahedrite tick 9,828; bloodstone tick 9,828 (it was stored at 6,352, so it completes by the cascade in the same tick). These equal the wire oracle's ticks (`oracle: 10 wood stored by tick 1847`, `10 tetrahedrite ... 9828`). Bound pinned at 10,500: a margin of 672 ticks (6.8%), chosen because the unpaused wire form drifted to 10,454. The test takes about 206 s in debug (about 10,030 ticks plus 200). It checks, every tick, progress == the oracle's stored count for all three goals, no goal completed before the one ahead, no goal un-completing, and each completion at a stock that meets its target; 200 ticks after the chain the tick has climbed and all three are still done.
-- **`same_seed_and_commands_remain_deterministic` changed beyond the `goals()` reader.** Its 21 x 21 x 21 pile from the origin stored no log in the 400-tick window (nor in 1,500), so the required "progress above 0" guard could not hold. I replaced that pile with a 3 x 3 pile at camp + (3..5, 3..5): wood is stored from tick 290 (4 logs by 432) and the test now runs in 2 s instead of 22 s. The test lost its giant-pile coverage; nothing else asserted on that pile in this test.
+- **`same_seed_and_commands_remain_deterministic` changed beyond the `goals()` reader.** Its 21 x 21 x 21 pile from the origin stored no log in the 400-tick window (nor in 1,500), so the required "progress above 0" guard could not hold. I replaced that pile with a 3 x 3 pile at camp + (3..5, 3..5): wood is stored from tick 290 (4 logs by 432). (Corrected at review run 1: this said "the test now runs in 2 s instead of 22 s", which does not reproduce. With the old pile restored in a scratch copy the test runs 5.3 s on HEAD against 6.4 s on `main`, debug, so dropping the pile hid no flood cost; the reason for the change is the "progress above 0" guard alone.) The test lost its giant-pile coverage; nothing else asserted on that pile in this test.
 - **Task 3.** `SaveState.goals_completed` (no serde default), filled in `to_save`, destructured in `from_save`; simd refuses `goals_completed > GOALS.len()` before reading positions.
 - **Task 2b tick cost: NOT measured here (the orchestrator measures it).** One thing to look at: `pile_targets` floods up to `4 x zone + 16` cells per distinct neighbouring ground component, so a very large zone (the 9,261-cell cube that `same_seed...` used to place) makes each call cost a flood of up to ~37,000 cells.
 - **Task 2b tick cost (orchestrator, measured): agent A's rule cost 17x the tick; an early exit restores it.** Release, a scratch probe (not committed) timing every `World::step` over 10,000 ticks of `plan-10-10-1.json` from tick 6, each build from its own scratch worktree:
@@ -532,7 +532,7 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
   stock dropped after the removal for: ['wood', 'tetrahedrite', 'bloodstone']
   GOALS OK
   ```
-  Only the end-state lines vary (two variants): runs 7511/7515 leave 4 tetrahedrite loose, 7512-7514 leave 3, with the haulers at different cells. The wire's ticks differ from the chain test's (1,847 / 9,828) because the daemon's connect snapshot is now tick 1 (tick 6 at creation): the crew stands elsewhere, so 6 of the 78 pile cells differ (`--plan-out` diffed against `plan-10-10-1.json`: digs and cuts identical). The sim itself did not move: a release probe of the scenario path on `985b7b7` and on `736da92` both give wood 1,847, tetrahedrite 9,828, bloodstone 9,828 (stored 6,352).
+  Only the end-state lines vary (two variants): runs 7511/7515 leave 4 tetrahedrite loose, 7512-7514 leave 3, with the haulers at different cells. The wire's ticks differ from the chain test's (1,847 / 9,828) because the daemon's connect snapshot is now tick 1 (tick 6 at creation): the crew stands elsewhere, so 6 of the 78 pile cells differ (`--plan-out` diffed against `plan-10-10-1.json`: digs and cuts identical). The sim itself did not move: a release probe of the scenario path on `985b7b7` and on `736da92` both give wood 1,847, tetrahedrite 9,828, bloodstone 9,828 (stored 6,352). (Corrected at review run 1: the `deltas carried goals` count is not fixed across runs either. The reviewers' 4 connect-at-once re-runs gave 9814 with identical tick lines, and the completion ticks follow the connect tick: 2,056 / 9,618 at connect tick 1, 1,847 / 9,828 at connect tick 6, the Feature Auditor's 3 of 3.)
   `tui 7521 --frames 2 --z 9` against a fresh daemon prints `goal 1 of 3: wood 0/10` in the trade grey (150,160,170) at tick 1 and tick 2.
 - **Orchestrator, Task 5:** the goal row was drawn at `h - 4`, a second literal beside `FOOTER_ROWS`; now `h - FOOTER_ROWS`.
 
@@ -560,6 +560,37 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
   GATE GREEN  3914s
   ```
 
+- **Review run 1 patch pass (2026-10-19, Opus, fresh session).** All 4 `[Review][Patch]` items.
+  - **AC 11 closed for holes beside rock, a drop or the map edge** (`b3a9753`, `97f153d`). `pile_targets`' flood no
+    longer calls a hole open when a flooded cell touches a cell that is neither pile nor standable. It is open only
+    when it reaches a cell outside the zones' x/y bounding box, or the cap (4 x zone + 16). A hole the pile rings
+    cannot leave the box, so it is a pocket whatever else borders it. The NOTE states the one limit left: a ringed
+    hole bigger than the cap (a one-cell-wide ring about 17 cells across) still reads as open.
+  - **RED:** `a_pile_round_ground_beside_rock_still_fills_every_cell` (scenario.rs; the ring of
+    `a_pile_round_enclosed_ground_still_fills_every_cell` plus one `Solid(Stone)` at the fire's west neighbour) on
+    `f7df25b`: `the ring sealed itself: 16 of 20 cells stored, last at tick 1451 (now 6050); 4 free pile cells
+    [(63,63,9), (65,63,9), (63,65,9), (65,65,9)] while 10 haul jobs retry`, the Acceptance Auditor's figures.
+  - **Ring test strengthened** (both ring tests share `assert_ring_fills`): it counts stored items by 3.3's rule
+    (one uncarried item per pile cell, `uncarried_item_tiles`), and it asserts AC 11's no-retry clause directly:
+    at most 100 ticks with a haul job in retry cooldown while a pile cell is free. On the fix: 0 ticks (plain ring)
+    and 20 (boulder ring). On the old rule with the earlier `free.is_empty()` assert stubbed (scratch worktree):
+    `haul jobs sat in retry cooldown for 4569 ticks while a pile cell was free`. That shows the new assert kills on
+    its own.
+  - **Mutation row 14** "a hole beside rock reads as open again" (the reviewed rule restored): KILLED by the boulder
+    test at `scenario.rs:5272`. Row 13 still KILLED by the plain ring test at the same line. 16 rows in the table.
+  - **Tick cost** (release, scratch worktrees, every `World::step` over 10,000 ticks of `plan-10-10-1.json` from
+    tick 6, 2 runs each). Old rule (`f7df25b`): mean 0.261 / 0.262 ms, p99 0.600 / 0.624, max 9.09 / 9.88,
+    0 ticks over 10 ms. New rule (`b3a9753`): mean 0.297 / 0.295 ms, p99 0.734 / 0.674, max 9.06 / 9.61, 0 over
+    10 ms. That is +13% on the mean (0.296 against 0.262 ms; the dev record's reference was 0.265), with p99 and
+    max about the same, still 0 over 10 ms, and far from the 17x of agent A's rule. Goals end the same (12/10/1, all done). Worst case, the 518-cell pile (camp +-20, z +-3) over 5,000
+    ticks: old 3.35 ms mean, p99 6.64, max 14.8, 31 over 10 ms; new 1.62 ms, p99 4.65, max 12.7, 16 over 10 ms.
+  - **Seat card** (`09139bb`): the spare tetrahedrite is `[45, 83, 12]`, just west of the South-west run's last cell.
+    It is the only one within 4 cells of any run (scratch probe on DEFAULT_SEED). The plan's 46 digs plus that cell
+    give 11 tetrahedrite items with every mark dug, against 10 without it. The card says its pile cell counts come
+    from one-level rects and are approximate at the seat.
+  - **Record:** the two claims that did not reproduce are corrected in place (the determinism test's run time, the
+    deltas count). The spine bullet and the `pile_targets` NOTE state the rule as it now is.
+
 ### File List
 
 - `crates/sim-core/src/lib.rs` (goals, stored helper, `pile_targets` entrance rule, unit tests), `crates/sim-core/src/save.rs`, `crates/sim-core/tests/scenario.rs` (chain test, ring test, determinism reader), `crates/sim-core/tests/save_load.rs`
@@ -568,7 +599,7 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 - (Agent B, Task 5) `crates/client-core/src/lib.rs`, `crates/client-core/tests/mirror.rs`, `crates/tui/src/view.rs`, `crates/tui/src/main.rs`, `crates/tui/tests/client.rs`, `crates/gui/src/ingest.rs`, `crates/gui/src/appearance.rs`
 - (Agent B, Task 4, literals) also `crates/gui/src/capture.rs`, `crates/gui/src/pick.rs`, `crates/gui/src/project.rs`, `crates/gui/tests/capture.rs`, `crates/gui/tests/headless.rs`
 - (Agents A and B, re-pointed rows) `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`, `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
-- `_bmad-output/implementation-artifacts/mutations/12-12.sh` (new, 15 rows)
+- `_bmad-output/implementation-artifacts/mutations/12-12.sh` (new, 15 rows; 16 after review run 1)
 - `_bmad-output/implementation-artifacts/12-12-signoff/vehicle-card.md` (new)
 - `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`, `_bmad-output/implementation-artifacts/metrics/12-12-the-first-goals.md`

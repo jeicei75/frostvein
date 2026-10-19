@@ -210,7 +210,9 @@ graph LR
   carry all three `Goal { kind, target, progress, completed }` in chain
   order; clients only print them. A pile cell's way in must reach ground
   outside the pile, so a pile ringing walkable ground (the campfire's
-  neighbours) no longer seals itself (Q3).
+  neighbours) no longer seals itself (Q3). A hole the pile rings is a
+  pocket whatever else borders it (rock, a drop, the map edge); only a
+  ringed hole bigger than the entrance flood's cap reads as open.
 
 ### AD-17 — The evidence ladder for a real renderer
 
