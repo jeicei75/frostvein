@@ -210,9 +210,14 @@ graph LR
   carry all three `Goal { kind, target, progress, completed }` in chain
   order; clients only print them. A pile cell's way in must reach ground
   outside the pile, so a pile ringing walkable ground (the campfire's
-  neighbours) no longer seals itself (Q3). A hole the pile rings is a
-  pocket whatever else borders it (rock, a drop, the map edge); only a
-  ringed hole bigger than the entrance flood's cap reads as open.
+  neighbours) no longer seals itself (Q3). Ground is a way out when its
+  flood reaches a cell outside the x/y box round every pile cell or the
+  cap (4 x all pile cells + 16); a flood that runs dry is a pocket,
+  whatever borders it. Enclosed ground still reads as open, and a thick
+  band round it seals, when it leaves the box (the box ignores z, so a
+  ramp down to a closed cellar outside it does it) or past the cap (a
+  lone one-wide ring 20 across). The floods' answers are kept until a
+  tile or the zones change (12.12 review run 2).
 
 ### AD-17 — The evidence ladder for a real renderer
 

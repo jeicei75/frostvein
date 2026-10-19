@@ -386,7 +386,9 @@ After triage, `scripts/reap-build-caches.sh --tmp-only --force` reaped 11 direct
 and reclaimed 6.0 GB of free space. Review cost row: $16.81, 290 turns (`87de117`).
 
 - [x] [Review][Decision] **The box exit makes `pile_targets` several times slower once piles are spread out** —
-  RESOLVED (Wolf, 2026-10-19): option (a), fix now; became the first Patch below. Severity HIGH. Sources: Acceptance (RAN), Feature (RAN), Blind (RAN, synthetic): a three-way convergence.
+  RESOLVED (Wolf, 2026-10-19): option (a), fix now; became the first Patch below. **RE-RULED at the patch pass
+  (Wolf, 2026-10-19, "b"): per-pile boxes (a) cut the cost but resealed the campfire ring in a compact layout; the
+  fix landed instead as one box plus a cache of the floods' answers, see the run 2 patch pass.** Severity HIGH. Sources: Acceptance (RAN), Feature (RAN), Blind (RAN, synthetic): a three-way convergence.
   - **Where:** `crates/sim-core/src/lib.rs:828-832` takes one box over the union of ALL zones. `:845` exits only
     outside it or at the cap, `4 x all zone cells + 16`. The memo short-circuits on the START cell only
     (`:837`). It is called twice per claimable haul job per tick (`claim_jobs` `:582`/`:585`, via `work_positions`
@@ -715,8 +717,12 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
   - **Q3:** Wolf cleared the west pile: "yes dropped but goal stays marked as done".
   - **Sitting B (the ring round the fire, the card's AC 11 step): NOT RUN, Wolf's call** ("too complicated test").
     AC 11 stands on `a_pile_round_enclosed_ground_still_fills_every_cell`,
-    `a_pile_round_ground_beside_rock_still_fills_every_cell`, rows 13 and 14, and the review's wire replay of
-    sitting B (20/20 at tick 2763).
+    `a_pile_round_ground_beside_rock_still_fills_every_cell`, rows 13 and 14, and review run 2's replays of
+    sitting B on `6aa424d`: the scenario path fills 20/20 at tick 2859 with 0 retry ticks (Acceptance), and the
+    live wire fills 20/20 at tick 2881 (Feature). (Corrected at the run 2 patch pass: this line cited run 1's wire
+    replay, 20/20 at tick 2763, which ran on `813c218`, before the box rule of `b3a9753`. Run 2's replays
+    predate that pass's flood cache, which keeps the floods' answers and changes none of them; the ring tests ran
+    on it, see below.)
   - **Seen at the seat, not 12.12's:**
     - Miners stuck in narrow pits. First, a one-wide tunnel at `77,70`: a clearing miner lifts and sets down one
       stone 32 times while the other retries her dig. Later, a miner frozen with a stone in a stone-walled pit at
@@ -729,6 +735,62 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
     - Both stuck miners got going again once Wolf designated more digs. Posted on #206 (the tunnel loop and the
       slow ticks) and #204 (the frozen miner).
 
+- **Review run 2 patch pass (2026-10-19, Opus, fresh session).** All 3 `[Review][Patch]` items; the HIGH one landed
+  as Wolf re-ruled it mid-pass.
+  - **First ruling, (a) per-pile boxes** (`54b35bd`, `5b112cf`). Wolf took my variant of the Patch's wording
+    ("a"): a flood is open once it reaches a cell outside EVERY pile component's x/y box, the cap, or a cell this
+    call already found open (the Patch's literal "its own pile's box" depends on visiting order). That cut
+    spread5 from 21.5 to 7.7 ms, but **resealed a ring in the compact layout**: the plan's campfire ring (two z9
+    components) and the added squares, with rock between them, enclose ground that no one pile's box holds. It
+    read as open, the ring sealed as on the old rule, 33 haul jobs retried for good, and tetrahedrite stopped at
+    1/10 (HEAD 10/10). It also cost +20% on the plan alone. I stopped and asked again.
+  - **Re-ruled (b), landed** (`25fe2da`): back to HEAD's one box over every pile. The floods' answers are kept in
+    `Terrain::pile_ground` (a `Mutex` beside the tiles, so no signature changes) for the zones they were found
+    for. `set_tile` drops them, and a change in the zones replaces them. The floods read terrain and zones only, not
+    `blocked`, so moving stones do not stale them. An answer is a property of the ground's component within the
+    box (it leaves the box or reaches the cap from any start), so a kept answer is the answer a new flood would
+    give: fill is HEAD's. A flood also stops at a cell already answered.
+  - **RED, as the Patch asked, a measurement** (release, every `World::step` over 10,000 ticks of
+    `plan-10-10-1.json` from tick 6, scratch worktrees, 4 at a time; mean ms; goals as wood/tet/blood stored):
+
+    | Layout | old rule `f7df25b` | HEAD `502be2b` | per-pile `54b35bd` | cache `25fe2da` |
+    |---|---|---|---|---|
+    | plan | 0.300 | 0.368 | 0.424 | **0.206** |
+    | plan + three far 2x2 piles | 0.674 | 2.208 | 0.604 | **0.240** |
+    | plan + five 5x5 spread | 4.97 | 19.84 (9,539 ticks over 10 ms) | 7.65 | **2.86** (9 over 10 ms) |
+    | plan + five 5x5 compact | 3.71, tet 1/10 | 2.41, 12/10/0 | 4.09, tet 1/10 | **0.77**, 12/10/0 |
+
+    Goals end the same on HEAD and the cache in every layout (12/10/1 on plan and far; 12/0/0 spread5; 12/10/0
+    compact5). The 518-cell pile (camp +-20, z +-3, 5,000 ticks, 3 at a time): old 3.95, HEAD 2.01, cache 1.94
+    ms; the floods are not its cost.
+  - **Tests.** `the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change` (lib.rs, replaces this pass's
+    `spread_piles_flood_only_the_ground_beside_them`): a 5x5 pile with a hole closed by a rock spur. A second call
+    floods 0 cells; digging the spur opens the hole (`(7,6)` depth 2 to 1); taking the two cells north of the hole
+    out of the zone opens it (`(6,7)` 2 to 1). `two_piles_that_ring_ground_together_still_fill_every_cell`
+    (scenario.rs, `5b112cf`): two piles and rock jointly ring a hole; fills 19/19 on HEAD and the cache, 16/19 on
+    the per-pile rule as first worded. It needs a two-column bar: a one-column bar's cells find their west
+    neighbour open first and `.any()` never floods the hole, so the first fixture survived row 16 (my checkpoint
+    example to Wolf was wrong in that detail).
+  - **Mutation table** (`env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh`, on `25fe2da`): **20/20 KILLED**.
+    Rows 15-18 are new: 15 the answers dropped on every call (killed at "unchanged terrain and zones flood
+    nothing"), 16 a tile change keeps them ("the dug spur opens the hole"), 17 a zone change keeps them ("the hole
+    opens north once those cells leave the zone"), 18 a flood bounded by its own pile's box (the joint-ring test,
+    `scenario.rs:5271`). Each dies at its own assert. Rows 13 and 14 still KILLED.
+  - **NOTE and spine** (`lib.rs` `pile_targets`, `ARCHITECTURE-SPINE.md:213`): the rule as it is, with its limits.
+    Enclosed ground reads as open when it reaches past the box (the box ignores z: a ramp to a closed cellar; a
+    pile-and-rock pocket running past it) or past the cap (a lone one-wide square ring 20 on a side, hole 18; the
+    cap counts every pile). The cost paragraph names the cache.
+  - **Card:** the spare is the only tetrahedrite within four cells on that run's own level (`[46, 83, 13]` sits
+    above the run's last cell); the pile cost line now gives 2 ms for the 518-cell pile and 3 ms for five spread
+    piles. **Record:** the seat block cites run 2's replays (above).
+  - **Closure table:**
+
+    | Item | Written for | Tested from | Pre-existing-state fixture | REWORK |
+    |---|---|---|---|---|
+    | Spread-pile cost (HIGH) | ground inside the box between spread piles | the compact layout where piles and rock ring ground together (must still fill), and unchanged/changed terrain and zones | far, spread5, compact5 on HEAD `502be2b`; `two_piles_that_ring_ground_together_still_fill_every_cell` | **yes**: re-closes run 1's box rule (`b3a9753`), and this pass's own `54b35bd` |
+    | NOTE and spine overstate the rule | the doc text | the reviewers' ramp-cellar and tunnel runs | n/a (prose) | no |
+    | Stale seat record and card | the record and the card | the run 2 replays; a probe of `[46,83,13]` (`Solid(Tetrahedrite)`) | DEFAULT_SEED | no |
+
 ### File List
 
 - `crates/sim-core/src/lib.rs` (goals, stored helper, `pile_targets` entrance rule, unit tests), `crates/sim-core/src/save.rs`, `crates/sim-core/tests/scenario.rs` (chain test, ring test, determinism reader), `crates/sim-core/tests/save_load.rs`
@@ -737,7 +799,7 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 - (Agent B, Task 5) `crates/client-core/src/lib.rs`, `crates/client-core/tests/mirror.rs`, `crates/tui/src/view.rs`, `crates/tui/src/main.rs`, `crates/tui/tests/client.rs`, `crates/gui/src/ingest.rs`, `crates/gui/src/appearance.rs`
 - (Agent B, Task 4, literals) also `crates/gui/src/capture.rs`, `crates/gui/src/pick.rs`, `crates/gui/src/project.rs`, `crates/gui/tests/capture.rs`, `crates/gui/tests/headless.rs`
 - (Agents A and B, re-pointed rows) `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`, `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
-- `_bmad-output/implementation-artifacts/mutations/12-12.sh` (new, 15 rows; 16 after review run 1)
+- `_bmad-output/implementation-artifacts/mutations/12-12.sh` (new, 15 rows; 16 after review run 1; 20 after review run 2)
 - `_bmad-output/implementation-artifacts/12-12-signoff/vehicle-card.md` (new)
 - `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`, `_bmad-output/implementation-artifacts/metrics/12-12-the-first-goals.md`

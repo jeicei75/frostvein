@@ -80,7 +80,8 @@ drag along that row at that level.
 
    These runs hold exactly 10 tetrahedrite, the target, so one missed cell or one stone left lying
    stops the chain at 9 / 10 for good. **The spare:** `[45, 83]` at z 12, the cell just west of the
-   South-west run's last cell `[46, 83]`. It is the only tetrahedrite within four cells of any run.
+   South-west run's last cell `[46, 83]`. It is the only tetrahedrite within four cells of any run
+   on that run's own level; other levels hold more, e.g. `[46, 83, 13]` right above the run's last cell.
    Dig it at the start with the rest (the measured run then digs 11), or dig it if the count sits
    at 9 once every mark is gone.
 
@@ -129,6 +130,6 @@ stone left lying beside a free pile cell?
 - **A pile placed over items while the game is paused** shows the new count at once but completes
   nothing until the next tick (D1).
 - **A miner clearing his own way may lift an item off a pile** (12.11); a goal already done stays done.
-- **A big pile (several hundred cells) slows the daemon** (about 3.5 ms a tick, before and after 12.12).
-  Keep the piles to the sizes above.
+- **A big pile (several hundred cells) slows the daemon**: about 2 ms a tick for one 518-cell pile, and
+  about 3 ms for five 25-cell piles spread across the map. Keep the piles to the sizes above.
 - Goals cannot be skipped, reset or reordered, and there is no reward: they only count.
