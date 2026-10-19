@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -361,6 +361,97 @@ its own `/tmp/review-<layer>`.
 - [x] [Review][Defer] **`goal_lines`' `{:>2}` misaligns the `/` at progress 100 or more**
   [`crates/client-core/src/lib.rs:112`] — deferred, cosmetic.
 
+Code review run 2 (2026-10-19, diff `813c218..6aa424d`, session c09dd276). Four layers: Blind Hunter and Edge Case
+Hunter on Sonnet, Acceptance Auditor and Feature Auditor on Opus. **No layer timed out**, every layer ran
+`cargo 1.97.1` in its own `/tmp/review-<layer>`, and no layer touched the repo.
+- **Blind (sim-core):** release probe comparing the new and old `pile_targets` on synthetic layouts.
+- **Edge (tests, mutations):** both ring tests instrumented; rows 13 and 14 applied by hand in a `/tmp` copy, with
+  and without the free-cell assert stubbed.
+- **Acceptance:** audited the closure table; the boulder test on `f7df25b` (RED at `scenario.rs:5272`); trajectory
+  hashes on main, `f7df25b` and HEAD; tick cost; the spare census; sitting B and `goals_wire.py` on HEAD.
+- **Feature:** traced every hop and found all WIRED; ran live A/B daemons (HEAD against `813c218`) for sitting B,
+  a boulder loaded from a save, a pit in the hole, `goals_wire.py`, and spread multi-pile layouts.
+
+**Delta against run 1:** run 1 had 0 HIGH, 1 MED decision, 3 patch, 10 defer. Run 2 NEW: **1 HIGH** (decision), 1
+MED patch, 1 LOW patch, 2 defer, 1 dismissed. **REWORK: closure row 1 (AC 11 beside rock).** The fill is closed for
+its fixture, but the patch item's "re-measure the tick cost" was measured on the compact layout only. The rule's
+NOTE and spine bullet also claim more than the code does. Rows 2-5 are CLOSED (Acceptance RAN each one: 4569 retry
+ticks on the old rule with the free-cell assert stubbed; row 14 kills at `:5272`; plan plus spare gives 11
+tetrahedrite and 12/11/1; both record claims corrected). **The stopping rule does NOT fire: a HIGH is among the new
+findings.**
+
+**Coverage holes:** no gui run, so AC 8's visual half and the seat drag geometry for AC 11 are unverified; the
+mutation table was applied by hand to rows 13 and 14 only; AC 10 rests on the recorded seat.
+
+- [x] [Review][Decision] **The box exit makes `pile_targets` several times slower once piles are spread out** —
+  RESOLVED (Wolf, 2026-10-19): option (a), fix now; became the first Patch below. Severity HIGH. Sources: Acceptance (RAN), Feature (RAN), Blind (RAN, synthetic): a three-way convergence.
+  - **Where:** `crates/sim-core/src/lib.rs:828-832` takes one box over the union of ALL zones. `:845` exits only
+    outside it or at the cap, `4 x all zone cells + 16`. The memo short-circuits on the START cell only
+    (`:837`). It is called twice per claimable haul job per tick (`claim_jobs` `:582`/`:585`, via `work_positions`
+    `:1334`) and on every delivery (`:2211`).
+  - **Why:** once piles sit apart, ground round each pile lies inside the box, so every inward flood runs to the
+    cap. The old rule stopped at the first cell beside rock, which real terrain is full of.
+  - **Measured, same fill trajectory in every A/B (cost only, not behaviour):**
+    - Acceptance: `plan-10-10-1.json` plus three 2x2 piles far off. HEAD **2.39 ms** mean (p99 4.6), old rule
+      0.67, main 0.24.
+    - Feature, live daemon: 5 x 25-cell piles near the corners. **30.95 against 6.14 cpu-ms/tick mean; fast4x 17
+      t/s against 95.**
+    - Feature: the same 5 piles in a compact box. 13.81 against 7.15 mean, 48-66 t/s against 104-128.
+  - **Why it shipped:** the patch pass re-measured `plan-10-10-1` (+13%) and one contiguous 518-cell pile (faster)
+    only, the two layouts where the box exit fires at once. This is the 17x class from Task 2b again, with every
+    test green.
+  - **Options:**
+    - **(a) Fix now.** Give each flood the x/y box of the pile COMPONENT it borders (4-connected same-z pile
+      cells), memoised per component, and end a flood when it reaches a cell this call already classified. The
+      RED is a measurement: the far-pile and 5 x 25 layouts against the old rule, plus both ring tests and rows 13
+      and 14. Two piles jointly ringing a hole need a test. UNTESTED.
+    - **(b) Cache `pile_targets` once per tick.** A bigger change: `blocked` moves within a tick as stones land.
+    - **(c) Accept and file.** Fill is correct; file a `bug` + `route:story` issue with these numbers for the
+      performance story Wolf has pencilled in (#204/#206), and state the cost in the NOTE, spine and card.
+- [ ] [Review][Patch] **Bound each entrance flood by its own pile's box, not one box over every pile**
+  [`crates/sim-core/src/lib.rs:828-857`] — Severity HIGH, from Decision 1 (a).
+  - Give each flood the x/y box of the pile component it borders (4-connected same-z pile cells), memoised per
+    component. End a flood when it reaches a cell this call already classified.
+  - RED first, as a measurement: the far-pile layout (`plan-10-10-1.json` plus three 2x2 piles at `[104,104,13]`,
+    `[24,104,19]`, `[94,64,25]`) and 5 x 25-cell piles spread and compact, against the old rule (`f7df25b`) and
+    HEAD. Re-measure the compact plan against 0.296 ms too.
+  - Both ring tests and rows 13 and 14 must stay green or KILLED. Add a test for two piles that jointly ring a hole,
+    and a mutation row that puts back the single union box.
+- [ ] [Review][Patch] **The NOTE and spine bullet overstate the entrance rule**
+  [`crates/sim-core/src/lib.rs:814-821`, `ARCHITECTURE-SPINE.md:213-215`] — Severity MED. Sources: Acceptance (RAN),
+  Blind (read), Edge (read).
+  - **"A hole the pile rings cannot leave the box" / "only a ringed hole bigger than the cap reads as open" is
+    false.** The box ignores z and the flood follows ramps. Acceptance RAN the fire ring with the west hole cell as
+    a ramp down to a CLOSED one-wide cellar running west out of the box: HEAD seals at **16/20**, 4 free cells, 4569
+    retry ticks. With the cellar ending inside the box it fills 20/20. The layout is contrived; the claim is the
+    defect.
+  - **"One that runs dry is a pocket, whatever borders it"** misses a pile-plus-rock pocket that reaches past the
+    box. Acceptance RAN a 4-cell pile across a one-wide dead-end tunnel ending one cell past the box: 1/4 stored,
+    5753 retry ticks, the same on HEAD, `f7df25b` and main (not a regression).
+  - **"About 17 cells across"** is wrong: a one-wide square ring hits the cap from outer side 20 (hole 18 across),
+    and the cap counts every pile on the map, not the ring alone.
+  - State the rule as it is, with the limits. If Decision 1 is (a), write the NOTE for the new rule instead.
+- [ ] [Review][Patch] **The seat record and the card cite stale evidence** [`12-12-the-first-goals.md:626`;
+  `12-12-signoff/vehicle-card.md:132`, `:82-83`] — Severity LOW. Patched rather than deferred: a stale record
+  invents scope later. Sources: Acceptance (RAN), Feature (RAN).
+  - The seat block rests AC 11 on "the review's wire replay of sitting B (20/20 at tick 2763)". That replay ran on
+    `813c218`, before `b3a9753`. Cite run 2's HEAD replays: scenario path 20/20 at tick 2859 with 0 retry ticks
+    (Acceptance), and live wire 20/20 at tick 2881 (Feature).
+  - The card's "about 3.5 ms a tick, before and after 12.12" is stale. The patch pass measured the 518-cell pile
+    at 1.62 ms, and the card says nothing of spread piles (Decision 1).
+  - The spare's "the only tetrahedrite within four cells of any run" holds on the run's own level only. In 3D,
+    ore touches run cells directly, e.g. `[46,83,13]` above the run's last cell.
+- [x] [Review][Defer] **The ring test's retry bound is checked only until the ring fills, and its message
+  overclaims** [`crates/sim-core/tests/scenario.rs:5248-5253`, `:5280-5283`] — deferred. Source: Edge (RAN).
+  Passing runs read 0 and 20, the old rule 4569. The counter does not check that a cell is free ("while a pile cell
+  was free"), and the loop stops at fill. With 26 stones for 20 cells, haul jobs may legitimately retry after fill.
+- [x] [Review][Defer] **Only one boulder position is tested, and no ring touching a drop or the map edge**
+  [`crates/sim-core/tests/scenario.rs:5296-5301`] — deferred. Source: Edge (read). Feature RAN a pit in the hole
+  live (20/20). The map edge and the other three hole cells stay unprobed.
+- Dismissed (1): Blind's "a rock-bounded alcove inside the box now fills in a different order". An alcove closed by
+  pile and rock is an enclosure under Decision 1 (a), "a pocket whatever borders it". Acceptance's trajectory
+  hashes over 10,000 ticks of the plan are identical on main, `f7df25b` and HEAD.
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -661,3 +752,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-18 | Code review run 1 on `813c218` (4 layers, none timed out): 0 HIGH. 1 MED decision: AC 11 seals again when the hole touches rock or a drop. Wolf ruled (a), close it now. 4 patches left as action items; 10 defer. Status -> in-progress. |
 | 2026-10-19 | Review run 1 patch pass (Opus, fresh session): all 4 patches landed (`b3a9753` `97f153d` `09139bb` `9fe4f89`); boulder RED to green, row 14 KILLED; full gate GREEN on `9fe4f89` (3766 s). Status -> review for a round-2 review; AC 10 seat still open. |
 | 2026-10-19 | Seat (AC 10) PASS on `a4d07eb`, sitting A, Q1-Q3 (Wolf). Sitting B not run (Wolf's call); AC 11 rests on the ring tests and the review's wire replay. Stuck-miner loops and fast4x stalls seen; pre-existing on `main`, posted on #206 and #204. |
+| 2026-10-19 | Code review run 2 on `6aa424d` (diff `813c218..6aa424d`, 4 layers, none timed out): 1 HIGH decision, the single box over every pile makes `pile_targets` several times slower once piles are spread out (fill unchanged). Wolf ruled (a), fix now. 3 patches left as action items; 2 defer; 1 dismissed. Stopping rule did not fire. Status -> in-progress. |

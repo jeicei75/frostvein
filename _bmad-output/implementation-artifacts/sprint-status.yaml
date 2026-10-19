@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-18
+# last_updated: 2026-10-19
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-18
+last_updated: 2026-10-19
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2687,7 +2687,7 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: review
+  12-12-the-first-goals: in-progress
   #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
   #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
   #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
@@ -2706,6 +2706,12 @@ development_status:
   #   REVIEW-PATCH run 1 2026-10-19 (Opus, fresh): all 4 landed (b3a9753 97f153d 09139bb 9fe4f89). Ring hole is
   #     open only outside the zones' x/y box or at the cap; boulder RED -> green; row 14 KILLED; tick 0.296 vs 0.262 ms,
   #     0 >10 ms. Full gate GREEN on 9fe4f89 (3766s). -> review: round-2 review in a FRESH session; AC 10 seat open.
+  #   SEAT 2026-10-19 on a4d07eb: AC 10 PASS (sitting A Q1-Q3; sitting B waived by Wolf).
+  #   CODE REVIEW run 2 2026-10-19, diff 813c218..6aa424d (4 layers, none timed out): 1 HIGH decision: the single
+  #     union box makes pile_targets 3.5-5x the old rule once piles are spread (2.39 vs 0.67 ms; live 5x25 piles
+  #     30.95 vs 6.14 cpu-ms/t, fast4x 17 t/s), fill unchanged. Wolf ruled (a) fix now (per-pile-component box).
+  #     3 patches (that fix, NOTE/spine overclaim, stale record/card lines) LEFT AS ACTION ITEMS; 2 defer;
+  #     stopping rule did NOT fire (a HIGH). -> in-progress.
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional

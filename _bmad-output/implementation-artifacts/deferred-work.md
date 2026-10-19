@@ -2712,3 +2712,8 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **Per-tick item scans are unmeasured** (`crates/sim-core/src/lib.rs:409`, `:444`, blind, read). `split_stored` runs in `create_haul_jobs` and again in `advance_goals`, plus once per Snapshot/Delta via `goals()`.
 - **`World::from_save` does not bound `goals_completed`** (`crates/sim-core/src/lib.rs:2818`, blind, read). Only simd bounds it (`crates/simd/src/main.rs:375`). Any other loader would accept a count past the chain and report every goal done.
 - **`goal_lines`' `{:>2}` misaligns the `/` at progress 100 or more** (`crates/client-core/src/lib.rs:112`, blind, read). Cosmetic.
+
+## Deferred from: code review of 12-12-the-first-goals, run 2 (2026-10-19)
+
+- **The ring test's retry bound is checked only until the ring fills, and its message overclaims** (`crates/sim-core/tests/scenario.rs:5248-5253`, `:5280-5283`, edge, RAN). Passing runs read 0 (plain ring) and 20 (boulder); the old rule reads 4569 with the free-cell assert stubbed. The counter counts any Haul job in cooldown, not only while a pile cell is free, and the loop exits at fill, so nothing after the fill is counted. With 26 stones for 20 cells, haul jobs may legitimately retry after the fill.
+- **Only one boulder position is tested, and no ring touching a drop or the map edge** (`crates/sim-core/tests/scenario.rs:5296-5301`, edge, read). Row 14's mutant keys on any non-standable side neighbour, so one position kills it. A pit in the hole was RAN live by the feature layer (20/20). The map edge and the other three hole cells are unprobed.
