@@ -63,6 +63,10 @@ drag along that row at that level.
    | East of the fire | `x 66..68`, `y 60..67` | z 9 |
    | South, one step up | `x 58..66`, `y 68..70` | z 10 |
 
+   The pile figures on this card (67 cells here, 20 in sitting B) were measured with flat one-level
+   rectangles. The gui's pile drag follows the ground, so where the ground steps your pile can take a
+   few cells more or fewer. Read every cell count on this card as approximate.
+
 2. **Cut** (`5`) the three trees, at their trunk base: `[65, 56, 10]`, `[61, 74, 13]`, `[65, 73, 12]`.
 3. **Dig** (`1`) the tunnels to the ore. Step the slice to each level first.
 
@@ -73,6 +77,12 @@ drag along that row at that level.
    | South-east, high | `x 68, y 76..79` and `[69, 79]` | z 14 | tetrahedrite at `[69, 79, 14]` |
    | South-west | `x 51, y 72..77`; `x 48..50, y 77`; `x 48, y 78..80`; `x 46..47, y 80`; `x 46, y 81..83` | z 12 | tetrahedrite at `[51,77]`, `[50,77]`, `[48,80]`, `[46,83]` |
    | Bloodstone | `x 55, y 74..83` | z 13 | the bloodstone at `[55, 83, 13]` |
+
+   These runs hold exactly 10 tetrahedrite, the target, so one missed cell or one stone left lying
+   stops the chain at 9 / 10 for good. **The spare:** `[45, 83]` at z 12, the cell just west of the
+   South-west run's last cell `[46, 83]`. It is the only tetrahedrite within four cells of any run.
+   Dig it at the start with the rest (the measured run then digs 11), or dig it if the count sits
+   at 9 once every mark is gone.
 
 4. Speed up to `fast4x` and watch the goal list and the tui row.
 
