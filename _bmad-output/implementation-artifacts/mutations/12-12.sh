@@ -127,3 +127,11 @@ old = '&& is_walkable(terrain, blocked, *n) && open_ground(*n))'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '&& is_walkable(terrain, blocked, *n) && (open_ground(*n) || true))'))
 PY
+
+mutation "14 a hole beside rock reads as open again (AC 11, review run 1 Decision 1)" sim-core a_pile_round_ground_beside_rock_still_fills_every_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            if seen.len() >= cap || !in_box(cell) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if seen.len() >= cap || !in_box(cell) || side_neighbours(cell).iter().any(|n| !zones.contains(n) && !terrain.is_standable(*n)) {\n'))
+PY
