@@ -8,7 +8,7 @@ pub use save::{SaveState, SavedClearing, SavedDwarf};
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
-    ops::RangeInclusive,
+    sync::Mutex,
 };
 
 use bevy_ecs::{
@@ -704,6 +704,16 @@ struct Terrain {
     dims: Dims,
     tiles: Vec<Tile>,
     dirty: BTreeSet<Pos>,
+    pile_ground: Mutex<PileGround>,
+}
+
+/// The ground `pile_targets`' entrance floods have classified, kept for the zones it was found
+/// for: true when its flood found open ground. The floods read terrain and zones only, so the
+/// answers hold until one changes; `set_tile` drops them.
+#[derive(Default)]
+struct PileGround {
+    zones: BTreeSet<Pos>,
+    open: BTreeMap<Pos, bool>,
 }
 
 impl Terrain {
@@ -729,6 +739,11 @@ impl Terrain {
         let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
         self.tiles[index] = tile;
         self.dirty.insert(p);
+        self.pile_ground
+            .get_mut()
+            .expect("nothing panics holding the pile ground")
+            .open
+            .clear();
         true
     }
 
@@ -800,30 +815,6 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
     })
 }
 
-/// The x/y bounding box of each pile component (same-z pile cells joined by 4-neighbours).
-fn pile_boxes(zones: &BTreeSet<Pos>) -> Vec<(RangeInclusive<i32>, RangeInclusive<i32>)> {
-    let mut boxes = Vec::new();
-    let mut seen = BTreeSet::new();
-    for &start in zones {
-        if !seen.insert(start) {
-            continue;
-        }
-        let (mut xs, mut ys) = (start.x..=start.x, start.y..=start.y);
-        let mut stack = vec![start];
-        while let Some(cell) = stack.pop() {
-            xs = cell.x.min(*xs.start())..=cell.x.max(*xs.end());
-            ys = cell.y.min(*ys.start())..=cell.y.max(*ys.end());
-            for n in side_neighbours(cell) {
-                if zones.contains(&n) && seen.insert(n) {
-                    stack.push(n);
-                }
-            }
-        }
-        boxes.push((xs, ys));
-    }
-    boxes
-}
-
 #[cfg(test)]
 thread_local! {
     /// Cells `pile_targets`' entrance floods have taken off the queue: the cost test's count.
@@ -844,28 +835,41 @@ thread_local! {
 /// is not a target; such a zone takes no deliveries. Cells are joined by same-z 4-neighbours only.
 /// "Outside" is a flood over non-pile walkable ground, ramps included (`astar_neighbours`). One that
 /// runs dry is a pocket, whatever borders it (pile, rock, a drop or the map edge). One that reaches
-/// a cell outside the zones' x/y bounding box, or 4 x the zone size + 16 cells, is open ground: a
-/// hole the pile rings cannot leave the box. A ringed hole bigger than the cap (a one-cell-wide
-/// ring about 17 cells across) reads as open ground and seals as before.
+/// a cell outside the x/y box round every pile cell on the map, or 4 x the zone size + 16 cells
+/// (every pile counts), is open ground. Enclosed ground still reads as open, and a band two or more
+/// deep round it can seal as before, when:
+/// - it reaches past the box: the box ignores z, so a ramp down from the hole to a closed cellar
+///   that runs out of it does it, and so does a pile-and-rock pocket running past it;
+/// - it is bigger than the cap: a lone one-cell-wide square ring 20 cells on a side (hole 18).
 ///
-/// The box exit is the cheap one: this runs on every haul claim and delivery, and flooding to the
-/// cap each time cost 17x the tick (12.12 Task 2b). Most ground beside a pile lies outside it.
+/// The box exit is the cheap one: flooding to the cap on every haul claim and delivery cost 17x
+/// the tick (12.12 Task 2b). Ground between spread piles lies inside the box, so its floods still
+/// run to the cap; the answers are kept in `Terrain::pile_ground` until a tile or the zones change
+/// (review run 2), so they run again after each dig, not on each claim.
 fn pile_targets(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
     zones: &BTreeSet<Pos>,
 ) -> BTreeMap<Pos, u32> {
     let cap = 4 * zones.len() + 16;
-    let boxes = pile_boxes(zones);
-    let in_box = |p: Pos| {
-        boxes
-            .iter()
-            .any(|(xs, ys)| xs.contains(&p.x) && ys.contains(&p.y))
-    };
+    // The zones' x/y bounding box (empty with no zones).
+    let xs = || zones.iter().map(|p| p.x);
+    let ys = || zones.iter().map(|p| p.y);
+    let (box_x, box_y) = (xs().min()..=xs().max(), ys().min()..=ys().max());
+    let in_box = |p: Pos| box_x.contains(&Some(p.x)) && box_y.contains(&Some(p.y));
     // Loose stones and haulers move, so they do not fence ground off: only terrain does.
     let no_items = BTreeSet::new();
-    // Ground cells already flooded: true when their flood found open ground.
-    let mut ground: BTreeMap<Pos, bool> = BTreeMap::new();
+    let mut kept = terrain
+        .pile_ground
+        .lock()
+        .expect("nothing panics holding the pile ground");
+    if kept.zones != *zones {
+        *kept = PileGround {
+            zones: zones.clone(),
+            open: BTreeMap::new(),
+        };
+    }
+    let ground = &mut kept.open;
     let mut open_ground = |start: Pos| -> bool {
         if let Some(&open) = ground.get(&start) {
             return open;
@@ -2689,6 +2693,7 @@ fn assemble(
         dims,
         tiles,
         dirty: BTreeSet::new(),
+        pile_ground: Mutex::default(),
     });
     let mut schedule = Schedule::default();
     schedule.add_systems(
@@ -3581,6 +3586,7 @@ mod tests {
             dims,
             tiles,
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         }
     }
 
@@ -3595,6 +3601,7 @@ mod tests {
                 Tile::Empty,
             ],
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
 
         assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
@@ -4250,6 +4257,7 @@ mod tests {
             dims,
             tiles,
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
         let stone = Pos { x: 1, y: 0, z: 2 };
         let pit = Pos { x: 2, y: 0, z: 1 };
@@ -5581,6 +5589,7 @@ mod tests {
             dims,
             tiles: vec![Tile::Empty; 6],
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
         terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         terrain.tiles[super::worldgen::index(dims, 1, 0, 1)] = Tile::Solid(Material::Stone);
@@ -5606,6 +5615,7 @@ mod tests {
             dims,
             tiles: vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize],
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
         let heights = [
             ((0, 0), 3),
@@ -7384,36 +7394,56 @@ mod tests {
         );
     }
 
-    // 12.12 review run 2, Decision 1 (a): one box over every pile put the open ground between
-    // spread piles inside it, so each entrance flood ran to the cap (4 x 400 + 16 cells here).
-    // Every ground cell beside one of these piles lies outside every pile's box: one cell a flood.
+    // 12.12 review run 2, Decision 1 (b): the entrance floods ran on every haul claim and delivery,
+    // and between spread piles each ran to the cap (4x the tick). Their answers are now kept until
+    // the terrain or the zones change. A 5x5 pile holds a hole at (7,7) whose fourth side is a rock
+    // spur out to the pile's edge, so the hole is a pocket until the spur is dug or the pile cells
+    // north of the hole leave the zone.
     #[test]
-    fn spread_piles_flood_only_the_ground_beside_them() {
-        let terrain = flat_terrain(128, 128);
-        let zones: BTreeSet<Pos> = [(5, 5), (113, 5), (5, 113), (113, 113)]
-            .into_iter()
-            .flat_map(|(x0, y0)| {
-                (x0..x0 + 10).flat_map(move |x| (y0..y0 + 10).map(move |y| Pos { x, y, z: 1 }))
-            })
-            .collect();
-        assert_eq!(zones.len(), 400);
-        super::FLOODED.with(|n| n.set(0));
-        let targets = super::pile_targets(&terrain, &BTreeSet::new(), &zones);
-        let flooded = super::FLOODED.with(|n| n.get());
+    fn the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change() {
+        let at1 = |x, y| Pos { x, y, z: 1 };
+        let (hole, spur) = (at1(7, 7), [at1(7, 8), at1(7, 9)]);
+        let fixture = || {
+            let mut terrain = flat_terrain(16, 16);
+            for cell in spur {
+                terrain.set_tile(cell, Tile::Solid(Material::Stone));
+            }
+            let zones: BTreeSet<Pos> = (5..=9)
+                .flat_map(|x| (5..=9).map(move |y| at1(x, y)))
+                .filter(|cell| *cell != hole && !spur.contains(cell))
+                .collect();
+            (terrain, zones)
+        };
+        let targets = |terrain: &Terrain, zones: &BTreeSet<Pos>| {
+            super::FLOODED.with(|n| n.set(0));
+            let targets = super::pile_targets(terrain, &BTreeSet::new(), zones);
+            (targets, super::FLOODED.with(|n| n.get()))
+        };
+
+        let (mut terrain, zones) = fixture();
+        let (first, flooded) = targets(&terrain, &zones);
+        assert_eq!(first[&at1(7, 6)], 2, "the hole is a pocket");
+        assert!(flooded > 0);
+        let (again, flooded) = targets(&terrain, &zones);
+        assert_eq!(again, first);
+        assert_eq!(flooded, 0, "unchanged terrain and zones flood nothing");
+        for cell in spur {
+            terrain.set_tile(cell, Tile::Empty);
+        }
         assert_eq!(
-            targets.len(),
-            400,
-            "every cell of the four piles is a target"
+            targets(&terrain, &zones).0[&at1(7, 6)],
+            1,
+            "the dug spur opens the hole"
         );
+
+        let (terrain, mut zones) = fixture();
+        assert_eq!(targets(&terrain, &zones).0[&at1(6, 7)], 2);
+        zones.remove(&at1(7, 5));
+        zones.remove(&at1(7, 6));
         assert_eq!(
-            targets[&Pos { x: 9, y: 9, z: 1 }],
-            5,
-            "a pile fills from the middle"
-        );
-        // 4 piles x 40 ground cells round each.
-        assert!(
-            flooded <= 160,
-            "the entrance floods took {flooded} cells, more than one per cell beside a pile"
+            targets(&terrain, &zones).0[&at1(6, 7)],
+            1,
+            "the hole opens north once those cells leave the zone"
         );
     }
 

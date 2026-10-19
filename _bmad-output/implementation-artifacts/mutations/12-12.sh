@@ -136,27 +136,57 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            if seen.len() >= cap || !in_box(cell) || side_neighbours(cell).iter().any(|n| !zones.contains(n) && !terrain.is_standable(*n)) {\n'))
 PY
 
-mutation "15 one box over every pile again (AC 11 cost, review run 2 Decision 1)" sim-core spread_piles_flood_only_the_ground_beside_them <<'PY'
+mutation "15 the entrance floods' answers dropped on every call (AC 11 cost, review run 2 Decision 1)" sim-core the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    let boxes = pile_boxes(zones);\n'
+old = '    if kept.zones != *zones {\n'
 assert s.count(old) == 1
-new = ('    let (xs, ys) = (zones.iter().map(|p| p.x), zones.iter().map(|p| p.y));\n'
-       '    let (x0, x1, y0, y1) = (xs.clone().min().unwrap_or(0), xs.max().unwrap_or(-1), ys.clone().min().unwrap_or(0), ys.max().unwrap_or(-1));\n'
-       '    let boxes = vec![(x0..=x1, y0..=y1)];\n')
-p.write_text(s.replace(old, new))
+p.write_text(s.replace(old, '    if true {\n'))
 PY
 
-mutation "16 a flood is bounded by its own pile's box only (review run 2 Decision 1, as first worded)" sim-core two_piles_that_ring_ground_together_still_fill_every_cell <<'PY'
+mutation "16 a tile change keeps the floods' answers (review run 2 Decision 1)" sim-core the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = ('        self.pile_ground\n            .get_mut()\n            .expect("nothing panics holding the pile ground")\n'
+       '            .open\n            .clear();\n')
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "17 a zone change keeps the floods' answers (review run 2 Decision 1)" sim-core the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    if kept.zones != *zones {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false {\n'))
+PY
+
+mutation "18 a flood is bounded by its own pile's box (review run 2 Decision 1, first ruled (a))" sim-core two_piles_that_ring_ground_together_still_fill_every_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+own_box = (
+    '    let own_box = |start: Pos| {\n'
+    '        let (mut seen, mut stack) = (BTreeSet::from([start]), vec![start]);\n'
+    '        let mut b = (start.x, start.x, start.y, start.y);\n'
+    '        while let Some(c) = stack.pop() {\n'
+    '            b = (b.0.min(c.x), b.1.max(c.x), b.2.min(c.y), b.3.max(c.y));\n'
+    '            for n in side_neighbours(c) {\n'
+    '                if zones.contains(&n) && seen.insert(n) {\n'
+    '                    stack.push(n);\n'
+    '                }\n'
+    '            }\n'
+    '        }\n'
+    '        b\n'
+    '    };\n')
 for old, new in [
-    ('    let in_box = |p: Pos| {\n        boxes\n            .iter()\n            .any(|(xs, ys)| xs.contains(&p.x) && ys.contains(&p.y))\n    };\n',
-     '    let in_box = |b: usize, p: Pos| boxes[b].0.contains(&p.x) && boxes[b].1.contains(&p.y);\n'),
-    ('    let mut open_ground = |start: Pos| -> bool {\n', '    let mut open_ground = |b: usize, start: Pos| -> bool {\n'),
-    ('            if seen.len() >= cap || !in_box(cell) {\n', '            if seen.len() >= cap || !in_box(b, cell) {\n'),
+    ('    let in_box = |p: Pos| box_x.contains(&Some(p.x)) && box_y.contains(&Some(p.y));\n',
+     '    let _ = (box_x, box_y);\n' + own_box),
+    ('    let mut open_ground = |start: Pos| -> bool {\n',
+     '    let mut open_ground = |b: (i32, i32, i32, i32), start: Pos| -> bool {\n'),
+    ('            if seen.len() >= cap || !in_box(cell) {\n',
+     '            if seen.len() >= cap || !(b.0..=b.1).contains(&cell.x) || !(b.2..=b.3).contains(&cell.y) {\n'),
     ('&& is_walkable(terrain, blocked, *n) && open_ground(*n))',
-     '&& is_walkable(terrain, blocked, *n) && open_ground(boxes.iter().position(|(xs, ys)| xs.contains(&cell.x) && ys.contains(&cell.y)).unwrap(), *n))'),
+     '&& is_walkable(terrain, blocked, *n) && open_ground(own_box(cell), *n))'),
 ]:
     assert s.count(old) == 1, old
     s = s.replace(old, new)
