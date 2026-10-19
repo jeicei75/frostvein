@@ -5303,19 +5303,22 @@ fn a_pile_round_ground_beside_rock_still_fills_every_cell() {
 }
 
 /// 12.12 review run 2, Decision 1 (a): two piles that ring a hole together, touching only at
-/// corners. The west bar is a pile of its own, and its box (one column) holds none of the hole; the
-/// other pile's box holds all of it. A flood bounded by its own pile's box called the hole open
-/// from the bar's side, and that sealed the band as a hole read as a way in did (Task 2b).
-/// The ring's cells less the four that touch the bar: 3 + 13 pile cells round a 7-cell hole.
+/// corners. The west bar (two columns) is a pile of its own, and its box holds none of the hole;
+/// the other pile's box holds all of it. The bar's inner column is the first pile cell to try the
+/// hole, so a flood bounded by its own pile's box called the hole open, and the band sealed as it
+/// did when a hole read as a way in (Task 2b): 16 of 19 cells stored.
+/// The ring's cells less the four that touch the bar, plus a second bar column: 6 + 13 pile cells
+/// round a 7-cell hole.
 fn joint_ring_pile(fire: Pos) -> Vec<Pos> {
-    let bar = [(-2, -1), (-2, 0), (-2, 1)];
+    let bar = [(-3, -1), (-3, 0), (-3, 1), (-2, -1), (-2, 0), (-2, 1)];
     let cut = [(-2, -2), (-2, 2), (-1, -1), (-1, 1)];
     let cells: Vec<(i32, i32)> = ring_pile(fire)
         .into_iter()
         .map(|cell| (cell.x - fire.x, cell.y - fire.y))
         .filter(|cell| !cut.contains(cell))
+        .chain(bar[..3].iter().copied())
         .collect();
-    assert_eq!(cells.len(), 16);
+    assert_eq!(cells.len(), 19);
     // Two piles: no cell of the bar has a side neighbour in the rest.
     for (x, y) in bar {
         for n in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
