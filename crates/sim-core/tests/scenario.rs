@@ -5188,8 +5188,12 @@ fn ring_pile(fire: Pos) -> Vec<Pos> {
     cells
 }
 
-#[test]
-fn a_pile_round_enclosed_ground_still_fills_every_cell() {
+/// Places the 20-cell ring round the fire on flat ground, turns `rock` (cells of the unzoned hole)
+/// to `Solid(Stone)`, lays 26 loose stones south of it, and runs until the ring is full or 6,000
+/// ticks pass. Asserts AC 11 by 3.3's stored rule (`World::goals` counts by it; stones have no
+/// goal, so this counts the same way: one uncarried item per pile cell): every cell stored, and
+/// the haul jobs left are the surplus stones only, so none retries for a cell it cannot reach.
+fn assert_ring_fills(rock: &[Pos]) {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let fire = world.camp_origin();
     // Flat open ground round the camp, so nothing but the zone shapes the fill.
@@ -5205,6 +5209,13 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
     assert_eq!(pile.len(), 20);
     let rects: Vec<Rect> = pile.iter().map(|&cell| rect(cell, cell)).collect();
     assert_eq!(world.place_stockpile(&rects), None, "the ring was refused");
+    for &cell in rock {
+        assert!(
+            !pile.contains(&cell) && cell != fire,
+            "{cell:?} is not in the hole"
+        );
+        assert!(world.set_tile(cell, Tile::Solid(Material::Stone)));
+    }
 
     // 26 loose stones in two rows south of the ring, more than there are pile cells.
     let mut save = world.to_save();
@@ -5219,13 +5230,13 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
     save.next_id = id;
     assert!(save.items.len() >= 26);
     let mut world = World::from_save(save);
+    let items = world.items().len();
 
     let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
     let stored = |world: &World| {
-        world
-            .items()
+        uncarried_item_tiles(world)
             .iter()
-            .filter(|(_, pos)| zones.contains(pos))
+            .filter(|pos| zones.contains(pos))
             .count()
     };
     let mut last_rise = 0;
@@ -5239,16 +5250,16 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
             last_rise = world.tick();
         }
     }
+    // Let the last hauler hand back his job.
+    for _ in 0..50 {
+        world.step();
+    }
+    let tiles = uncarried_item_tiles(&world);
     let free: Vec<Pos> = pile
         .iter()
         .copied()
-        .filter(|cell| !world.items().iter().any(|(_, pos)| pos == cell))
+        .filter(|cell| !tiles.contains(cell))
         .collect();
-    let loose = world
-        .items()
-        .iter()
-        .filter(|(_, pos)| !zones.contains(pos))
-        .count();
     let hauls = world
         .jobs()
         .iter()
@@ -5256,10 +5267,37 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
         .count();
     assert!(
         free.is_empty(),
-        "the ring sealed itself: {best} of {} cells filled, last at tick {last_rise} (now {}); \
-         {} free pile cells {free:?} while {loose} stones lie loose and {hauls} haul jobs retry",
+        "the ring sealed itself: {best} of {} cells stored, last at tick {last_rise} (now {}); \
+         {} free pile cells {free:?} while {hauls} haul jobs retry",
         pile.len(),
         world.tick(),
         free.len()
     );
+    assert_eq!(
+        stored(&world),
+        pile.len(),
+        "a pile cell holds no stored item"
+    );
+    assert_eq!(
+        hauls,
+        items - pile.len(),
+        "a haul job is left for a stone the full ring has no cell for, and only those"
+    );
+}
+
+#[test]
+fn a_pile_round_enclosed_ground_still_fills_every_cell() {
+    assert_ring_fills(&[]);
+}
+
+/// 12.12 review run 1, Decision 1 (a): a hole is a pocket when its flood runs dry, whatever borders
+/// it. One boulder at the fire's west neighbour made the hole touch rock, which read as a way out:
+/// 4 cells sealed and 10 haul jobs retried for good.
+#[test]
+fn a_pile_round_ground_beside_rock_still_fills_every_cell() {
+    let fire = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).camp_origin();
+    assert_ring_fills(&[Pos {
+        x: fire.x - 1,
+        ..fire
+    }]);
 }

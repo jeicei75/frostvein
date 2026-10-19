@@ -811,20 +811,25 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
 ///
 /// NOTE: a pile cell this never reaches (no walkable non-pile ground around its part of the zone)
 /// is not a target; such a zone takes no deliveries. Cells are joined by same-z 4-neighbours only.
-/// "Outside" is a flood over non-pile walkable ground, ramps included (`astar_neighbours`), capped
-/// at 4 x the zone size + 16 cells: a flood that reaches the cap is open ground. One that runs dry
-/// is a pocket only if every cell beside it is a pile cell. A hole in a pile on a ledge, with a
-/// drop or rock beside it as well, reads as open ground and seals as before.
+/// "Outside" is a flood over non-pile walkable ground, ramps included (`astar_neighbours`). One that
+/// runs dry is a pocket, whatever borders it (pile, rock, a drop or the map edge). One that reaches
+/// a cell outside the zones' x/y bounding box, or 4 x the zone size + 16 cells, is open ground: a
+/// hole the pile rings cannot leave the box. A ringed hole bigger than the cap (a one-cell-wide
+/// ring about 17 cells across) reads as open ground and seals as before.
 ///
-/// The flood stops at the first cell beside rock, a drop or the map edge (a same-z neighbour that
-/// is neither pile nor standable, which the flood could never reach): this runs on every haul
-/// claim and delivery, and flooding to the cap each time cost 17x the tick (12.12 Task 2b).
+/// The box exit is the cheap one: this runs on every haul claim and delivery, and flooding to the
+/// cap each time cost 17x the tick (12.12 Task 2b). Most ground beside a pile lies outside it.
 fn pile_targets(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
     zones: &BTreeSet<Pos>,
 ) -> BTreeMap<Pos, u32> {
     let cap = 4 * zones.len() + 16;
+    // The zones' x/y bounding box (empty with no zones).
+    let xs = || zones.iter().map(|p| p.x);
+    let ys = || zones.iter().map(|p| p.y);
+    let (box_x, box_y) = (xs().min()..=xs().max(), ys().min()..=ys().max());
+    let in_box = |p: Pos| box_x.contains(&Some(p.x)) && box_y.contains(&Some(p.y));
     // Loose stones and haulers move, so they do not fence ground off: only terrain does.
     let no_items = BTreeSet::new();
     // Ground cells already flooded: true when their flood found open ground.
@@ -837,13 +842,7 @@ fn pile_targets(
         let mut flood = VecDeque::from([start]);
         let mut open = false;
         while let Some(cell) = flood.pop_front() {
-            // Any boundary but the zone (rock, a drop, the map edge) is ground a dwarf can use,
-            // just a small one; a flood that runs dry inside the zone alone is a pocket.
-            if seen.len() >= cap
-                || side_neighbours(cell)
-                    .iter()
-                    .any(|n| !zones.contains(n) && !terrain.is_standable(*n))
-            {
+            if seen.len() >= cap || !in_box(cell) {
                 open = true;
                 break;
             }
