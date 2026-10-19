@@ -2487,6 +2487,32 @@
     "schema": 2,
     "turns": 301
   },
+  "c09dd276-29c6-417a-82df-d05aa3332e22.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1569375,
+        "cache_read": 26141254,
+        "input": 528,
+        "output": 109652
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 282463,
+        "cache_read": 1566499,
+        "input": 68,
+        "output": 639
+      }
+    },
+    "cache_creation": 1851838,
+    "cache_read": 27707753,
+    "input": 596,
+    "last_ts": "2026-10-19T09:08:31.387Z",
+    "marked_at": null,
+    "output": 110291,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 290
+  },
   "c1686eb2-fffc-438c-a30b-e5cb9bbdd4bb.jsonl": {
     "by_model": {
       "claude-opus-5-5": {
