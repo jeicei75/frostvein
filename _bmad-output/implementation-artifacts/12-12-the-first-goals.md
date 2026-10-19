@@ -481,6 +481,8 @@ HIGH, so there is no round 4.** The live gate already ran this round (Feature's 
 `a4d07eb`) predates the cache, and the trajectories are byte-identical across it.
 
 **Coverage holes:** no gui or tui run this round (no client code changed); AC 7/8/10 rest on earlier runs and the seat.
+After triage, `scripts/reap-build-caches.sh --tmp-only --force` reaped 19 directories under /tmp (21.8 GB listed)
+and reclaimed 16.1 GB of free space. Review cost row: $12.59, 307 turns (`e1ab594`).
 
 - [ ] [Review][Patch] **The rule Wolf re-ruled away from (outside EVERY pile component's box, `54b35bd`) is pinned
   by no test or row** [`crates/sim-core/tests/scenario.rs:5296-5344`; `mutations/12-12.sh` row 18] — Severity MED.
