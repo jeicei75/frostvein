@@ -8,6 +8,7 @@ pub use save::{SaveState, SavedClearing, SavedDwarf};
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
+    ops::RangeInclusive,
 };
 
 use bevy_ecs::{
@@ -799,6 +800,36 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
     })
 }
 
+/// The x/y bounding box of each pile component (same-z pile cells joined by 4-neighbours).
+fn pile_boxes(zones: &BTreeSet<Pos>) -> Vec<(RangeInclusive<i32>, RangeInclusive<i32>)> {
+    let mut boxes = Vec::new();
+    let mut seen = BTreeSet::new();
+    for &start in zones {
+        if !seen.insert(start) {
+            continue;
+        }
+        let (mut xs, mut ys) = (start.x..=start.x, start.y..=start.y);
+        let mut stack = vec![start];
+        while let Some(cell) = stack.pop() {
+            xs = cell.x.min(*xs.start())..=cell.x.max(*xs.end());
+            ys = cell.y.min(*ys.start())..=cell.y.max(*ys.end());
+            for n in side_neighbours(cell) {
+                if zones.contains(&n) && seen.insert(n) {
+                    stack.push(n);
+                }
+            }
+        }
+        boxes.push((xs, ys));
+    }
+    boxes
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Cells `pile_targets`' entrance floods have taken off the queue: the cost test's count.
+    static FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
 /// non-pile cells around the zone (a cell touching one is depth 1). Deep cells fill first, so a
 /// pile fills from the inside out. The layers run through FREE cells only (#184): a free cell
@@ -825,11 +856,12 @@ fn pile_targets(
     zones: &BTreeSet<Pos>,
 ) -> BTreeMap<Pos, u32> {
     let cap = 4 * zones.len() + 16;
-    // The zones' x/y bounding box (empty with no zones).
-    let xs = || zones.iter().map(|p| p.x);
-    let ys = || zones.iter().map(|p| p.y);
-    let (box_x, box_y) = (xs().min()..=xs().max(), ys().min()..=ys().max());
-    let in_box = |p: Pos| box_x.contains(&Some(p.x)) && box_y.contains(&Some(p.y));
+    let boxes = pile_boxes(zones);
+    let in_box = |p: Pos| {
+        boxes
+            .iter()
+            .any(|(xs, ys)| xs.contains(&p.x) && ys.contains(&p.y))
+    };
     // Loose stones and haulers move, so they do not fence ground off: only terrain does.
     let no_items = BTreeSet::new();
     // Ground cells already flooded: true when their flood found open ground.
@@ -842,6 +874,12 @@ fn pile_targets(
         let mut flood = VecDeque::from([start]);
         let mut open = false;
         while let Some(cell) = flood.pop_front() {
+            #[cfg(test)]
+            FLOODED.with(|n| n.set(n.get() + 1));
+            if let Some(&known) = ground.get(&cell) {
+                open = known;
+                break;
+            }
             if seen.len() >= cap || !in_box(cell) {
                 open = true;
                 break;
@@ -7343,6 +7381,39 @@ mod tests {
         assert!(
             corners.contains(&landed),
             "the stone landed on {landed:?}, not a reachable corner"
+        );
+    }
+
+    // 12.12 review run 2, Decision 1 (a): one box over every pile put the open ground between
+    // spread piles inside it, so each entrance flood ran to the cap (4 x 400 + 16 cells here).
+    // Every ground cell beside one of these piles lies outside every pile's box: one cell a flood.
+    #[test]
+    fn spread_piles_flood_only_the_ground_beside_them() {
+        let terrain = flat_terrain(128, 128);
+        let zones: BTreeSet<Pos> = [(5, 5), (113, 5), (5, 113), (113, 113)]
+            .into_iter()
+            .flat_map(|(x0, y0)| {
+                (x0..x0 + 10).flat_map(move |x| (y0..y0 + 10).map(move |y| Pos { x, y, z: 1 }))
+            })
+            .collect();
+        assert_eq!(zones.len(), 400);
+        super::FLOODED.with(|n| n.set(0));
+        let targets = super::pile_targets(&terrain, &BTreeSet::new(), &zones);
+        let flooded = super::FLOODED.with(|n| n.get());
+        assert_eq!(
+            targets.len(),
+            400,
+            "every cell of the four piles is a target"
+        );
+        assert_eq!(
+            targets[&Pos { x: 9, y: 9, z: 1 }],
+            5,
+            "a pile fills from the middle"
+        );
+        // 4 piles x 40 ground cells round each.
+        assert!(
+            flooded <= 160,
+            "the entrance floods took {flooded} cells, more than one per cell beside a pile"
         );
     }
 

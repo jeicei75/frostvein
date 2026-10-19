@@ -135,3 +135,30 @@ old = '            if seen.len() >= cap || !in_box(cell) {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            if seen.len() >= cap || !in_box(cell) || side_neighbours(cell).iter().any(|n| !zones.contains(n) && !terrain.is_standable(*n)) {\n'))
 PY
+
+mutation "15 one box over every pile again (AC 11 cost, review run 2 Decision 1)" sim-core spread_piles_flood_only_the_ground_beside_them <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    let boxes = pile_boxes(zones);\n'
+assert s.count(old) == 1
+new = ('    let (xs, ys) = (zones.iter().map(|p| p.x), zones.iter().map(|p| p.y));\n'
+       '    let (x0, x1, y0, y1) = (xs.clone().min().unwrap_or(0), xs.max().unwrap_or(-1), ys.clone().min().unwrap_or(0), ys.max().unwrap_or(-1));\n'
+       '    let boxes = vec![(x0..=x1, y0..=y1)];\n')
+p.write_text(s.replace(old, new))
+PY
+
+mutation "16 a flood is bounded by its own pile's box only (review run 2 Decision 1, as first worded)" sim-core two_piles_that_ring_ground_together_still_fill_every_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+for old, new in [
+    ('    let in_box = |p: Pos| {\n        boxes\n            .iter()\n            .any(|(xs, ys)| xs.contains(&p.x) && ys.contains(&p.y))\n    };\n',
+     '    let in_box = |b: usize, p: Pos| boxes[b].0.contains(&p.x) && boxes[b].1.contains(&p.y);\n'),
+    ('    let mut open_ground = |start: Pos| -> bool {\n', '    let mut open_ground = |b: usize, start: Pos| -> bool {\n'),
+    ('            if seen.len() >= cap || !in_box(cell) {\n', '            if seen.len() >= cap || !in_box(b, cell) {\n'),
+    ('&& is_walkable(terrain, blocked, *n) && open_ground(*n))',
+     '&& is_walkable(terrain, blocked, *n) && open_ground(boxes.iter().position(|(xs, ys)| xs.contains(&cell.x) && ys.contains(&cell.y)).unwrap(), *n))'),
+]:
+    assert s.count(old) == 1, old
+    s = s.replace(old, new)
+p.write_text(s)
+PY

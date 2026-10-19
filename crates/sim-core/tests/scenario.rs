@@ -5188,13 +5188,13 @@ fn ring_pile(fire: Pos) -> Vec<Pos> {
     cells
 }
 
-/// Places the 20-cell ring round the fire on flat ground, turns `rock` (cells of the unzoned hole)
-/// to `Solid(Stone)`, lays 26 loose stones south of it, and runs until the ring is full or 6,000
+/// Places the pile `ring` makes round the fire on flat ground, turns `rock` (cells of the unzoned
+/// hole) to `Solid(Stone)`, lays 26 loose stones south of it, and runs until it is full or 6,000
 /// ticks pass. Asserts AC 11 by 3.3's stored rule (`World::goals` counts by it; stones have no
 /// goal, so this counts the same way: one uncarried item per pile cell): every cell stored, and no
 /// haul job sat in retry cooldown for long while a cell was still free. A sealed ring retried
 /// every tick for good; a fill that works sees at most a cooldown or two while haulers jostle.
-fn assert_ring_fills(rock: &[Pos]) {
+fn assert_ring_fills(ring: fn(Pos) -> Vec<Pos>, rock: &[Pos]) {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
     let fire = world.camp_origin();
     // Flat open ground round the camp, so nothing but the zone shapes the fill.
@@ -5206,8 +5206,7 @@ fn assert_ring_fills(rock: &[Pos]) {
             }
         }
     }
-    let pile = ring_pile(fire);
-    assert_eq!(pile.len(), 20);
+    let pile = ring(fire);
     let rects: Vec<Rect> = pile.iter().map(|&cell| rect(cell, cell)).collect();
     assert_eq!(world.place_stockpile(&rects), None, "the ring was refused");
     for &cell in rock {
@@ -5285,7 +5284,7 @@ fn assert_ring_fills(rock: &[Pos]) {
 
 #[test]
 fn a_pile_round_enclosed_ground_still_fills_every_cell() {
-    assert_ring_fills(&[]);
+    assert_ring_fills(ring_pile, &[]);
 }
 
 /// 12.12 review run 1, Decision 1 (a): a hole is a pocket when its flood runs dry, whatever borders
@@ -5294,8 +5293,49 @@ fn a_pile_round_enclosed_ground_still_fills_every_cell() {
 #[test]
 fn a_pile_round_ground_beside_rock_still_fills_every_cell() {
     let fire = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).camp_origin();
-    assert_ring_fills(&[Pos {
-        x: fire.x - 1,
-        ..fire
-    }]);
+    assert_ring_fills(
+        ring_pile,
+        &[Pos {
+            x: fire.x - 1,
+            ..fire
+        }],
+    );
+}
+
+/// 12.12 review run 2, Decision 1 (a): two piles that ring a hole together, touching only at
+/// corners. The west bar is a pile of its own, and its box (one column) holds none of the hole; the
+/// other pile's box holds all of it. A flood bounded by its own pile's box called the hole open
+/// from the bar's side, and that sealed the band as a hole read as a way in did (Task 2b).
+/// The ring's cells less the four that touch the bar: 3 + 13 pile cells round a 7-cell hole.
+fn joint_ring_pile(fire: Pos) -> Vec<Pos> {
+    let bar = [(-2, -1), (-2, 0), (-2, 1)];
+    let cut = [(-2, -2), (-2, 2), (-1, -1), (-1, 1)];
+    let cells: Vec<(i32, i32)> = ring_pile(fire)
+        .into_iter()
+        .map(|cell| (cell.x - fire.x, cell.y - fire.y))
+        .filter(|cell| !cut.contains(cell))
+        .collect();
+    assert_eq!(cells.len(), 16);
+    // Two piles: no cell of the bar has a side neighbour in the rest.
+    for (x, y) in bar {
+        for n in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
+            assert!(
+                bar.contains(&n) || !cells.contains(&n),
+                "{n:?} touches the bar"
+            );
+        }
+    }
+    cells
+        .into_iter()
+        .map(|(dx, dy)| Pos {
+            x: fire.x + dx,
+            y: fire.y + dy,
+            ..fire
+        })
+        .collect()
+}
+
+#[test]
+fn two_piles_that_ring_ground_together_still_fill_every_cell() {
+    assert_ring_fills(joint_ring_pile, &[]);
 }
