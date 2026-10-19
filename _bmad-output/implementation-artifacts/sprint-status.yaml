@@ -2687,7 +2687,7 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: review
+  12-12-the-first-goals: in-progress
   #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
   #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
   #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
@@ -2715,6 +2715,11 @@ development_status:
   #   REVIEW-PATCH run 2 2026-10-19 (Opus, fresh): per-pile boxes resealed the fire ring in a compact layout; Wolf
   #     re-ruled (b): one box + flood answers kept until a tile or the zones change (25fe2da); spread piles 19.84 ->
   #     2.86 ms, fill unchanged. 20/20 KILLED. Full gate GREEN on 12febce (4002s). -> review: round-3 review FRESH.
+  #   CODE REVIEW run 3 2026-10-19, diff 6aa424d..bdac2d4 (4 layers, none timed out): 0 HIGH. Cache holds: hashes
+  #     identical to 6aa424d, live 5 spread piles 2.49 vs 21.27 ms (193 vs 52 t/s), dig-heavy within 7% of main;
+  #     wire 5/5 OK; ring 20/20 t2881. REWORK row 1: the every-box rule (54b35bd) is pinned by nothing (MED patch:
+  #     test + row 19); LOW patch: NOTE/spine cap example cannot seal. 5 defer, 4 dismissed. STOPPING RULE FIRED:
+  #     no round 4. Patches LEFT AS ACTION ITEMS. -> in-progress: bmad-review-patch FRESH, then PR on Wolf's yes.
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional

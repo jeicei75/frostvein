@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -457,6 +457,70 @@ and reclaimed 6.0 GB of free space. Review cost row: $16.81, 290 turns (`87de117
   pile and rock is an enclosure under Decision 1 (a), "a pocket whatever borders it". Acceptance's trajectory
   hashes over 10,000 ticks of the plan are identical on main, `f7df25b` and HEAD.
 
+Code review run 3 (2026-10-19, diff `6aa424d..bdac2d4`, session 51ce71e4). Four layers: Blind Hunter and Edge Case
+Hunter on Sonnet, Acceptance Auditor and Feature Auditor on Opus. **No layer timed out**, every layer ran
+`cargo 1.97.1` in its own `/tmp/review-<layer>`, and no layer touched the repo.
+- **Blind (sim-core):** read start-independence, tile writers and callers; a release probe (items+dwarves hash every
+  25 ticks, plan digs and cuts) on `6aa424d` and HEAD for compact/spread3/spread5 piles, plus a far tile flipped every
+  1/5/20/100 ticks. Hashes identical old and new in every layout; spread5 56.0 -> 0.66 ms, a flip every tick 48.9 -> 1.70.
+- **Edge (tests, mutations, shells):** fixture geometry checked; rows 15-18 applied by hand in a `/tmp` copy, each dies
+  at its own assert; `save_load` 17/17; every production tile write goes through `Terrain::set_tile`.
+- **Acceptance:** audited the closure table; per-tick goal + items/dwarves logs byte-identical on `6aa424d` and HEAD
+  for plan, far and a new four-3x3-pile layout (6.95 -> 0.45 ms); reload mid-run at t2000/t5000 identical to
+  never-saved; an instrumented run counted 165,478 calls, 881 floods, 48 clears; put 54b35bd's rule back on HEAD.
+- **Feature:** every hop WIRED (both callers pass the whole `Zones`; every tile writer goes through `set_tile`); live
+  release daemons, HEAD vs `6aa424d` vs main: five spread piles 2.49 ms 193 t/s vs 21.27 ms 52 t/s; dig-heavy (+250
+  digs) 3.79 vs 32.60 ms, main 3.54; stored/loose counts identical; `goals_wire.py` 5/5 GOALS OK; sitting B ring 20/20
+  at t2881 (82 tile changes during the fill).
+
+**Delta against run 2:** run 2 had 1 HIGH decision, 1 MED patch, 1 LOW patch, 2 defer, 1 dismissed. Run 3 NEW: **0
+HIGH**, 1 MED patch, 1 LOW patch, 5 defer, 4 dismissed. **REWORK: closure row 1 (spread-pile cost)**, its both-sides
+half only: the cost fix is real and keeps the fill, but the compact reseal that made Wolf re-rule (a) to (b) is pinned
+by nothing. Rows 2 and 3 are CLOSED (row 2 with the LOW below). **The stopping rule FIRES: every new finding is below
+HIGH, so there is no round 4.** The live gate already ran this round (Feature's daemons). The seat (AC 10, on
+`a4d07eb`) predates the cache, and the trajectories are byte-identical across it.
+
+**Coverage holes:** no gui or tui run this round (no client code changed); AC 7/8/10 rest on earlier runs and the seat.
+
+- [ ] [Review][Patch] **The rule Wolf re-ruled away from (outside EVERY pile component's box, `54b35bd`) is pinned
+  by no test or row** [`crates/sim-core/tests/scenario.rs:5296-5344`; `mutations/12-12.sh` row 18] — Severity MED.
+  Source: Acceptance (RAN). Put back on HEAD with the cache kept, every sim-core test stays green (lib 96, save_load
+  17, scenario 86, 22). Row 18 and the joint-ring test guard the Patch's literal "own pile's box" only. The compact5
+  layout that showed the reseal (tet 1/10, 33 hauls retrying) was a measurement, and its coordinates are not recorded.
+  - Add a ring test whose hole lies outside each pile component's own box: e.g. four one-side bars round a hole,
+    rock at the corners, two deep so the band can seal; RED under the every-box rule, green on HEAD.
+  - Add mutation row 19 that puts back `54b35bd`'s every-box rule; it must die at the new test's assert.
+  - Record the layout's cells (and compact5's, if recovered from the patch pass scratch) in the record.
+  - Riding along (Edge, LOW, same fixture code): put `assert_eq!(cells.len(), 20)` back inside `ring_pile`
+    (`scenario.rs:5188`). `assert_ring_fills` lost it, and the two `ring_pile` tests now run any shape silently.
+- [ ] [Review][Patch] **The NOTE's and spine's cap example cannot seal** [`crates/sim-core/src/lib.rs:842`;
+  `ARCHITECTURE-SPINE.md:216-219`] — Severity LOW. Patched rather than deferred: this is the third round correcting this
+  text, and the spine is the binding record. Source: Acceptance (RAN in a scratch lib test). The arithmetic is now
+  true (side 19 pocket, side 20 open), but a one-wide ring has no band two deep, so it reads as open and still fills.
+  The smallest lone square band that seals through the cap is two deep and 39 on a side (hole 35: cap 1200 < 1225;
+  side 38 is a pocket, cap 1168 > 1156). The spine also contradicts itself: "a thick band round it seals ... (a lone
+  one-wide ring 20 across)". State the one-wide ring as reading open, and the 39-side two-deep band as the sealing case.
+- [x] [Review][Defer] **No row kills the flood's stop at an already-answered cell** [`crates/sim-core/src/lib.rs:881-884`]
+  — deferred. Sources: Blind (read), Edge (read): a two-layer convergence. Removing it changes cost and the `FLOODED`
+  count only; the unit test asserts `flooded == 0` on a repeat call, which still holds.
+- [x] [Review][Defer] **spread5 is not reproducible from the record** [`12-12-the-first-goals.md`, run 2 patch pass
+  RED table] — deferred. Source: Acceptance (read). No pile cells for spread5 (or the 518-cell pile beyond "camp +-20,
+  z +-3"), and its 12/0/0 end goes uncommented.
+- [x] [Review][Defer] **The card's cost line sits under the "big pile" heading** [`12-12-signoff/vehicle-card.md:133-134`]
+  — deferred. Source: Acceptance (read). Five 25-cell piles are not "several hundred cells", and 2.86 ms is `World::step`
+  for plan + spread5. Feature measured 2.4-2.9 ms live, so the figure holds.
+- [x] [Review][Defer] **Ticks grow with loose items when haulers are short** [`crates/sim-core/src/lib.rs:583-593`] —
+  deferred, pre-existing. Source: Feature (RAN). 0 haulers, 66 loose stones: 11.17 ms/tick on HEAD, 11.70 on main
+  (90 t/s at fast4x). The per-haul-job `work_positions` in `claim_jobs`, not the floods. Candidate for #206.
+- [x] [Review][Defer] **`Terrain.tiles` is not guarded, so a future direct writer would skip the invalidation**
+  [`crates/sim-core/src/lib.rs:704-712`] — deferred. Source: Blind (read). Every production write goes through
+  `set_tile` today; only test fixtures assign `.tiles` directly, before use.
+- Dismissed (4): Edge's "the joint-ring test never asserts the hole is walkable and unzoned" (row 18 dies on it, so
+  a broken fixture would show as a SURVIVED row); Blind's "the cache is hidden state, not saved" (a pure function of
+  tiles and zones, rebuilt on load; AC 3 RAN identical); Feature's "every `set_tile` drops every answer" (by design,
+  stated in the NOTE, measured harmless at play dig rates); Feature's "far-corner piles fill slowly" (long walks,
+  identical on `6aa424d`).
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -833,4 +897,5 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-19 | Review run 1 patch pass (Opus, fresh session): all 4 patches landed (`b3a9753` `97f153d` `09139bb` `9fe4f89`); boulder RED to green, row 14 KILLED; full gate GREEN on `9fe4f89` (3766 s). Status -> review for a round-2 review; AC 10 seat still open. |
 | 2026-10-19 | Seat (AC 10) PASS on `a4d07eb`, sitting A, Q1-Q3 (Wolf). Sitting B not run (Wolf's call); AC 11 rests on the ring tests and the review's wire replay. Stuck-miner loops and fast4x stalls seen; pre-existing on `main`, posted on #206 and #204. |
 | 2026-10-19 | Code review run 2 on `6aa424d` (diff `813c218..6aa424d`, 4 layers, none timed out): 1 HIGH decision, the single box over every pile makes `pile_targets` several times slower once piles are spread out (fill unchanged). Wolf ruled (a), fix now. 3 patches left as action items; 2 defer; 1 dismissed. Stopping rule did not fire. Status -> in-progress. |
+| 2026-10-19 | Code review run 3 on `bdac2d4` (diff `6aa424d..bdac2d4`, 4 layers, none timed out): 0 HIGH. The flood-answer cache holds (identical trajectories, spread piles 8-10x faster live). REWORK closure row 1: the every-box rule is unpinned (MED patch); LOW patch on the cap example. 5 defer; 4 dismissed. Stopping rule fired: no round 4. Patches left as action items. Status -> in-progress. |
 | 2026-10-19 | Review run 2 patch pass (Opus, fresh session): per-pile boxes (`54b35bd` `5b112cf`) resealed the campfire ring in a compact layout; Wolf re-ruled (b), landed as one box plus kept flood answers (`25fe2da`): spread piles 19.84 to 2.86 ms, fill unchanged. NOTE, spine, card and record (`12febce`). Mutation table 20/20 KILLED; full gate GREEN on `12febce` (4002 s). Status -> review for a round-3 review. |
