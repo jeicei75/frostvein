@@ -2687,7 +2687,7 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: in-progress
+  12-12-the-first-goals: review
   #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
   #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
   #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
@@ -2703,6 +2703,9 @@ development_status:
   #     0 HIGH. 1 MED decision: AC 11 seals again when the hole touches rock/drop (1 boulder in the ring -> 4 cells
   #     free, 10 haul jobs retry). Wolf ruled (a): close it now. 4 patches (that fix, a spare-tetrahedrite line on
   #     the card, the card's approximate pile counts, 2 record claims) LEFT AS ACTION ITEMS. 10 defer. -> in-progress.
+  #   REVIEW-PATCH run 1 2026-10-19 (Opus, fresh): all 4 landed (b3a9753 97f153d 09139bb 9fe4f89). Ring hole is
+  #     open only outside the zones' x/y box or at the cap; boulder RED -> green; row 14 KILLED; tick 0.296 vs 0.262 ms,
+  #     0 >10 ms. Full gate GREEN on 9fe4f89 (3766s). -> review: round-2 review in a FRESH session; AC 10 seat open.
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional

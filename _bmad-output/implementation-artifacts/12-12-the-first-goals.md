@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -304,26 +304,26 @@ its own `/tmp/review-<layer>`.
       0.265 ms, and strengthen the ring test while there (see the deferred ring-test item).
     - **(b) Narrow and file.** Correct the NOTE, the spine bullet and the record to state the rock/drop limit, and
       file a `bug` + `route:story` issue.
-- [ ] [Review][Patch] **Close AC 11 for holes that touch rock, a drop or the map edge** [`crates/sim-core/src/lib.rs:842-846`, NOTE `:812-821`] — Severity MED, from Decision 1 (a).
+- [x] [Review][Patch] **Close AC 11 for holes that touch rock, a drop or the map edge** [`crates/sim-core/src/lib.rs:842-846`, NOTE `:812-821`] — Severity MED, from Decision 1 (a).
   - Change the rule so a hole is a pocket when its flood runs dry, whatever borders it. Candidate cheap exit: "open" once the flood leaves the zone's x/y bounding box or hits the cap.
   - RED first: the Acceptance Auditor's boulder probe (the committed ring setup plus one `Solid(Stone)` at the fire's west neighbour), committed as a scenario test.
   - Re-measure the release tick cost against 0.265 ms mean / 0 ticks > 10 ms.
   - Strengthen `a_pile_round_enclosed_ground_still_fills_every_cell` to count by `split_stored` and to assert AC 11's no-retry clause (the deferred ring-test item).
   - Add a mutation row and re-mutate.
   - Bring the NOTE, the spine bullet (`ARCHITECTURE-SPINE.md:212`) and the record into line.
-- [ ] [Review][Patch] **The seat card leaves no spare tetrahedrite** [`12-12-signoff/vehicle-card.md:71-74`] —
+- [x] [Review][Patch] **The seat card leaves no spare tetrahedrite** [`12-12-signoff/vehicle-card.md:71-74`] —
   Severity MED. Source: Feature (RAN, card replayed over the wire).
   - The card digs exactly 10 ore cells (3+2+1+4) for a target of 10. "The next one at `[69,79,14]`" is one of the
     10.
   - The replay's tick 10000 read tetrahedrite 9, loose 0, marks 0; the 10th was in a hauler's hands.
   - One missed drag cell or one stranded ore stops the chain at 9/10 for good, and the card names no next step.
     Name one or two spare tetrahedrite cells, or the dig to make if it sits at 9.
-- [ ] [Review][Patch] **The card's pile figures come from single-z rects; the gui's stockpile drag follows the
+- [x] [Review][Patch] **The card's pile figures come from single-z rects; the gui's stockpile drag follows the
   surface** [`12-12-signoff/vehicle-card.md`; `crates/gui/src/designate.rs:193`] — Severity LOW, in the file
   patched above. Source: Feature (read).
   - The replay matched the card's 67 cells only because it also used single-z rects.
   - Say on the card that the cell counts are approximate at the seat.
-- [ ] [Review][Patch] **Two record claims do not reproduce**
+- [x] [Review][Patch] **Two record claims do not reproduce**
   [`12-12-the-first-goals.md:412`, `:431`] — Severity LOW. Patched rather than deferred: a false record invents
   scope later. Source: Acceptance (RAN) and Feature (RAN).
   - **The "runs in 2 s instead of 22 s" claim for the determinism test:** with the old 21x21x21 pile restored in a
@@ -590,6 +590,30 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
     from one-level rects and are approximate at the seat.
   - **Record:** the two claims that did not reproduce are corrected in place (the determinism test's run time, the
     deltas count). The spine bullet and the `pile_targets` NOTE state the rule as it now is.
+  - **Full gate on `9fe4f89`, `RUST_TEST_THREADS=1 scripts/gate.sh`, rc 0:**
+
+    ```
+    cargo fmt --check           ok  0s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  719s
+    cargo test (pixel guards)   ok  3008s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  1s
+    bench tests                 ok  19s
+    mutation tables still apply ok  9s
+    GATE GREEN  3766s
+    ```
+  - **Closure table** (no row is REWORK; nothing re-closes an earlier round's fix):
+
+    | Item | Written for | Tested from | Pre-existing-state fixture |
+    |---|---|---|---|
+    | AC 11 beside rock | a ringed hole touching rock | the plain ring (must still fill, 0 retry ticks) and the OLD rule (must fail both asserts) | `a_pile_round_ground_beside_rock_still_fills_every_cell` RED on `f7df25b`; the stubbed-assert run on `f7df25b` (4569 retry ticks) |
+    | Ring test no-retry clause | AC 11's "no haul job retries forever" | the old rule with the earlier assert stubbed | the same `f7df25b` worktree |
+    | Spare tetrahedrite | a chain stuck at 9/10 | the plan WITHOUT the spare (exactly 10) | `plan-10-10-1.json` on DEFAULT_SEED |
+    | Approximate counts | card text | n/a (prose) | n/a |
+    | Two record claims | the record | the reviewers' measured figures | n/a (prose) |
 
 ### File List
 
@@ -614,3 +638,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-18 | Task 0 Q3 RULED: fold the pile-ring defect in (Wolf: "fold it"); Task 2b, AC 11, a mutation row, a seat step. |
 | 2026-10-18 | Dev (Sonnet 5.5 agents A and B, Opus orchestrating): Tasks 1-9 done. Goals in sim-core, on the wire, in both clients; pile-ring fix (early-exit flood after a 17x tick regression); mutation table 15/15 KILLED; wire 5/5 OK and a deliberate RED; seat card. Full gate GREEN on `c53c050`. Status -> review. |
 | 2026-10-18 | Code review run 1 on `813c218` (4 layers, none timed out): 0 HIGH. 1 MED decision: AC 11 seals again when the hole touches rock or a drop. Wolf ruled (a), close it now. 4 patches left as action items; 10 defer. Status -> in-progress. |
+| 2026-10-19 | Review run 1 patch pass (Opus, fresh session): all 4 patches landed (`b3a9753` `97f153d` `09139bb` `9fe4f89`); boulder RED to green, row 14 KILLED; full gate GREEN on `9fe4f89` (3766 s). Status -> review for a round-2 review; AC 10 seat still open. |
