@@ -382,6 +382,8 @@ findings.**
 
 **Coverage holes:** no gui run, so AC 8's visual half and the seat drag geometry for AC 11 are unverified; the
 mutation table was applied by hand to rows 13 and 14 only; AC 10 rests on the recorded seat.
+After triage, `scripts/reap-build-caches.sh --tmp-only --force` reaped 11 directories under /tmp (7.8 GB listed)
+and reclaimed 6.0 GB of free space. Review cost row: $16.81, 290 turns (`87de117`).
 
 - [x] [Review][Decision] **The box exit makes `pile_targets` several times slower once piles are spread out** —
   RESOLVED (Wolf, 2026-10-19): option (a), fix now; became the first Patch below. Severity HIGH. Sources: Acceptance (RAN), Feature (RAN), Blind (RAN, synthetic): a three-way convergence.
