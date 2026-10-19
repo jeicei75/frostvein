@@ -615,6 +615,27 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
     | Approximate counts | card text | n/a (prose) | n/a |
     | Two record claims | the record | the reviewers' measured figures | n/a (prose) |
 
+- **Seat, AC 10 (Wolf, 2026-10-19, fresh world on `a4d07eb`, gui + tui, sitting A of the card): PASS.**
+  - **Q1:** wood ticked at 10/10. Bloodstone read 1/1 for a long time without ticking, as the card says, and
+    completed with tetrahedrite.
+  - **Q2:** the title turned gold, every goal was done, and play went on.
+  - **Q3:** Wolf cleared the west pile: "yes dropped but goal stays marked as done".
+  - **Sitting B (the ring round the fire, the card's AC 11 step): NOT RUN, Wolf's call** ("too complicated test").
+    AC 11 stands on `a_pile_round_enclosed_ground_still_fills_every_cell`,
+    `a_pile_round_ground_beside_rock_still_fills_every_cell`, rows 13 and 14, and the review's wire replay of
+    sitting B (20/20 at tick 2763).
+  - **Seen at the seat, not 12.12's:**
+    - Miners stuck in narrow pits. First, a one-wide tunnel at `77,70`: a clearing miner lifts and sets down one
+      stone 32 times while the other retries her dig. Later, a miner frozen with a stone in a stone-walled pit at
+      `68,52`.
+    - Dwarf movement went chunky at fast4x while they were stuck ("move pause move pause"), then recovered. Wolf
+      reads it as the loops, more visible at speed.
+    - Both saves replayed offline (release) loop or freeze identically on `main` `60955ef`. The first save's ticks
+      over 10 ms (14-20 per 3,000, up to 28 ms; a fast4x tick has 5 ms) fall on the loop's set-down and retry
+      ticks, also on `main`. The later save's sim tick averaged 0.82 ms.
+    - Both stuck miners got going again once Wolf designated more digs. Posted on #206 (the tunnel loop and the
+      slow ticks) and #204 (the frozen miner).
+
 ### File List
 
 - `crates/sim-core/src/lib.rs` (goals, stored helper, `pile_targets` entrance rule, unit tests), `crates/sim-core/src/save.rs`, `crates/sim-core/tests/scenario.rs` (chain test, ring test, determinism reader), `crates/sim-core/tests/save_load.rs`
@@ -639,3 +660,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-18 | Dev (Sonnet 5.5 agents A and B, Opus orchestrating): Tasks 1-9 done. Goals in sim-core, on the wire, in both clients; pile-ring fix (early-exit flood after a 17x tick regression); mutation table 15/15 KILLED; wire 5/5 OK and a deliberate RED; seat card. Full gate GREEN on `c53c050`. Status -> review. |
 | 2026-10-18 | Code review run 1 on `813c218` (4 layers, none timed out): 0 HIGH. 1 MED decision: AC 11 seals again when the hole touches rock or a drop. Wolf ruled (a), close it now. 4 patches left as action items; 10 defer. Status -> in-progress. |
 | 2026-10-19 | Review run 1 patch pass (Opus, fresh session): all 4 patches landed (`b3a9753` `97f153d` `09139bb` `9fe4f89`); boulder RED to green, row 14 KILLED; full gate GREEN on `9fe4f89` (3766 s). Status -> review for a round-2 review; AC 10 seat still open. |
+| 2026-10-19 | Seat (AC 10) PASS on `a4d07eb`, sitting A, Q1-Q3 (Wolf). Sitting B not run (Wolf's call); AC 11 rests on the ring tests and the review's wire replay. Stuck-miner loops and fast4x stalls seen; pre-existing on `main`, posted on #206 and #204. |
