@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -412,8 +412,9 @@ and reclaimed 6.0 GB of free space. Review cost row: $16.81, 290 turns (`87de117
     - **(b) Cache `pile_targets` once per tick.** A bigger change: `blocked` moves within a tick as stones land.
     - **(c) Accept and file.** Fill is correct; file a `bug` + `route:story` issue with these numbers for the
       performance story Wolf has pencilled in (#204/#206), and state the cost in the NOTE, spine and card.
-- [ ] [Review][Patch] **Bound each entrance flood by its own pile's box, not one box over every pile**
-  [`crates/sim-core/src/lib.rs:828-857`] — Severity HIGH, from Decision 1 (a).
+- [x] [Review][Patch] **Bound each entrance flood by its own pile's box, not one box over every pile**
+  [`crates/sim-core/src/lib.rs:828-857`] — Severity HIGH, from Decision 1 (a). LANDED as re-ruled (b): one box plus
+  the floods' answers kept until a tile or the zones change (`25fe2da`).
   - Give each flood the x/y box of the pile component it borders (4-connected same-z pile cells), memoised per
     component. End a flood when it reaches a cell this call already classified.
   - RED first, as a measurement: the far-pile layout (`plan-10-10-1.json` plus three 2x2 piles at `[104,104,13]`,
@@ -421,7 +422,7 @@ and reclaimed 6.0 GB of free space. Review cost row: $16.81, 290 turns (`87de117
     HEAD. Re-measure the compact plan against 0.296 ms too.
   - Both ring tests and rows 13 and 14 must stay green or KILLED. Add a test for two piles that jointly ring a hole,
     and a mutation row that puts back the single union box.
-- [ ] [Review][Patch] **The NOTE and spine bullet overstate the entrance rule**
+- [x] [Review][Patch] **The NOTE and spine bullet overstate the entrance rule**
   [`crates/sim-core/src/lib.rs:814-821`, `ARCHITECTURE-SPINE.md:213-215`] — Severity MED. Sources: Acceptance (RAN),
   Blind (read), Edge (read).
   - **"A hole the pile rings cannot leave the box" / "only a ringed hole bigger than the cap reads as open" is
@@ -435,7 +436,7 @@ and reclaimed 6.0 GB of free space. Review cost row: $16.81, 290 turns (`87de117
   - **"About 17 cells across"** is wrong: a one-wide square ring hits the cap from outer side 20 (hole 18 across),
     and the cap counts every pile on the map, not the ring alone.
   - State the rule as it is, with the limits. If Decision 1 is (a), write the NOTE for the new rule instead.
-- [ ] [Review][Patch] **The seat record and the card cite stale evidence** [`12-12-the-first-goals.md:626`;
+- [x] [Review][Patch] **The seat record and the card cite stale evidence** [`12-12-the-first-goals.md:626`;
   `12-12-signoff/vehicle-card.md:132`, `:82-83`] — Severity LOW. Patched rather than deferred: a stale record
   invents scope later. Sources: Acceptance (RAN), Feature (RAN).
   - The seat block rests AC 11 on "the review's wire replay of sitting B (20/20 at tick 2763)". That replay ran on
@@ -783,6 +784,21 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
   - **Card:** the spare is the only tetrahedrite within four cells on that run's own level (`[46, 83, 13]` sits
     above the run's last cell); the pile cost line now gives 2 ms for the 518-cell pile and 3 ms for five spread
     piles. **Record:** the seat block cites run 2's replays (above).
+  - **Full gate on `12febce`, `RUST_TEST_THREADS=1 scripts/gate.sh`, rc 0:**
+
+    ```
+    cargo fmt --check           ok  1s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  750s
+    cargo test (pixel guards)   ok  3210s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  1s
+    bench tests                 ok  19s
+    mutation tables still apply ok  11s
+    GATE GREEN  4002s
+    ```
   - **Closure table:**
 
     | Item | Written for | Tested from | Pre-existing-state fixture | REWORK |
@@ -817,3 +833,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-19 | Review run 1 patch pass (Opus, fresh session): all 4 patches landed (`b3a9753` `97f153d` `09139bb` `9fe4f89`); boulder RED to green, row 14 KILLED; full gate GREEN on `9fe4f89` (3766 s). Status -> review for a round-2 review; AC 10 seat still open. |
 | 2026-10-19 | Seat (AC 10) PASS on `a4d07eb`, sitting A, Q1-Q3 (Wolf). Sitting B not run (Wolf's call); AC 11 rests on the ring tests and the review's wire replay. Stuck-miner loops and fast4x stalls seen; pre-existing on `main`, posted on #206 and #204. |
 | 2026-10-19 | Code review run 2 on `6aa424d` (diff `813c218..6aa424d`, 4 layers, none timed out): 1 HIGH decision, the single box over every pile makes `pile_targets` several times slower once piles are spread out (fill unchanged). Wolf ruled (a), fix now. 3 patches left as action items; 2 defer; 1 dismissed. Stopping rule did not fire. Status -> in-progress. |
+| 2026-10-19 | Review run 2 patch pass (Opus, fresh session): per-pile boxes (`54b35bd` `5b112cf`) resealed the campfire ring in a compact layout; Wolf re-ruled (b), landed as one box plus kept flood answers (`25fe2da`): spread piles 19.84 to 2.86 ms, fill unchanged. NOTE, spine, card and record (`12febce`). Mutation table 20/20 KILLED; full gate GREEN on `12febce` (4002 s). Status -> review for a round-3 review. |
