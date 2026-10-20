@@ -213,10 +213,12 @@ graph LR
   neighbours) no longer seals itself (Q3). Ground is a way out when its
   flood reaches a cell outside the x/y box round every pile cell or the
   cap (4 x all pile cells + 16); a flood that runs dry is a pocket,
-  whatever borders it. Enclosed ground still reads as open, and a thick
-  band round it seals, when it leaves the box (the box ignores z, so a
-  ramp down to a closed cellar outside it does it) or past the cap (a
-  lone one-wide ring 20 across). The floods' answers are kept until a
+  whatever borders it. Enclosed ground still reads as open, and a band two
+  or more deep round it can seal, when it leaves the box (the box ignores
+  z, so a ramp down to a closed cellar outside it does it) or passes the
+  cap (a lone two-deep square band 39 across, hole 35; a lone one-wide
+  ring reads open past the cap too, from 20 across, but fills, since each
+  of its cells touches the outside). The floods' answers are kept until a
   tile or the zones change (12.12 review run 2).
 
 ### AD-17 — The evidence ladder for a real renderer

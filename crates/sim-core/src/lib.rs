@@ -840,7 +840,9 @@ thread_local! {
 /// deep round it can seal as before, when:
 /// - it reaches past the box: the box ignores z, so a ramp down from the hole to a closed cellar
 ///   that runs out of it does it, and so does a pile-and-rock pocket running past it;
-/// - it is bigger than the cap: a lone one-cell-wide square ring 20 cells on a side (hole 18).
+/// - it is bigger than the cap: a lone square band two deep and 39 cells on a side (hole 35: cap
+///   1,200 < 1,225 cells; at 38 the hole is a pocket). A lone one-wide ring reads open past the
+///   cap too, from 20 on a side, but fills: each of its cells touches the outside.
 ///
 /// The box exit is the cheap one: flooding to the cap on every haul claim and delivery cost 17x
 /// the tick (12.12 Task 2b). Ground between spread piles lies inside the box, so its floods still
