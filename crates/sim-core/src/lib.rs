@@ -7447,6 +7447,42 @@ mod tests {
         );
     }
 
+    // 12.12 review run 3: four bars, two deep, ring a 3x3 hole at (8,8), with rock at the corners
+    // so no bar touches another. No bar's own box holds any of the hole, so a flood that is open
+    // once it leaves EVERY pile's box (`54b35bd`, the rule Wolf re-ruled away from) called the hole
+    // open and every bar cell lay one deep. One box over all four holds the hole: a pocket.
+    // NOTE: hauling this shape on HEAD still stalls (14 of 24, haulers stand in the hole to fill its
+    // last way out, #207), so this pins the depths, not a fill.
+    #[test]
+    fn a_hole_outside_each_piles_own_box_is_still_a_pocket() {
+        let at1 = |x, y| Pos { x, y, z: 1 };
+        let mut terrain = flat_terrain(16, 16);
+        for dx in [-3, -2, 2, 3] {
+            for dy in [-3, -2, 2, 3] {
+                terrain.set_tile(at1(8 + dx, 8 + dy), Tile::Solid(Material::Stone));
+            }
+        }
+        // Each bar: 3 cells along its side, at Chebyshev distance 2 (inner) and 3 (outer).
+        let bars = |out: i32| {
+            (-1..=1).flat_map(move |a: i32| {
+                [(a, -out), (a, out), (-out, a), (out, a)].map(|(dx, dy)| at1(8 + dx, 8 + dy))
+            })
+        };
+        let zones: BTreeSet<Pos> = bars(2).chain(bars(3)).collect();
+        assert_eq!(zones.len(), 24);
+        let targets = super::pile_targets(&terrain, &BTreeSet::new(), &zones);
+        assert_eq!(targets.len(), 24, "every bar cell is a target");
+        for cell in bars(3) {
+            assert_eq!(targets[&cell], 1, "{cell:?} touches open ground");
+        }
+        for cell in bars(2) {
+            assert_eq!(
+                targets[&cell], 2,
+                "{cell:?} lies inside: the hole is a pocket"
+            );
+        }
+    }
+
     #[test]
     fn wander_rest_is_ten_ticks() {
         let mut world = World::generate(42, Dims::DEFAULT);

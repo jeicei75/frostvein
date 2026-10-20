@@ -5185,6 +5185,7 @@ fn ring_pile(fire: Pos) -> Vec<Pos> {
             }
         }
     }
+    assert_eq!(cells.len(), 20);
     cells
 }
 

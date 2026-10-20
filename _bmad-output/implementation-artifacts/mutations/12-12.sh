@@ -192,3 +192,32 @@ for old, new in [
     s = s.replace(old, new)
 p.write_text(s)
 PY
+
+mutation "19 a flood is open outside EVERY pile component's box (review run 3; 54b35bd, re-ruled away from)" sim-core a_hole_outside_each_piles_own_box_is_still_a_pocket <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    let in_box = |p: Pos| box_x.contains(&Some(p.x)) && box_y.contains(&Some(p.y));\n'
+assert s.count(old) == 1
+new = (
+    '    let _ = (box_x, box_y);\n'
+    '    let mut boxes = Vec::new();\n'
+    '    let mut done = BTreeSet::new();\n'
+    '    for &start in zones {\n'
+    '        if !done.insert(start) {\n'
+    '            continue;\n'
+    '        }\n'
+    '        let mut b = (start.x, start.x, start.y, start.y);\n'
+    '        let mut stack = vec![start];\n'
+    '        while let Some(c) = stack.pop() {\n'
+    '            b = (b.0.min(c.x), b.1.max(c.x), b.2.min(c.y), b.3.max(c.y));\n'
+    '            for n in side_neighbours(c) {\n'
+    '                if zones.contains(&n) && done.insert(n) {\n'
+    '                    stack.push(n);\n'
+    '                }\n'
+    '            }\n'
+    '        }\n'
+    '        boxes.push(b);\n'
+    '    }\n'
+    '    let in_box = |p: Pos| boxes.iter().any(|b| (b.0..=b.1).contains(&p.x) && (b.2..=b.3).contains(&p.y));\n')
+p.write_text(s.replace(old, new))
+PY
