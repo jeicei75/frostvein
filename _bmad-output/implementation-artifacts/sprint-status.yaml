@@ -2687,7 +2687,7 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: in-progress
+  12-12-the-first-goals: review
   #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
   #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
   #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
@@ -2720,6 +2720,9 @@ development_status:
   #     wire 5/5 OK; ring 20/20 t2881. REWORK row 1: the every-box rule (54b35bd) is pinned by nothing (MED patch:
   #     test + row 19); LOW patch: NOTE/spine cap example cannot seal. 5 defer, 4 dismissed. STOPPING RULE FIRED:
   #     no round 4. Patches LEFT AS ACTION ITEMS. -> in-progress: bmad-review-patch FRESH, then PR on Wolf's yes.
+  #   REVIEW-PATCH run 3 2026-10-20 (Opus, fresh): both landed. Every-box rule pinned by DEPTH (e18c542, row 19
+  #     KILLED): the hauled four-bar ring stalls on HEAD itself (14/24), Wolf ruled depth + issue -> #207. Cap example
+  #     fixed (a91e40f). Full gate GREEN on a91e40f (3779s). No round 4. -> review: PR on Wolf's yes.
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional

@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -484,7 +484,7 @@ HIGH, so there is no round 4.** The live gate already ran this round (Feature's 
 After triage, `scripts/reap-build-caches.sh --tmp-only --force` reaped 19 directories under /tmp (21.8 GB listed)
 and reclaimed 16.1 GB of free space. Review cost row: $12.59, 307 turns (`e1ab594`).
 
-- [ ] [Review][Patch] **The rule Wolf re-ruled away from (outside EVERY pile component's box, `54b35bd`) is pinned
+- [x] [Review][Patch] **The rule Wolf re-ruled away from (outside EVERY pile component's box, `54b35bd`) is pinned
   by no test or row** [`crates/sim-core/tests/scenario.rs:5296-5344`; `mutations/12-12.sh` row 18] — Severity MED.
   Source: Acceptance (RAN). Put back on HEAD with the cache kept, every sim-core test stays green (lib 96, save_load
   17, scenario 86, 22). Row 18 and the joint-ring test guard the Patch's literal "own pile's box" only. The compact5
@@ -495,13 +495,16 @@ and reclaimed 16.1 GB of free space. Review cost row: $12.59, 307 turns (`e1ab59
   - Record the layout's cells (and compact5's, if recovered from the patch pass scratch) in the record.
   - Riding along (Edge, LOW, same fixture code): put `assert_eq!(cells.len(), 20)` back inside `ring_pile`
     (`scenario.rs:5188`). `assert_ring_fills` lost it, and the two `ring_pile` tests now run any shape silently.
-- [ ] [Review][Patch] **The NOTE's and spine's cap example cannot seal** [`crates/sim-core/src/lib.rs:842`;
+  - LANDED `e18c542` as a DEPTH test, Wolf's ruling 2026-10-20: the hauled four-bar fixture stalls on HEAD itself
+    (14/24, haulers stand in the hole to fill its last way out), filed as #207. Row 19 KILLED. See the run 3 patch pass.
+- [x] [Review][Patch] **The NOTE's and spine's cap example cannot seal** [`crates/sim-core/src/lib.rs:842`;
   `ARCHITECTURE-SPINE.md:216-219`] — Severity LOW. Patched rather than deferred: this is the third round correcting this
   text, and the spine is the binding record. Source: Acceptance (RAN in a scratch lib test). The arithmetic is now
   true (side 19 pocket, side 20 open), but a one-wide ring has no band two deep, so it reads as open and still fills.
   The smallest lone square band that seals through the cap is two deep and 39 on a side (hole 35: cap 1200 < 1225;
   side 38 is a pocket, cap 1168 > 1156). The spine also contradicts itself: "a thick band round it seals ... (a lone
   one-wide ring 20 across)". State the one-wide ring as reading open, and the 39-side two-deep band as the sealing case.
+  - LANDED `a91e40f`; sides 38/39 and 19/20 re-measured by depth (run 3 patch pass).
 - [x] [Review][Defer] **No row kills the flood's stop at an already-answered cell** [`crates/sim-core/src/lib.rs:881-884`]
   — deferred. Sources: Blind (read), Edge (read): a two-layer convergence. Removing it changes cost and the `FLOODED`
   count only; the unit test asserts `flooded == 0` on a repeat call, which still holds.
@@ -873,6 +876,51 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
     | NOTE and spine overstate the rule | the doc text | the reviewers' ramp-cellar and tunnel runs | n/a (prose) | no |
     | Stale seat record and card | the record and the card | the run 2 replays; a probe of `[46,83,13]` (`Solid(Tetrahedrite)`) | DEFAULT_SEED | no |
 
+- **Review run 3 patch pass (2026-10-20, Opus, fresh session).** Both `[Review][Patch]` items.
+  - **The every-box rule pinned (MED), as a depth test** (`e18c542`). The suggested ring test did not work as a
+    scenario: four bars two deep round the campfire's 3x3 square, with rock on the 16 corner cells (Chebyshev 2..=3
+    from the fire on both axes), run through `assert_ring_fills`. It **does not fill on HEAD**: 14/24 stored, the
+    last at t1748, and 12 haul jobs retrying until t6000. Traced: the last free inner cell (64,62) is the hole's
+    only way out. Haulers 1 and 3 are sent to its neighbour (64,63) in the hole, and from there the drop walls them in
+    (#182/#201), so it is refused. Idle dwarf 4, also in the hole, makes a fill from outside refused too. The
+    depth-1 outer cells get nothing while a deeper free cell exists. On main `60955ef`, and with the every-box rule
+    put back (row 19's payload, scratch worktree), the same fixture truly seals at 12/24 (a different free set:
+    the inner row is cut off). A plus-shaped variant (the hole's 4 corners rock too) also stalls on HEAD at 14/24.
+    I stopped there rather than tune a third. **Wolf ruled (2026-10-20): pin by depth and file the stall: #207.**
+    `a_hole_outside_each_piles_own_box_is_still_a_pocket` (lib.rs): the same four bars and corner rock round a
+    3x3 hole at (8,8) on `flat_terrain(16, 16)`. On HEAD the outer row is depth 1 and the inner row depth 2 (the
+    hole is a pocket). Row 19 (the every-box rule put back, flood-answer cache kept) **KILLED** at `lib.rs:7500`
+    ("(7,6) lies inside: the hole is a pocket"), run alone. `ring_pile` asserts its 20 cells again. That is a
+    fixture guard, not a test, so it has no row.
+  - **compact5, recovered** from the run 2 patch pass probe (`tp-cache/src/main.rs` in that session's scratch):
+    `plan-10-10-1.json`'s digs, cuts and piles, applied at tick 6. Then five 5x5 squares, each a `PlaceStockpile`
+    rect x/y +-2 round camp + (-8,-8), (8,-8), (-8,8), (8,8), (0,-16), and z from the surface -1 to +1 (the
+    surface is the highest `Empty` over `Solid`/`Ramp` at the centre). The four-bar layout is the one above.
+  - **Cap example (LOW)** (`a91e40f`), in the NOTE and the spine. Re-measured by depth in a scratch lib test on
+    `e18c542`. A two-deep square band of side 38 (288 cells, cap 1,168, hole 1,156): inner row depth 2, a pocket.
+    Side 39 (296 cells, cap 1,200, hole 1,225): inner row depth 1, read as open (inner corners depth 2, as they
+    touch no hole cell). One-wide rings of side 19 and 20 are depth 1 throughout, so they fill either way.
+  - **Full gate on `a91e40f`** (`RUST_TEST_THREADS=1 scripts/gate.sh`):
+    ```
+    cargo fmt --check           ok  1s
+    cargo clippy -D warnings    ok  4s
+    cargo test                  ok  725s
+    cargo test (pixel guards)   ok  3011s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  19s
+    mutation tables still apply ok  10s
+    GATE GREEN  3779s
+    ```
+  - **Closure table:**
+
+    | Item | Written for | Tested from | Pre-existing-state fixture | REWORK |
+    |---|---|---|---|---|
+    | Every-box rule unpinned (MED) | the rule Wolf re-ruled away from (`54b35bd`) | HEAD (depths 1/2, green); the every-box rule put back with the cache kept (row 19, RED at `:7500`); the hauled fixture on main, on the every-box rule (both seal 12/24) and on HEAD (stalls 14/24, #207) | the four-bar layout: two-deep bars round a 3x3 hole, rock corners, so no pile's own box holds the hole | **yes**: re-closes run 2's closure row 1 (its both-sides half) |
+    | Cap example cannot seal (LOW) | the NOTE and spine text | depth probes of two-deep bands 38/39 and one-wide rings 19/20 on `e18c542` | n/a (prose) | **yes**: the third correction of this text (run 1 and run 2 patches) |
+
 ### File List
 
 - `crates/sim-core/src/lib.rs` (goals, stored helper, `pile_targets` entrance rule, unit tests), `crates/sim-core/src/save.rs`, `crates/sim-core/tests/scenario.rs` (chain test, ring test, determinism reader), `crates/sim-core/tests/save_load.rs`
@@ -881,7 +929,7 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 - (Agent B, Task 5) `crates/client-core/src/lib.rs`, `crates/client-core/tests/mirror.rs`, `crates/tui/src/view.rs`, `crates/tui/src/main.rs`, `crates/tui/tests/client.rs`, `crates/gui/src/ingest.rs`, `crates/gui/src/appearance.rs`
 - (Agent B, Task 4, literals) also `crates/gui/src/capture.rs`, `crates/gui/src/pick.rs`, `crates/gui/src/project.rs`, `crates/gui/tests/capture.rs`, `crates/gui/tests/headless.rs`
 - (Agents A and B, re-pointed rows) `_bmad-output/implementation-artifacts/mutations/2-4-the-world-endures.sh`, `_bmad-output/implementation-artifacts/mutations/3-3-the-haul-and-the-skeleton-walks.sh`
-- `_bmad-output/implementation-artifacts/mutations/12-12.sh` (new, 15 rows; 16 after review run 1; 20 after review run 2)
+- `_bmad-output/implementation-artifacts/mutations/12-12.sh` (new, 15 rows; 16 after review run 1; 20 after review run 2; 21 after review run 3)
 - `_bmad-output/implementation-artifacts/12-12-signoff/vehicle-card.md` (new)
 - `_bmad-output/planning-artifacts/architecture/architecture-frostvein-2026-08-09/ARCHITECTURE-SPINE.md`
 - `_bmad-output/implementation-artifacts/sprint-status.yaml`, `_bmad-output/implementation-artifacts/metrics/12-12-the-first-goals.md`
@@ -901,3 +949,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-19 | Code review run 2 on `6aa424d` (diff `813c218..6aa424d`, 4 layers, none timed out): 1 HIGH decision, the single box over every pile makes `pile_targets` several times slower once piles are spread out (fill unchanged). Wolf ruled (a), fix now. 3 patches left as action items; 2 defer; 1 dismissed. Stopping rule did not fire. Status -> in-progress. |
 | 2026-10-19 | Code review run 3 on `bdac2d4` (diff `6aa424d..bdac2d4`, 4 layers, none timed out): 0 HIGH. The flood-answer cache holds (identical trajectories, spread piles 8-10x faster live). REWORK closure row 1: the every-box rule is unpinned (MED patch); LOW patch on the cap example. 5 defer; 4 dismissed. Stopping rule fired: no round 4. Patches left as action items. Status -> in-progress. |
 | 2026-10-19 | Review run 2 patch pass (Opus, fresh session): per-pile boxes (`54b35bd` `5b112cf`) resealed the campfire ring in a compact layout; Wolf re-ruled (b), landed as one box plus kept flood answers (`25fe2da`): spread piles 19.84 to 2.86 ms, fill unchanged. NOTE, spine, card and record (`12febce`). Mutation table 20/20 KILLED; full gate GREEN on `12febce` (4002 s). Status -> review for a round-3 review. |
+| 2026-10-20 | Review run 3 patch pass (Opus, fresh session): both patches landed. The every-box rule is pinned by a depth test plus row 19 (KILLED) (`e18c542`); the hauled four-bar ring stalls on HEAD itself (14/24), so Wolf ruled depth + issue (#207). Cap example corrected in the NOTE and spine (`a91e40f`). Full gate GREEN on `a91e40f` (3779 s). No round 4 (run 3's stopping rule). Status -> review: PR on Wolf's yes. |
