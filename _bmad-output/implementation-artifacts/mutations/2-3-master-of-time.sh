@@ -56,9 +56,10 @@ import pathlib
 p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
 # Narrowed 2026-08-22: 3.1 replaced the empty `zones` placeholder this anchored on with a
 # real projection. The speed field is what the row is about, so anchor that alone.
-old = "        speed,\n\n        refusals,\n    }\n}\n"
+# Re-pointed 2026-10-18 (12.12): `goals` now sits between `speed` and `refusals`.
+old = "        speed,\n        goals: goals_out(world),\n        refusals,\n    }\n}\n"
 assert s.count(old) == 1
-p.write_text(s.replace(old, "        speed: protocol::Speed::Normal,\n\n        refusals,\n    }\n}\n"))
+p.write_text(s.replace(old, "        speed: protocol::Speed::Normal,\n        goals: goals_out(world),\n        refusals,\n    }\n}\n"))
 PY
 
 mutation "plus at fast wraps to paused" tui speed_keys_follow_the_pinned_step_table_and_clamp <<'PY'

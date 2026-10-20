@@ -8,6 +8,7 @@ pub use save::{SaveState, SavedClearing, SavedDwarf};
 use std::{
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque},
+    sync::Mutex,
 };
 
 use bevy_ecs::{
@@ -52,6 +53,22 @@ pub const DIG_WORK_TICKS: u32 = 50;
 // NOTE: tuned with 12.8's clip.
 pub const CUT_WORK_TICKS: u32 = 50;
 const RETRY_COOLDOWN: u64 = 20;
+
+/// The first-session goal chain (12.12, FR47), in order: store this many of each kind.
+pub const GOALS: [(ItemKind, u32); 3] = [
+    (ItemKind::Wood, 10),
+    (ItemKind::Tetrahedrite, 10),
+    (ItemKind::Bloodstone, 1),
+];
+
+/// One goal as the wire reads it. `progress` is the STORED count of `kind` (3.3's rule), live.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Goal {
+    pub kind: ItemKind,
+    pub target: u32,
+    pub progress: u32,
+    pub completed: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Material {
@@ -383,31 +400,66 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
     }
 }
 
+/// 3.3's rule, in ONE place (the goals count by it too): an item is STORED iff it is not carried,
+/// stands on a stockpile tile, AND is the LOWEST-ID uncarried item on that tile. Everything else
+/// uncarried is LOOSE, with its position. Amended at 3.3's review (Wolf's call).
+///
+/// The lowest-id clause still recognizes extra stones in an older save as loose. New retry drops
+/// avoid making a stack; the pick-up leg waits for a free stockpile tile. `uncarried_stones` is
+/// ascending by item id, so "first seen per tile" IS "lowest id".
+fn split_stored(ecs: &EcsWorld) -> (BTreeSet<u32>, Vec<(u32, Pos)>) {
+    let zones = &ecs.resource::<Zones>().0;
+    let mut occupied: BTreeSet<Pos> = BTreeSet::new();
+    let mut stored: BTreeSet<u32> = BTreeSet::new();
+    let mut loose = Vec::new();
+    for (id, pos) in uncarried_stones(ecs) {
+        if zones.contains(&pos) && occupied.insert(pos) {
+            stored.insert(id);
+        } else {
+            loose.push((id, pos));
+        }
+    }
+    (stored, loose)
+}
+
+/// How many goals of `GOALS` are done, in order. Never goes down.
+#[derive(Resource)]
+struct GoalsCompleted(u32);
+
+/// The stored count (`split_stored`) of every item kind.
+fn stored_by_kind(ecs: &EcsWorld) -> BTreeMap<ItemKind, u32> {
+    let (stored, _) = split_stored(ecs);
+    let mut counts = BTreeMap::new();
+    for entity in ecs.iter_entities() {
+        if let (Some(item), Some(id)) = (entity.get::<Item>(), entity.get::<Id>())
+            && stored.contains(&id.0)
+        {
+            *counts.entry(item.0).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+/// Completes the next goal while its stored count meets its target, so a chain whose later stock
+/// is already there finishes in one tick (12.12 D2). A completed goal stays completed.
+fn advance_goals(ecs: &mut EcsWorld) {
+    let stored = stored_by_kind(ecs);
+    let mut done = ecs.resource::<GoalsCompleted>().0;
+    while let Some(&(kind, target)) = GOALS.get(done as usize) {
+        if stored.get(&kind).copied().unwrap_or(0) < target {
+            break;
+        }
+        done += 1;
+    }
+    ecs.resource_mut::<GoalsCompleted>().0 = done;
+}
+
 /// Exclusive, because retiring a claimed job calls `release_claim`. It sits inside the chained
 /// schedule, so a paused daemon takes new stockpiles and designations but derives no work from
 /// them — 3.2's line, extended to stones unchanged.
 fn create_haul_jobs(ecs: &mut EcsWorld) {
-    let (stored, loose, any_zone) = {
-        let zones = &ecs.resource::<Zones>().0;
-        // AC3, as amended at 3.3's review (Wolf's call): a stone is STORED iff it is not carried,
-        // stands on a stockpile tile, AND is the LOWEST-ID uncarried stone on that tile. Everything
-        // else uncarried is LOOSE.
-        //
-        // The lowest-id clause still recognizes extra stones in an older save as loose. New
-        // retry drops avoid making a stack; the pick-up leg waits for a free stockpile tile.
-        // `uncarried_stones` is ascending by item id, so "first seen per tile" IS "lowest id".
-        let mut occupied: BTreeSet<Pos> = BTreeSet::new();
-        let mut stored: BTreeSet<u32> = BTreeSet::new();
-        let mut loose = Vec::new();
-        for (id, pos) in uncarried_stones(ecs) {
-            if zones.contains(&pos) && occupied.insert(pos) {
-                stored.insert(id);
-            } else {
-                loose.push((id, pos));
-            }
-        }
-        (stored, loose, !zones.is_empty())
-    };
+    let (stored, loose) = split_stored(ecs);
+    let any_zone = !ecs.resource::<Zones>().0.is_empty();
 
     // Retire first. The only way a stored stone still has a job is a stockpile placed over a
     // loose stone while a dwarf walks to it — so its holder is by definition not yet carrying
@@ -652,6 +704,16 @@ struct Terrain {
     dims: Dims,
     tiles: Vec<Tile>,
     dirty: BTreeSet<Pos>,
+    pile_ground: Mutex<PileGround>,
+}
+
+/// The ground `pile_targets`' entrance floods have classified, kept for the zones it was found
+/// for: true when its flood found open ground. The floods read terrain and zones only, so the
+/// answers hold until one changes; `set_tile` drops them.
+#[derive(Default)]
+struct PileGround {
+    zones: BTreeSet<Pos>,
+    open: BTreeMap<Pos, bool>,
 }
 
 impl Terrain {
@@ -677,6 +739,11 @@ impl Terrain {
         let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
         self.tiles[index] = tile;
         self.dirty.insert(p);
+        self.pile_ground
+            .get_mut()
+            .expect("nothing panics holding the pile ground")
+            .open
+            .clear();
         true
     }
 
@@ -748,26 +815,99 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
     })
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Cells `pile_targets`' entrance floods have taken off the queue: the cost test's count.
+    static FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
 /// non-pile cells around the zone (a cell touching one is depth 1). Deep cells fill first, so a
 /// pile fills from the inside out. The layers run through FREE cells only (#184): a free cell
 /// walled in by taken ones (an item lies on them) is no target, so it cannot hold the deepest
 /// layer and stop every delivery to the cells a hauler can still reach.
 ///
+/// A walkable non-pile neighbour is a way in only if it reaches ground outside the pile (12.12 Q3):
+/// a pile ringing the campfire surrounds the fire's neighbours, and counting those as ways in let
+/// the middle of the band fill first and seal the free cells off from every hauler.
+///
 /// NOTE: a pile cell this never reaches (no walkable non-pile ground around its part of the zone)
 /// is not a target; such a zone takes no deliveries. Cells are joined by same-z 4-neighbours only.
+/// "Outside" is a flood over non-pile walkable ground, ramps included (`astar_neighbours`). One that
+/// runs dry is a pocket, whatever borders it (pile, rock, a drop or the map edge). One that reaches
+/// a cell outside the x/y box round every pile cell on the map, or 4 x the zone size + 16 cells
+/// (every pile counts), is open ground. Enclosed ground still reads as open, and a band two or more
+/// deep round it can seal as before, when:
+/// - it reaches past the box: the box ignores z, so a ramp down from the hole to a closed cellar
+///   that runs out of it does it, and so does a pile-and-rock pocket running past it;
+/// - it is bigger than the cap: a lone square band two deep and 39 cells on a side (hole 35: cap
+///   1,200 < 1,225 cells; at 38 the hole is a pocket). A lone one-wide ring reads open past the
+///   cap too, from 20 on a side, but fills: each of its cells touches the outside.
+///
+/// The box exit is the cheap one: flooding to the cap on every haul claim and delivery cost 17x
+/// the tick (12.12 Task 2b). Ground between spread piles lies inside the box, so its floods still
+/// run to the cap; the answers are kept in `Terrain::pile_ground` until a tile or the zones change
+/// (review run 2), so they run again after each dig, not on each claim.
 fn pile_targets(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
     zones: &BTreeSet<Pos>,
 ) -> BTreeMap<Pos, u32> {
+    let cap = 4 * zones.len() + 16;
+    // The zones' x/y bounding box (empty with no zones).
+    let xs = || zones.iter().map(|p| p.x);
+    let ys = || zones.iter().map(|p| p.y);
+    let (box_x, box_y) = (xs().min()..=xs().max(), ys().min()..=ys().max());
+    let in_box = |p: Pos| box_x.contains(&Some(p.x)) && box_y.contains(&Some(p.y));
+    // Loose stones and haulers move, so they do not fence ground off: only terrain does.
+    let no_items = BTreeSet::new();
+    let mut kept = terrain
+        .pile_ground
+        .lock()
+        .expect("nothing panics holding the pile ground");
+    if kept.zones != *zones {
+        *kept = PileGround {
+            zones: zones.clone(),
+            open: BTreeMap::new(),
+        };
+    }
+    let ground = &mut kept.open;
+    let mut open_ground = |start: Pos| -> bool {
+        if let Some(&open) = ground.get(&start) {
+            return open;
+        }
+        let mut seen = BTreeSet::from([start]);
+        let mut flood = VecDeque::from([start]);
+        let mut open = false;
+        while let Some(cell) = flood.pop_front() {
+            #[cfg(test)]
+            FLOODED.with(|n| n.set(n.get() + 1));
+            if let Some(&known) = ground.get(&cell) {
+                open = known;
+                break;
+            }
+            if seen.len() >= cap || !in_box(cell) {
+                open = true;
+                break;
+            }
+            for n in astar_neighbours(terrain, &no_items, cell) {
+                if !zones.contains(&n) && seen.insert(n) {
+                    flood.push_back(n);
+                }
+            }
+        }
+        for cell in seen {
+            ground.insert(cell, open);
+        }
+        open
+    };
     let mut depth: BTreeMap<Pos, u32> = BTreeMap::new();
     let mut queue = VecDeque::new();
     for &cell in zones {
         if is_walkable(terrain, blocked, cell)
             && side_neighbours(cell)
                 .iter()
-                .any(|n| !zones.contains(n) && is_walkable(terrain, blocked, *n))
+                .any(|n| !zones.contains(n) && is_walkable(terrain, blocked, *n) && open_ground(*n))
         {
             depth.insert(cell, 1);
             queue.push_back(cell);
@@ -2362,8 +2502,9 @@ fn settle(ecs: &mut EcsWorld) {
     // NOTE: dwarf gravity is one level per tick; an item takes its whole open column in one tick.
 }
 
-/// Exclusive and LAST in the chain, not merely after `settle`: a carried stone sits on its
-/// carrier's tile at the end of every tick no matter which system moved the carrier.
+/// Exclusive and LAST of the movers, not merely after `settle`: a carried stone sits on its
+/// carrier's tile at the end of every tick no matter which system moved the carrier. Only
+/// `advance_goals` follows it, because it must judge final positions.
 fn carry_items(ecs: &mut EcsWorld) {
     let mut carriers: Vec<_> = ecs
         .iter_entities()
@@ -2538,6 +2679,7 @@ fn assemble(
     jobs: Jobs,
     designations: BTreeMap<Pos, DesignationKind>,
     zones: BTreeSet<Pos>,
+    goals_completed: u32,
 ) -> World {
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
@@ -2547,11 +2689,13 @@ fn assemble(
     ecs.insert_resource(Camp(camp_origin));
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
+    ecs.insert_resource(GoalsCompleted(goals_completed));
     ecs.insert_resource(jobs);
     ecs.insert_resource(Terrain {
         dims,
         tiles,
         dirty: BTreeSet::new(),
+        pile_ground: Mutex::default(),
     });
     let mut schedule = Schedule::default();
     schedule.add_systems(
@@ -2564,6 +2708,7 @@ fn assemble(
             settle,
             wander,
             carry_items,
+            advance_goals,
         )
             .chain(),
     );
@@ -2611,6 +2756,7 @@ impl World {
             Jobs::default(),
             BTreeMap::new(),
             BTreeSet::new(),
+            0,
         );
         // Identity has its own stream so it never shifts a spawn position.
         let mut identity_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY);
@@ -2709,6 +2855,7 @@ impl World {
             next_job_id: job_resource.next_id,
             items,
             emitters,
+            goals_completed: self.ecs.resource::<GoalsCompleted>().0,
         }
     }
 
@@ -2728,6 +2875,7 @@ impl World {
             next_job_id,
             items,
             emitters,
+            goals_completed,
         } = save;
         let mut job_resource = Jobs {
             next_id: next_job_id,
@@ -2751,6 +2899,7 @@ impl World {
             job_resource,
             designations.into_iter().collect(),
             zones.into_iter().collect(),
+            goals_completed,
         );
         for dwarf in dwarves {
             let current_job = dwarf.current_job.map(JobId);
@@ -3138,6 +3287,25 @@ impl World {
             .collect()
     }
 
+    /// The goal chain, in order, with progress read live: the STORED count of each goal's kind
+    /// (3.3's rule). `completed` is decided at the end of each tick (`advance_goals`) and is sticky.
+    // NOTE: while the daemon is paused nothing ticks, so a pile placed over enough logs reads
+    // `10/10` here and stays uncompleted until the next tick (12.12 D1).
+    pub fn goals(&self) -> Vec<Goal> {
+        let stored = stored_by_kind(&self.ecs);
+        let done = self.ecs.resource::<GoalsCompleted>().0 as usize;
+        GOALS
+            .iter()
+            .enumerate()
+            .map(|(i, &(kind, target))| Goal {
+                kind,
+                target,
+                progress: stored.get(&kind).copied().unwrap_or(0),
+                completed: i < done,
+            })
+            .collect()
+    }
+
     /// Sorted ascending by `Pos`.
     pub fn zones(&self) -> Vec<Pos> {
         self.ecs.resource::<Zones>().0.iter().copied().collect()
@@ -3420,6 +3588,7 @@ mod tests {
             dims,
             tiles,
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         }
     }
 
@@ -3434,6 +3603,7 @@ mod tests {
                 Tile::Empty,
             ],
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
 
         assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
@@ -4089,6 +4259,7 @@ mod tests {
             dims,
             tiles,
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
         let stone = Pos { x: 1, y: 0, z: 2 };
         let pit = Pos { x: 2, y: 0, z: 1 };
@@ -5420,6 +5591,7 @@ mod tests {
             dims,
             tiles: vec![Tile::Empty; 6],
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
         terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         terrain.tiles[super::worldgen::index(dims, 1, 0, 1)] = Tile::Solid(Material::Stone);
@@ -5445,6 +5617,7 @@ mod tests {
             dims,
             tiles: vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize],
             dirty: BTreeSet::new(),
+            pile_ground: Default::default(),
         };
         let heights = [
             ((0, 0), 3),
@@ -7223,6 +7396,95 @@ mod tests {
         );
     }
 
+    // 12.12 review run 2, Decision 1 (b): the entrance floods ran on every haul claim and delivery,
+    // and between spread piles each ran to the cap (4x the tick). Their answers are now kept until
+    // the terrain or the zones change. A 5x5 pile holds a hole at (7,7) whose fourth side is a rock
+    // spur out to the pile's edge, so the hole is a pocket until the spur is dug or the pile cells
+    // north of the hole leave the zone.
+    #[test]
+    fn the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change() {
+        let at1 = |x, y| Pos { x, y, z: 1 };
+        let (hole, spur) = (at1(7, 7), [at1(7, 8), at1(7, 9)]);
+        let fixture = || {
+            let mut terrain = flat_terrain(16, 16);
+            for cell in spur {
+                terrain.set_tile(cell, Tile::Solid(Material::Stone));
+            }
+            let zones: BTreeSet<Pos> = (5..=9)
+                .flat_map(|x| (5..=9).map(move |y| at1(x, y)))
+                .filter(|cell| *cell != hole && !spur.contains(cell))
+                .collect();
+            (terrain, zones)
+        };
+        let targets = |terrain: &Terrain, zones: &BTreeSet<Pos>| {
+            super::FLOODED.with(|n| n.set(0));
+            let targets = super::pile_targets(terrain, &BTreeSet::new(), zones);
+            (targets, super::FLOODED.with(|n| n.get()))
+        };
+
+        let (mut terrain, zones) = fixture();
+        let (first, flooded) = targets(&terrain, &zones);
+        assert_eq!(first[&at1(7, 6)], 2, "the hole is a pocket");
+        assert!(flooded > 0);
+        let (again, flooded) = targets(&terrain, &zones);
+        assert_eq!(again, first);
+        assert_eq!(flooded, 0, "unchanged terrain and zones flood nothing");
+        for cell in spur {
+            terrain.set_tile(cell, Tile::Empty);
+        }
+        assert_eq!(
+            targets(&terrain, &zones).0[&at1(7, 6)],
+            1,
+            "the dug spur opens the hole"
+        );
+
+        let (terrain, mut zones) = fixture();
+        assert_eq!(targets(&terrain, &zones).0[&at1(6, 7)], 2);
+        zones.remove(&at1(7, 5));
+        zones.remove(&at1(7, 6));
+        assert_eq!(
+            targets(&terrain, &zones).0[&at1(6, 7)],
+            1,
+            "the hole opens north once those cells leave the zone"
+        );
+    }
+
+    // 12.12 review run 3: four bars, two deep, ring a 3x3 hole at (8,8), with rock at the corners
+    // so no bar touches another. No bar's own box holds any of the hole, so a flood that is open
+    // once it leaves EVERY pile's box (`54b35bd`, the rule Wolf re-ruled away from) called the hole
+    // open and every bar cell lay one deep. One box over all four holds the hole: a pocket.
+    // NOTE: hauling this shape on HEAD still stalls (14 of 24, haulers stand in the hole to fill its
+    // last way out, #207), so this pins the depths, not a fill.
+    #[test]
+    fn a_hole_outside_each_piles_own_box_is_still_a_pocket() {
+        let at1 = |x, y| Pos { x, y, z: 1 };
+        let mut terrain = flat_terrain(16, 16);
+        for dx in [-3, -2, 2, 3] {
+            for dy in [-3, -2, 2, 3] {
+                terrain.set_tile(at1(8 + dx, 8 + dy), Tile::Solid(Material::Stone));
+            }
+        }
+        // Each bar: 3 cells along its side, at Chebyshev distance 2 (inner) and 3 (outer).
+        let bars = |out: i32| {
+            (-1..=1).flat_map(move |a: i32| {
+                [(a, -out), (a, out), (-out, a), (out, a)].map(|(dx, dy)| at1(8 + dx, 8 + dy))
+            })
+        };
+        let zones: BTreeSet<Pos> = bars(2).chain(bars(3)).collect();
+        assert_eq!(zones.len(), 24);
+        let targets = super::pile_targets(&terrain, &BTreeSet::new(), &zones);
+        assert_eq!(targets.len(), 24, "every bar cell is a target");
+        for cell in bars(3) {
+            assert_eq!(targets[&cell], 1, "{cell:?} touches open ground");
+        }
+        for cell in bars(2) {
+            assert_eq!(
+                targets[&cell], 2,
+                "{cell:?} lies inside: the hole is a pocket"
+            );
+        }
+    }
+
     #[test]
     fn wander_rest_is_ten_ticks() {
         let mut world = World::generate(42, Dims::DEFAULT);
@@ -7235,5 +7497,154 @@ mod tests {
         }
         world.step();
         assert_eq!(world.dwarves()[0].2, JobState::Walk);
+    }
+
+    // ---- 12.12 goals: a world with hand-placed items on a pile ----
+
+    /// A pile of `n` cells along y 0 at z 1 (x 0..n), zoned. Nothing is loose, so no haul job
+    /// exists and the items stay where they are put.
+    fn goal_pile(world: &mut World, n: i32) -> Vec<Pos> {
+        let cells: Vec<Pos> = (0..n).map(|x| at(x, 0, 1)).collect();
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .extend(cells.iter().copied());
+        cells
+    }
+
+    fn put_item(world: &mut World, id: u32, kind: super::ItemKind, pos: Pos) {
+        world.ecs.spawn((super::Item(kind), super::Id(id), pos));
+    }
+
+    fn goal_progress(world: &World) -> Vec<(u32, bool)> {
+        world
+            .goals()
+            .iter()
+            .map(|goal| (goal.progress, goal.completed))
+            .collect()
+    }
+
+    #[test]
+    fn goal_progress_counts_stored_items_only() {
+        use super::ItemKind::{Bloodstone, Stone, Tetrahedrite, Wood};
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 6);
+        // Stored: wood 100 on cell 0, wood 102 on cell 1, tetrahedrite 104 on cell 4.
+        put_item(&mut world, 100, Wood, pile[0]);
+        put_item(&mut world, 102, Wood, pile[1]);
+        put_item(&mut world, 104, Tetrahedrite, pile[4]);
+        // A second item on one cell is not stored.
+        put_item(&mut world, 101, Wood, pile[0]);
+        // A wood above a LOWER-id stone on its cell is not stored; the stone is, but is no goal.
+        put_item(&mut world, 99, Stone, pile[2]);
+        put_item(&mut world, 105, Wood, pile[2]);
+        // A loose item (off the zone) is not stored.
+        put_item(&mut world, 103, Wood, at(20, 0, 1));
+        put_item(&mut world, 106, Bloodstone, at(21, 0, 1));
+        // A carried item sitting on a zone cell is not stored.
+        put_item(&mut world, 107, Wood, pile[3]);
+        let entity = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(0)))
+            .expect("dwarf zero exists")
+            .id();
+        world.ecs.get_mut::<super::Carrying>(entity).unwrap().0 = Some(107);
+        // The carrier stands on that cell, so the carried item lies on the pile; read before the
+        // step, which may walk him off it.
+        *world.ecs.get_mut::<Pos>(entity).unwrap() = pile[3];
+        assert_eq!(
+            goal_progress(&world),
+            vec![(2, false), (1, false), (0, false)],
+            "a carried item on a pile cell is not stored"
+        );
+
+        world.step();
+
+        assert_eq!(
+            goal_progress(&world),
+            vec![(2, false), (1, false), (0, false)],
+            "progress is the stored count of each kind"
+        );
+    }
+
+    #[test]
+    fn a_completed_goal_stays_completed_when_its_stock_leaves() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 10);
+        for (i, cell) in pile.iter().enumerate() {
+            put_item(&mut world, 100 + i as u32, super::ItemKind::Wood, *cell);
+        }
+        world.step();
+        assert_eq!(goal_progress(&world)[0], (10, true));
+
+        // The pile is removed: the count follows the stock down, the goal stays done.
+        world.ecs.resource_mut::<super::Zones>().0.clear();
+        world.step();
+        assert_eq!(goal_progress(&world)[0], (0, true));
+
+        // Re-zone, then move one item off its cell: still done, progress is what is stored.
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .extend(pile.iter().copied());
+        let moved = world
+            .ecs
+            .iter_entities()
+            .find(|entity| entity.get::<super::Id>() == Some(&super::Id(100)))
+            .expect("item 100 exists")
+            .id();
+        *world.ecs.get_mut::<Pos>(moved).unwrap() = at(30, 0, 1);
+        world.step();
+        assert_eq!(goal_progress(&world)[0], (9, true));
+    }
+
+    #[test]
+    fn a_goal_completes_only_after_the_ones_ahead_of_it() {
+        use super::ItemKind::{Bloodstone, Tetrahedrite};
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 11);
+        put_item(&mut world, 100, Bloodstone, pile[0]);
+        for i in 0..10 {
+            put_item(&mut world, 101 + i, Tetrahedrite, pile[1 + i as usize]);
+        }
+        world.step();
+        // Bloodstone is stored and its count is met, yet nothing ahead of it is done.
+        assert_eq!(
+            goal_progress(&world),
+            vec![(0, false), (10, false), (1, false)],
+            "bloodstone stored first must not complete"
+        );
+    }
+
+    #[test]
+    fn the_chain_cascades_in_one_tick() {
+        use super::ItemKind::{Bloodstone, Tetrahedrite, Wood};
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let pile = goal_pile(&mut world, 21);
+        put_item(&mut world, 100, Bloodstone, pile[0]);
+        for i in 0..10 {
+            put_item(&mut world, 101 + i, Tetrahedrite, pile[1 + i as usize]);
+        }
+        // Wood is one short: nothing completes, the later stock waits.
+        for i in 0..9 {
+            put_item(&mut world, 120 + i, Wood, pile[11 + i as usize]);
+        }
+        world.step();
+        assert_eq!(
+            goal_progress(&world),
+            vec![(9, false), (10, false), (1, false)]
+        );
+
+        // The tenth wood lands on the last pile cell: all three complete on that one tick (D2).
+        put_item(&mut world, 129, Wood, pile[20]);
+        world.step();
+        assert_eq!(
+            goal_progress(&world),
+            vec![(10, true), (10, true), (1, true)],
+            "goal 1 meeting its target completes goals 2 and 3, whose stock is already there"
+        );
     }
 }

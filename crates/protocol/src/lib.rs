@@ -266,6 +266,15 @@ pub enum ItemKind {
     Bloodstone,
 }
 
+/// One step of the goal chain (12.12). All three are sent on every message, in chain order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Goal {
+    pub kind: ItemKind,
+    pub target: u32,
+    pub progress: u32,
+    pub completed: bool,
+}
+
 /// Full world state, sent on connect (AD-3). Field order is wire order.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Snapshot {
@@ -280,6 +289,7 @@ pub struct Snapshot {
     pub items: Vec<Item>,
     pub speed: Speed,
     pub tick: u64,
+    pub goals: Vec<Goal>,
 }
 
 /// One per loop iteration (AD-8). `tiles` is the dirty set; everything else is a
@@ -295,6 +305,7 @@ pub struct Delta {
     pub zones: Vec<Zone>,
     pub items: Vec<Item>,
     pub speed: Speed,
+    pub goals: Vec<Goal>,
     /// NOTE: every attached client sees every refusal in the broadcast delta.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refusals: Vec<Refusal>,
@@ -319,7 +330,8 @@ mod tests {
         "zones": [{"pos": [1, 2, 4]}],
         "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
         "speed": "normal",
-        "tick": 9
+        "tick": 9,
+        "goals": [{"kind": "wood", "target": 10, "progress": 12, "completed": true}, {"kind": "tetrahedrite", "target": 10, "progress": 3, "completed": false}, {"kind": "bloodstone", "target": 1, "progress": 0, "completed": false}]
     }"#;
 
     const DELTA_WIRE: &str = r#"{
@@ -330,7 +342,8 @@ mod tests {
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
         "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
-        "speed": "fast"
+        "speed": "fast",
+        "goals": [{"kind": "wood", "target": 10, "progress": 12, "completed": true}, {"kind": "tetrahedrite", "target": 10, "progress": 3, "completed": false}, {"kind": "bloodstone", "target": 1, "progress": 0, "completed": false}]
     }"#;
 
     #[test]
@@ -367,12 +380,32 @@ mod tests {
         assert_eq!(serde_json::to_value(&plain).unwrap(), plain_value);
         assert_eq!(
             serde_json::to_string(&plain).unwrap(),
-            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3],"kind":"stone"}],"speed":"fast"}"#
+            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3],"kind":"stone"}],"speed":"fast","goals":[{"kind":"wood","target":10,"progress":12,"completed":true},{"kind":"tetrahedrite","target":10,"progress":3,"completed":false},{"kind":"bloodstone","target":1,"progress":0,"completed":false}]}"#
         );
         plain.refusals.push(refusal);
         let encoded = serde_json::to_string(&plain).unwrap();
         assert!(encoded.contains(&format!(r#""refusals":[{literal}]"#)));
+        assert!(
+            encoded.find(r#""goals""#) < encoded.find(r#""refusals""#),
+            "goals sit after speed and before refusals"
+        );
         assert_eq!(serde_json::from_str::<Delta>(&encoded).unwrap(), plain);
+    }
+
+    #[test]
+    fn a_goal_is_literal_on_the_wire() {
+        let literal = r#"{"kind":"tetrahedrite","target":10,"progress":3,"completed":false}"#;
+        let goal: Goal = serde_json::from_str(literal).unwrap();
+        assert_eq!(
+            goal,
+            Goal {
+                kind: ItemKind::Tetrahedrite,
+                target: 10,
+                progress: 3,
+                completed: false
+            }
+        );
+        assert_eq!(serde_json::to_string(&goal).unwrap(), literal);
     }
 
     const COMMAND_WIRE: &str = r#"{"type":"set_speed","speed":"paused"}"#;

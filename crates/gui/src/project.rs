@@ -4225,6 +4225,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         assert!(sim_will_keep(&mirror, [0, 0, 2], Channel));
@@ -4287,6 +4288,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         let cell = |tile| crate::pick::PickedCell {
@@ -4465,6 +4467,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap()
     }
@@ -5477,6 +5480,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap()
     }
@@ -5498,6 +5502,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         assert!(!is_exposed(&enclosed, [1, 1, 1]));
@@ -5529,6 +5534,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         assert!(
@@ -5570,6 +5576,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
         assert!(
@@ -5623,6 +5630,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
 
@@ -5710,6 +5718,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
 
@@ -5790,6 +5799,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
 
@@ -5912,6 +5922,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
 
@@ -5970,6 +5981,7 @@ mod tests {
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
+            goals: Vec::new(),
         })
         .unwrap();
 

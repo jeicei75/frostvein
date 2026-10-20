@@ -2699,3 +2699,29 @@ story) and #194 (`route:undecided`); they are not repeated here.
 
 - **A kept clearing landing is re-checked against only part of the set-down rules** (`crates/sim-core/src/lib.rs:1799-1807`, acceptance + edge, read). The kept-landing filter re-checks blocked, occupied, standable, drop side and last exit, but not `walls_in_a_dwarf`, the target column, `job_positions`, marked cells or `z < pos.z`. A landing that turns illegal between the lift and the set-down is used anyway: a dwarf steps into a pocket it closes, or Wolf marks the cell. simd validates neither `SavedClearing.landing` nor `drop_from`, which a real save never gets wrong. The sweeps found no violation.
 - **simd's mid-clear positive control covers only the carry tick** (`crates/simd/tests/serve.rs:3138`, edge, RAN). The committed test saves at the first carried tick only, so a validator that refused a walk-to-stone or lift-phase save would stay green. The edge layer's probe loaded a real DEFAULT_SEED save at every tick of a clear: 73 clearing ticks, 28 carry ticks, 0 refused.
+
+## Deferred from: code review of 12-12-the-first-goals, run 1 (2026-10-18)
+
+- **AC 1 has no pinning test** (`crates/sim-core/tests/scenario.rs:5101`, acceptance, RAN). Nothing asserts that a fresh world's `goals()`, or the first delta's goals, have progress 0 and nothing completed. A live probe confirmed both on a real daemon.
+- **AC 4's "logged reason" is not asserted** (`crates/simd/src/main.rs:1050`, `:1076`, edge + acceptance, RAN). The two refusal tests check only `is_none()`. The log lines were seen live.
+- **The Snapshot is pinned order-insensitively** (`crates/protocol/src/lib.rs:523-527`, acceptance, read). It uses a `serde_json::Value` compare, so "goals after tick" on `Snapshot` is unpinned. This is pre-existing practice; the Delta is byte-exact.
+- **The real-daemon goal test never checks `completed`** (`crates/simd/tests/serve.rs:3243`, edge, read). `completed` is pinned only in the `bridge.rs` unit test and in sim-core save_load.
+- **The ring test counts naively and skips AC 11's no-retry clause** (`crates/sim-core/tests/scenario.rs:5192`, acceptance, read). It counts any item on a zone cell, carried items and stacks included. Row 13 still kills it. It goes with Review Decision 1 if that one is closed now.
+- **The tui goal row clips silently at narrow widths** (`crates/tui/src/view.rs:445`, edge, read). There is no ellipsis. The longest line is 72 columns.
+- **The gui goal readout may overlap the designate hint in a narrow window** (`crates/gui/src/ingest.rs:1932`, edge, read). The readout is bottom-right, the hint bottom-left. Not observed.
+- **Per-tick item scans are unmeasured** (`crates/sim-core/src/lib.rs:409`, `:444`, blind, read). `split_stored` runs in `create_haul_jobs` and again in `advance_goals`, plus once per Snapshot/Delta via `goals()`.
+- **`World::from_save` does not bound `goals_completed`** (`crates/sim-core/src/lib.rs:2818`, blind, read). Only simd bounds it (`crates/simd/src/main.rs:375`). Any other loader would accept a count past the chain and report every goal done.
+- **`goal_lines`' `{:>2}` misaligns the `/` at progress 100 or more** (`crates/client-core/src/lib.rs:112`, blind, read). Cosmetic.
+
+## Deferred from: code review of 12-12-the-first-goals, run 2 (2026-10-19)
+
+- **The ring test's retry bound is checked only until the ring fills, and its message overclaims** (`crates/sim-core/tests/scenario.rs:5248-5253`, `:5280-5283`, edge, RAN). Passing runs read 0 (plain ring) and 20 (boulder); the old rule reads 4569 with the free-cell assert stubbed. The counter counts any Haul job in cooldown, not only while a pile cell is free, and the loop exits at fill, so nothing after the fill is counted. With 26 stones for 20 cells, haul jobs may legitimately retry after the fill.
+- **Only one boulder position is tested, and no ring touching a drop or the map edge** (`crates/sim-core/tests/scenario.rs:5296-5301`, edge, read). Row 14's mutant keys on any non-standable side neighbour, so one position kills it. A pit in the hole was RAN live by the feature layer (20/20). The map edge and the other three hole cells are unprobed.
+
+## Deferred from: code review of 12-12-the-first-goals, run 3 (2026-10-19)
+
+- **No mutation row kills the entrance flood's stop at an already-answered cell** (`crates/sim-core/src/lib.rs:881-884`, blind+edge, read). Removing it changes cost and the test-only `FLOODED` count only; the cache unit test asserts `flooded == 0` on a repeat call, which still holds. A cost-only mutant, the class 12.12 Task 2b hit.
+- **spread5 is not reproducible from the 12.12 run 2 patch pass record** (story, run 2 patch pass RED table, acceptance, read). No pile cells for spread5 or for the 518-cell pile beyond "camp +-20, z +-3"; spread5's 12/0/0 end goes uncommented.
+- **The card's pile cost line sits under the "big pile (several hundred cells)" heading** (`_bmad-output/implementation-artifacts/12-12-signoff/vehicle-card.md:133-134`, acceptance, read). Five 25-cell piles are not that, and 2.86 ms is `World::step` for plan + spread5. Feature measured 2.4-2.9 ms live, so the figure holds.
+- **Ticks grow with loose items when haulers are short** (`crates/sim-core/src/lib.rs:583-593`, feature, RAN). 0 haulers, 66 loose stones: 11.17 ms/tick on HEAD (`bdac2d4`), 11.70 on main `60955ef`, ~90 t/s at fast4x. Cost is the per-haul-job `work_positions` evaluation in `claim_jobs`, not the entrance floods. Pre-existing; candidate for #206 (slow ticks).
+- **`Terrain.tiles` is not guarded, so a future direct writer would skip the `pile_ground` invalidation** (`crates/sim-core/src/lib.rs:704-712`, blind, read). Every production write goes through `Terrain::set_tile` today; only test fixtures assign `.tiles` directly, before any `pile_targets` call.

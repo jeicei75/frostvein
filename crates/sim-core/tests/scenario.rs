@@ -2059,6 +2059,7 @@ fn same_seed_and_commands_remain_deterministic() {
     let mut second = World::generate(42, Dims::DEFAULT);
     let channel_pos = first.dwarves()[0].1;
     let trunk = nearest_trunk_beside_open_ground(&first);
+    let camp = first.camp_origin();
     let commands = [
         SimCommand::Designate {
             kind: DesignationKind::Cut,
@@ -2068,22 +2069,30 @@ fn same_seed_and_commands_remain_deterministic() {
             kind: DesignationKind::Channel,
             rect: rect(channel_pos, channel_pos),
         },
+        // 12.12: this was a 21 x 21 x 21 pile from the origin, and with it no log was stored in the
+        // window (not in 1,500 ticks either). A pile at the camp stores the felled
+        // wood by tick ~290, so `goals` compares a real count.
         SimCommand::PlaceStockpile {
             rect: rect(
-                Pos { x: 0, y: 0, z: 0 },
                 Pos {
-                    x: 20,
-                    y: 20,
-                    z: 20,
+                    x: camp.x + 3,
+                    y: camp.y + 3,
+                    ..camp
+                },
+                Pos {
+                    x: camp.x + 5,
+                    y: camp.y + 5,
+                    ..camp
                 },
             ),
         },
     ];
     for command in commands {
-        first.apply_command(command);
+        assert_eq!(first.apply_command(command), None);
         second.apply_command(command);
     }
 
+    let mut most_wood_stored = 0;
     for tick in 0..400 {
         if tick == 60 {
             let command = SimCommand::SetProfession {
@@ -2117,7 +2126,11 @@ fn same_seed_and_commands_remain_deterministic() {
         assert_eq!(first.tiles(), second.tiles());
         assert_eq!(first.designations(), second.designations());
         assert_eq!(first.zones(), second.zones());
+        assert_eq!(first.goals(), second.goals());
+        most_wood_stored = most_wood_stored.max(first.goals()[0].progress);
     }
+    // THE GUARD (12.12): `goals` compared a real count, not zeros.
+    assert!(most_wood_stored > 0, "no wood was ever stored in 400 ticks");
     // THE GUARD: the cut was felled inside the window, so `item_kinds` compared real wood.
     assert!(
         first
@@ -4879,4 +4892,454 @@ fn job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever() {
         world.tick(),
         world.designations()
     );
+}
+
+// ---- 12.12: the goal chain on DEFAULT_SEED ----
+//
+// The plan is `12-12-signoff/plan-10-10-1.json` (made by `goals_wire.py` from the snapshot at tick 6
+// on the wire, byte-identical on 3 of 3 daemons), ported as literals: 46 digs to the nearest
+// tetrahedrite and bloodstone, 3 cuts, and 3 compact piles of 30/30/18 cells that enclose nothing,
+// so a pile-fill regression cannot masquerade as a goals failure (Task 2b's ring test judges that).
+
+const CHAIN_DIGS: [(i32, i32, i32); 46] = [
+    (73, 64, 11),
+    (74, 64, 11),
+    (75, 64, 11),
+    (76, 64, 11),
+    (77, 64, 11),
+    (77, 65, 11),
+    (78, 64, 11),
+    (68, 76, 14),
+    (68, 77, 14),
+    (68, 78, 14),
+    (68, 79, 14),
+    (69, 79, 14),
+    (69, 73, 12),
+    (69, 74, 12),
+    (69, 75, 12),
+    (69, 76, 12),
+    (69, 77, 12),
+    (69, 78, 12),
+    (69, 79, 12),
+    (51, 72, 12),
+    (51, 73, 12),
+    (51, 74, 12),
+    (51, 75, 12),
+    (51, 76, 12),
+    (51, 77, 12),
+    (50, 77, 12),
+    (49, 77, 12),
+    (48, 77, 12),
+    (48, 78, 12),
+    (48, 79, 12),
+    (48, 80, 12),
+    (47, 80, 12),
+    (46, 80, 12),
+    (46, 81, 12),
+    (46, 82, 12),
+    (46, 83, 12),
+    (55, 74, 13),
+    (55, 75, 13),
+    (55, 76, 13),
+    (55, 77, 13),
+    (55, 78, 13),
+    (55, 79, 13),
+    (55, 80, 13),
+    (55, 81, 13),
+    (55, 82, 13),
+    (55, 83, 13),
+];
+const CHAIN_CUTS: [(i32, i32, i32); 3] = [(65, 56, 10), (61, 74, 13), (65, 73, 12)];
+const CHAIN_PILES: [&[(i32, i32, i32)]; 3] = [
+    &[
+        (67, 63, 9),
+        (66, 63, 9),
+        (68, 63, 9),
+        (67, 62, 9),
+        (67, 64, 9),
+        (66, 62, 9),
+        (68, 62, 9),
+        (68, 64, 9),
+        (67, 61, 9),
+        (67, 65, 9),
+        (65, 62, 9),
+        (66, 61, 9),
+        (68, 65, 9),
+        (67, 60, 9),
+        (66, 65, 9),
+        (67, 66, 9),
+        (65, 61, 9),
+        (66, 60, 9),
+        (66, 66, 9),
+        (67, 67, 9),
+        (64, 61, 9),
+        (65, 60, 9),
+        (66, 59, 9),
+        (65, 66, 9),
+        (66, 67, 9),
+        (63, 61, 9),
+        (64, 60, 9),
+        (65, 59, 9),
+        (65, 67, 9),
+        (62, 61, 9),
+    ],
+    &[
+        (61, 65, 9),
+        (60, 65, 9),
+        (62, 65, 9),
+        (61, 64, 9),
+        (61, 66, 9),
+        (59, 65, 9),
+        (60, 64, 9),
+        (60, 66, 9),
+        (62, 66, 9),
+        (61, 63, 9),
+        (61, 67, 9),
+        (58, 65, 9),
+        (59, 64, 9),
+        (59, 66, 9),
+        (60, 63, 9),
+        (60, 67, 9),
+        (63, 66, 9),
+        (62, 67, 9),
+        (62, 63, 9),
+        (57, 65, 9),
+        (58, 64, 9),
+        (58, 66, 9),
+        (59, 63, 9),
+        (59, 67, 9),
+        (60, 62, 9),
+        (63, 67, 9),
+        (57, 64, 9),
+        (58, 63, 9),
+        (59, 62, 9),
+        (60, 61, 9),
+    ],
+    &[
+        (62, 69, 10),
+        (61, 69, 10),
+        (63, 69, 10),
+        (62, 68, 10),
+        (62, 70, 10),
+        (60, 69, 10),
+        (61, 68, 10),
+        (64, 69, 10),
+        (63, 70, 10),
+        (59, 69, 10),
+        (60, 68, 10),
+        (65, 69, 10),
+        (64, 70, 10),
+        (58, 69, 10),
+        (59, 68, 10),
+        (66, 69, 10),
+        (65, 70, 10),
+        (58, 68, 10),
+    ],
+];
+
+const CHAIN_SNAPSHOT_TICK: u64 = 6;
+/// Measured: wood completes at tick 1,847, tetrahedrite and (by the cascade, bloodstone was stored
+/// at 6,352) bloodstone at 9,828, the same ticks as the wire oracle. Pinned at 10,500: a 672-tick
+/// (6.8%) margin, which is what the unpaused wire form drifted by (10,454).
+const CHAIN_BOUND_TICK: u64 = 10_500;
+
+fn at3((x, y, z): (i32, i32, i32)) -> Pos {
+    Pos { x, y, z }
+}
+
+/// The stored count per kind from public readers only: 3.3's rule (uncarried, on a zone cell, the
+/// lowest id on that cell), re-derived here so it does not share code with the sim.
+fn stored_by_kind(world: &World) -> BTreeMap<ItemKind, u32> {
+    let carried: BTreeSet<u32> = world.carrying().iter().filter_map(|(_, c)| *c).collect();
+    let kinds: BTreeMap<Id, ItemKind> = world.item_kinds().into_iter().collect();
+    let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
+    let mut occupied = BTreeSet::new();
+    let mut stored = BTreeMap::new();
+    for (id, pos) in world.items() {
+        if carried.contains(&id.0) || !zones.contains(&pos) || !occupied.insert(pos) {
+            continue;
+        }
+        *stored.entry(kinds[&id]).or_insert(0) += 1;
+    }
+    stored
+}
+
+#[test]
+fn the_default_world_completes_the_goal_chain_with_scripted_commands() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    for _ in 0..CHAIN_SNAPSHOT_TICK {
+        world.step();
+    }
+    for cell in CHAIN_DIGS {
+        let pos = at3(cell);
+        let refused = world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(pos, pos),
+        });
+        assert_eq!(refused, None, "dig {pos:?} was refused");
+    }
+    for cell in CHAIN_CUTS {
+        let pos = at3(cell);
+        let refused = world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Cut,
+            rect: rect(pos, pos),
+        });
+        assert_eq!(refused, None, "cut {pos:?} was refused");
+    }
+    let pile_rects: Vec<Rect> = CHAIN_PILES
+        .iter()
+        .flat_map(|pile| pile.iter())
+        .map(|&cell| rect(at3(cell), at3(cell)))
+        .collect();
+    assert_eq!(pile_rects.len(), 78);
+    assert_eq!(
+        world.place_stockpile(&pile_rects),
+        None,
+        "the piles were refused"
+    );
+
+    let fresh = world.goals();
+    assert_eq!(
+        fresh.iter().map(|g| (g.kind, g.target)).collect::<Vec<_>>(),
+        vec![
+            (ItemKind::Wood, 10),
+            (ItemKind::Tetrahedrite, 10),
+            (ItemKind::Bloodstone, 1)
+        ]
+    );
+
+    let mut done_at: [Option<u64>; 3] = [None; 3];
+    while world.tick() < CHAIN_BOUND_TICK && done_at[2].is_none() {
+        world.step();
+        let goals = world.goals();
+        let stored = stored_by_kind(&world);
+        for (k, goal) in goals.iter().enumerate() {
+            // The oracle: progress IS the stored count of the kind, every tick.
+            let want = stored.get(&goal.kind).copied().unwrap_or(0);
+            assert_eq!(
+                goal.progress,
+                want,
+                "tick {}: {:?} progress {} but {want} are stored",
+                world.tick(),
+                goal.kind,
+                goal.progress
+            );
+            // Never earlier than the goal ahead, and never undone.
+            if goal.completed {
+                assert!(
+                    k == 0 || goals[k - 1].completed,
+                    "tick {}: goal {k} is completed before goal {}",
+                    world.tick(),
+                    k - 1
+                );
+                if done_at[k].is_none() {
+                    done_at[k] = Some(world.tick());
+                    assert!(
+                        want >= goal.target,
+                        "tick {}: {:?} completed on {want} of {}",
+                        world.tick(),
+                        goal.kind,
+                        goal.target
+                    );
+                }
+            } else {
+                assert!(done_at[k].is_none(), "goal {k} went back to incomplete");
+            }
+        }
+    }
+    assert!(
+        done_at[2].is_some(),
+        "the chain was not done by tick {CHAIN_BOUND_TICK}: {:?}",
+        world.goals()
+    );
+
+    let done_tick = world.tick();
+    for _ in 0..200 {
+        world.step();
+    }
+    assert_eq!(world.tick(), done_tick + 200, "the tick has climbed");
+    assert!(
+        world.goals().iter().all(|g| g.completed),
+        "a goal un-completed after the chain: {:?}",
+        world.goals()
+    );
+}
+
+// ---- 12.12 Task 2b: a pile round walkable ground it does not zone ----
+
+/// The creation shape (12.12 Q3): a pile band ringing the campfire, with the fire's 4 neighbours
+/// left out of the zone. Those 4 cells and the fire are walkable ground the zone surrounds.
+/// Chebyshev distance 1..=2 from the fire, minus the 4 side neighbours: 20 pile cells.
+fn ring_pile(fire: Pos) -> Vec<Pos> {
+    let mut cells = Vec::new();
+    for dy in -2..=2i32 {
+        for dx in -2..=2i32 {
+            let ring = dx.abs().max(dy.abs());
+            let hole = dx.abs() + dy.abs() == 1;
+            if ring >= 1 && !hole {
+                cells.push(Pos {
+                    x: fire.x + dx,
+                    y: fire.y + dy,
+                    ..fire
+                });
+            }
+        }
+    }
+    assert_eq!(cells.len(), 20);
+    cells
+}
+
+/// Places the pile `ring` makes round the fire on flat ground, turns `rock` (cells of the unzoned
+/// hole) to `Solid(Stone)`, lays 26 loose stones south of it, and runs until it is full or 6,000
+/// ticks pass. Asserts AC 11 by 3.3's stored rule (`World::goals` counts by it; stones have no
+/// goal, so this counts the same way: one uncarried item per pile cell): every cell stored, and no
+/// haul job sat in retry cooldown for long while a cell was still free. A sealed ring retried
+/// every tick for good; a fill that works sees at most a cooldown or two while haulers jostle.
+fn assert_ring_fills(ring: fn(Pos) -> Vec<Pos>, rock: &[Pos]) {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let fire = world.camp_origin();
+    // Flat open ground round the camp, so nothing but the zone shapes the fill.
+    for y in fire.y - 10..=fire.y + 10 {
+        for x in fire.x - 10..=fire.x + 10 {
+            let pos = Pos { x, y, z: fire.z };
+            if !is_standable(&world, pos) {
+                make_standable(&mut world, pos);
+            }
+        }
+    }
+    let pile = ring(fire);
+    let rects: Vec<Rect> = pile.iter().map(|&cell| rect(cell, cell)).collect();
+    assert_eq!(world.place_stockpile(&rects), None, "the ring was refused");
+    for &cell in rock {
+        assert!(
+            !pile.contains(&cell) && cell != fire,
+            "{cell:?} is not in the hole"
+        );
+        assert!(world.set_tile(cell, Tile::Solid(Material::Stone)));
+    }
+
+    // 26 loose stones in two rows south of the ring, more than there are pile cells.
+    let mut save = world.to_save();
+    let mut id = save.next_id;
+    for y in fire.y + 5..=fire.y + 6 {
+        for x in fire.x - 6..fire.x + 7 {
+            save.items
+                .push((id, Pos { x, y, z: fire.z }, ItemKind::Stone));
+            id += 1;
+        }
+    }
+    save.next_id = id;
+    assert!(save.items.len() >= 26);
+    let mut world = World::from_save(save);
+
+    let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
+    let stored = |world: &World| {
+        uncarried_item_tiles(world)
+            .iter()
+            .filter(|pos| zones.contains(pos))
+            .count()
+    };
+    let mut last_rise = 0;
+    let mut best = 0;
+    let end = world.tick() + 6_000;
+    let mut retry_ticks = 0;
+    while world.tick() < end && best < pile.len() {
+        world.step();
+        let now = stored(&world);
+        if world
+            .jobs()
+            .iter()
+            .any(|job| matches!(job.kind, JobKind::Haul { .. }) && job.retry_after > world.tick())
+        {
+            retry_ticks += 1;
+        }
+        if now > best {
+            best = now;
+            last_rise = world.tick();
+        }
+    }
+    let tiles = uncarried_item_tiles(&world);
+    let free: Vec<Pos> = pile
+        .iter()
+        .copied()
+        .filter(|cell| !tiles.contains(cell))
+        .collect();
+    let hauls = world
+        .jobs()
+        .iter()
+        .filter(|job| matches!(job.kind, JobKind::Haul { .. }))
+        .count();
+    assert!(
+        free.is_empty(),
+        "the ring sealed itself: {best} of {} cells stored, last at tick {last_rise} (now {}); \
+         {} free pile cells {free:?} while {hauls} haul jobs retry",
+        pile.len(),
+        world.tick(),
+        free.len()
+    );
+    assert!(
+        retry_ticks <= 100,
+        "haul jobs sat in retry cooldown for {retry_ticks} ticks while a pile cell was free"
+    );
+}
+
+#[test]
+fn a_pile_round_enclosed_ground_still_fills_every_cell() {
+    assert_ring_fills(ring_pile, &[]);
+}
+
+/// 12.12 review run 1, Decision 1 (a): a hole is a pocket when its flood runs dry, whatever borders
+/// it. One boulder at the fire's west neighbour made the hole touch rock, which read as a way out:
+/// 4 cells sealed and 10 haul jobs retried for good.
+#[test]
+fn a_pile_round_ground_beside_rock_still_fills_every_cell() {
+    let fire = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).camp_origin();
+    assert_ring_fills(
+        ring_pile,
+        &[Pos {
+            x: fire.x - 1,
+            ..fire
+        }],
+    );
+}
+
+/// 12.12 review run 2, Decision 1 (a): two piles that ring a hole together, touching only at
+/// corners. The west bar (two columns) is a pile of its own, and its box holds none of the hole;
+/// the other pile's box holds all of it. The bar's inner column is the first pile cell to try the
+/// hole, so a flood bounded by its own pile's box called the hole open, and the band sealed as it
+/// did when a hole read as a way in (Task 2b): 16 of 19 cells stored.
+/// The ring's cells less the four that touch the bar, plus a second bar column: 6 + 13 pile cells
+/// round a 7-cell hole.
+fn joint_ring_pile(fire: Pos) -> Vec<Pos> {
+    let bar = [(-3, -1), (-3, 0), (-3, 1), (-2, -1), (-2, 0), (-2, 1)];
+    let cut = [(-2, -2), (-2, 2), (-1, -1), (-1, 1)];
+    let cells: Vec<(i32, i32)> = ring_pile(fire)
+        .into_iter()
+        .map(|cell| (cell.x - fire.x, cell.y - fire.y))
+        .filter(|cell| !cut.contains(cell))
+        .chain(bar[..3].iter().copied())
+        .collect();
+    assert_eq!(cells.len(), 19);
+    // Two piles: no cell of the bar has a side neighbour in the rest.
+    for (x, y) in bar {
+        for n in [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)] {
+            assert!(
+                bar.contains(&n) || !cells.contains(&n),
+                "{n:?} touches the bar"
+            );
+        }
+    }
+    cells
+        .into_iter()
+        .map(|(dx, dy)| Pos {
+            x: fire.x + dx,
+            y: fire.y + dy,
+            ..fire
+        })
+        .collect()
+}
+
+#[test]
+fn two_piles_that_ring_ground_together_still_fill_every_cell() {
+    assert_ring_fills(joint_ring_pile, &[]);
 }

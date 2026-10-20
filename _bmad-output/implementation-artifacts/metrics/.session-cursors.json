@@ -19,6 +19,32 @@
     "schema": 2,
     "turns": 239
   },
+  "03075c92-3102-40ea-a041-3a211e22d35c.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1604629,
+        "cache_read": 97683108,
+        "input": 1142,
+        "output": 477427
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 4223093,
+        "cache_read": 70455289,
+        "input": 650,
+        "output": 4236
+      }
+    },
+    "cache_creation": 5827722,
+    "cache_read": 168138397,
+    "input": 1792,
+    "last_ts": "2026-10-16T14:29:53.649Z",
+    "marked_at": null,
+    "output": 481663,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 882
+  },
   "0331c9b7-1075-4c51-9cc5-09cba006485d.jsonl": {
     "by_model": {
       "claude-opus-5-5": {
@@ -836,6 +862,32 @@
     "schema": 2,
     "turns": 418
   },
+  "2a08aabe-6036-4d6a-bdc5-ebfcac95951e.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 835321,
+        "cache_read": 30082630,
+        "input": 590,
+        "output": 73241
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 622199,
+        "cache_read": 9534372,
+        "input": 230,
+        "output": 3285
+      }
+    },
+    "cache_creation": 1457520,
+    "cache_read": 39617002,
+    "input": 820,
+    "last_ts": "2026-10-18T08:04:34.336Z",
+    "marked_at": null,
+    "output": 76526,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 403
+  },
   "2a3e8fc5-ddba-48fe-b552-c45e44b2cc54.jsonl": {
     "by_model": {
       "claude-opus-5-5": {
@@ -1137,6 +1189,26 @@
     "output": 85528,
     "turns": 60
   },
+  "418b3528-1389-4356-b3a4-eed8886e3f9e.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 697368,
+        "cache_read": 38865477,
+        "input": 610,
+        "output": 295864
+      }
+    },
+    "cache_creation": 697368,
+    "cache_read": 38865477,
+    "input": 610,
+    "last_ts": "2026-10-19T13:09:17.056Z",
+    "marked_at": null,
+    "output": 295864,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 299
+  },
   "41f00da4-4a34-4b82-96fd-6c0f7528ee32.jsonl": {
     "by_model": {
       "claude-opus-5-5": {
@@ -1324,6 +1396,32 @@
     "schema": 2,
     "turns": 174
   },
+  "51ce71e4-ec1e-44f3-b1b0-728c0115e556.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 699495,
+        "cache_read": 26669554,
+        "input": 528,
+        "output": 82066
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 328360,
+        "cache_read": 2915370,
+        "input": 100,
+        "output": 550
+      }
+    },
+    "cache_creation": 1027855,
+    "cache_read": 29584924,
+    "input": 628,
+    "last_ts": "2026-10-19T18:20:43.150Z",
+    "marked_at": null,
+    "output": 82616,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 307
+  },
   "5248232a-b6d8-482e-9bae-1b42ce4b3a9a.jsonl": {
     "by_model": {
       "claude-fable-5": {
@@ -1373,6 +1471,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 759
+  },
+  "58b82f21-b165-45af-b7e3-41465590a3e1.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 259109,
+        "cache_read": 14904410,
+        "input": 262,
+        "output": 99178
+      }
+    },
+    "cache_creation": 259109,
+    "cache_read": 14904410,
+    "input": 262,
+    "last_ts": "2026-10-19T06:02:35.497Z",
+    "marked_at": null,
+    "output": 99178,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 130
   },
   "597258f9-4a8e-4851-9b11-346dd70c63ee.jsonl": {
     "by_model": {
@@ -1533,6 +1651,32 @@
     "schema": 2,
     "turns": 550
   },
+  "6a8c3907-cb7a-401a-b26f-ccd49431597c.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1161596,
+        "cache_read": 38574084,
+        "input": 660,
+        "output": 84229
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 360484,
+        "cache_read": 6649791,
+        "input": 198,
+        "output": 1719
+      }
+    },
+    "cache_creation": 1522080,
+    "cache_read": 45223875,
+    "input": 858,
+    "last_ts": "2026-10-18T20:02:31.482Z",
+    "marked_at": null,
+    "output": 85948,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 404
+  },
   "700269d1-1c23-465d-8f60-2ae589fb2a75.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -1556,6 +1700,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 306
+  },
+  "7261ea4f-0f97-4ff9-a8d4-cffef01c6495.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1023224,
+        "cache_read": 32859692,
+        "input": 466,
+        "output": 165228
+      }
+    },
+    "cache_creation": 1023224,
+    "cache_read": 32859692,
+    "input": 466,
+    "last_ts": "2026-10-15T17:46:36.299Z",
+    "marked_at": null,
+    "output": 165228,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 233
   },
   "7460af31-e836-4707-91c5-3eb681c3b36a.jsonl": {
     "by_model": {
@@ -1582,6 +1746,32 @@
     "quota_last": null,
     "schema": 2,
     "turns": 323
+  },
+  "75483502-40fa-418d-a019-a976b2a299bf.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1766769,
+        "cache_read": 35092833,
+        "input": 544,
+        "output": 111760
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 503164,
+        "cache_read": 982398,
+        "input": 46,
+        "output": 568
+      }
+    },
+    "cache_creation": 2269933,
+    "cache_read": 36075231,
+    "input": 590,
+    "last_ts": "2026-10-17T15:01:36.379Z",
+    "marked_at": null,
+    "output": 112328,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 288
   },
   "760bf910-3450-40da-b096-909897ad3ad3.jsonl": {
     "by_model": {
@@ -2054,6 +2244,32 @@
     "schema": 2,
     "turns": 116
   },
+  "b3040710-e03a-46cb-876d-41242f3b1651.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 2383742,
+        "cache_read": 110432598,
+        "input": 1392,
+        "output": 493854
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 1081266,
+        "cache_read": 45328439,
+        "input": 670,
+        "output": 4596
+      }
+    },
+    "cache_creation": 3465008,
+    "cache_read": 155761037,
+    "input": 2062,
+    "last_ts": "2026-10-18T17:38:25.734Z",
+    "marked_at": null,
+    "output": 498450,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 1016
+  },
   "b31911ae-3f52-4845-8b5a-47ac0be0ccb7.jsonl": {
     "by_model": {
       "<synthetic>": {
@@ -2251,6 +2467,26 @@
     "output": 186940,
     "turns": 216
   },
+  "bba0aa97-8f22-46d1-a87d-8c9ca17d097b.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 460308,
+        "cache_read": 16798338,
+        "input": 274,
+        "output": 117365
+      }
+    },
+    "cache_creation": 460308,
+    "cache_read": 16798338,
+    "input": 274,
+    "last_ts": "2026-10-20T09:27:51.898Z",
+    "marked_at": null,
+    "output": 117365,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 134
+  },
   "bd85bf64-a64e-4a6f-b13f-0b8c6dcbd12f.jsonl": {
     "by_model": {
       "claude-opus-5": {
@@ -2296,6 +2532,52 @@
     "quota_last": null,
     "schema": 2,
     "turns": 155
+  },
+  "be647a49-397f-4d8b-b305-20c155bb64df.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 660477,
+        "cache_read": 55643573,
+        "input": 610,
+        "output": 281767
+      }
+    },
+    "cache_creation": 660477,
+    "cache_read": 55643573,
+    "input": 610,
+    "last_ts": "2026-10-18T06:58:47.348Z",
+    "marked_at": null,
+    "output": 281767,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 301
+  },
+  "c09dd276-29c6-417a-82df-d05aa3332e22.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 1569375,
+        "cache_read": 26141254,
+        "input": 528,
+        "output": 109652
+      },
+      "claude-sonnet-5-5": {
+        "cache_creation": 282463,
+        "cache_read": 1566499,
+        "input": 68,
+        "output": 639
+      }
+    },
+    "cache_creation": 1851838,
+    "cache_read": 27707753,
+    "input": 596,
+    "last_ts": "2026-10-19T09:08:31.387Z",
+    "marked_at": null,
+    "output": 110291,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 290
   },
   "c1686eb2-fffc-438c-a30b-e5cb9bbdd4bb.jsonl": {
     "by_model": {
@@ -2374,6 +2656,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 326
+  },
+  "c4f9c021-cd80-45b8-b1d0-4bc4bc3c53fc.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 209798,
+        "cache_read": 10210208,
+        "input": 212,
+        "output": 62986
+      }
+    },
+    "cache_creation": 209798,
+    "cache_read": 10210208,
+    "input": 212,
+    "last_ts": "2026-10-18T10:13:36.661Z",
+    "marked_at": null,
+    "output": 62986,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 103
   },
   "c8e1e263-1947-4edc-8493-6da318ed94e3.jsonl": {
     "by_model": {
@@ -2645,6 +2947,26 @@
     "quota_last": null,
     "schema": 2,
     "turns": 457
+  },
+  "e97edc94-9afb-4293-9230-44d76eeda288.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 407201,
+        "cache_read": 27032824,
+        "input": 376,
+        "output": 182659
+      }
+    },
+    "cache_creation": 407201,
+    "cache_read": 27032824,
+    "input": 376,
+    "last_ts": "2026-10-17T10:44:07.867Z",
+    "marked_at": null,
+    "output": 182659,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 186
   },
   "ea3a682e-11ed-4459-a4d7-2c354a8dfe8d.jsonl": {
     "by_model": {
@@ -4272,5 +4594,25 @@
     "quota_last": 31.0,
     "schema": 2,
     "turns": 74
+  },
+  "rollout-2026-10-16T05-31-04-01a14331-438d-7aa3-8321-bc57f46c887b.jsonl": {
+    "by_model": {
+      "gpt-6-sol": {
+        "cache_creation": 0,
+        "cache_read": 42422400,
+        "input": 392922,
+        "output": 93890
+      }
+    },
+    "cache_creation": 0,
+    "cache_read": 42422400,
+    "input": 392922,
+    "last_ts": "2026-10-16T06:46:09.984Z",
+    "marked_at": null,
+    "output": 93890,
+    "primary_only": false,
+    "quota_last": 26.0,
+    "schema": 2,
+    "turns": 345
   }
 }

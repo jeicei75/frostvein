@@ -35,6 +35,7 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
         items: items_out(world),
         speed,
         tick: world.tick(),
+        goals: goals_out(world),
     }
 }
 
@@ -79,9 +80,22 @@ pub fn delta(
             .collect(),
         items: items_out(world),
         speed,
-
+        goals: goals_out(world),
         refusals,
     }
+}
+
+fn goals_out(world: &sim_core::World) -> Vec<protocol::Goal> {
+    world
+        .goals()
+        .into_iter()
+        .map(|goal| protocol::Goal {
+            kind: item_kind_out(goal.kind),
+            target: goal.target,
+            progress: goal.progress,
+            completed: goal.completed,
+        })
+        .collect()
 }
 
 fn items_out(world: &sim_core::World) -> Vec<protocol::Item> {
@@ -712,6 +726,42 @@ mod tests {
             }
         }
         assert!(saw_solid, "world must contain at least one solid tile");
+    }
+
+    #[test]
+    fn snapshot_and_delta_carry_the_goal_chain_as_hand_written_wire_values() {
+        // Wood done and stocked, one tetrahedrite stored: progress and completion both differ
+        // from a fresh world's zeros, so neither can be hardwired.
+        let mut save = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+        for x in 0..11 {
+            let pos = sim_core::Pos { x, y: 0, z: 1 };
+            let kind = if x < 10 {
+                sim_core::ItemKind::Wood
+            } else {
+                sim_core::ItemKind::Tetrahedrite
+            };
+            save.zones.push(pos);
+            save.items.push((save.next_id, pos, kind));
+            save.next_id += 1;
+        }
+        save.goals_completed = 1;
+        let mut world = sim_core::World::from_save(save);
+        let goal = |kind, target, progress, completed| protocol::Goal {
+            kind,
+            target,
+            progress,
+            completed,
+        };
+        let expected = vec![
+            goal(protocol::ItemKind::Wood, 10, 10, true),
+            goal(protocol::ItemKind::Tetrahedrite, 10, 1, false),
+            goal(protocol::ItemKind::Bloodstone, 1, 0, false),
+        ];
+        assert_eq!(snapshot(&world, protocol::Speed::Normal).goals, expected);
+        assert_eq!(
+            delta(&mut world, protocol::Speed::Normal, Vec::new()).goals,
+            expected
+        );
     }
 
     #[test]

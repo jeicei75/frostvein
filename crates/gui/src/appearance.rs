@@ -453,6 +453,11 @@ pub fn entity_appearance(kind: EntityKind) -> EntityAppearance {
 /// 12.6 look draft (`12-6-signoff/draft.md`).
 pub const TRADE_TEXT_COLOR: Color = Color::srgb_u8(150, 160, 170);
 
+/// The goal list's colours, from the approved 12.12 draft (`12-12-signoff/draft.md`): a done goal
+/// in the tui's pile green, the all-done title in the Gold tunic.
+pub const GOAL_DONE_COLOR: Color = Color::srgb_u8(88, 190, 118);
+pub const GOAL_ALL_DONE_COLOR: Color = Color::srgb_u8(0xD6, 0xA4, 0x2C);
+
 /// A dwarf's tunic colour, from the approved 12.2 draft (`12-2-signoff/draft.md`). The tui draws
 /// the same five hexes for the roster (`tui::palette::dwarf_colour`); both clients own their copy.
 pub fn dwarf_tunic_color(colour: protocol::DwarfColour) -> Color {

@@ -148,6 +148,7 @@ fn snapshot_with_dims(dims: Dims, tiles: Vec<Tile>, entities: Vec<Entity>) -> Sn
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 0,
+        goals: Vec::new(),
     }
 }
 
@@ -166,6 +167,7 @@ fn delta_at(tick: u64, tiles: Vec<TileChange>, entities: Vec<Entity>) -> Delta {
         items: Vec::new(),
         speed: Speed::Normal,
         refusals: Vec::new(),
+        goals: Vec::new(),
     }
 }
 
@@ -368,6 +370,7 @@ fn designation_delta_projects_in_the_same_update_that_ingests_it() {
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
 
@@ -497,6 +500,7 @@ fn a_designation_kind_change_restyles_the_existing_position_mark() {
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -779,6 +783,7 @@ fn snapshot_then_delta_in_one_frame_leaves_no_stale_marks() {
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -818,6 +823,7 @@ fn send_empty_designation_delta(app: &mut App, tiles: Vec<TileChange>) {
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -3087,6 +3093,7 @@ fn mouse_designation_on_a_sliced_underground_level_round_trips_to_a_projected_ma
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
 
@@ -4548,6 +4555,7 @@ fn a_buried_channel_mark_climbs_onto_the_rock_covering_it() {
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
+            goals: Vec::new(),
         }))))
         .unwrap();
     app.update();
@@ -5492,6 +5500,7 @@ fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
             pos: at,
             kind: protocol::ItemKind::Stone,
         }],
+        goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])
     };
     let parent_of_stone = |app: &mut App| {
@@ -5593,6 +5602,7 @@ fn a_hauler_does_not_pick_up_his_stone_until_he_is_drawn_at_its_cell() {
                 pos: [1, 0, 0],
                 kind: protocol::ItemKind::Stone,
             }],
+            goals: Vec::new(),
             ..delta_at(1, Vec::new(), vec![hauling])
         },
     );
@@ -5628,6 +5638,7 @@ fn a_dwarf_walking_in_at_fast_reaches_his_work_clip_within_the_run() {
     for tick in 1..=50 {
         let delta = Delta {
             speed: Speed::Fast,
+            goals: Vec::new(),
             ..delta_at(
                 tick,
                 Vec::new(),
@@ -5670,6 +5681,7 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
             pos: at,
             kind: protocol::ItemKind::Stone,
         }],
+        goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])
     };
     let stone = |app: &mut App| {
@@ -5784,6 +5796,7 @@ fn stone_70_at(tick: u64, entity: Entity, at: [i32; 3]) -> Delta {
             pos: at,
             kind: protocol::ItemKind::Stone,
         }],
+        goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])
     }
 }
@@ -6404,6 +6417,7 @@ fn a_carried_log_is_drawn_at_the_log_scale() {
             pos: at,
             kind: protocol::ItemKind::Wood,
         }],
+        goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])
     };
     apply_delta(

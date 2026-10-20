@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-18
+# last_updated: 2026-10-19
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-18
+last_updated: 2026-10-19
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2687,7 +2687,42 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: backlog
+  12-12-the-first-goals: review
+  #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
+  #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
+  #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
+  #     daemons (plan kept as plan-10-10-1.json); 5/5/1 ~6k, 8/8/2 ~18k, 10/10/3 ~25k. RED 3/3 on main (no `goals`).
+  #     NEW defect found by the probe: a pile RINGING the campfire seals its inner cells from every hauler
+  #     (`pile_targets` counts enclosed ground as a way in); 8 haul jobs retried forever. Not this story's (Q3).
+  #     Task 0 RULED 2026-10-18 (Wolf): Q1 10 wood / 10 tetrahedrite / 1 bloodstone; Q2 draft (A); Q3 pile-ring
+  #     defect FOLDED IN (Task 2b, AC 11). Defaults D1-D4 (live progress, cascade, refuse pre-12.12 saves, chain-done derived).
+  #   DEV 2026-10-18 (Sonnet 5.5 agents, Opus orchestrating): Tasks 1-9 done; pile-ring fix cost 17x the tick at
+  #     first, fixed by an early-exit flood; mutations/12-12.sh 15/15 KILLED; wire 5/5 OK + deliberate RED; full gate
+  #     GREEN on c53c050 (3914s). -> review. Code review in a FRESH session; AC 10 seat is Wolf's (vehicle-card.md).
+  #   CODE REVIEW run 1 2026-10-18 on 813c218 (4 layers, none timed out; wire GOALS OK 8/8, every hop WIRED):
+  #     0 HIGH. 1 MED decision: AC 11 seals again when the hole touches rock/drop (1 boulder in the ring -> 4 cells
+  #     free, 10 haul jobs retry). Wolf ruled (a): close it now. 4 patches (that fix, a spare-tetrahedrite line on
+  #     the card, the card's approximate pile counts, 2 record claims) LEFT AS ACTION ITEMS. 10 defer. -> in-progress.
+  #   REVIEW-PATCH run 1 2026-10-19 (Opus, fresh): all 4 landed (b3a9753 97f153d 09139bb 9fe4f89). Ring hole is
+  #     open only outside the zones' x/y box or at the cap; boulder RED -> green; row 14 KILLED; tick 0.296 vs 0.262 ms,
+  #     0 >10 ms. Full gate GREEN on 9fe4f89 (3766s). -> review: round-2 review in a FRESH session; AC 10 seat open.
+  #   SEAT 2026-10-19 on a4d07eb: AC 10 PASS (sitting A Q1-Q3; sitting B waived by Wolf).
+  #   CODE REVIEW run 2 2026-10-19, diff 813c218..6aa424d (4 layers, none timed out): 1 HIGH decision: the single
+  #     union box makes pile_targets 3.5-5x the old rule once piles are spread (2.39 vs 0.67 ms; live 5x25 piles
+  #     30.95 vs 6.14 cpu-ms/t, fast4x 17 t/s), fill unchanged. Wolf ruled (a) fix now (per-pile-component box).
+  #     3 patches (that fix, NOTE/spine overclaim, stale record/card lines) LEFT AS ACTION ITEMS; 2 defer;
+  #     stopping rule did NOT fire (a HIGH). -> in-progress.
+  #   REVIEW-PATCH run 2 2026-10-19 (Opus, fresh): per-pile boxes resealed the fire ring in a compact layout; Wolf
+  #     re-ruled (b): one box + flood answers kept until a tile or the zones change (25fe2da); spread piles 19.84 ->
+  #     2.86 ms, fill unchanged. 20/20 KILLED. Full gate GREEN on 12febce (4002s). -> review: round-3 review FRESH.
+  #   CODE REVIEW run 3 2026-10-19, diff 6aa424d..bdac2d4 (4 layers, none timed out): 0 HIGH. Cache holds: hashes
+  #     identical to 6aa424d, live 5 spread piles 2.49 vs 21.27 ms (193 vs 52 t/s), dig-heavy within 7% of main;
+  #     wire 5/5 OK; ring 20/20 t2881. REWORK row 1: the every-box rule (54b35bd) is pinned by nothing (MED patch:
+  #     test + row 19); LOW patch: NOTE/spine cap example cannot seal. 5 defer, 4 dismissed. STOPPING RULE FIRED:
+  #     no round 4. Patches LEFT AS ACTION ITEMS. -> in-progress: bmad-review-patch FRESH, then PR on Wolf's yes.
+  #   REVIEW-PATCH run 3 2026-10-20 (Opus, fresh): both landed. Every-box rule pinned by DEPTH (e18c542, row 19
+  #     KILLED): the hauled four-bar ring stalls on HEAD itself (14/24), Wolf ruled depth + issue -> #207. Cap example
+  #     fixed (a91e40f). Full gate GREEN on a91e40f (3779s). No round 4. -> review: PR on Wolf's yes.
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional

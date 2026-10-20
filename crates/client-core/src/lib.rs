@@ -4,7 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use protocol::{Delta, Designation, Dims, Entity, Item, Rect, Snapshot, Speed, Tile, Zone};
+use protocol::{
+    Delta, Designation, Dims, Entity, Goal, Item, ItemKind, Rect, Snapshot, Speed, Tile, Zone,
+};
 use thiserror::Error;
 
 pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
@@ -57,6 +59,119 @@ pub fn profession_text(profession: protocol::Profession) -> &'static str {
     }
 }
 
+/// The one spelling of a goal's item kind, shared by both clients.
+pub fn goal_kind_text(kind: ItemKind) -> &'static str {
+    match kind {
+        ItemKind::Stone => "stone",
+        ItemKind::Wood => "wood",
+        ItemKind::Tetrahedrite => "tetrahedrite",
+        ItemKind::Bloodstone => "bloodstone",
+    }
+}
+
+/// How a goal reads in the list: done, the one in progress, or a later one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GoalState {
+    Done,
+    Current,
+    Later,
+}
+
+/// Display only: every goal the daemon marked completed (the daemon owns the rule).
+pub fn goals_all_done(goals: &[Goal]) -> bool {
+    !goals.is_empty() && goals.iter().all(|goal| goal.completed)
+}
+
+/// The gui list's title line.
+pub fn goals_title_text(goals: &[Goal]) -> &'static str {
+    if goals_all_done(goals) {
+        "all goals done - play on"
+    } else {
+        "goals"
+    }
+}
+
+/// The gui list's lines, in chain order: `[x] wood          10 / 10`. The current goal is the
+/// first one not completed.
+pub fn goal_lines(goals: &[Goal]) -> Vec<(GoalState, String)> {
+    let current = goals.iter().position(|goal| !goal.completed);
+    goals
+        .iter()
+        .enumerate()
+        .map(|(index, goal)| {
+            let (state, mark) = if goal.completed {
+                (GoalState::Done, 'x')
+            } else if Some(index) == current {
+                (GoalState::Current, ' ')
+            } else {
+                (GoalState::Later, ' ')
+            };
+            (
+                state,
+                format!(
+                    "[{mark}] {:<12}  {:>2} / {}",
+                    goal_kind_text(goal.kind),
+                    goal.progress,
+                    goal.target
+                ),
+            )
+        })
+        .collect()
+}
+
+/// The tui goal row as `head` (grey) then `done` (green): the current goal and the done ones, or
+/// the chain-done line.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoalRow {
+    pub head: String,
+    pub done: String,
+}
+
+pub fn goal_row_text(goals: &[Goal]) -> GoalRow {
+    let count = |goal: &Goal| {
+        format!(
+            "{} {}/{}",
+            goal_kind_text(goal.kind),
+            goal.progress,
+            goal.target
+        )
+    };
+    let done: Vec<String> = goals
+        .iter()
+        .filter(|goal| goal.completed)
+        .map(count)
+        .collect();
+    match goals.iter().position(|goal| !goal.completed) {
+        None if goals.is_empty() => GoalRow {
+            head: String::new(),
+            done: String::new(),
+        },
+        None => GoalRow {
+            head: "all goals done - play on: ".to_string(),
+            done: done.join("  "),
+        },
+        Some(index) => {
+            let current = format!(
+                "goal {} of {}: {}",
+                index + 1,
+                goals.len(),
+                count(&goals[index])
+            );
+            if done.is_empty() {
+                GoalRow {
+                    head: current,
+                    done: String::new(),
+                }
+            } else {
+                GoalRow {
+                    head: format!("{current}   "),
+                    done: format!("done: {}", done.join("  ")),
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Changes {
     pub tiles: Vec<[i32; 3]>,
@@ -87,6 +202,7 @@ pub struct Mirror {
     items: BTreeMap<u32, Item>,
     speed: Speed,
     tick: u64,
+    goals: Vec<Goal>,
     previous_entities: BTreeMap<u32, Entity>,
     changes: Changes,
 }
@@ -112,6 +228,7 @@ impl Mirror {
             zones,
             items,
             speed,
+            goals,
             ..
         } = delta;
         let mut changes = Changes::default();
@@ -150,6 +267,7 @@ impl Mirror {
         self.zones = zones;
         self.items = items.into_iter().map(|item| (item.id, item)).collect();
         self.speed = speed;
+        self.goals = goals;
         self.tick = tick;
         self.changes = changes;
     }
@@ -164,6 +282,10 @@ impl Mirror {
 
     pub fn speed(&self) -> Speed {
         self.speed
+    }
+
+    pub fn goals(&self) -> &[Goal] {
+        &self.goals
     }
 
     pub fn tile(&self, pos: [i32; 3]) -> Option<Tile> {
@@ -212,6 +334,7 @@ impl Mirror {
                 .collect(),
             speed: snapshot.speed,
             tick: snapshot.tick,
+            goals: snapshot.goals,
             previous_entities: BTreeMap::new(),
             changes: Changes::default(),
         }
@@ -438,6 +561,125 @@ mod tests {
         }
     }
 
+    fn goal(kind: ItemKind, target: u32, progress: u32, completed: bool) -> Goal {
+        Goal {
+            kind,
+            target,
+            progress,
+            completed,
+        }
+    }
+
+    fn chain(wood: (u32, bool), tetra: (u32, bool), blood: (u32, bool)) -> Vec<Goal> {
+        vec![
+            goal(ItemKind::Wood, 10, wood.0, wood.1),
+            goal(ItemKind::Tetrahedrite, 10, tetra.0, tetra.1),
+            goal(ItemKind::Bloodstone, 1, blood.0, blood.1),
+        ]
+    }
+
+    #[test]
+    fn every_goal_kind_has_its_one_spelling() {
+        for (kind, text) in [
+            (ItemKind::Wood, "wood"),
+            (ItemKind::Tetrahedrite, "tetrahedrite"),
+            (ItemKind::Bloodstone, "bloodstone"),
+        ] {
+            assert_eq!(goal_kind_text(kind), text);
+        }
+    }
+
+    #[test]
+    fn the_goal_row_reads_as_the_approved_draft() {
+        let row = |goals: &[Goal]| {
+            let row = goal_row_text(goals);
+            (row.head, row.done)
+        };
+        let joined = |goals: &[Goal]| {
+            let (head, done) = row(goals);
+            format!("{head}{done}")
+        };
+        assert_eq!(
+            joined(&chain((4, false), (0, false), (0, false))),
+            "goal 1 of 3: wood 4/10"
+        );
+        assert_eq!(
+            row(&chain((10, true), (3, false), (0, false))),
+            (
+                "goal 2 of 3: tetrahedrite 3/10   ".to_string(),
+                "done: wood 10/10".to_string()
+            )
+        );
+        assert_eq!(
+            joined(&chain((10, true), (3, false), (0, false))),
+            "goal 2 of 3: tetrahedrite 3/10   done: wood 10/10"
+        );
+        assert_eq!(
+            row(&chain((12, true), (10, true), (1, true))),
+            (
+                "all goals done - play on: ".to_string(),
+                "wood 12/10  tetrahedrite 10/10  bloodstone 1/1".to_string()
+            )
+        );
+        assert_eq!(row(&[]), (String::new(), String::new()));
+    }
+
+    #[test]
+    fn the_goal_list_reads_as_the_approved_draft() {
+        let lines = |goals: &[Goal]| goal_lines(goals);
+        assert_eq!(
+            lines(&chain((10, true), (3, false), (1, false))),
+            vec![
+                (GoalState::Done, "[x] wood          10 / 10".to_string()),
+                (GoalState::Current, "[ ] tetrahedrite   3 / 10".to_string()),
+                (GoalState::Later, "[ ] bloodstone     1 / 1".to_string()),
+            ]
+        );
+        assert_eq!(
+            lines(&chain((12, true), (10, true), (1, true))),
+            vec![
+                (GoalState::Done, "[x] wood          12 / 10".to_string()),
+                (GoalState::Done, "[x] tetrahedrite  10 / 10".to_string()),
+                (GoalState::Done, "[x] bloodstone     1 / 1".to_string()),
+            ]
+        );
+        assert_eq!(
+            goals_title_text(&chain((10, true), (3, false), (0, false))),
+            "goals"
+        );
+        assert!(!goals_all_done(&chain((10, true), (3, false), (0, false))));
+        let done = chain((12, true), (10, true), (1, true));
+        assert!(goals_all_done(&done));
+        assert_eq!(goals_title_text(&done), "all goals done - play on");
+        assert!(!goals_all_done(&[]));
+    }
+
+    #[test]
+    fn a_deltas_goals_reach_the_mirror_and_a_snapshot_resets_them() {
+        let mut snap = snapshot();
+        snap.goals = chain((0, false), (0, false), (0, false));
+        let mut mirror = Mirror::from_snapshot(snap.clone()).unwrap();
+        assert_eq!(mirror.goals(), snap.goals.as_slice());
+
+        let after = chain((10, true), (3, false), (0, false));
+        mirror.apply_delta(Delta {
+            msg_type: MessageType::Delta,
+            tick: 10,
+            tiles: Vec::new(),
+            entities: Vec::new(),
+            designations: Vec::new(),
+            zones: Vec::new(),
+            items: Vec::new(),
+            speed: Speed::Normal,
+            refusals: Vec::new(),
+            goals: after.clone(),
+        });
+        assert_eq!(mirror.goals(), after.as_slice());
+
+        mirror.apply_snapshot(snap.clone()).unwrap();
+        assert_eq!(mirror.goals(), snap.goals.as_slice());
+    }
+
     fn snapshot() -> Snapshot {
         Snapshot {
             msg_type: MessageType::Snapshot,
@@ -463,6 +705,7 @@ mod tests {
             }],
             speed: Speed::Normal,
             tick: 9,
+            goals: Vec::new(),
         }
     }
 
@@ -484,6 +727,7 @@ mod tests {
             speed: Speed::Fast,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
 
         assert_eq!(mirror.tile([1, 0, 0]), Some(Tile::Solid(Material::Stone)));
@@ -517,12 +761,14 @@ mod tests {
             speed: Speed::Fast,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
 
         let replacement = Snapshot {
             tick: 11,
             entities: Vec::new(),
             items: Vec::new(),
+            goals: Vec::new(),
             ..snapshot()
         };
         mirror.apply_snapshot(replacement).unwrap();
@@ -532,6 +778,7 @@ mod tests {
         assert_eq!(mirror.tick(), 11);
         let error = Mirror::from_snapshot(Snapshot {
             tiles: vec![Tile::Empty],
+            goals: Vec::new(),
             ..snapshot()
         })
         .unwrap_err()
@@ -548,6 +795,7 @@ mod tests {
                 z: 4,
             },
             tiles: Vec::new(),
+            goals: Vec::new(),
             ..snapshot()
         });
 
@@ -626,6 +874,7 @@ mod tests {
             speed: Speed::Normal,
 
             refusals: Vec::new(),
+            goals: Vec::new(),
         });
 
         assert_eq!(mirror.changes().spawned, vec![8]);
