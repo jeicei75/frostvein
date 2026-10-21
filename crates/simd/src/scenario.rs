@@ -343,10 +343,6 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
     let low = means.iter().copied().fold(f64::INFINITY, f64::min);
     let high = means.iter().copied().fold(0.0, f64::max);
     let average = means.iter().sum::<f64>() / runs as f64;
-    let spread = match runs {
-        1 => "1 run: no floor".to_string(),
-        _ => format!("spread {:.1}%", (high - low) / average * 100.0),
-    };
     if hashes.iter().any(|hash| *hash != hashes[0]) {
         let hashes: Vec<String> = hashes.iter().map(|hash| format!("{hash:016x}")).collect();
         bail!(
@@ -354,9 +350,14 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             hashes.join(" ")
         );
     }
-    println!(
-        "bench {name}: {runs} runs, mean {low:.4}..{high:.4} ms ({spread}), state identical across {runs} runs"
-    );
+    if runs == 1 {
+        println!("bench {name}: 1 run, mean {low:.4} ms (1 run: no floor)");
+    } else {
+        println!(
+            "bench {name}: {runs} runs, mean {low:.4}..{high:.4} ms (spread {:.1}%), state identical across {runs} runs",
+            (high - low) / average * 100.0
+        );
+    }
     Ok(())
 }
 

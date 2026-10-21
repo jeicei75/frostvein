@@ -1,0 +1,10 @@
+{
+ "name": "seat-slow",
+ "about": "Wolf's 2026-10-19 12.12 seat save (~/frostvein-saves/12-12-seat-slow.save, tick 53,759): Bifur frozen carrying stone 138, the stuck-loop slowness posted on #204. No commands. Rots at the next save-format change: re-capture it then.",
+ "start": {
+  "save": "saves/12-12-seat-slow.save"
+ },
+ "ticks": 3000,
+ "speed": "fast4x",
+ "commands": []
+}

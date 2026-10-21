@@ -1,0 +1,107 @@
+{
+ "name": "deep-pit",
+ "about": "12.10b's two-wide staircase four levels down at [61,62,9] (scenario.rs staircase_site) with its creation pile, each level marked on the tick the level above opened (ticks 0/420/1180/1644; all four open by 2192 at authoring). The cost of a crew working down a pit.",
+ "start": {
+  "seed": 4026891802
+ },
+ "ticks": 3000,
+ "speed": "fast4x",
+ "commands": [
+  {
+   "at": 0,
+   "command": {
+    "type": "place_stockpile",
+    "rects": [
+     {
+      "min": [
+       56,
+       66,
+       9
+      ],
+      "max": [
+       72,
+       73,
+       9
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "at": 0,
+   "command": {
+    "type": "designate",
+    "kind": "channel",
+    "rect": {
+     "min": [
+      61,
+      62,
+      9
+     ],
+     "max": [
+      65,
+      63,
+      9
+     ]
+    }
+   }
+  },
+  {
+   "at": 420,
+   "command": {
+    "type": "designate",
+    "kind": "channel",
+    "rect": {
+     "min": [
+      62,
+      62,
+      8
+     ],
+     "max": [
+      65,
+      63,
+      8
+     ]
+    }
+   }
+  },
+  {
+   "at": 1180,
+   "command": {
+    "type": "designate",
+    "kind": "channel",
+    "rect": {
+     "min": [
+      63,
+      62,
+      7
+     ],
+     "max": [
+      65,
+      63,
+      7
+     ]
+    }
+   }
+  },
+  {
+   "at": 1644,
+   "command": {
+    "type": "designate",
+    "kind": "channel",
+    "rect": {
+     "min": [
+      64,
+      62,
+      6
+     ],
+     "max": [
+      65,
+      63,
+      6
+     ]
+    }
+   }
+  }
+ ]
+}
