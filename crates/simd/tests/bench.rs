@@ -133,6 +133,7 @@ fn a_scenario_without_its_command_reaches_a_different_world() {
         json["commands"] = serde_json::json!([])
     });
     let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
     let text = stdout(&output);
     assert!(output.status.success(), "bench failed: {output:?}");
     assert_eq!(run_states(&text), vec![expected(false)], "{text}");
@@ -202,6 +203,7 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
     ];
     for (name, path, cause) in cases {
         let output = bench(&path, 1);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!output.status.success(), "{name}: exited 0: {output:?}");
         assert!(

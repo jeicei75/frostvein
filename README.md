@@ -180,6 +180,18 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--clock','12')
 ```
 
+**A scripted run** (13.1): the daemon replays a scenario from `scenarios/`, holding its first tick
+until the client connects and pausing on its last, so a `--perf-log` covers exactly that run with no
+keys pressed. Its `done` line prints the state hash `simd --bench` prints for the same file:
+
+```powershell
+# WSL, from the repo
+simd 7451 --scenario scenarios/plan.json
+
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\plan.csv')
+```
+
 - **Write captures and logs under `.bin\`** with an absolute path. It is gitignored, so the checkout
   stays clean and the launcher can still say the served tree is exactly HEAD.
 - **One fresh `simd` per `--static-world` capture**, started with `--pause-at 120`.
@@ -366,6 +378,20 @@ scripts/push.sh
 It gates *before* opening the connection, and then **asks the remote whether the push landed**. That
 last step is the point — a push killed by the idle timeout leaves `GATE GREEN` as the last line on
 screen and no branch on the remote, which is a failure that reads as a success. See issue #76.
+
+### Tick cost
+
+```bash
+cargo build --release -p simd
+target/release/simd --bench scenarios/plan.json          # 5 runs: step mean/p99/max, state hash
+scripts/tick-bench.sh BASE HEAD                          # every scenario, both commits, interleaved
+```
+
+`--bench` replays a scenario headless with no tick sleep and checks that every run reaches the same
+state. `tick-bench.sh` builds both commits in scratch worktrees and says, per scenario, whether the
+change in the mean clears each build's own run-to-run floor. It is informational, never a gate, and
+needs both commits at or after 13.1. Judge by the mean: the max is one noisy tick. Do not run it
+beside the full gate or `scripts/mutate.sh`, both of which move the floor.
 
 ## Crates
 

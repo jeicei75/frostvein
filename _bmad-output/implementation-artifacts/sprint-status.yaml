@@ -2736,7 +2736,7 @@ development_status:
   # the goal ("more ambitious") and adds its game stories here. Opened BEFORE the PRD with the two
   # stories any M4 goal needs: 13.1 builds the bench (#210), 13.2 spikes the movement layer with it
   # (#209), in parallel with the PRD draft. The PRD is final only after Wolf rules 13.2.
-  13-1-scripted-runs-and-the-tick-bench: in-progress
+  13-1-scripted-runs-and-the-tick-bench: review
   # 13.1: Wolf picked Opus 5.5 to implement (2026-10-21).
   13-2-the-way-through-pathfinding-and-reachability-spike: backlog
   epic-13-retrospective: optional
