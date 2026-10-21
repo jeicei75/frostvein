@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default; Wolf picked Opus 5.5 to IMPLEMENT too
 
 # Story 13.1: Scripted Runs and the Tick Bench
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 

@@ -24,10 +24,12 @@ PY
 
 mutation "daemon discards stockpile refusal" simd the_daemon_keeps_channels_and_stockpiles_only_at_standable_cells <<'PY'
 import pathlib
+# Re-pointed 2026-10-21 (13.1): the live loop's sim arms moved into `apply_sim_command`, which a scenario
+# also calls; the seam is unchanged.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '                    refusals.extend(world.place_stockpile(&rects).map(bridge::refusal_out));\n'
+old = '            world.place_stockpile(&rects).map(bridge::refusal_out)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    refusals.extend(world.place_stockpile(&rects).map(bridge::refusal_out).filter(|_| false));\n'))
+p.write_text(s.replace(old, '            world.place_stockpile(&rects).map(bridge::refusal_out).filter(|_| false)\n'))
 PY
 
 mutation "tui omits refusal status" tui streamed_refusal_stays_on_the_status_row_across_plain_deltas <<'PY'

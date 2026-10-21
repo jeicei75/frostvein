@@ -4226,6 +4226,7 @@ dependencies = [
  "anyhow",
  "client-core",
  "protocol",
+ "serde",
  "serde_json",
  "sim-core",
 ]

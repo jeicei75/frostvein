@@ -276,80 +276,57 @@ PY
 
 mutation "daemon designate arm decodes but discards" simd designation_and_stockpile_changes_reach_both_clients <<'PY'
 import pathlib
-# Re-pointed 2026-10-05 (12.7): 12.7's Designate arm now extends `refusals` with the sim's result; the seam is unchanged.
+# Re-pointed 2026-10-21 (13.1): the live loop's sim arms moved into `apply_sim_command`, which a scenario
+# also calls; the seam is unchanged.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''                protocol::Command::Designate { kind, rect } => {
-                    refusals.extend(
-                        world
-                            .apply_command(sim_core::SimCommand::Designate {
-                                kind: bridge::designation_kind_in(kind),
-                                rect: bridge::rect_in(rect),
-                            })
-                            .map(bridge::refusal_out),
-                    );
-                }
+old = '''        protocol::Command::Designate { kind, rect } => world
+            .apply_command(sim_core::SimCommand::Designate {
+                kind: bridge::designation_kind_in(kind),
+                rect: bridge::rect_in(rect),
+            })
+            .map(bridge::refusal_out),
 '''
-assert old in s
-p.write_text(s.replace(old, '                protocol::Command::Designate { .. } => {}\n'))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        protocol::Command::Designate { .. } => None,\n'))
 PY
-
 mutation "daemon remove-stockpile arm decodes but discards" simd designation_and_stockpile_changes_reach_both_clients <<'PY'
 import pathlib
+# Re-pointed 2026-10-21 (13.1): the live loop's sim arms moved into `apply_sim_command`, which a scenario
+# also calls; the seam is unchanged.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''                protocol::Command::RemoveStockpile { rect } => {
-                    world.apply_command(sim_core::SimCommand::RemoveStockpile {
-                        rect: bridge::rect_in(rect),
-                    });
-                }
+old = '''        protocol::Command::RemoveStockpile { rect } => {
+            world.apply_command(sim_core::SimCommand::RemoveStockpile {
+                rect: bridge::rect_in(rect),
+            });
+            None
+        }
 '''
-assert old in s
-p.write_text(s.replace(old, '                protocol::Command::RemoveStockpile { .. } => {}\n'))
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        protocol::Command::RemoveStockpile { .. } => None,\n'))
 PY
-
 mutation "daemon designate intake is blocked while paused" simd designation_is_applied_while_tick_is_paused <<'PY'
 import pathlib
-# Re-pointed 2026-10-05 (12.7): 12.7's Designate arm now extends `refusals` with the sim's result; the seam is unchanged.
+# Re-pointed 2026-10-21 (13.1): the live loop's sim arms moved into `apply_sim_command`, which a scenario
+# also calls; the seam is unchanged.
+# The loop now hands every sim command to that function in one arm, so the pause gate sits on the call.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''                protocol::Command::Designate { kind, rect } => {
-                    refusals.extend(
-                        world
-                            .apply_command(sim_core::SimCommand::Designate {
-                                kind: bridge::designation_kind_in(kind),
-                                rect: bridge::rect_in(rect),
-                            })
-                            .map(bridge::refusal_out),
-                    );
-                }
-'''
-new = '''                protocol::Command::Designate { kind, rect } => {
-                    if speed != protocol::Speed::Paused {
-                        refusals.extend(
-                            world
-                                .apply_command(sim_core::SimCommand::Designate {
-                                    kind: bridge::designation_kind_in(kind),
-                                    rect: bridge::rect_in(rect),
-                                })
-                                .map(bridge::refusal_out),
-                        );
-                    }
-                }
-'''
-assert old in s
+old = '                    refusals.extend(apply_sim_command(&mut world, command));\n'
+assert s.count(old) == 1
+new = '                    if speed != protocol::Speed::Paused {\n                        refusals.extend(apply_sim_command(&mut world, command));\n                    }\n'
 p.write_text(s.replace(old, new))
 PY
-
 mutation "daemon swaps place and remove stockpile" simd designation_and_stockpile_changes_reach_both_clients <<'PY'
 import pathlib
-import re
+# Re-pointed 2026-10-21 (13.1): the live loop's sim arms moved into `apply_sim_command`, which a scenario
+# also calls; the seam is unchanged.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 # 12.1 review: a place is one drag through `place_stockpile`, so the swap spells both halves.
-place = '                    refusals.extend(world.place_stockpile(&rects).map(bridge::refusal_out));\n'
+place = '            world.place_stockpile(&rects).map(bridge::refusal_out)\n'
 remove = 'sim_core::SimCommand::RemoveStockpile {'
 assert s.count(place) == 1 and s.count(remove) == 1
 s = s.replace(remove, 'sim_core::SimCommand::PlaceStockpile {')
-p.write_text(s.replace(place, '                    for rect in rects { world.apply_command(sim_core::SimCommand::RemoveStockpile { rect }); }\n'))
+p.write_text(s.replace(place, '            for rect in rects { world.apply_command(sim_core::SimCommand::RemoveStockpile { rect }); }\n            None\n'))
 PY
-
 mutation "x commits only CancelDesignation" tui remove_mode_commits_cancel_then_remove_stockpile_for_the_same_rect <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()

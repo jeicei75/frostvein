@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod bridge;
+mod scenario;
 
 use anyhow::{Context, bail};
 use std::{
@@ -8,6 +9,7 @@ use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
+    path::PathBuf,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -60,18 +62,32 @@ struct Client {
     stream: TcpStream,
 }
 
-/// `simd [port] [--pause-at TICK]`.
+/// What the command line asked for.
+#[derive(Debug, PartialEq)]
+struct Args {
+    port: u16,
+    pause_at: Option<u64>,
+    /// `--scenario FILE`: serve, replaying the file's commands on their ticks (13.1).
+    scenario: Option<PathBuf>,
+    /// `--bench FILE`: replay the file headless, time every step and exit; no TCP (13.1).
+    bench: Option<PathBuf>,
+    /// `--runs N`, for `--bench` only.
+    runs: usize,
+}
+
+/// `simd [port] [--pause-at TICK] [--scenario FILE]`, or `simd --bench FILE [--runs N]`.
 ///
 /// `--pause-at` lets the DAEMON freeze its own world on a chosen tick. A `gui --static-world`
 /// client schedules the same pause (tick 120), but only if it connects before that tick -- 12 s
 /// after the daemon starts. A script starts the client within a second; a person at the vehicle,
 /// switching windows and running `launch-gui.ps1`, connected at tick 230 and every capture was
 /// refused. With `--pause-at 120` the world stops on 120 however late the client arrives.
-fn parse_args(
-    args: impl IntoIterator<Item = std::ffi::OsString>,
-) -> anyhow::Result<(u16, Option<u64>)> {
-    let mut port = protocol::DEFAULT_PORT;
+fn parse_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> anyhow::Result<Args> {
+    let mut port = None;
     let mut pause_at = None;
+    let mut scenario = None;
+    let mut bench = None;
+    let mut runs = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         // NOTE: OsString, not String — std::env::args panics on non-UTF-8 argv during
@@ -88,17 +104,73 @@ fn parse_args(
                     .parse()
                     .with_context(|| format!("invalid --pause-at tick {value:?}"))?,
             );
+        } else if text == "--scenario" || text == "--bench" {
+            let value = PathBuf::from(
+                args.next()
+                    .with_context(|| format!("{text} requires a scenario file"))?,
+            );
+            if text == "--scenario" {
+                scenario = Some(value);
+            } else {
+                bench = Some(value);
+            }
+        } else if text == "--runs" {
+            let value = args.next().context("--runs requires a count")?;
+            let value = value.to_string_lossy();
+            let count: usize = value
+                .parse()
+                .with_context(|| format!("invalid --runs count {value:?}"))?;
+            if count == 0 {
+                bail!("--runs must be at least 1");
+            }
+            runs = Some(count);
         } else {
-            port = text.parse().with_context(|| {
+            port = Some(text.parse().with_context(|| {
                 format!("invalid port argument {text:?}: expected 0-65535 (0 = OS-assigned)")
-            })?;
+            })?);
         }
     }
-    Ok((port, pause_at))
+    if bench.is_some() && (port.is_some() || pause_at.is_some() || scenario.is_some()) {
+        bail!("--bench runs headless: it takes no port, --pause-at or --scenario");
+    }
+    if bench.is_none() && runs.is_some() {
+        bail!("--runs is for --bench only");
+    }
+    Ok(Args {
+        port: port.unwrap_or(protocol::DEFAULT_PORT),
+        pause_at,
+        scenario,
+        bench,
+        runs: runs.unwrap_or(scenario::DEFAULT_RUNS),
+    })
 }
 
 fn main() -> anyhow::Result<()> {
-    let (port, pause_at) = parse_args(std::env::args_os().skip(1))?;
+    let Args {
+        port,
+        pause_at,
+        scenario,
+        bench,
+        runs,
+    } = parse_args(std::env::args_os().skip(1))?;
+    if let Some(path) = bench {
+        return scenario::bench(&path, runs);
+    }
+    // Loaded before binding, so a bad file never leaves a listening daemon behind it.
+    let scenario = scenario
+        .map(|path| scenario::Scenario::load(&path))
+        .transpose()?;
+    let (world, scenario_live) = match scenario {
+        Some(scenario) => {
+            let world = scenario.world()?;
+            let live = scenario::Live::new(scenario, world.tick());
+            (world, Some(live))
+        }
+        None => (
+            sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT),
+            None,
+        ),
+    };
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
     println!("listening on 127.0.0.1:{}", listener.local_addr()?.port());
@@ -122,8 +194,7 @@ fn main() -> anyhow::Result<()> {
             .context("could not queue --pause-at")?;
         println!("pausing at tick {tick} (--pause-at)");
     }
-    let world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
-    tick(world, new_rx, live, command_tx, command_rx)
+    tick(world, scenario_live, new_rx, live, command_tx, command_rx)
 }
 
 fn accept_connections(
@@ -154,13 +225,26 @@ fn accept_connections(
 
 fn tick(
     mut world: sim_core::World,
+    mut scenario: Option<scenario::Live>,
     new_rx: Receiver<TcpStream>,
     live: Arc<AtomicUsize>,
     command_tx: mpsc::Sender<protocol::Command>,
     command_rx: Receiver<protocol::Command>,
 ) -> anyhow::Result<()> {
     let mut clients = Vec::new();
-    let mut speed = protocol::Speed::Normal;
+    // A scenario holds its start tick until the first client connects (13.1 Task 0 Q2), so a
+    // `--perf-log` at the seat covers the whole run however long the launch takes.
+    let mut speed = match &scenario {
+        Some(live) => {
+            println!(
+                "scenario {}: holding tick {} until a client connects",
+                live.name(),
+                world.tick()
+            );
+            protocol::Speed::Paused
+        }
+        None => protocol::Speed::Normal,
+    };
     // A `SetSpeed` that named a future tick, held until the world reaches it. See
     // `protocol::Command::SetSpeed::at_tick`: applying one on arrival makes the freeze point
     // latency-bound, which is issue #111.
@@ -210,6 +294,13 @@ fn tick(
                     // paused therefore leaves the loop paused on the restored tick.
                     if let Some(loaded) = load_world() {
                         world = loaded;
+                        if let Some(live) = scenario.take() {
+                            println!(
+                                "scenario {}: abandoned at tick {}: a client loaded a save",
+                                live.name(),
+                                world.tick()
+                            );
+                        }
                         let line = Arc::new(format!(
                             "{}\n",
                             serde_json::to_string(&bridge::snapshot(&world, speed))?
@@ -221,40 +312,27 @@ fn tick(
                     eprintln!("shutting down on client quit");
                     return Ok(());
                 }
-                protocol::Command::Designate { kind, rect } => {
-                    refusals.extend(
-                        world
-                            .apply_command(sim_core::SimCommand::Designate {
-                                kind: bridge::designation_kind_in(kind),
-                                rect: bridge::rect_in(rect),
-                            })
-                            .map(bridge::refusal_out),
-                    );
+                command @ (protocol::Command::Designate { .. }
+                | protocol::Command::CancelDesignation { .. }
+                | protocol::Command::PlaceStockpile { .. }
+                | protocol::Command::RemoveStockpile { .. }
+                | protocol::Command::SetProfession { .. }) => {
+                    if let Some(live) = &mut scenario {
+                        live.client_command();
+                    }
+                    refusals.extend(apply_sim_command(&mut world, command));
                 }
-                protocol::Command::CancelDesignation { rect } => {
-                    world.apply_command(sim_core::SimCommand::CancelDesignation {
-                        rect: bridge::rect_in(rect),
-                    });
-                }
-                protocol::Command::PlaceStockpile { rects } => {
-                    let rects: Vec<_> = rects.into_iter().map(bridge::rect_in).collect();
-                    refusals.extend(world.place_stockpile(&rects).map(bridge::refusal_out));
-                }
-                protocol::Command::RemoveStockpile { rect } => {
-                    world.apply_command(sim_core::SimCommand::RemoveStockpile {
-                        rect: bridge::rect_in(rect),
-                    });
-                }
-                protocol::Command::SetProfession { dwarf, profession } => {
-                    refusals.extend(
-                        world
-                            .apply_command(sim_core::SimCommand::SetProfession {
-                                dwarf: sim_core::Id(dwarf),
-                                profession: bridge::profession_in(profession),
-                            })
-                            .map(bridge::refusal_out),
-                    );
-                }
+            }
+        }
+        if let Some(live) = &mut scenario {
+            // Due commands land here, after the clients' and before the step: the same place in
+            // the tick as `scenario::bench` applies them, which is what makes the two hashes agree.
+            for command in live.due(world.tick()) {
+                refusals.extend(apply_sim_command(&mut world, command));
+            }
+            if live.finish(&world) {
+                speed = protocol::Speed::Paused;
+                scheduled_speed = None;
             }
         }
         // Fire a scheduled speed change the moment the world stands on its tick, BEFORE the step
@@ -295,6 +373,9 @@ fn tick(
                 connect_client(stream, line, Arc::clone(&live), command_tx.clone())
             {
                 clients.push(client);
+                if let Some(run) = scenario.as_mut().and_then(scenario::Live::release) {
+                    speed = run;
+                }
             }
         }
 
@@ -310,6 +391,51 @@ fn tick(
         broadcast(&mut clients, &delta_line);
 
         thread::sleep(deadline.saturating_duration_since(Instant::now()));
+    }
+}
+
+/// The sim half of a command: what the live loop does with a client's command and what a scenario
+/// does with its own (13.1 AC 2). One function, so a scenario run IS the daemon's code path.
+fn apply_sim_command(
+    world: &mut sim_core::World,
+    command: protocol::Command,
+) -> Option<protocol::Refusal> {
+    match command {
+        protocol::Command::Designate { kind, rect } => world
+            .apply_command(sim_core::SimCommand::Designate {
+                kind: bridge::designation_kind_in(kind),
+                rect: bridge::rect_in(rect),
+            })
+            .map(bridge::refusal_out),
+        protocol::Command::CancelDesignation { rect } => {
+            world.apply_command(sim_core::SimCommand::CancelDesignation {
+                rect: bridge::rect_in(rect),
+            });
+            None
+        }
+        protocol::Command::PlaceStockpile { rects } => {
+            let rects: Vec<_> = rects.into_iter().map(bridge::rect_in).collect();
+            world.place_stockpile(&rects).map(bridge::refusal_out)
+        }
+        protocol::Command::RemoveStockpile { rect } => {
+            world.apply_command(sim_core::SimCommand::RemoveStockpile {
+                rect: bridge::rect_in(rect),
+            });
+            None
+        }
+        protocol::Command::SetProfession { dwarf, profession } => world
+            .apply_command(sim_core::SimCommand::SetProfession {
+                dwarf: sim_core::Id(dwarf),
+                profession: bridge::profession_in(profession),
+            })
+            .map(bridge::refusal_out),
+        // The loop handles these before calling here, and a scenario refuses them at load.
+        protocol::Command::SetSpeed { .. }
+        | protocol::Command::Save
+        | protocol::Command::Load
+        | protocol::Command::Quit => {
+            unreachable!("daemon command {command:?} reached the sim")
+        }
     }
 }
 
@@ -342,7 +468,18 @@ fn load_world() -> Option<sim_core::World> {
 }
 
 fn load_world_from(path: &str) -> Option<sim_core::World> {
-    let result = (|| -> anyhow::Result<sim_core::World> {
+    match try_load_world_from(path) {
+        Ok(world) => Some(world),
+        Err(error) => {
+            eprintln!("could not load {path}: {error:#}");
+            None
+        }
+    }
+}
+
+/// Every check the live `Load` makes, returning the cause, so a scenario's save fails as loudly.
+fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
+    (|| -> anyhow::Result<sim_core::World> {
         let file = fs::File::open(path).with_context(|| format!("could not open {path}"))?;
         let mut encoded = Vec::new();
         file.take(MAX_SAVE_BYTES + 1)
@@ -711,15 +848,7 @@ fn load_world_from(path: &str) -> Option<sim_core::World> {
             }
         }
         Ok(sim_core::World::from_save(save))
-    })();
-
-    match result {
-        Ok(world) => Some(world),
-        Err(error) => {
-            eprintln!("could not load {path}: {error:#}");
-            None
-        }
-    }
+    })()
 }
 
 fn period(speed: protocol::Speed) -> Duration {
@@ -900,7 +1029,10 @@ fn excerpt(line: &str) -> String {
 mod tests {
     #[test]
     fn pause_at_is_parsed_beside_the_port_and_rejects_garbage() {
-        let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
+        let parse = |args: &[&str]| {
+            super::parse_args(args.iter().map(std::ffi::OsString::from))
+                .map(|args| (args.port, args.pause_at))
+        };
         assert_eq!(parse(&[]).unwrap(), (protocol::DEFAULT_PORT, None));
         assert_eq!(parse(&["7451"]).unwrap(), (7451, None));
         assert_eq!(
@@ -917,6 +1049,34 @@ mod tests {
         );
         assert!(parse(&["--pause-at", "soon"]).is_err());
         assert!(parse(&["nope"]).is_err());
+    }
+
+    #[test]
+    fn bench_takes_a_file_and_runs_and_refuses_the_daemon_flags() {
+        let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
+        let bench = parse(&["--bench", "plan.json"]).unwrap();
+        assert_eq!(bench.bench, Some(PathBuf::from("plan.json")));
+        assert_eq!(bench.runs, scenario::DEFAULT_RUNS);
+        assert_eq!(
+            parse(&["--bench", "plan.json", "--runs", "3"])
+                .unwrap()
+                .runs,
+            3
+        );
+        let live = parse(&["7451", "--scenario", "plan.json"]).unwrap();
+        assert_eq!(
+            (live.port, live.scenario),
+            (7451, Some(PathBuf::from("plan.json")))
+        );
+        assert!(parse(&["--bench"]).is_err(), "a missing file");
+        assert!(parse(&["--bench", "plan.json", "--runs", "0"]).is_err());
+        assert!(parse(&["--bench", "plan.json", "7451"]).is_err());
+        assert!(parse(&["--bench", "plan.json", "--pause-at", "120"]).is_err());
+        assert!(parse(&["--bench", "a.json", "--scenario", "b.json"]).is_err());
+        assert!(
+            parse(&["7451", "--runs", "3"]).is_err(),
+            "--runs without --bench"
+        );
     }
 
     use super::*;
