@@ -36,7 +36,13 @@ What the probe established:
 - **The 12.12 tick tables were scratch probes, and none was committed.** spread5's cells were never recorded (`12-12-the-first-goals.md:511`, deferred), and the 518-cell pile is recorded only as "camp ±20, z ±3". This story builds the reproducible versions, and its own figures supersede the old ones.
 - **`main` has no `--bench`.** A compare against `main` cannot run until this story merges (Key decisions).
 
-## Task 0: questions for Wolf (answer before dev)
+## Task 0: RULED (Wolf, 2026-10-21: "1 ok 2 yes")
+
+- **Q1 (a):** commit `12-12-seat-slow.save` under `scenarios/saves/`.
+- **Q2 yes:** `--scenario` holds the start tick until the first client connects.
+
+The questions as asked:
+
 
 1. **Commit the seat save?** `12-12-seat-slow.save` is 7.2 MB of JSON.
    - **(a) Commit it** under `scenarios/saves/` *(recommended)*. Anyone can then run it, and the bench reproduces it byte for byte. It rots at the next save-format change (12.11 refused older saves), and when it does, the bench fails loudly naming the file, so it gets re-captured rather than silently skipped.
@@ -56,7 +62,7 @@ What the probe established:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf rules Q1 and Q2.** Record the answers here before any code.
+- [x] **Task 0: Wolf rules Q1 and Q2.** Ruled 2026-10-21: Q1 (a) commit the save, Q2 hold until connect.
 - [ ] **Task 1: the scenario file and one apply path (AC 2, 6).**
   - [ ] NEW `crates/simd/src/scenario.rs`. Shape (field names fixed; a `serde(deny_unknown_fields)` struct):
     ```json
@@ -235,4 +241,5 @@ Exit 0 is not a result: read the lines. The seat half of AC 7 is Wolf's (Task 8)
 
 | Date | Change |
 | --- | --- |
+| 2026-10-21 | Task 0 ruled by Wolf: Q1 (a) commit the seat save under `scenarios/saves/`; Q2 hold the start tick until the first client connects. |
 | 2026-10-21 | Story created on `b8b7a5c` (Opus 5.5). Creation probe: determinism holds (identical hashes ×5); the plan's mean 0.1744–0.1758 ms; the seat save loads (0.41 ms); RED +4% clears the floor in the mean, not in the max. Task 0 Q1 (commit the save) and Q2 (hold until connect) await Wolf. |
