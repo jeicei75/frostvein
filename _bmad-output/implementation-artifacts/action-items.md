@@ -915,3 +915,73 @@ under `src-assets/prompts/`); bring `docs/project-brief.md` up to the M2 reality
 authored assets) — PRD criterion 5 passes only literally while the brief describes the M1 Unreal plan.
 
 **Owner.** Paige · **Route.** story · **Status.** open
+
+## Epic 12 — M3 close — 6 items
+
+These were committed at the M3-close retrospective on 2026-10-21 (`epic-12-retro-2026-10-21.md`), and
+Wolf approved all of them as listed. The IDs start a new M3 series. Status lives on the issue. M3-5 and
+M3-6 were done inside the retro, so they have no issue.
+
+### M3-1 (#209)
+
+**Action.** A pathfinding and reachability spike, as **the first M4 work**, run in parallel with the M4
+PRD. It covers four things:
+- a survey of genre practice: DF, Factorio, Going Medieval, hierarchical A\*, cooperative pathfinding;
+- a profile of our A\*: `BTreeMap` storage, a heuristic that loops over every goal cell at every
+  expansion (`lib.rs:1124`), the 50k node cap, and no reachability kept between ticks (`lib.rs:569`);
+- a connectivity-map prototype;
+- squeeze-past and clamber-over, measured on the cage sweeps and the 8 open cage issues.
+
+Strict rules stay: one dwarf per tile, and items block where it is natural. The spike ends in a proposal
+Wolf rules on before any movement story, and before the PRD is final.
+
+**Owner.** Winston · **Route.** story · **Status.** open
+
+**Why.** Stuck or looping dwarves appeared in 8 of 13 Epic 12 stories, and 8 cage issues are still open.
+Four local wall-in guards conflict (#207). Wolf: *"are we following industry standard best practices or
+just doing ad-hoc fixing?"* The answer is ad-hoc, and the same cause shows up as tick cost.
+
+### M3-2 (#210)
+
+**Action.** One scripted scenario format: a seed or save, plus timed commands. `simd` replays it headless
+in release and reports the tick mean, p99 and max beside `main`. The same file drives a seat run with
+`--perf-log`. It advances #50. This comes first on the M4 critical path, because M3-1 measures with it.
+
+**Owner.** Charlie · **Route.** story · **Status.** open
+
+**Why.** No test asserts cost, and 12.12 let the 17× class through twice because only compact layouts
+were measured. Wolf wants scripted scenarios *"so no need to manually play to make it more robust and
+reproducible"*, and he watches gui FPS in the same run.
+
+### M3-3 (#211)
+
+**Action.** Time each pixel guard, then cut: a small capture or none for the 8 tests that don't check
+pixels, fewer frames where motion isn't the subject, and shared captures for scenes that are identical.
+This folds in #145 (M2-31).
+
+**Owner.** Charlie · **Route.** story · **Status.** open
+
+**Why.** The pixel guards took 3,011 s of 12.12's 3,779 s full gate. Skipping them on sim-only diffs was
+rejected because gui work is coming.
+
+### M3-4 (#212)
+
+**Action.** One full gate per story, at PR. Patch passes run the fast tier plus the pixel guards they
+touch. Record this in `docs/technical-preferences.md` and in the review-patch config.
+
+**Owner.** Amelia · **Route.** skill-rule · **Status.** open
+
+**Why.** 12.12 ran the full gate about four times. Wolf: *"it takes ages to run so progress is slow"*.
+
+### M3-5
+
+**Action.** 12.13 / FR40 is dropped from M3 and moved to M4, as an input to the M4 PRD.
+
+**Owner.** Alice · **Status.** done (in this retro: the board, and the `epics.md` NOTE)
+
+### M3-6
+
+**Action.** Hygiene: #191 was verified fixed in 12.10's patch pass and closed. The 12.4 header was
+corrected from `in-progress` to `done`.
+
+**Owner.** Amelia · **Status.** done (in this retro)

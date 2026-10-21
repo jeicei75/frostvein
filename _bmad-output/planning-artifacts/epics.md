@@ -2782,6 +2782,11 @@ So that my first session has a direction without ever ending the game.
 
 ### Story 12.13 *(stretch — first cut)*: Ready for More Faces
 
+NOTE (Wolf, 2026-10-21, M3-close retro): **DROPPED from M3, moved to M4.** *"it's not that urgent right
+now"*. FR40 is an M4 PRD input, not a cancelled requirement. Round 20's *"have to rethink the model and
+rig anyway"* argues against preparing today's rig. Epic 12 closed with 13 stories. Record:
+`epic-12-retro-2026-10-21.md`.
+
 As the boss,
 I want the dwarf model prepared for per-dwarf variation beyond colour,
 So that later milestones can give each dwarf a look of their own without redoing the model.
