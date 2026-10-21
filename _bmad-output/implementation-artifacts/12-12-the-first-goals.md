@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.11's creation
 
 # Story 12.12: The First Goals
 
-Status: review
+Status: done
 
 ## Story
 
@@ -950,3 +950,4 @@ Re-pinned existing tests (Task 5), all disclosed: the tui footer grew from 3 row
 | 2026-10-19 | Code review run 3 on `bdac2d4` (diff `6aa424d..bdac2d4`, 4 layers, none timed out): 0 HIGH. The flood-answer cache holds (identical trajectories, spread piles 8-10x faster live). REWORK closure row 1: the every-box rule is unpinned (MED patch); LOW patch on the cap example. 5 defer; 4 dismissed. Stopping rule fired: no round 4. Patches left as action items. Status -> in-progress. |
 | 2026-10-19 | Review run 2 patch pass (Opus, fresh session): per-pile boxes (`54b35bd` `5b112cf`) resealed the campfire ring in a compact layout; Wolf re-ruled (b), landed as one box plus kept flood answers (`25fe2da`): spread piles 19.84 to 2.86 ms, fill unchanged. NOTE, spine, card and record (`12febce`). Mutation table 20/20 KILLED; full gate GREEN on `12febce` (4002 s). Status -> review for a round-3 review. |
 | 2026-10-20 | Review run 3 patch pass (Opus, fresh session): both patches landed. The every-box rule is pinned by a depth test plus row 19 (KILLED) (`e18c542`); the hauled four-bar ring stalls on HEAD itself (14/24), so Wolf ruled depth + issue (#207). Cap example corrected in the NOTE and spine (`a91e40f`). Full gate GREEN on `a91e40f` (3779 s). No round 4 (run 3's stopping rule). Status -> review: PR on Wolf's yes. |
+| 2026-10-20 | Pushed (`f833d0c`) and merged as PR #208 (`ac0a2f8`); no issue closed, #207 stays open. Status -> done. |

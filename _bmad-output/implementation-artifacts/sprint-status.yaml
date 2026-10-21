@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-19
+# last_updated: 2026-10-21
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-19
+last_updated: 2026-10-21
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2478,7 +2478,7 @@ development_status:
   # Covered by the M2-close retrospective filed as Epic 8's: epic-8-retro-2026-09-28.md
   epic-11-retrospective: done
 
-  epic-12: in-progress
+  epic-12: done
   # A CREW WITH TRADES -- Milestone 3, the ONE M3 epic (Wolf, M2 retro 2026-09-28). Added to the
   # board 2026-09-28 by sprint planning after PR #151 (a96ab48). 12 stories + 12.13 stretch
   # (FR40), inside the 10-14 cap; cut order 12.13, then 12.11's tree half, then the gem
@@ -2687,7 +2687,7 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: review
+  12-12-the-first-goals: done
   #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
   #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
   #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
@@ -2723,9 +2723,13 @@ development_status:
   #   REVIEW-PATCH run 3 2026-10-20 (Opus, fresh): both landed. Every-box rule pinned by DEPTH (e18c542, row 19
   #     KILLED): the hauled four-bar ring stalls on HEAD itself (14/24), Wolf ruled depth + issue -> #207. Cap example
   #     fixed (a91e40f). Full gate GREEN on a91e40f (3779s). No round 4. -> review: PR on Wolf's yes.
-  12-13-ready-for-more-faces: backlog
-  # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
-  epic-12-retrospective: optional
+  #   MERGED 2026-10-20: PR #208 (ac0a2f8). No issue closed; #207 open. -> done.
+  12-13-ready-for-more-faces: dropped
+  # 12.13 is the STRETCH (first cut). DROPPED from M3 at the retro 2026-10-21 (Wolf: "move it to M4 ..
+  # it's not that urgent right now"): FR40 is an M4 PRD input, not a cancelled requirement.
+  # M3 CLOSED 2026-10-21. Epic 12 IS Milestone 3; its retro is the M3 close: epic-12-retro-2026-10-21.md.
+  # Action items M3-1..M3-4 live as GitHub issues #209-#212 (label action-item); M3-5/M3-6 done in the retro.
+  epic-12-retrospective: done
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).
 #

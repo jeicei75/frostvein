@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default, same as 12.1-12.3's creation
 
 # Story 12.4: Every Dwarf Has a Trade
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -787,6 +787,7 @@ Claude Sonnet 5.5 subagents x2 (Tasks 1-3; Tasks 4-5), orchestrated and verified
 
 | Date | Change |
 | --- | --- |
+| 2026-10-21 | Header corrected to `Status: done` at the M3-close retro (`epic-12-retro-2026-10-21.md` M3-6). The board has said done since the merge; the header was never flipped. |
 | 2026-10-02 | Review patch pass 2 (fresh session): all 4 patches landed (`ef5e3d1`, `3e685e3`, `76ab969`). mutD pinned by a third job (dig 2, miner 3), and the exhaustion precondition asserted. 12-4.sh 16/16 KILLED (rows 15 mutD and 16 budget bump added). FULL GATE GREEN 3088 s on `3e685e3`. Status review, for PR on Wolf's yes. Patch cost $2.74 over 65 turns. |
 | 2026-10-02 | Code review run 2 on `05a16a4..b0c1bd0` (4 layers, none timed out). 0 REWORK: the patch pass 1 closure table held, and mutA/mutB/mutC were re-killed at the named assertions by three layers. 4 NEW findings (0 HIGH, 1 MED, 3 LOW), so the stopping rule ends the static audit. All 4 were left as action items (Wolf: option 2): mutD (sat-out `continue` -> `break`) survives sim-core, the exhaustion precondition is unasserted, and two record fixes. 4 dismissed. Live 17 of 25 re-observed; AC11/AC12 never fire on DEFAULT_SEED. Status in-progress. Review cost $7.51 over 165 turns (subagents 52.0% of tokens). Review caches reaped from /tmp: 21.5 GB, 14.2 GB freed. |
 | 2026-10-02 | Review patch pass 1 (fresh session): all 4 patches landed (`6938841`, `ef7f523`, `0b38aca`). 12-4.sh 14/14 KILLED (row 11 re-pointed to mutA; mutB/mutC added as rows 13/14). FULL GATE GREEN 3093 s on `0b38aca`. Status review, for code review run 2. Patch cost $2.76 over 62 turns. |
