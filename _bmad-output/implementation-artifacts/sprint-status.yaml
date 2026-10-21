@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-19
+# last_updated: 2026-10-20
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-19
+last_updated: 2026-10-20
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2687,7 +2687,7 @@ development_status:
   #     reported early on a silence check): 0 HIGH, 1 MED (row 4 REWORK: 'never below him' let-go unpinned),
   #     2 LOW patch (record 'no new saved state', seat card refresh), 2 defer. STOPPING RULE fired: no round 3;
   #     next spend = a fresh-world seat re-sit. 3 patches LEFT AS ACTION ITEMS. -> in-progress.
-  12-12-the-first-goals: review
+  12-12-the-first-goals: done
   #   Created 2026-10-18 on 60955ef. Nothing exists (no goal code, no stored count). Chain REACHABLE on DEFAULT_SEED,
   #     judged by the wire: 12-12-signoff/goals_wire.py plans cuts + ore tunnels + piles from the snapshot and counts
   #     stored items per kind (3.3's rule) from the wire alone; 10/10/1 all stored by tick 9828, identical on 3/3 fresh
@@ -2723,6 +2723,7 @@ development_status:
   #   REVIEW-PATCH run 3 2026-10-20 (Opus, fresh): both landed. Every-box rule pinned by DEPTH (e18c542, row 19
   #     KILLED): the hauled four-bar ring stalls on HEAD itself (14/24), Wolf ruled depth + issue -> #207. Cap example
   #     fixed (a91e40f). Full gate GREEN on a91e40f (3779s). No round 4. -> review: PR on Wolf's yes.
+  #   MERGED 2026-10-20: PR #208 (ac0a2f8). No issue closed; #207 open. -> done.
   12-13-ready-for-more-faces: backlog
   # 12.13 is the STRETCH (first cut) -- first to go if the cap bites.
   epic-12-retrospective: optional
