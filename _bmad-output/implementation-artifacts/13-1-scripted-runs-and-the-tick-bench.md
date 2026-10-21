@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default; Wolf picked Opus 5.5 to IMPLEMENT too
 
 # Story 13.1: Scripted Runs and the Tick Bench
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -149,6 +149,33 @@ The questions as asked:
   - [x] Fast tier green on every commit (pre-commit hook). Every `simd` test, `serve.rs` included, green on `de3e290`'s code (34 + 4 + 80).
   - [x] Dev cost row and `phase_state.py clear` (dev close).
   - [ ] **The ONE full gate, at PR (M3-4, #212).** Deliberately not run at dev close: the rule is one full gate per story, at PR, after review and any patch pass.
+
+### Review Findings
+
+Code review run 1 (2026-10-21, a fresh session). Four layers ran, and every one ran `cargo 1.97.1` against its own `CARGO_TARGET_DIR`. No layer timed out or failed. The Blind Hunter ran release `--bench` on about 15 adversarial files but not `cargo test`; the other three ran `cargo test -p simd` green (34 + 4 + 80). The bench ran end to end on all 8 scenarios, and every end line and hash matched this record. Served runs matched the bench hash, and the real gui ran headless on lavapipe. **AC 7 (the seat) is not observed and stays open.** AC 4's RED and control were not re-run; `HEAD HEAD` and the pre-13.1 probe were RAN in a clone. No HIGH findings; 7 patch, 11 defer (one filed as #214), 4 dismissed.
+
+- [ ] [Review][Patch] **MED, acceptance.** `bench.rs` is not in the fast tier, and the record says it is [`scripts/gate.sh:182`]. Fast runs `cargo test -p simd --bins`, which skips the integration tests, so AC 1/2/3/6's four tests run only at the full gate. The SKIPPED banner names only `serve.rs`. Fix: add `cargo test -p simd --test bench` to the fast arm, and correct the Completion Notes claim.
+- [ ] [Review][Patch] **MED, acceptance + feature.** tick-bench aborts the whole table at the first scenario it cannot measure [`scripts/tick-bench.sh:78-96`]. `deep-pit`'s channel marks have about 50 ticks of slack: shifted 100 ticks early, the bench refuses at tick 1544 (RAN). `seat-slow` fails on whichever build disagrees with the save format. Either one ends the compare before `plan`, the piles or `seat-slow` are measured, which is exactly where 13.2 will hit it. Fix: print a failed row with its cause, continue, and exit 1 at the end.
+- [ ] [Review][Patch] **MED, edge + acceptance.** tick-bench accepts `RUNS` below 3 [`scripts/tick-bench.sh:34`]. `RUNS=1` gives 0.0% floors, so a binary against itself reads `+12.9% BEYOND FLOOR` (RAN). `RUNS=0` dies on `base_states[0]: unbound variable` after both builds (RAN). Fix: refuse a non-integer or `< 3` before building ("two samples are not a floor").
+- [ ] [Review][Patch] **MED, edge.** `--pause-at` with `--scenario` is silently defeated [`crates/simd/src/main.rs:133`]. On a save start, the daemon logs `already past, applying Paused now`, and then the first connect's `release()` runs the world anyway (RAN: `last tick 54718 fast4x`). Fix: refuse the combination in `parse_args`; a scenario's end pause is its freeze point.
+- [ ] [Review][Patch] **MED, feature.** The seat card cannot mark where the run ends, so the CSV pools the paused tail [`_bmad-output/implementation-artifacts/13-1-signoff/vehicle-card.md`]. A probe CSV read `over 87.1s` against a done line at about 53.6 s, and Q3 cannot be answered from the summary. Fix: press **F3** (the perf mark, which leaves the sim alone) when the done line prints. While in the card, two LOWs from the same layer: if the gui exits (evicted at connect), restart both simd and the gui, since the hold happens only once; and run a release `simd`.
+- [ ] [Review][Patch] **LOW (a silent-failure trap), feature.** `--scenario` from a debug build gives no warning [`crates/simd/src/main.rs:237-245`]. A debug daemon runs 5.34 ms per tick against fast4x's 5 ms period, with 801 ticks over 10 ms (RAN), so a seat run stretches while the hash still matches. Fix: print the bench's `DEBUG BUILD: figures are not a measurement` at the hold.
+- [ ] [Review][Patch] **LOW, acceptance (in a file being edited).** `big-pile` runs 5,006 ticks, and the record lists only the plan files' 10,006 [this file, Completion Notes]. Fix: one line in the deviations.
+- [x] [Review][Defer] A huge `ticks` panics (`capacity overflow`) rather than failing cleanly [`crates/simd/src/scenario.rs:293`] — deferred, unreachable in practice
+- [x] [Review][Defer] A zero mean makes tick-bench's awk produce NaN and read `within floor` [`scripts/tick-bench.sh:103`] — deferred, needs a sub-50 ns tick
+- [x] [Review][Defer] A client `Load` after `done` still prints `abandoned` [`crates/simd/src/main.rs:297`] — deferred, cosmetic; the hash was already printed
+- [x] [Review][Defer] Served scenario refusals are not logged by the daemon [`crates/simd/src/main.rs:331`] — deferred, only reachable with client commands, which the done line already flags
+- [x] [Review][Defer] `--bench --runs 3` gives a port error; repeated flags are last-wins [`crates/simd/src/main.rs`] — deferred, still a loud exit 1
+- [x] [Review][Defer] No test for a save that decodes but fails the live checks [`crates/simd/tests/bench.rs`] — deferred, the behaviour was RAN correct
+- [x] [Review][Defer] The done line does not prove the gui watched the run [`crates/simd/src/scenario.rs:234`] — deferred, card Q3 checks the CSV on its own
+- [x] [Review][Defer] Speed keys leave no trace in the done line [`crates/simd/src/main.rs:255`] — deferred, the card says not to press them
+- [x] [Review][Defer] After `done`, the gui's first Space press is a no-op [`crates/gui/src/command.rs:298`] — deferred, pre-existing
+- [x] [Review][Defer] The served run-shape test panics, rather than failing, on an early end, and three served behaviours are untested [`crates/simd/tests/bench.rs`] — deferred, all three RAN live
+- [x] [Review][Defer] An off-map designate/cancel/remove rect is accepted silently [`crates/sim-core/src/lib.rs:3061`] — deferred, pre-existing; filed as #214
+
+Review cost: $15.63 over 300 turns (subagents 74.1% of tokens). The patches were left as action items (Wolf), for a fresh `bmad-review-patch` session. Reaped after triage: `reap-build-caches.sh --tmp-only --force`, 9 directories, 11.7 GB (6.6 GB of free space reclaimed).
+
+Dismissed (4): `STATE DIVERGED` shows only as the stderr error (it is printed, and it exits 1, so AC 1 holds); the probe message says `<sha>`, not `BASE <sha>` (head can be pre-13.1 too); tick-bench reads the working tree's scenarios (documented in its header, by design); `DEBUG BUILD` prints once per run (Task 2 asks for that).
 
 ## Dev Notes
 
