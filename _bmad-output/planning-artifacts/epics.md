@@ -476,6 +476,17 @@ Wolf starts a fresh world and can tell his five dwarves apart by name and colour
 
 ---
 
+## Epic List — Milestone 4 (added 2026-10-21)
+
+**One epic, growing by stories** (M2-25; Wolf at the M3-close retro, 2026-10-21). The M4 goal is left to the M4 PRD, and it is to be **more ambitious** than M3's. The epic opens **before** the PRD, with the two stories any M4 goal needs, because the PRD can't be final until Wolf rules the spike (13.2), and the spike measures with the bench (13.1). The PRD then adds its game stories to this epic, and its title is renamed to the PRD's goal. FR40 (12.13, dropped from M3) is an M4 PRD input. The remaining tooling items (#142, #144, #148, #211, #212) run beside the epic as issues, outside any cap.
+
+### Epic 13: Milestone 4 *(working title — renamed when the M4 PRD sets the goal)*
+It opens with groundwork from the M3-close retro (`epic-12-retro-2026-10-21.md` §4, §8). The movement layer is ad-hoc: reachability is recomputed per question, and four local wall-in guards conflict. No instrument measures sim cost, so cost regressions shipped with every test green. 13.1 builds the instrument, and 13.2 uses it to decide the movement layer.
+**FRs covered:** none yet; the M4 PRD adds them. The action items M3-2 (#210) and M3-1 (#209) are covered.
+**Order constraints:** 13.1 before 13.2, because the spike measures with the bench. 13.2 runs in parallel with the M4 PRD draft and uses the draft's scale numbers (dwarf count, map size, terrain-change rate). The PRD is final only after Wolf rules on 13.2's proposal.
+
+---
+
 ## Epic 1: The Frozen World on Screen
 
 Generate the world and behold it: workspace scaffold, seeded worldgen with icy terrain, dwarves spawned, daemon serving a snapshot on connect, TUI rendering the z-level view in the icy-grim palette.
@@ -2801,3 +2812,62 @@ So that later milestones can give each dwarf a look of their own without redoing
 
 **Given** cap pressure,
 **Then** this story is the first cut, before anything else in the epic.
+
+---
+
+# Milestone 4
+
+## Epic 13: Milestone 4 *(working title)*
+
+The M4 epic opens with the instrument and the spike that the M3-close retro put first on M4's critical path (`epic-12-retro-2026-10-21.md` §8). The PRD's game stories join this epic as they are written.
+
+**Standing acceptance criteria:** the M3 standing ACs 1–8 (Epic 12) carry over, with one change. Under M3-4 (#212), the full gate runs **once per story, at PR**, and patch passes run the fast tier plus the pixel guards they touch. AC1's "green, run in full, before the story is done" still holds, because done follows the PR.
+
+### Story 13.1: Scripted Runs and the Tick Bench
+
+As the boss,
+I want one scripted scenario file that replays the same run headless for a tick benchmark and at my seat for frame rate,
+So that performance is measured on reproducible runs instead of by playing, and a cost regression is caught before it ships.
+
+**Acceptance Criteria:**
+
+**Given** a scenario file (a seed or a save, plus timed commands),
+**When** `simd` replays it headless in release,
+**Then** it reports the tick mean, p99 and max. Two runs of one scenario reach identical sim state, and the story records the timing noise floor across runs of the same build (#210).
+
+**Given** the same scenario file,
+**When** Wolf runs it at the seat with `--perf-log`,
+**Then** the run needs no manual input, and the gui's frame-rate log and the sim's tick figures come from the same run shape (#210, advances #50).
+
+**Given** a change under test,
+**Then** the bench reports its figures side by side against `main` on the same scenarios, so a regression reads as a delta beyond the recorded floor, not as an absolute threshold.
+
+**Given** the starting scenario set,
+**Then** it includes at least the 12.12 plan layouts and spread piles, a deep pit, a full-pile crowd, and Wolf's kept `12-12-seat-slow.save`. Each scenario is named after the cost case it exercises.
+
+**Given** the instrument rule (standing AC 8),
+**Then** a sabotage that makes a scenario measurably slower moves the bench's reading beyond the floor, and a scenario that fails to load or replay exits non-zero.
+
+### Story 13.2: The Way Through — Pathfinding and Reachability Spike
+
+As the boss,
+I want the movement layer checked against how colony sims solve reachability and crowding,
+So that M4 builds on a movement layer that is fixed as a whole, not one cage shape at a time.
+
+**Acceptance Criteria:**
+
+**Given** the spike,
+**Then** it surveys genre practice (Dwarf Fortress, Factorio, Going Medieval, hierarchical A*, cooperative pathfinding) and verifies or strikes the leads recorded in `epic-12-retro-2026-10-21.md` §4.1 (#209).
+
+**Given** our A*,
+**Then** 13.1's bench profiles it: the `BTreeMap` storage, the heuristic that loops over every goal (`lib.rs:1124`), the `MAX_ASTAR_NODES` cap, and the floods that recompute reachability per question.
+
+**Given** a connectivity-map prototype, and squeeze-past and clamber-over prototypes,
+**Then** each is measured on the bench and on the cage sweeps against the open cage issues (#159 #186 #187 #189 #203 #204 #206 #207). The scale target is the M4 PRD draft's numbers.
+
+**Given** Wolf's ruling that the strict rules stay (one dwarf per tile; items block where natural),
+**Then** every proposed option keeps them in spirit, and any rule change is presented for his ruling, never assumed.
+
+**Given** the end of the spike,
+**Then** it delivers a proposal with numbers. Wolf rules on it before any movement story is written and before the M4 PRD is final. The prototypes are throwaway.
+
