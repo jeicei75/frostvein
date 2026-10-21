@@ -262,13 +262,28 @@ fn a_served_scenario_holds_for_its_client_and_ends_on_the_benchs_hash() {
         snapshot.tick, 0,
         "the world held its start tick for the client"
     );
-    // Drain the client so the daemon never evicts it.
-    thread::spawn(move || for _ in reader.lines().map_while(Result::ok) {});
+    // Drained on a thread so the daemon never evicts it; each delta's tick comes back here.
+    let (tick_tx, ticks) = mpsc::channel();
+    thread::spawn(move || {
+        for line in reader.lines().map_while(Result::ok) {
+            let delta: protocol::Delta = serde_json::from_str(&line).unwrap();
+            if tick_tx.send(delta.tick).is_err() {
+                break;
+            }
+        }
+    });
     assert_eq!(
         next("running"),
         "scenario one-dig: client connected, running at Fast4x"
     );
     let done = next("done");
+    // Paused on the end tick: once a delta reaches it, the next five (one per 100 ms) stay there.
+    let mut after: Vec<u64> = ticks
+        .iter()
+        .skip_while(|tick| *tick < TICKS)
+        .take(6)
+        .collect();
+    after.remove(0);
     let _ = child.kill();
     let _ = child.wait();
     let _ = fs::remove_dir_all(&dir);
@@ -281,4 +296,5 @@ fn a_served_scenario_holds_for_its_client_and_ends_on_the_benchs_hash() {
         )
     );
     assert_eq!(bench_state[0], expected(true));
+    assert_eq!(after, vec![TICKS; 5], "the world stops on its end tick");
 }
