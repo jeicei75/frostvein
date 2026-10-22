@@ -75,7 +75,7 @@ struct Args {
     runs: usize,
 }
 
-/// `simd [port] [--pause-at TICK] [--scenario FILE]`, or `simd --bench FILE [--runs N]`.
+/// `simd [port] [--pause-at TICK | --scenario FILE]`, or `simd --bench FILE [--runs N]`.
 ///
 /// `--pause-at` lets the DAEMON freeze its own world on a chosen tick. A `gui --static-world`
 /// client schedules the same pause (tick 120), but only if it connects before that tick -- 12 s
@@ -132,6 +132,11 @@ fn parse_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> anyhow::Res
     }
     if bench.is_some() && (port.is_some() || pause_at.is_some() || scenario.is_some()) {
         bail!("--bench runs headless: it takes no port, --pause-at or --scenario");
+    }
+    // A scenario's end pause IS its freeze point, and the first connect's release would run the
+    // world past a `--pause-at` anyway: silently defeated, so refused.
+    if scenario.is_some() && pause_at.is_some() {
+        bail!("--scenario pauses at its own end tick: it takes no --pause-at");
     }
     if bench.is_none() && runs.is_some() {
         bail!("--runs is for --bench only");
@@ -236,6 +241,10 @@ fn tick(
     // `--perf-log` at the seat covers the whole run however long the launch takes.
     let mut speed = match &scenario {
         Some(live) => {
+            // A debug daemon misses fast4x's period, so a seat run stretches while its hash matches.
+            if cfg!(debug_assertions) {
+                eprintln!("DEBUG BUILD: figures are not a measurement");
+            }
             println!(
                 "scenario {}: holding tick {} until a client connects",
                 live.name(),
@@ -1073,6 +1082,10 @@ mod tests {
         assert!(parse(&["--bench", "plan.json", "7451"]).is_err());
         assert!(parse(&["--bench", "plan.json", "--pause-at", "120"]).is_err());
         assert!(parse(&["--bench", "a.json", "--scenario", "b.json"]).is_err());
+        assert!(
+            parse(&["7451", "--scenario", "plan.json", "--pause-at", "120"]).is_err(),
+            "a scenario's end pause is its freeze point"
+        );
         assert!(
             parse(&["7451", "--runs", "3"]).is_err(),
             "--runs without --bench"

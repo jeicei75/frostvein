@@ -235,10 +235,11 @@ fn a_served_scenario_holds_for_its_client_and_ends_on_the_benchs_hash() {
         .args(["0", "--scenario", FIXTURE])
         .current_dir(&dir)
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("simd must start");
     let out = lines(child.stdout.take().unwrap());
+    let mut err = child.stderr.take().unwrap();
     let next = |what: &str| {
         out.recv_timeout(IO_TIMEOUT)
             .unwrap_or_else(|error| panic!("no {what} line: {error:?}"))
@@ -289,6 +290,15 @@ fn a_served_scenario_holds_for_its_client_and_ends_on_the_benchs_hash() {
     let _ = child.kill();
     let _ = child.wait();
     let _ = fs::remove_dir_all(&dir);
+    let mut err_text = String::new();
+    err.read_to_string(&mut err_text).unwrap();
+    // A debug daemon misses fast4x's 5 ms period, so the seat run stretches while the hash still
+    // matches; it must say so. Same profile as this test, so a release run asserts its absence.
+    assert_eq!(
+        err_text.contains("DEBUG BUILD: figures are not a measurement"),
+        cfg!(debug_assertions),
+        "the served run's debug warning: {err_text:?}"
+    );
     let bench_state = run_states(&stdout(&bench(Path::new(FIXTURE), 1)));
     assert_eq!(
         done,
