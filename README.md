@@ -189,6 +189,7 @@ the hold happens only once:
 
 ```powershell
 # WSL, from the repo
+cargo build --release -p simd
 target/release/simd 7451 --scenario scenarios/plan.json
 
 # PowerShell, from the Windows checkout
@@ -391,10 +392,15 @@ scripts/tick-bench.sh BASE HEAD                          # every scenario, both 
 ```
 
 `--bench` replays a scenario headless with no tick sleep and checks that every run reaches the same
-state. `tick-bench.sh` builds both commits in scratch worktrees and says, per scenario, whether the
-change in the mean clears each build's own run-to-run floor. It is informational, never a gate, and
-needs both commits at or after 13.1. Judge by the mean: the max is one noisy tick. Do not run it
-beside the full gate or `scripts/mutate.sh`, both of which move the floor.
+state. `tick-bench.sh` builds both commits in scratch worktrees, plus a control: base built again
+with its functions in another order. Per scenario, it says whether the change in the mean clears
+each build's own run-to-run floor AND the control's delta. Two builds of identical code can differ
+by several percent on layout alone, and the control is only a lower bound on that, so a change near
+twice the control is weak evidence. It is informational, never a gate, and needs both commits at or
+after 13.1. `RUNS` (default 5) must be at least 3. A scenario that cannot be measured prints a
+`FAILED` row naming the builds and the cause; the rest still run, and the script exits 1 at the
+end. Judge by the mean: the max is one noisy tick. Do not run it beside the full gate or
+`scripts/mutate.sh`, both of which move the floor.
 
 ## Crates
 
