@@ -89,3 +89,19 @@ old = '                crate::try_load_world_from(path).with_context(|| {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                Ok::<_, anyhow::Error>(sim_core::World::generate(1, sim_core::Dims::DEFAULT)).with_context(|| {\n'))
 PY
+
+mutation "12 --pause-at is let in beside --scenario (review patch)" simd bench_takes_a_file_and_runs_and_refuses_the_daemon_flags <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '    if scenario.is_some() && pause_at.is_some() {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false && scenario.is_some() && pause_at.is_some() {\n'))
+PY
+
+mutation "13 a debug scenario daemon does not warn (review patch)" simd a_served_scenario_holds_for_its_client_and_ends_on_the_benchs_hash <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if cfg!(debug_assertions) {\n                eprintln!("DEBUG BUILD: figures are not a measurement");\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false && cfg!(debug_assertions) {\n                eprintln!("DEBUG BUILD: figures are not a measurement");\n'))
+PY
