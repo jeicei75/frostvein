@@ -181,12 +181,15 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 ```
 
 **A scripted run** (13.1): the daemon replays a scenario from `scenarios/`, holding its first tick
-until the client connects and pausing on its last, so a `--perf-log` covers exactly that run with no
-keys pressed. Its `done` line prints the state hash `simd --bench` prints for the same file:
+until the client connects and pausing on its last, so a `--perf-log` starts with that run's first
+tick. Its `done` line prints the state hash `simd --bench` prints for the same file. Press **F3** when
+the `done` line prints: the log keeps recording the paused frames after it, and the mark is where the
+run ended. Use a release `simd`; a debug one misses fast4x's period. If the gui exits, restart both, because
+the hold happens only once:
 
 ```powershell
 # WSL, from the repo
-simd 7451 --scenario scenarios/plan.json
+target/release/simd 7451 --scenario scenarios/plan.json
 
 # PowerShell, from the Windows checkout
 .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\plan.csv')
