@@ -206,6 +206,8 @@ Dismissed (4): `STATE DIVERGED` shows only as the stderr error (it is printed, a
 - [x] [Review][Defer] perf_summary's percentiles and `over Ns` still pool the paused tail after `done`, and no tool cuts at the F3 mark [`scripts/bench/perf_summary.py:121-147`] — deferred, pre-existing tool; the card discloses it
 - [x] [Review][Defer] The F3 → CSV `mark=1` hop has no committed test, though card Q3 now depends on it [`crates/gui/src/perf.rs:265`, `ingest.rs:902`] — deferred, pre-existing hop, proven by a scratch test this review
 
+Review run 2 cost: $12.72 over 242 turns (subagents 72.5% of tokens). Patches left as action items (Wolf "2"), for a fresh `bmad-review-patch` session. Reaped after triage: `reap-build-caches.sh --tmp-only --force`, 10 directories, 54.8 GB (30.0 GB of free space reclaimed).
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
