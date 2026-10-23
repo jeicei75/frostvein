@@ -1,0 +1,30 @@
+{
+  "name": "one-dig",
+  "about": "Test fixture (13.1): DEFAULT_SEED, one dig mark on the plan's first tetrahedrite tunnel cell at tick 5, 40 ticks.",
+  "start": {
+    "seed": 4026891802
+  },
+  "ticks": 40,
+  "speed": "fast4x",
+  "commands": [
+    {
+      "at": 5,
+      "command": {
+        "type": "designate",
+        "kind": "dig",
+        "rect": {
+          "min": [
+            73,
+            64,
+            11
+          ],
+          "max": [
+            73,
+            64,
+            11
+          ]
+        }
+      }
+    }
+  ]
+}

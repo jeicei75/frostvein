@@ -180,6 +180,22 @@ The launcher fetches the checkout, refuses a `gui.exe` whose stamp is not HEAD, 
 .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--clock','12')
 ```
 
+**A scripted run** (13.1): the daemon replays a scenario from `scenarios/`, holding its first tick
+until the client connects and pausing on its last, so a `--perf-log` starts with that run's first
+tick. Its `done` line prints the state hash `simd --bench` prints for the same file. Press **F3** when
+the `done` line prints: the log keeps recording the paused frames after it, and the mark is where the
+run ended. Use a release `simd`; a debug one misses fast4x's period. If the gui exits, restart both, because
+the hold happens only once:
+
+```powershell
+# WSL, from the repo
+cargo build --release -p simd
+target/release/simd 7451 --scenario scenarios/plan.json
+
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\plan.csv')
+```
+
 - **Write captures and logs under `.bin\`** with an absolute path. It is gitignored, so the checkout
   stays clean and the launcher can still say the served tree is exactly HEAD.
 - **One fresh `simd` per `--static-world` capture**, started with `--pause-at 120`.
@@ -366,6 +382,25 @@ scripts/push.sh
 It gates *before* opening the connection, and then **asks the remote whether the push landed**. That
 last step is the point — a push killed by the idle timeout leaves `GATE GREEN` as the last line on
 screen and no branch on the remote, which is a failure that reads as a success. See issue #76.
+
+### Tick cost
+
+```bash
+cargo build --release -p simd
+target/release/simd --bench scenarios/plan.json          # 5 runs: step mean/p99/max, state hash
+scripts/tick-bench.sh BASE HEAD                          # every scenario, both commits, interleaved
+```
+
+`--bench` replays a scenario headless with no tick sleep and checks that every run reaches the same
+state. `tick-bench.sh` builds both commits in scratch worktrees, plus a control: base built again
+with its functions in another order. Per scenario, it says whether the change in the mean clears
+each build's own run-to-run floor AND the control's delta. Two builds of identical code can differ
+by several percent on layout alone, and the control is only a lower bound on that, so a change near
+twice the control is weak evidence. It is informational, never a gate, and needs both commits at or
+after 13.1. `RUNS` (default 5) must be at least 3. A scenario that cannot be measured prints a
+`FAILED` row naming the builds and the cause; the rest still run, and the script exits 1 at the
+end. Judge by the mean: the max is one noisy tick. Do not run it beside the full gate or
+`scripts/mutate.sh`, both of which move the floor.
 
 ## Crates
 

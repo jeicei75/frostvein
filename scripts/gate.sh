@@ -177,9 +177,12 @@ run "cargo fmt --check" cargo fmt --check
 run "cargo clippy -D warnings" cargo clippy --all-targets -- -D warnings
 if [ "$FAST" -eq 1 ] || [ "$RUN_SERVE" -eq 0 ]; then
   # Everything except the daemon integration suite. simd's own unit tests still run
-  # (--bins, 18 tests in 0.41s); only crates/simd/tests/serve.rs is deferred to push.
+  # (--bins, 34 tests), and so does tests/bench.rs (13.1's scenario replay, ~2s):
+  # --bins alone skipped it, so its four tests ran only at the full gate. Only
+  # crates/simd/tests/serve.rs is deferred to push.
   run "cargo test (fast set)" cargo test --workspace --exclude simd
   run "cargo test -p simd --bins" cargo test -p simd --bins
+  run "cargo test simd bench.rs" cargo test -p simd --test bench
 else
   run "cargo test" cargo test
 fi
