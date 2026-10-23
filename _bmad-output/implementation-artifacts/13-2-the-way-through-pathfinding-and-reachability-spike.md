@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.2: The Way Through — Pathfinding and Reachability Spike
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -95,7 +95,7 @@ so that M4 builds on a movement layer that is fixed as a whole, not one cage sha
   - A\* is unit-cost today, so this needs a weighted step, and the heuristic must stay admissible. Emitters share `blocked` with stones (`blocked_cells` `:795`, `world_blocked` `:800`) and must stay blocking.
   - The item-placing writers (haul drop `:2258`, dig spawn `:2337`, channel landing `:2395`, `settle` `:2493`) must still never place a stone on a dwarf. The sweep's `landed` list must stay empty.
 - [x] **Task 8: the proposal (AC 1–7).** NEW `13-2-signoff/proposal.md` with § Survey, Profile, Scale, Prototypes, Issues, Rulings needed and Recommendation. Every number names its patch stack and command. State ADR 5 ("plain A\* for M1", `docs/technical-preferences.md`) and what the recommendation does to it.
-- [ ] **Task 9: Wolf rules, then close.**
+- [x] **Task 9: Wolf rules, then close.**
   - Record the ruling in the Change Log and in the proposal's last section. Note any issue it re-scopes on that issue, with no closing keyword; nothing here closes an issue.
   - Then the ONE full gate (`RUST_TEST_THREADS=1 scripts/gate.sh`) and paste the block. Then the cost row (`session_tokens.py --phase dev --story 13-2-the-way-through-pathfinding-and-reachability-spike`) and `phase_state.py clear`.
 
@@ -195,7 +195,26 @@ Wolf picked Sonnet 5.5 (`claude-sonnet-5-5`) subagents for the implementation (2
 - **pile-memo (Opus; AC 3's "cost fix the profile justifies"; `9294b89`).** `pile-memo.patch` keeps the last `pile_targets` answer, keyed on the blocked cells among the zones and their side neighbours. Census: 10/10 hashes and end lines equal C0, and every sweep line is equal. RED: a key that ignores `blocked` moves all 4 hashes tried. Quiet tick-bench (§6): −55% … −91% on the seven pile scenarios. Scale: 128² crew 200 drops from 313 to 20.8 ms with identical counts. A first hash check was vacuous: the regex matched 0 lines on both sides, so "equal" proved nothing. The re-check matched 10 lines.
 - **Task 8 (Opus).** Wrote `13-2-signoff/proposal.md` (§ Survey, Profile, Scale, Prototypes, Issues, Rulings needed, Recommendation, ADR 5). `git diff 4f57027 -- crates/` is empty.
 
+- **Task 9, the one full gate (Opus; `RUST_TEST_THREADS=1 scripts/gate.sh` at `18c56634`).** Green, 6413 s. That is longer than the 45–65 min estimate because the pixel guards alone took 5568 s:
+  ```
+  frostvein gate
+    cargo fmt --check           ok  1s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  737s
+    cargo test (pixel guards)   ok  5568s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  51s
+    mutation tables still apply ok  25s
+  GATE GREEN  6413s
+  ```
+
 ### Completion Notes List
+
+- Spike done. No sim change lands: `git diff 4f57027 -- crates/` is empty (AC 7). Every prototype is a throwaway patch under `13-2-signoff/prototypes/`.
+- Wolf ruled the proposal on 2026-10-23. The next stories are 13.3 pile-memo, then 13.4 squeeze-past, then 13.5 clamber-over only if ruled. ADR 5's scope is amended.
 
 ### File List
 
@@ -220,3 +239,4 @@ All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `
 | 2026-10-23 | Task 0 ruled by Wolf: Q1 crews of 5/20/50/100/200 on today's map, and (follow-up) on 256×256×32 too; Q2 one story (split at Part B on overrun); Q3 commit both issue saves. |
 | 2026-10-23 | Tasks 1–8 done (Sonnet 5.5 agents implement, Opus 5.5 verifies; every agent output re-run by Opus). The proposal recommends: pile-memo first (no ruling; 128² crew 200 drops from 313 to 21 ms with identical outcomes), then squeeze if the swap is ruled in, then clamber only if standing on a stone is ruled in. No connectivity map; #159 waits for the M4 map size. Four issues are not movement. ADR 5 keeps plain A\*, and its scope becomes "while the walkable component is under the node budget". Awaiting Wolf's ruling. |
 | 2026-10-23 | **Wolf ruled the proposal** (four questions, each answered with the recommended option). Order as recommended: 13.3 pile-memo, 13.4 squeeze-past, 13.5 clamber-over only if ruled. Ruling 1: the swap is allowed, and 13.4 must clear the #187 sweep regression first. Ruling 2: clamber is decided after squeeze, once #207 is re-measured on 13.4. ADR 5 is amended as proposed (scope line in `docs/technical-preferences.md`). #159 waits for the M4 map size; #186/#187/#203/#204 get their own stories. Recorded in proposal § Ruling. |
+| 2026-10-23 | Full gate green at `18c56634` (6413 s). Status → review. |
