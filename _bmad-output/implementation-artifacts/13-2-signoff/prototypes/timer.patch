@@ -1,0 +1,158 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 02acc658..ce34eb69 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -855,6 +855,7 @@ fn pile_targets(
+     blocked: &BTreeSet<Pos>,
+     zones: &BTreeSet<Pos>,
+ ) -> BTreeMap<Pos, u32> {
++    let _timer = counters::Timer::new("pile_targets");
+     counters::add("flood", "pile_targets", "calls", 1);
+     let cap = 4 * zones.len() + 16;
+     // The zones' x/y bounding box (empty with no zones).
+@@ -968,6 +969,7 @@ fn walls_in_a_dwarf(
+     dwarves: &BTreeSet<Pos>,
+     cell: Pos,
+ ) -> bool {
++    let _timer = counters::Timer::new("walls_in_a_dwarf");
+     counters::add("calls", "walls_in_a_dwarf", "calls", 1);
+     let sides = sides_of(terrain, blocked, cell);
+     let mut closed = blocked.clone();
+@@ -984,6 +986,7 @@ fn closes_last_level_exit(
+     dwarves: &BTreeSet<Pos>,
+     cell: Pos,
+ ) -> bool {
++    let _timer = counters::Timer::new("closes_last_level_exit");
+     counters::add("calls", "closes_last_level_exit", "calls", 1);
+     terrain.is_standable(cell)
+         && dwarves.iter().any(|dwarf| {
+@@ -1014,6 +1017,7 @@ fn walls_in_a_dwarf_from(
+     cell: Pos,
+     sides: Vec<Pos>,
+ ) -> bool {
++    let _timer = counters::Timer::new("walls_in_a_dwarf_from");
+     counters::add("calls", "walls_in_a_dwarf_from", "calls", 1);
+     let mut closed = blocked.clone();
+     closed.insert(cell);
+@@ -1027,6 +1031,7 @@ fn stranded(
+     dwarves: &BTreeSet<Pos>,
+     sides: Vec<Pos>,
+ ) -> BTreeSet<Pos> {
++    let _timer = counters::Timer::new("stranded");
+     counters::add("flood", "stranded", "calls", 1);
+     // One breadth-first flood per side of `cell`, run in lockstep and merged where two meet. A
+     // flood that runs dry is a whole piece; the search stops once one flood is left running and it
+@@ -1175,6 +1180,7 @@ fn astar_with_budget_inner(
+     goals: &BTreeSet<Pos>,
+     nodes_remaining: &mut usize,
+ ) -> (Option<Vec<Pos>>, bool, BTreeSet<Pos>) {
++    let _timer = counters::Timer::new("astar_with_budget_inner");
+     if goals.is_empty() {
+         return (None, false, BTreeSet::new());
+     }
+@@ -1272,6 +1278,7 @@ fn route_to_nearest_inner(
+     accept: impl Fn(Pos) -> bool,
+     nodes_remaining: &mut usize,
+ ) -> Option<Vec<Pos>> {
++    let _timer = counters::Timer::new("route_to_nearest_inner");
+     let mut parents = BTreeMap::new();
+     let mut queue = VecDeque::from([from]);
+     while let Some(cell) = queue.pop_front() {
+@@ -1500,6 +1507,7 @@ fn nearest_free_cell(
+     from: Pos,
+     refused: impl Fn(Pos) -> bool,
+ ) -> Option<Pos> {
++    let _timer = counters::Timer::new("nearest_free_cell");
+     counters::add("flood", "nearest_free_cell", "calls", 1);
+     let mut seen = BTreeSet::from([from]);
+     let mut frontier = BTreeSet::from([from]);
+@@ -1909,6 +1917,7 @@ fn caging_stone(
+     stones: &BTreeMap<u32, Pos>,
+     pos: Pos,
+ ) -> Option<u32> {
++    let _timer = counters::Timer::new("caging_stone");
+     const CAGE_CELLS: usize = 64;
+     counters::add("flood", "caging_stone", "calls", 1);
+     // The cells reachable from `pos`, or `None` once there are more than `CAGE_CELLS`.
+@@ -2782,15 +2791,25 @@ fn assemble(
+     let mut schedule = Schedule::default();
+     schedule.add_systems(
+         (
++            counters::lap::<0>,
+             advance_tick,
++            counters::lap::<1>,
+             create_jobs,
++            counters::lap::<2>,
+             create_haul_jobs,
++            counters::lap::<3>,
+             claim_jobs,
++            counters::lap::<4>,
+             execute_jobs,
++            counters::lap::<5>,
+             settle,
++            counters::lap::<6>,
+             wander,
++            counters::lap::<7>,
+             carry_items,
++            counters::lap::<8>,
+             advance_goals,
++            counters::lap::<9>,
+         )
+             .chain(),
+     );
+@@ -3051,7 +3070,10 @@ impl World {
+ 
+     pub fn step(&mut self) {
+         self.schedule.run(&mut self.ecs);
+-        counters::tick_boundary(self);
++        {
++            let _timer = counters::Timer::new("tick_boundary");
++            counters::tick_boundary(self);
++        }
+         debug_assert!(
+             {
+                 let mut stood_on = BTreeSet::new();
+@@ -3737,6 +3759,43 @@ pub mod counters {
+         add("emitter", "ticks", "boundaries", 1);
+     }
+ 
++    /// 13.2 timer probe (throwaway): inclusive wall time of a function, in ns.
++    pub struct Timer(&'static str, std::time::Instant);
++    impl Timer {
++        pub fn new(name: &'static str) -> Self {
++            Timer(name, std::time::Instant::now())
++        }
++    }
++    impl Drop for Timer {
++        fn drop(&mut self) {
++            add("time", "fn_ns", self.0, self.1.elapsed().as_nanos() as u64);
++        }
++    }
++    const SYSTEMS: [&str; 9] = [
++        "advance_tick",
++        "create_jobs",
++        "create_haul_jobs",
++        "claim_jobs",
++        "execute_jobs",
++        "settle",
++        "wander",
++        "carry_items",
++        "advance_goals",
++    ];
++    thread_local! {
++        static LAST: Cell<Option<std::time::Instant>> = const { Cell::new(None) };
++    }
++    /// A system between two chained systems: books the time since the previous lap to system I-1.
++    pub fn lap<const I: usize>() {
++        let now = std::time::Instant::now();
++        if I > 0 {
++            if let Some(last) = LAST.with(Cell::get) {
++                add("time", "system_ns", SYSTEMS[I - 1], (now - last).as_nanos() as u64);
++            }
++        }
++        LAST.with(|c| c.set(Some(now)));
++    }
++
+     /// Returns the tallies, one line per (kind, name) with sorted `key=value` pairs, and resets.
+     pub fn take() -> Vec<String> {
+         let rows = ROWS.with(|r| std::mem::take(&mut *r.borrow_mut()));
