@@ -209,6 +209,7 @@ All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `
 - NEW `13-2-signoff/scale-{base,connectivity,connectivity-sub,squeeze,clamber}.txt`, `13-2-signoff/scale-r1-{base,connectivity-i,squeeze,clamber,pile-memo}.txt`
 - NEW `13-2-signoff/tickbench.txt`, `13-2-signoff/timer.txt`, `13-2-signoff/timer-pile-memo.txt`
 - NEW `13-2-signoff/profile-table.md`, `13-2-signoff/scale-table.md`, `13-2-signoff/proto-{connectivity,squeeze,clamber}.md`, `13-2-signoff/proposal.md`
+- UPDATE `docs/technical-preferences.md` (ADR 5 scope line, per Wolf's ruling)
 - UPDATE this story, `sprint-status.yaml`
 
 ## Change Log
@@ -218,3 +219,4 @@ All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `
 | 2026-10-23 | Story created on `db8fde3` (Opus 5.5). Creation probe: both issue saves freeze on HEAD (#206 marks=3 and #203 marks=11, each over 10k+ ticks; #203's save needed `clearing` and `goals_completed` added). The ghost-dwarves RED moved #206 from 3 to 0 and made 3 of 6 reproducers worse. There is no M4 PRD draft and no profiler on the devpod. Task 0 Q1–Q3 await Wolf. |
 | 2026-10-23 | Task 0 ruled by Wolf: Q1 crews of 5/20/50/100/200 on today's map, and (follow-up) on 256×256×32 too; Q2 one story (split at Part B on overrun); Q3 commit both issue saves. |
 | 2026-10-23 | Tasks 1–8 done (Sonnet 5.5 agents implement, Opus 5.5 verifies; every agent output re-run by Opus). The proposal recommends: pile-memo first (no ruling; 128² crew 200 drops from 313 to 21 ms with identical outcomes), then squeeze if the swap is ruled in, then clamber only if standing on a stone is ruled in. No connectivity map; #159 waits for the M4 map size. Four issues are not movement. ADR 5 keeps plain A\*, and its scope becomes "while the walkable component is under the node budget". Awaiting Wolf's ruling. |
+| 2026-10-23 | **Wolf ruled the proposal** (four questions, each answered with the recommended option). Order as recommended: 13.3 pile-memo, 13.4 squeeze-past, 13.5 clamber-over only if ruled. Ruling 1: the swap is allowed, and 13.4 must clear the #187 sweep regression first. Ruling 2: clamber is decided after squeeze, once #207 is re-measured on 13.4. ADR 5 is amended as proposed (scope line in `docs/technical-preferences.md`). #159 waits for the M4 map size; #186/#187/#203/#204 get their own stories. Recorded in proposal § Ruling. |

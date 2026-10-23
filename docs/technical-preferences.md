@@ -39,6 +39,9 @@ these win.
 4. Clients contain zero game logic. Any rule a client needs is exposed by the sim.
 5. Plain A* pathfinding on the voxel grid for milestone 1. Hierarchical
    pathfinding is acknowledged future work, not scaffolded now.
+   Scope (Wolf, 2026-10-23, 13.2 spike): plain A* with a fixed node budget holds while
+   the walkable component is under `MAX_ASTAR_NODES`. Past that (#159), the next step is
+   a budget sized to the component or a better heuristic, not a hierarchy.
 
 Architect: record decisions and module layout. Do not produce comparative
 evaluations of alternatives. If you disagree with a decision, flag it in one

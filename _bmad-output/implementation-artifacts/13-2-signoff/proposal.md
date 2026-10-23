@@ -378,4 +378,12 @@ unscaffolded.
 
 ## Ruling
 
-Pending Wolf.
+**Wolf, 2026-10-23** (four questions, each answered with the recommended option):
+
+1. **Order: as recommended.** 13.3 pile-memo, then 13.4 squeeze-past, then 13.5 clamber-over only if Ruling 2 allows it. #159 waits for
+   the M4 map size. #186, #187, #203 and #204 go to their own stories, outside the movement layer.
+2. **Ruling 1: the swap is allowed.** Squeeze-past (variant B) is the basis for 13.4, and 13.4 must clear the #187 cage-sweep
+   regression before it lands.
+3. **Ruling 2: decide after squeeze.** #207 is re-measured on top of 13.4; clamber-over is ruled then.
+4. **ADR 5: amended as proposed.** Plain A\* with a fixed node budget holds while the walkable component is under
+   `MAX_ASTAR_NODES`. The next step past that is a budget or a heuristic, not a hierarchy (`docs/technical-preferences.md`).
