@@ -400,6 +400,7 @@ claude-opus-5-5 (Opus 5.5), building directly in the creation session, with no s
 - **Deviation: the run-shape test lives in `bench.rs`, not `serve.rs`.** It needs no shared harness. CORRECTED at the patch pass: this said it ran in the fast tier on every commit, which was false, because the fast arm ran `cargo test -p simd --bins`, and that skips integration tests. Since `60bc6c7` the fast arm also runs `--test bench` (~2 s).
 - **Re-pointed:** five mutation rows (3.1 ×4, 12.1 ×1) followed the sim arms into `apply_sim_command`, and ran KILLED.
 - **Not done here:** the full gate (Task 9, at PR per M3-4) and the seat (AC 7, Wolf's; card `13-1-signoff/vehicle-card.md`).
+- **AC 7 MET at the seat (Wolf, 2026-10-23, build `2fb1f17`).** `done at tick 10006 state=2479b66a35ac887e commands=50/50`, with no client-commands suffix, so it was the bench's hash with no manual input. The gui's CSV (`13-1-signoff/13-1-plan.csv`, 17,018 frames) covers the run: edit frames span 0.3 s to 43.7 s. The F3 mark landed late (164.6 s), because the stop at elapsed 10:00 read as a fault; the card now says that stop is the end. The frame times are vsync-bound (p50 16.16 ms) and are not a perf statement. Record: the card's "The sitting" section.
 
 ### File List
 
@@ -418,6 +419,7 @@ claude-opus-5-5 (Opus 5.5), building directly in the creation session, with no s
 
 | Date | Change |
 | --- | --- |
+| 2026-10-23 | AC 7 MET at the seat (Wolf, `2fb1f17`): the hash matched the bench, there was no manual input, and the CSV covers the run. F3 was late; the card now names the elapsed-10:00 stop as the end. The full gate at PR is the only open item. |
 | 2026-10-22 | Review-patch run 2 (Opus 5.5): all 5 landed (`8e14f7d`, `9ca72d2`, `8c44d89`). tick-bench gains a cross-build control: base rebuilt with `--shuffle-sections`, chosen over `-C metadata`, which read about −1.7%. Under the new verdict the identical-code reference pair still reads −5.5% BEYOND FLOOR (control −3.4%). The RED reads BEYOND by at most 0.3 points and is unvalidated across builds, and the cross-build resolution is about 6%. FAILED rows name every failed build; a panic shows its message. Fast tier green on each commit; the full gate is owed at PR. Status stays in-progress (AC 7). |
 | 2026-10-22 | Code review run 2 (fresh session), diff `9e86180..aba37d9`: closure 7/7 CLOSED, 0 REWORK; 0 HIGH, 5 patch (MED cross-build control, ruled fix now; 4 LOW), 3 defer. Stopping rule fired: no round 3. Patches left as action items. Status stays in-progress (AC 7 and the PR full gate are open). |
 | 2026-10-22 | Patch pass (fresh session, Opus 5.5): all 7 review patches landed (`6a7f3d6` `60bc6c7` `4aabd3d` `c3d6168` `5bfdfdb`), each with its both-sides line; rows 12-13 KILLED; fast tier + `cargo test -p simd` green. Found: two builds with the same `plan` code read −5.4% to −6.1% apart, so the same-binary control understates the noise. Full gate still owed at PR; AC 7 still Wolf's. |
