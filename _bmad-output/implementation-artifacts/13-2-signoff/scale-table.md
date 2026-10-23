@@ -1,5 +1,8 @@
 # 13.2 scale table (Task 4, AC 6) -- base, no option patch
 
+**Superseded for the option columns by `proposal.md` § Scale** (single-run rows for base and every option, `scale-r1-*.txt`). This
+file keeps the 3-run base reading and the #159 component sizes.
+
 From `scale-base.txt` (`scale.sh`, stack 4f57027 + census + counters + scale patches; 2000 ticks per point, `--runs 3`, state
 identical across the 3 runs of every point, `commands=applied/total` full on all ten). Tick mean and p99 are the mean of the three
 runs. Counter columns are run 1. "nodes expanded" is A* nodes only; `route_to_nearest` cells are a separate column. Marks left

@@ -69,32 +69,32 @@ so that M4 builds on a movement layer that is fixed as a whole, not one cage sha
 ## Tasks / Subtasks
 
 - [x] **Task 0: Wolf rules Q1–Q3.** Ruled 2026-10-23: Q1 crews 5/20/50/100/200 on 128² and 256², Q2 one story, Q3 commit both saves.
-- [ ] **Task 1: the census instrument (AC 3, 4).** NEW `13-2-signoff/census.sh PATCH...`:
+- [x] **Task 1: the census instrument (AC 3, 4).** NEW `13-2-signoff/census.sh PATCH...`:
   - It makes a scratch worktree at `4f57027` and applies the patches in order. It builds a release `simd` there; `cd` into the worktree, because `CARGO_TARGET_DIR` builds the cwd's sources.
   - It prints every reproducer's `end` line (the 8 `scenarios/*.json` and the two issue saves at 10,000 ticks) and the cage-sweep lists.
   - `census.patch` turns the cage sweep's three `assert_eq!`/`assert!` on `landed`/`frozen`/`unfinished` (`tests/scenario.rs:3109-3125`) and the staircase `worked` asserts into `eprintln!`. Today the first failing assert hides the rest, and a prototype is expected to change the pins.
   - Run the sweeps with `cargo test --release -p sim-core --test scenario <name> -- --nocapture`.
   - Add (Q3) `scenarios/stuck-tunnel.json` (#206) and `scenarios/dig-loop.json` (#203), each starting from its save with 10,000 ticks and no commands, and say in `about` which issue the file reproduces.
   - **RED, then control.** `census.sh` with no prototype must reproduce the creation table above. `census.sh ghost.patch` (commit the probe as `prototypes/ghost.patch`) must read seat-loop `marks=0` and plan `marks=4`. A census that cannot tell these two apart is broken.
-- [ ] **Task 2: the survey (AC 1).** Web sources only, with each claim linked. One table plus at most a paragraph per lead. Check DFHack's walkable-group id in its source or docs, not from memory.
-- [ ] **Task 3: the profile (AC 2).**
+- [x] **Task 2: the survey (AC 1).** Web sources only, with each claim linked. One table plus at most a paragraph per lead. Check DFHack's walkable-group id in its source or docs, not from memory.
+- [x] **Task 3: the profile (AC 2).**
   - NEW `prototypes/counters.patch` adds plain counters (a resource or statics, read at the bench's end line or printed by a test). It counts A\* calls and nodes per caller (`claim_jobs` `:633`/`:646`, `execute_jobs` replan `:2113`, `resolve_blocked_step` `:1751`, `clearing_set_down` `:1927`), `route_to_nearest` calls and cells, heuristic goal-checks, and cells visited by `stranded` (`:1015`), `caging_stone` (`:1832`), `nearest_free_cell` (`:1436`, which has no cap) and the `pile_targets` floods (`:851`).
   - Counters only, with no behaviour change: every reproducer's state hash must equal base.
   - RED: on top of counters, make `astar_heuristic` iterate its goals twice (13.1's sabotage). Plan's goal-check count must double, and nodes must not move.
   - Use tick-bench for the ms column (`RUNS=5`, never beside the gate or `mutate.sh`). Judge between builds by counts. A ms delta under about 6% between two SHAs is weak evidence.
-- [ ] **Task 4: scale (AC 6).** Crews of 5/20/50/100/200 on 128×128×32 and 256×256×32 (Q1). NEW `prototypes/scale.patch` makes the crew size and the dims scenario-settable (throwaway). **Trap: a bigger map costs only if the work uses it.** Put the 256² scenarios' marks and piles far enough apart that paths and floods span the map, or the extra area is idle ground and reads as free. **On 256², #159 may become live:** DEFAULT_SEED's walkable area is about 16k cells at 128², so 4× the area can pass the 50k `MAX_ASTAR_NODES` cap. Measure that component size, and fill #159's cell from it. **Trap: spawn runs out of cells.** `spawn_dwarves` (`lib.rs:3447`) draws from the standable cells within `CAMP_RADIUS = 3` of the camp (`worldgen.rs:7`), which is at most 49 cells, and `random_range(0..0)` panics once they are used up. So 50+ dwarves need a wider spawn ring. The identity and profession arrays are fixed at 5 too. Scenario files go in `13-2-signoff/scale/`, not `scenarios/`. Each scale point needs real work for the crew (marks plus a pile), or it measures idle dwarves. Run base plus each option patch on top of it.
-- [ ] **Task 5: connectivity map (AC 3, 4).** `prototypes/connectivity.patch`. It keeps reachability between ticks and answers "can he get there" before any A\* or flood, so #159's starvation and the per-question floods go.
+- [x] **Task 4: scale (AC 6).** Crews of 5/20/50/100/200 on 128×128×32 and 256×256×32 (Q1). NEW `prototypes/scale.patch` makes the crew size and the dims scenario-settable (throwaway). **Trap: a bigger map costs only if the work uses it.** Put the 256² scenarios' marks and piles far enough apart that paths and floods span the map, or the extra area is idle ground and reads as free. **On 256², #159 may become live:** DEFAULT_SEED's walkable area is about 16k cells at 128², so 4× the area can pass the 50k `MAX_ASTAR_NODES` cap. Measure that component size, and fill #159's cell from it. **Trap: spawn runs out of cells.** `spawn_dwarves` (`lib.rs:3447`) draws from the standable cells within `CAMP_RADIUS = 3` of the camp (`worldgen.rs:7`), which is at most 49 cells, and `random_range(0..0)` panics once they are used up. So 50+ dwarves need a wider spawn ring. The identity and profession arrays are fixed at 5 too. Scenario files go in `13-2-signoff/scale/`, not `scenarios/`. Each scale point needs real work for the crew (marks plus a pile), or it measures idle dwarves. Run base plus each option patch on top of it.
+- [x] **Task 5: connectivity map (AC 3, 4).** `prototypes/connectivity.patch`. It keeps reachability between ticks and answers "can he get there" before any A\* or flood, so #159's starvation and the per-question floods go.
   - **Trap: items move on every haul.** If the map includes items, it is invalidated constantly. If it covers terrain only, A\* still decides around items. Measure the invalidation rate and say which way it went and why.
   - Invalidate on the same inputs as `pile_ground` (`set_tile` at `lib.rs:742`, a zones change at `:868`).
   - Also measure whether the map lets the four wall-in guards (`walls_in_a_dwarf` `:959`, `walls_in_a_dwarf_from` `:1002`, `closes_last_level_exit` `:974`, `caging_stone`) become one question ("does every dwarf still reach work?"). A guard that answers a different question once it is cheaper is a different rule: compare outcomes as well as ms.
-- [ ] **Task 6: squeeze-past (AC 3, 4, 5).** `prototypes/squeeze.patch`. A timed swap of two dwarves in a one-wide way, where the gui would sell it with an animation (out of scope here).
+- [x] **Task 6: squeeze-past (AC 3, 4, 5).** `prototypes/squeeze.patch`. A timed swap of two dwarves in a one-wide way, where the gui would sell it with an animation (out of scope here).
   - `resolve_blocked_step` never swaps today (`lib.rs:1685`). `step_and_watch` (`tests/scenario.rs:4746`) panics on a swap, and changing that check IS the rule change: list it under Rulings needed.
   - List every writer of a dwarf's `Pos` (`execute_jobs`, `settle`, `wander`; `dwarf_tiles` doc, `lib.rs:1195`) and keep each one's `occupied` current. Then check that no tile holds two dwarves at a tick boundary. `step_and_watch` covers only the one-wide staircase, so `counters.patch` also counts tick boundaries where two dwarves share a tile, on every reproducer. It must read 0 on base and on every prototype (AC 5's emitter).
   - The ghost probe is not this prototype's ceiling; see Found at creation.
-- [ ] **Task 7: clamber-over (AC 3, 4, 5).** `prototypes/clamber.patch`. A costed step over a blocking stone.
+- [x] **Task 7: clamber-over (AC 3, 4, 5).** `prototypes/clamber.patch`. A costed step over a blocking stone.
   - A\* is unit-cost today, so this needs a weighted step, and the heuristic must stay admissible. Emitters share `blocked` with stones (`blocked_cells` `:795`, `world_blocked` `:800`) and must stay blocking.
   - The item-placing writers (haul drop `:2258`, dig spawn `:2337`, channel landing `:2395`, `settle` `:2493`) must still never place a stone on a dwarf. The sweep's `landed` list must stay empty.
-- [ ] **Task 8: the proposal (AC 1–7).** NEW `13-2-signoff/proposal.md` with § Survey, Profile, Scale, Prototypes, Issues, Rulings needed and Recommendation. Every number names its patch stack and command. State ADR 5 ("plain A\* for M1", `docs/technical-preferences.md`) and what the recommendation does to it.
+- [x] **Task 8: the proposal (AC 1–7).** NEW `13-2-signoff/proposal.md` with § Survey, Profile, Scale, Prototypes, Issues, Rulings needed and Recommendation. Every number names its patch stack and command. State ADR 5 ("plain A\* for M1", `docs/technical-preferences.md`) and what the recommendation does to it.
 - [ ] **Task 9: Wolf rules, then close.**
   - Record the ruling in the Change Log and in the proposal's last section. Note any issue it re-scopes on that issue, with no closing keyword; nothing here closes an issue.
   - Then the ONE full gate (`RUST_TEST_THREADS=1 scripts/gate.sh`) and paste the block. Then the cost row (`session_tokens.py --phase dev --story 13-2-the-way-through-pathfinding-and-reachability-spike`) and `phase_state.py clear`.
@@ -176,9 +176,40 @@ Wolf picked Sonnet 5.5 (`claude-sonnet-5-5`) subagents for the implementation (2
 
 ### Debug Log References
 
+- **Task 1, census (Sonnet agent; `8a90b8d`, `63590df`, `c09ca31`).** Opus re-ran both from a cold target and diffed them: `census.sh` is byte-identical to `census-base.txt`, and `census.sh prototypes/ghost.patch` is byte-identical to `census-ghost.txt` (80 s cold for the base run).
+  - **Base reproduces the creation table.** stuck-tunnel `tick=28082 marks=3 items=57 goals=38/4/0`, dig-loop `tick=17640 marks=11 items=44`, plan `marks=0 goals=12/10/1`, full-pile-crowd `marks=0 items=46`, deep-pit `marks=0`, seat-slow `marks=1 goals=38/12/1`.
+  - **Base sweeps.** frozen `[(10,6,0),(12,4,1),(12,4,4),(12,6,3)]`, unfinished `[(11,6,1)]`, landed `[]`, two-wide `24/24`, one-wide `failed=[]`. Shares and swaps are 0.
+  - **Ghost discriminates.** stuck-tunnel marks 3→0, plan 0→4 (goals 12/8/1), full-pile-crowd 0→37, dig-loop 11→20. The share counter fires: head-on 319, one-wide 37,231.
+  - **Census additions.** `census.patch` adds one census-only test, `census_207_four_bars_round_a_hole`, because no test filled #207's four-bar shape. It reads `stored=14/24`, the issue's number. Other readings: #189 `stored=23/24` with 80 pick-ups after t2500, and pocket207 `24/24`.
+  - **The saves.** `12-12-seat-loop.save` is byte-identical to the kept copy (`cmp`). The patched #203 save adds `"clearing": null` per dwarf and top-level `"goals_completed": 0`. Both scenarios give the same hash over `--runs 2`.
+- **Task 3, counters (Sonnet agent; `e467791`, `a1072d5`).** Opus re-ran the counters census, which matches the committed `census-counters.txt` exactly. Every state hash and sweep line equals base, and 10/10 counter blocks read `IDENTICAL across 2 runs`.
+  - **RED.** Heuristic-twice doubles every goal-check count (plan `claim_goals` 176,776 → 353,552) and leaves nodes (83,060) and every hash unchanged.
+  - **Share-counter RED.** Under ghost the emitter reads shares > 0 on 9 of 10 scenarios. Base reads 0 on all 14 blocks.
+  - **Top cost.** `caging_stone`'s flood is the top cost in 9 of 10 scenarios (59–74% of nodes+cells). In stuck-tunnel it is `execute_replan` instead: 69 no-path searches of about 16k nodes each, 1.1M nodes in all.
+- **Task 2, survey (Sonnet agent, web).** The draft is in the session scratchpad and goes into the proposal at Task 8. Opus re-fetched the load-bearing quote, DFHack `Maps.cpp` L1076-1087 `canWalkBetween` = `tile1 && tile1 == tile2` and `df.block.xml` L288-289, and it matches.
+- **Task 4, scale (Sonnet agent; `caa0a71`, `9f9069d`; Opus `9294b89`).** `scale.patch` is inert on the committed scenarios (hashes equal C0). Base reading (3 runs, `scale-base.txt`): 128² crews 5…200 → 0.41/5.25/30.9/95.7/309 ms. The camp component is 16,063 cells on 128² and 64,300 on 256², which is over the 50k budget. Exhausted A\* calls on 256² are 10/10/131/218/138; there are none on 128². The scale agent's first run was killed mid-way by another agent's `pkill -f` (stitched from 4 invocations; header says so). Opus then re-ran all ten points for base and every option at once with `SCALE_RUNS=1` (`scale-r1-*.txt`). Base counts match `scale-base.txt` exactly.
+- **Task 5, connectivity (Sonnet agent; `c8c9327`).** Opus re-ran the T and I censuses: both are byte-identical to the committed files, and every hash equals base. The quiet tick-bench (`tickbench.txt` §2–3) shows every scenario slower: T +1.8% … +118.7%, I +8.6% … +421.5%. The guards-as-one-question variant was not built. The level guard reads false at 3,018 of 3,018 calls in seat-slow.
+- **Task 6, squeeze (Sonnet agent; `443b872`).** Opus re-ran its census byte-identical (`shares=0`). It fixes #206 (3 → 0) and #189 (24/24), and moves #207 from 14 to 18. It makes #187 worse: 4 cage runs are stuck at 16k ticks. Tick-bench §4: stuck-tunnel −71% (the livelock is gone); the other states differ.
+- **Task 7, clamber (Sonnet agent; `31d7342`).** Opus re-ran the cost-4 census byte-identical (`landed=[]`, `shares=0`). It fixes #189 and #207 (24/24), and makes #203 worse (11 → 14). The guards variant breaks outcomes (two-wide staircase 12/24). Tick-bench §5: +6% … +35% in the changed worlds.
+- **Task 3 addendum: counts ranked the wrong thing (Opus).** In the quiet tick-bench, plan-compact runs 1.39 ms and plan-far 0.22 ms on nearly equal counts. A throwaway `timer.patch` (lap systems plus drop-timers; hashes equal base) put `pile_targets` at 69–94% of the tick in every scenario over 0.1 ms and at every 128² scale point, with A\* at 0–3%. A cache hit still rebuilds the depth map, about 57 µs at 203 zone cells.
+- **pile-memo (Opus; AC 3's "cost fix the profile justifies"; `9294b89`).** `pile-memo.patch` keeps the last `pile_targets` answer, keyed on the blocked cells among the zones and their side neighbours. Census: 10/10 hashes and end lines equal C0, and every sweep line is equal. RED: a key that ignores `blocked` moves all 4 hashes tried. Quiet tick-bench (§6): −55% … −91% on the seven pile scenarios. Scale: 128² crew 200 drops from 313 to 20.8 ms with identical counts. A first hash check was vacuous: the regex matched 0 lines on both sides, so "equal" proved nothing. The re-check matched 10 lines.
+- **Task 8 (Opus).** Wrote `13-2-signoff/proposal.md` (§ Survey, Profile, Scale, Prototypes, Issues, Rulings needed, Recommendation, ADR 5). `git diff 4f57027 -- crates/` is empty.
+
 ### Completion Notes List
 
 ### File List
+
+All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `crates/`.
+
+- NEW `scenarios/stuck-tunnel.json`, `scenarios/dig-loop.json`, `scenarios/saves/12-12-seat-loop.save`, `scenarios/saves/12-11-dig-loop-patched.save` (repo root)
+- NEW `13-2-signoff/census.sh`, `13-2-signoff/scale.sh`
+- NEW `13-2-signoff/prototypes/{census,ghost,counters,counters-red-heuristic-twice,scale,connectivity,squeeze,clamber,clamber-guards,pile-memo,timer}.patch`
+- NEW `13-2-signoff/scale/*.json` (10) and `13-2-signoff/scale/README.md`
+- NEW `13-2-signoff/census-{base,ghost,counters,counters-ghost,connectivity,connectivity-i,squeeze,clamber,clamber-cost8,clamber-guards,pile-memo}.txt`, `13-2-signoff/profile-red.txt`
+- NEW `13-2-signoff/scale-{base,connectivity,connectivity-sub,squeeze,clamber}.txt`, `13-2-signoff/scale-r1-{base,connectivity-i,squeeze,clamber,pile-memo}.txt`
+- NEW `13-2-signoff/tickbench.txt`, `13-2-signoff/timer.txt`, `13-2-signoff/timer-pile-memo.txt`
+- NEW `13-2-signoff/profile-table.md`, `13-2-signoff/scale-table.md`, `13-2-signoff/proto-{connectivity,squeeze,clamber}.md`, `13-2-signoff/proposal.md`
+- UPDATE this story, `sprint-status.yaml`
 
 ## Change Log
 
@@ -186,3 +217,4 @@ Wolf picked Sonnet 5.5 (`claude-sonnet-5-5`) subagents for the implementation (2
 | --- | --- |
 | 2026-10-23 | Story created on `db8fde3` (Opus 5.5). Creation probe: both issue saves freeze on HEAD (#206 marks=3 and #203 marks=11, each over 10k+ ticks; #203's save needed `clearing` and `goals_completed` added). The ghost-dwarves RED moved #206 from 3 to 0 and made 3 of 6 reproducers worse. There is no M4 PRD draft and no profiler on the devpod. Task 0 Q1–Q3 await Wolf. |
 | 2026-10-23 | Task 0 ruled by Wolf: Q1 crews of 5/20/50/100/200 on today's map, and (follow-up) on 256×256×32 too; Q2 one story (split at Part B on overrun); Q3 commit both issue saves. |
+| 2026-10-23 | Tasks 1–8 done (Sonnet 5.5 agents implement, Opus 5.5 verifies; every agent output re-run by Opus). The proposal recommends: pile-memo first (no ruling; 128² crew 200 drops from 313 to 21 ms with identical outcomes), then squeeze if the swap is ruled in, then clamber only if standing on a stone is ruled in. No connectivity map; #159 waits for the M4 map size. Four issues are not movement. ADR 5 keeps plain A\*, and its scope becomes "while the walkable component is under the node budget". Awaiting Wolf's ruling. |
