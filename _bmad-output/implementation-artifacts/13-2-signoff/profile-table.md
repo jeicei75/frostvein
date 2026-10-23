@@ -1,8 +1,10 @@
 # 13.2 profile table (Task 3)
 
 Generated from `census-counters.txt` (`census.sh prototypes/counters.patch`, run 1 of 2; both runs print identical blocks)
-on 4f57027 + census.patch + counters.patch. Counts only. The `mean ms` column is left EMPTY for the orchestrator's
-`tick-bench` run (it must not run beside other builds).
+on 4f57027 + census.patch + counters.patch. The `mean ms` column is from `tickbench.txt` section 1
+(`scripts/tick-bench.sh 4f57027 ec1478b4`, quiet devpod, 5 interleaved runs per build): base 4f57027 ms, and in brackets the
+census+counters build `ec1478b4` (C0). Counter overhead: within the noise floor on the six heavier scenarios, +3% to +11% on the
+four sub-0.1 ms ones (deep-pit, dig-loop, full-pile-crowd, stuck-tunnel), state hashes identical.
 
 Cost unit for `top cost`: A* **nodes expanded**, `route_to_nearest` **cells popped**, flood **cells visited**
 (`pile_targets` cache hits are lookups, not cells; goal-checks are heuristic work inside A*, not extra cells).
@@ -11,16 +13,16 @@ Cost unit for `top cost`: A* **nodes expanded**, `route_to_nearest` **cells popp
 
 | scenario | ticks | mean ms | A* calls | A* nodes | A* goal-checks | route cells | flood cells | top cost (nodes+cells) |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| big-pile | 5006 |  | 3,898 | 121,371 | 268,131 | 686 | 274,861 | `flood:caging_stone` 266,549 (67% of 396,918) |
-| deep-pit | 3000 |  | 1,321 | 66,654 | 147,464 | 120 | 116,140 | `flood:caging_stone` 114,393 (63% of 182,914) |
-| dig-loop | 17640 |  | 23,050 | 80,858 | 162,319 | 4,763 | 206,718 | `flood:caging_stone` 203,434 (70% of 292,339) |
-| full-pile-crowd | 10006 |  | 31,518 | 128,097 | 291,208 | 1,476 | 402,947 | `flood:caging_stone` 392,327 (74% of 532,520) |
-| plan-compact-piles | 10006 |  | 3,930 | 147,298 | 549,905 | 745 | 380,107 | `flood:caging_stone` 354,925 (67% of 528,150) |
-| plan-far-piles | 10006 |  | 4,475 | 163,946 | 473,556 | 1,002 | 399,646 | `flood:caging_stone` 380,646 (67% of 564,594) |
-| plan-spread-piles | 10006 |  | 4,216 | 174,304 | 929,166 | 763 | 441,787 | `flood:caging_stone` 363,767 (59% of 616,854) |
-| plan | 10006 |  | 4,475 | 163,946 | 459,228 | 1,002 | 393,386 | `flood:caging_stone` 380,646 (68% of 558,334) |
-| seat-slow | 56759 |  | 33 | 19,467 | 76,098 | 16 | 30,328 | `astar:claim_goals` 18,529 (37% of 49,811) |
-| stuck-tunnel | 28082 |  | 11,033 | 1,160,963 | 2,608,072 | 1,913 | 476,826 | `astar:execute_replan` 1,106,988 (68% of 1,639,702) |
+| big-pile | 5006 | 1.0543 (1.0346) | 3,898 | 121,371 | 268,131 | 686 | 274,861 | `flood:caging_stone` 266,549 (67% of 396,918) |
+| deep-pit | 3000 | 0.0378 (0.0405) | 1,321 | 66,654 | 147,464 | 120 | 116,140 | `flood:caging_stone` 114,393 (63% of 182,914) |
+| dig-loop | 17640 | 0.0348 (0.0373) | 23,050 | 80,858 | 162,319 | 4,763 | 206,718 | `flood:caging_stone` 203,434 (70% of 292,339) |
+| full-pile-crowd | 10006 | 0.0307 (0.0340) | 31,518 | 128,097 | 291,208 | 1,476 | 402,947 | `flood:caging_stone` 392,327 (74% of 532,520) |
+| plan-compact-piles | 10006 | 1.3931 (1.3694) | 3,930 | 147,298 | 549,905 | 745 | 380,107 | `flood:caging_stone` 354,925 (67% of 528,150) |
+| plan-far-piles | 10006 | 0.2223 (0.2227) | 4,475 | 163,946 | 473,556 | 1,002 | 399,646 | `flood:caging_stone` 380,646 (67% of 564,594) |
+| plan-spread-piles | 10006 | 1.6827 (1.6499) | 4,216 | 174,304 | 929,166 | 763 | 441,787 | `flood:caging_stone` 363,767 (59% of 616,854) |
+| plan | 10006 | 0.1866 (0.1844) | 4,475 | 163,946 | 459,228 | 1,002 | 393,386 | `flood:caging_stone` 380,646 (68% of 558,334) |
+| seat-slow | 56759 | 0.4717 (0.4517) | 33 | 19,467 | 76,098 | 16 | 30,328 | `astar:claim_goals` 18,529 (37% of 49,811) |
+| stuck-tunnel | 28082 | 0.0967 (0.0997) | 11,033 | 1,160,963 | 2,608,072 | 1,913 | 476,826 | `astar:execute_replan` 1,106,988 (68% of 1,639,702) |
 
 ### big-pile
 
