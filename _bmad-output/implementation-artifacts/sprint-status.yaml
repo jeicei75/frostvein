@@ -2750,6 +2750,8 @@ development_status:
   # 13-2-signoff/prototypes/). Found: NO M4 PRD draft exists (scale target -> Task 0 Q1); both issue saves freeze
   # on HEAD (#206 marks=3, #203 marks=11 after adding `clearing`/`goals_completed`); ghost-dwarves RED freed #206
   # but worsened 3 of 6 reproducers. Task 0 Q1-Q3 (scale curve, one story or split, commit the saves) await Wolf.
+  # Task 0 RULED 2026-10-23: Q1 crews 5/20/50/100/200 on 128x128x32; Q2 one story (split at Part B on overrun);
+  # Q3 commit both issue saves.
   epic-13-retrospective: optional
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).

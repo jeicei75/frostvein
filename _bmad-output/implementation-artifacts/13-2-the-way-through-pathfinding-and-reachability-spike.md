@@ -50,18 +50,11 @@ so that M4 builds on a movement layer that is fixed as a whole, not one cage sha
 
   It does two things. It shows the census discriminates, and it is evidence that #206 is a dwarf-blocks-dwarf freeze, which is the squeeze-past family. **And deleting a rule is not an upper bound.** Occupancy feeds the wall-in guards and the job logic as well as movement, so ghosting made 3 of 6 reproducers worse. A prototype has to change movement only.
 
-## Task 0: Wolf rules Q1–Q3
+## Task 0: RULED (Wolf, 2026-10-23: "1 5, 20, 50, 100, 200 2 a 3 yes")
 
-1. **Scale target, with no PRD draft.** *(Recommended: (a).)*
-   - (a) The spike measures a curve, and the PRD picks a point on it later. The points are 5, 20 and 50 dwarves on 128×128×32, plus 20 dwarves on 256×256×32. They come from a throwaway scale patch. The proposal says where each option breaks.
-   - (b) Wolf names provisional numbers now.
-   - (c) Wait for the PRD draft. This blocks the spike, which the retro ran in parallel on purpose.
-2. **One story or two?** *(Recommended: (a).)* The spike covers a survey, a profile and three prototypes.
-   - (a) Keep one story. Prototypes are crude by design, and a prototype that can't be made to work is recorded with what blocked it, which is a result in itself. If dev overruns, split at Part B (Tasks 6–7 plus their rows) into 13.3, and 13.2 ships a partial proposal.
-   - (b) Split now. 13.2 is the survey, profile, scale and connectivity map; 13.3 is squeeze-past, clamber-over and the final proposal.
-3. **Commit the two issue saves?** *(Recommended: yes.)* Each is about 7.2 MB of JSON.
-   - Yes: commit `12-12-seat-loop.save` as it is, and the #203 save as `12-11-dig-loop-patched.save` (its two added fields named in its scenario's `about`). The proposal's numbers can then be re-run from the repo.
-   - No: the census reads `~/frostvein-saves/`, and those rows can be reproduced only on this devpod.
+1. **Scale: crews of 5, 20, 50, 100 and 200 dwarves**, on today's 128×128×32 map. The spike measures that curve, the proposal says where each option breaks, and the PRD picks a point later. The 256×256 point offered at creation was not taken.
+2. **One story (a).** Prototypes are crude by design, and a prototype that can't be made to work is recorded with what blocked it, which is a result. If dev overruns, split at Part B (Tasks 6–7 plus their rows) into 13.3, and 13.2 ships a partial proposal.
+3. **Commit both issue saves.** `12-12-seat-loop.save` as it is, and the #203 save as `12-11-dig-loop-patched.save`, with its two added fields (`"clearing": null` on each dwarf, top-level `"goals_completed": 0`) named in its scenario's `about`.
 
 ## Acceptance Criteria
 
@@ -70,18 +63,18 @@ so that M4 builds on a movement layer that is fixed as a whole, not one cage sha
 3. Every prototype has a row reproducible from a committed patch that applies to `4f57027`. The row covers tick-bench against base (with the control column), every reproducer's `end` line, and the cage-sweep lists (frozen, unfinished, landed, and the two staircase sweeps' worked counts). The prototypes are a connectivity map, squeeze-past and clamber-over, plus any A\* cost fix the profile justifies.
 4. § Issues gives each of #159 #186 #187 #189 #203 #204 #206 #207 one cell per option (fixed, unchanged, worse, or not movement) with the number behind it. A "not movement" cell says what kind of issue it is instead.
 5. In every prototype, no two dwarves stand on one tile at any tick boundary. Any departure from today's rules (a swap, a step over an item, a changed wall-in guard) is listed under § Rulings needed with what it buys.
-6. § Scale gives the tick mean and nodes expanded for base and each option at the scale points ruled in Task 0 Q1.
+6. § Scale gives the tick mean and nodes expanded for base and each option at crews of 5, 20, 50, 100 and 200 dwarves on the 128×128×32 map (Task 0 Q1).
 7. § Recommendation names the options, their order and the stories they would become, with expected cost taken from the proposal's own numbers. Wolf's ruling is recorded in this story before Status moves to review, and `git diff 4f57027 -- crates/` is empty.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf rules Q1–Q3** (above). Nothing below starts before this.
+- [x] **Task 0: Wolf rules Q1–Q3.** Ruled 2026-10-23: Q1 crews 5/20/50/100/200, Q2 one story, Q3 commit both saves.
 - [ ] **Task 1: the census instrument (AC 3, 4).** NEW `13-2-signoff/census.sh PATCH...`:
   - It makes a scratch worktree at `4f57027` and applies the patches in order. It builds a release `simd` there; `cd` into the worktree, because `CARGO_TARGET_DIR` builds the cwd's sources.
   - It prints every reproducer's `end` line (the 8 `scenarios/*.json` and the two issue saves at 10,000 ticks) and the cage-sweep lists.
   - `census.patch` turns the cage sweep's three `assert_eq!`/`assert!` on `landed`/`frozen`/`unfinished` (`tests/scenario.rs:3109-3125`) and the staircase `worked` asserts into `eprintln!`. Today the first failing assert hides the rest, and a prototype is expected to change the pins.
   - Run the sweeps with `cargo test --release -p sim-core --test scenario <name> -- --nocapture`.
-  - Per Q3, add `scenarios/stuck-tunnel.json` (#206) and `scenarios/dig-loop.json` (#203), each starting from its save with 10,000 ticks and no commands, and say in `about` which issue the file reproduces.
+  - Add (Q3) `scenarios/stuck-tunnel.json` (#206) and `scenarios/dig-loop.json` (#203), each starting from its save with 10,000 ticks and no commands, and say in `about` which issue the file reproduces.
   - **RED, then control.** `census.sh` with no prototype must reproduce the creation table above. `census.sh ghost.patch` (commit the probe as `prototypes/ghost.patch`) must read seat-loop `marks=0` and plan `marks=4`. A census that cannot tell these two apart is broken.
 - [ ] **Task 2: the survey (AC 1).** Web sources only, with each claim linked. One table plus at most a paragraph per lead. Check DFHack's walkable-group id in its source or docs, not from memory.
 - [ ] **Task 3: the profile (AC 2).**
@@ -89,7 +82,7 @@ so that M4 builds on a movement layer that is fixed as a whole, not one cage sha
   - Counters only, with no behaviour change: every reproducer's state hash must equal base.
   - RED: on top of counters, make `astar_heuristic` iterate its goals twice (13.1's sabotage). Plan's goal-check count must double, and nodes must not move.
   - Use tick-bench for the ms column (`RUNS=5`, never beside the gate or `mutate.sh`). Judge between builds by counts. A ms delta under about 6% between two SHAs is weak evidence.
-- [ ] **Task 4: scale (AC 6).** Per Q1. NEW `prototypes/scale.patch` makes the crew size and dims scenario-settable (throwaway), and new scenario files go in `13-2-signoff/scale/`, not `scenarios/`. Each scale point needs real work for the crew (marks plus a pile), or it measures idle dwarves. Run base plus each option patch on top of it.
+- [ ] **Task 4: scale (AC 6).** Crews of 5/20/50/100/200 on 128×128×32 (Q1). NEW `prototypes/scale.patch` makes the crew size scenario-settable (throwaway). **Trap: spawn runs out of cells.** `spawn_dwarves` (`lib.rs:3447`) draws from the standable cells within `CAMP_RADIUS = 3` of the camp (`worldgen.rs:7`), which is at most 49 cells, and `random_range(0..0)` panics once they are used up. So 50+ dwarves need a wider spawn ring. The identity and profession arrays are fixed at 5 too. Scenario files go in `13-2-signoff/scale/`, not `scenarios/`. Each scale point needs real work for the crew (marks plus a pile), or it measures idle dwarves. Run base plus each option patch on top of it.
 - [ ] **Task 5: connectivity map (AC 3, 4).** `prototypes/connectivity.patch`. It keeps reachability between ticks and answers "can he get there" before any A\* or flood, so #159's starvation and the per-question floods go.
   - **Trap: items move on every haul.** If the map includes items, it is invalidated constantly. If it covers terrain only, A\* still decides around items. Measure the invalidation rate and say which way it went and why.
   - Invalidate on the same inputs as `pile_ground` (`set_tile` at `lib.rs:742`, a zones change at `:868`).
@@ -134,7 +127,7 @@ so that M4 builds on a movement layer that is fixed as a whole, not one cage sha
 ### Project Structure Notes
 
 - NEW `_bmad-output/implementation-artifacts/13-2-signoff/`: `census.sh`, `proposal.md`, `prototypes/{census,ghost,counters,scale,connectivity,squeeze,clamber}.patch`, `scale/*.json`.
-- NEW (per Q3) `scenarios/stuck-tunnel.json`, `scenarios/dig-loop.json`, `scenarios/saves/12-12-seat-loop.save`, `scenarios/saves/12-11-dig-loop-patched.save`.
+- NEW (Q3) `scenarios/stuck-tunnel.json`, `scenarios/dig-loop.json`, `scenarios/saves/12-12-seat-loop.save`, `scenarios/saves/12-11-dig-loop-patched.save`.
 - UPDATE this story and `sprint-status.yaml`. Nothing under `crates/`.
 
 ### Previous story intelligence
@@ -190,3 +183,4 @@ Exit 0 is not a result: read the lines.
 | Date | Change |
 | --- | --- |
 | 2026-10-23 | Story created on `db8fde3` (Opus 5.5). Creation probe: both issue saves freeze on HEAD (#206 marks=3 and #203 marks=11, each over 10k+ ticks; #203's save needed `clearing` and `goals_completed` added). The ghost-dwarves RED moved #206 from 3 to 0 and made 3 of 6 reproducers worse. There is no M4 PRD draft and no profiler on the devpod. Task 0 Q1–Q3 await Wolf. |
+| 2026-10-23 | Task 0 ruled by Wolf: Q1 crews of 5/20/50/100/200 on today's map; Q2 one story (split at Part B on overrun); Q3 commit both issue saves. |
