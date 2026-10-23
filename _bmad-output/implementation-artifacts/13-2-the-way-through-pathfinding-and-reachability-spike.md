@@ -172,6 +172,8 @@ Exit 0 is not a result: read the lines.
 
 ### Agent Model Used
 
+Wolf picked Sonnet 5.5 (`claude-sonnet-5-5`) subagents for the implementation (2026-10-23). Opus 5.5 orchestrates and verifies.
+
 ### Debug Log References
 
 ### Completion Notes List
