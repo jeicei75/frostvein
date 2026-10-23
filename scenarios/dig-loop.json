@@ -1,0 +1,10 @@
+{
+ "name": "dig-loop",
+ "about": "Reproduces #203 (the dig loop that freezes with marks left): Wolf's 2026-10-16 12.11 save (~/frostvein-saves/12-11-dig-loop.save, tick 7,640), patched by hand because the save format moved on: `\"clearing\": null` added to each dwarf and a top-level `\"goals_completed\": 0` (without them the load is refused with `missing field clearing`). No commands. Rots at the next save-format change: re-capture or patch it then.",
+ "start": {
+  "save": "saves/12-11-dig-loop-patched.save"
+ },
+ "ticks": 10000,
+ "speed": "fast4x",
+ "commands": []
+}
