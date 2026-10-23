@@ -1,0 +1,487 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index b54b80d6..675f0a25 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -630,6 +630,7 @@ fn claim_jobs(
+                     continue;
+                 }
+                 if let Some(delivery) = &delivery {
++                    counters::at("claim_delivery");
+                     match astar_with_budget(&terrain, &blocked, **pos, delivery, &mut budgets[slot])
+                     {
+                         (Some(_), false, _) => {}
+@@ -643,6 +644,7 @@ fn claim_jobs(
+                         }
+                     }
+                 }
++                counters::at("claim_goals");
+                 let path = match astar_with_budget(
+                     &terrain,
+                     &blocked,
+@@ -853,6 +855,7 @@ fn pile_targets(
+     blocked: &BTreeSet<Pos>,
+     zones: &BTreeSet<Pos>,
+ ) -> BTreeMap<Pos, u32> {
++    counters::add("flood", "pile_targets", "calls", 1);
+     let cap = 4 * zones.len() + 16;
+     // The zones' x/y bounding box (empty with no zones).
+     let xs = || zones.iter().map(|p| p.x);
+@@ -874,14 +877,17 @@ fn pile_targets(
+     let ground = &mut kept.open;
+     let mut open_ground = |start: Pos| -> bool {
+         if let Some(&open) = ground.get(&start) {
++            counters::add("flood", "pile_targets", "cache_hits", 1);
+             return open;
+         }
++        counters::add("flood", "pile_targets", "cache_misses", 1);
+         let mut seen = BTreeSet::from([start]);
+         let mut flood = VecDeque::from([start]);
+         let mut open = false;
+         while let Some(cell) = flood.pop_front() {
+             #[cfg(test)]
+             FLOODED.with(|n| n.set(n.get() + 1));
++            counters::add("flood", "pile_targets", "cells", 1);
+             if let Some(&known) = ground.get(&cell) {
+                 open = known;
+                 break;
+@@ -962,6 +968,7 @@ fn walls_in_a_dwarf(
+     dwarves: &BTreeSet<Pos>,
+     cell: Pos,
+ ) -> bool {
++    counters::add("calls", "walls_in_a_dwarf", "calls", 1);
+     let sides = sides_of(terrain, blocked, cell);
+     let mut closed = blocked.clone();
+     closed.insert(cell);
+@@ -977,6 +984,7 @@ fn closes_last_level_exit(
+     dwarves: &BTreeSet<Pos>,
+     cell: Pos,
+ ) -> bool {
++    counters::add("calls", "closes_last_level_exit", "calls", 1);
+     terrain.is_standable(cell)
+         && dwarves.iter().any(|dwarf| {
+             side_neighbours(*dwarf).contains(&cell)
+@@ -1006,6 +1014,7 @@ fn walls_in_a_dwarf_from(
+     cell: Pos,
+     sides: Vec<Pos>,
+ ) -> bool {
++    counters::add("calls", "walls_in_a_dwarf_from", "calls", 1);
+     let mut closed = blocked.clone();
+     closed.insert(cell);
+     !stranded(terrain, &closed, dwarves, sides).is_empty()
+@@ -1018,6 +1027,7 @@ fn stranded(
+     dwarves: &BTreeSet<Pos>,
+     sides: Vec<Pos>,
+ ) -> BTreeSet<Pos> {
++    counters::add("flood", "stranded", "calls", 1);
+     // One breadth-first flood per side of `cell`, run in lockstep and merged where two meet. A
+     // flood that runs dry is a whole piece; the search stops once one flood is left running and it
+     // is larger than every finished piece. So a check costs about the size of the pockets, not of
+@@ -1046,6 +1056,7 @@ fn stranded(
+                 pieces.push(floods.remove(i).0);
+                 continue;
+             };
++            counters::add("flood", "stranded", "cells", 1);
+             for next in astar_neighbours(terrain, closed, tile) {
+                 match floods.iter().position(|(seen, _)| seen.contains(&next)) {
+                     Some(j) if j != i => {
+@@ -1125,6 +1136,7 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
+     goals
+         .iter()
+         .map(|goal| {
++            counters::goal_check();
+             let horizontal = from.x.abs_diff(goal.x) + from.y.abs_diff(goal.y);
+             horizontal.max(from.z.abs_diff(goal.z))
+         })
+@@ -1138,6 +1150,30 @@ fn astar_with_budget(
+     from: Pos,
+     goals: &BTreeSet<Pos>,
+     nodes_remaining: &mut usize,
++) -> (Option<Vec<Pos>>, bool, BTreeSet<Pos>) {
++    let (caller, before, checks) = (
++        counters::caller(),
++        *nodes_remaining,
++        counters::goal_checks(),
++    );
++    let result = astar_with_budget_inner(terrain, blocked, from, goals, nodes_remaining);
++    counters::astar(
++        caller,
++        (before - *nodes_remaining) as u64,
++        counters::goal_checks() - checks,
++        goals.is_empty(),
++        result.0.is_some(),
++        result.1,
++    );
++    result
++}
++
++fn astar_with_budget_inner(
++    terrain: &Terrain,
++    blocked: &BTreeSet<Pos>,
++    from: Pos,
++    goals: &BTreeSet<Pos>,
++    nodes_remaining: &mut usize,
+ ) -> (Option<Vec<Pos>>, bool, BTreeSet<Pos>) {
+     if goals.is_empty() {
+         return (None, false, BTreeSet::new());
+@@ -1209,15 +1245,40 @@ fn route_to_nearest(
+     blocked: &BTreeSet<Pos>,
+     from: Pos,
+     accept: impl Fn(Pos) -> bool,
++) -> Option<Vec<Pos>> {
++    let caller = counters::caller();
++    let mut nodes_remaining = MAX_ASTAR_NODES;
++    let route = route_to_nearest_inner(terrain, blocked, from, accept, &mut nodes_remaining);
++    counters::add("route", caller, "calls", 1);
++    counters::add(
++        "route",
++        caller,
++        "cells",
++        (MAX_ASTAR_NODES - nodes_remaining) as u64,
++    );
++    counters::add(
++        "route",
++        caller,
++        if route.is_some() { "found" } else { "none" },
++        1,
++    );
++    route
++}
++
++fn route_to_nearest_inner(
++    terrain: &Terrain,
++    blocked: &BTreeSet<Pos>,
++    from: Pos,
++    accept: impl Fn(Pos) -> bool,
++    nodes_remaining: &mut usize,
+ ) -> Option<Vec<Pos>> {
+     let mut parents = BTreeMap::new();
+     let mut queue = VecDeque::from([from]);
+-    let mut nodes_remaining = MAX_ASTAR_NODES;
+     while let Some(cell) = queue.pop_front() {
+-        if nodes_remaining == 0 {
++        if *nodes_remaining == 0 {
+             return None;
+         }
+-        nodes_remaining -= 1;
++        *nodes_remaining -= 1;
+         for next in astar_neighbours(terrain, blocked, cell) {
+             if next == from || parents.contains_key(&next) {
+                 continue;
+@@ -1439,11 +1500,13 @@ fn nearest_free_cell(
+     from: Pos,
+     refused: impl Fn(Pos) -> bool,
+ ) -> Option<Pos> {
++    counters::add("flood", "nearest_free_cell", "calls", 1);
+     let mut seen = BTreeSet::from([from]);
+     let mut frontier = BTreeSet::from([from]);
+     while !frontier.is_empty() {
+         let mut next = BTreeSet::new();
+         for cell in frontier {
++            counters::add("flood", "nearest_free_cell", "cells", 1);
+             if !refused(cell) {
+                 return Some(cell);
+             }
+@@ -1644,6 +1707,7 @@ fn make_room_down_the_idle_chain(
+     let mut except: Vec<Pos> = idle.keys().copied().collect();
+     except.push(pos);
+     let closed = closed_to_dwarves(blocked, occupied, &except);
++    counters::at("make_room");
+     let Some(route) = route_to_nearest(ecs.resource::<Terrain>(), &closed, next, |tile| {
+         !occupied.contains(&tile) && !holder_tiles.contains(&tile)
+     }) else {
+@@ -1726,6 +1790,7 @@ fn resolve_blocked_step(
+         // No way aside: leave by the nearest free tile off the holder's path. The holder's own
+         // tile is passable for the search (it is the way out) but not a destination.
+         let closed = closed_to_dwarves(blocked, occupied, &[pos, next]);
++        counters::at("resolve_exit");
+         let exit = route_to_nearest(terrain, &closed, next, |tile| {
+             tile != pos && !holder_tiles.contains(&tile)
+         });
+@@ -1734,6 +1799,7 @@ fn resolve_blocked_step(
+                 return None;
+             }
+             // #194: the only way out is back up the line the holder came down.
++            counters::at("resolve_back_up");
+             route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| {
+                 !occupied.contains(&tile) && !holder_tiles.contains(&tile)
+             })
+@@ -1748,6 +1814,7 @@ fn resolve_blocked_step(
+             return false;
+         }
+         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
++        counters::at("resolve_reroute");
+         let Some(rerouted) = astar(ecs.resource::<Terrain>(), &closed, pos, goals) else {
+             return false;
+         };
+@@ -1759,18 +1826,24 @@ fn resolve_blocked_step(
+     let (holder_escape, blocker_escape) = {
+         let terrain = ecs.resource::<Terrain>();
+         (
+-            route_to_nearest(
+-                terrain,
+-                &closed_to_dwarves(blocked, occupied, &[pos]),
+-                pos,
+-                |tile| !blocker_tiles.contains(&tile),
+-            ),
+-            route_to_nearest(
+-                terrain,
+-                &closed_to_dwarves(blocked, occupied, &[next]),
+-                next,
+-                |tile| !holder_tiles.contains(&tile),
+-            ),
++            {
++                counters::at("resolve_holder_escape");
++                route_to_nearest(
++                    terrain,
++                    &closed_to_dwarves(blocked, occupied, &[pos]),
++                    pos,
++                    |tile| !blocker_tiles.contains(&tile),
++                )
++            },
++            {
++                counters::at("resolve_blocker_escape");
++                route_to_nearest(
++                    terrain,
++                    &closed_to_dwarves(blocked, occupied, &[next]),
++                    next,
++                    |tile| !holder_tiles.contains(&tile),
++                )
++            },
+         )
+     };
+     let holder_yields = match (&holder_escape, &blocker_escape) {
+@@ -1787,6 +1860,7 @@ fn resolve_blocked_step(
+             // for them to yield.
+             let mut closed = blocked.clone();
+             closed.insert(next);
++            counters::at("resolve_back_out");
+             let back_out = route_to_nearest(ecs.resource::<Terrain>(), &closed, pos, |tile| {
+                 !occupied.contains(&tile) && !blocker_tiles.contains(&tile)
+             });
+@@ -1836,11 +1910,14 @@ fn caging_stone(
+     pos: Pos,
+ ) -> Option<u32> {
+     const CAGE_CELLS: usize = 64;
++    counters::add("flood", "caging_stone", "calls", 1);
+     // The cells reachable from `pos`, or `None` once there are more than `CAGE_CELLS`.
+     let pocket = |closed: &BTreeSet<Pos>| {
++        counters::add("flood", "caging_stone", "pockets", 1);
+         let mut seen = BTreeSet::from([pos]);
+         let mut queue = VecDeque::from([pos]);
+         while let Some(cell) = queue.pop_front() {
++            counters::add("flood", "caging_stone", "cells", 1);
+             for next in astar_neighbours(terrain, closed, cell) {
+                 if seen.insert(next) {
+                     if seen.len() > CAGE_CELLS {
+@@ -1923,10 +2000,13 @@ fn clearing_set_down(
+         kept.filter(|cell| {
+             neighbours.contains(cell)
+                 && (*cell == pos
+-                    || (!occupied.contains(cell)
+-                        && astar(terrain, blocked, pos, &BTreeSet::from([*cell])).is_some()))
++                    || (!occupied.contains(cell) && {
++                        counters::at("clearing_kept_landing");
++                        astar(terrain, blocked, pos, &BTreeSet::from([*cell])).is_some()
++                    }))
+         })
+         .or_else(|| {
++            counters::at("clearing_landing");
+             route_to_nearest(terrain, blocked, pos, |cell| {
+                 neighbours.contains(&cell) && !occupied.contains(&cell)
+             })
+@@ -2110,6 +2190,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             // changes no terrain, so `clear_paths` never ran): plan again rather than step in.
+             if path.is_empty() || blocked.contains(&path[0]) {
+                 let terrain = ecs.resource::<Terrain>();
++                counters::at("execute_replan");
+                 let Some(computed) = astar(terrain, &blocked, pos, &work_positions) else {
+                     retry_claim(ecs, entity, job.id);
+                     continue;
+@@ -2448,6 +2529,7 @@ fn settle(ecs: &mut EcsWorld) {
+             // A dwarf already on `below`, or an item lying there, is not landed on: the faller
+             // rests on the nearest free walkable tile instead.
+             let landing = if occupied.contains(&below) || blocked.contains(&below) {
++                counters::at("settle_landing");
+                 route_to_nearest(ecs.resource::<Terrain>(), &blocked, below, |cell| {
+                     !occupied.contains(&cell)
+                 })
+@@ -2964,6 +3046,7 @@ impl World {
+ 
+     pub fn step(&mut self) {
+         self.schedule.run(&mut self.ecs);
++        counters::tick_boundary(self);
+         debug_assert!(
+             {
+                 let mut stood_on = BTreeSet::new();
+@@ -3544,6 +3627,105 @@ fn camp_emitters(camp: Pos) -> [(Pos, LightKind); 5] {
+     ]
+ }
+ 
++/// 13.2 counters (throwaway, no behaviour change): per-thread tallies of search work, read by
++/// `take`. Thread-local because `cargo test` runs tests on parallel threads; the bench is one.
++pub mod counters {
++    use super::{Pos, World};
++    use std::cell::{Cell, RefCell};
++    use std::collections::BTreeMap;
++
++    type Row = (&'static str, &'static str, &'static str);
++    thread_local! {
++        static CALLER: Cell<&'static str> = const { Cell::new("other") };
++        static ROWS: RefCell<BTreeMap<Row, u64>> = const { RefCell::new(BTreeMap::new()) };
++        static GOAL_CHECKS: Cell<u64> = const { Cell::new(0) };
++        static PREV: RefCell<(u64, Vec<(u32, Pos)>)> = const { RefCell::new((0, Vec::new())) };
++    }
++
++    /// Names the call site of the next `astar`/`route_to_nearest`.
++    pub fn at(name: &'static str) {
++        CALLER.with(|c| c.set(name));
++    }
++    pub(super) fn caller() -> &'static str {
++        CALLER.with(Cell::get)
++    }
++    pub(super) fn add(kind: &'static str, name: &'static str, key: &'static str, n: u64) {
++        ROWS.with(|r| *r.borrow_mut().entry((kind, name, key)).or_insert(0) += n);
++    }
++    pub(super) fn goal_check() {
++        GOAL_CHECKS.with(|c| c.set(c.get() + 1));
++    }
++    pub(super) fn goal_checks() -> u64 {
++        GOAL_CHECKS.with(Cell::get)
++    }
++    pub(super) fn astar(
++        caller: &'static str,
++        nodes: u64,
++        checks: u64,
++        goals_empty: bool,
++        found: bool,
++        budget: bool,
++    ) {
++        add("astar", caller, "calls", 1);
++        add("astar", caller, "nodes", nodes);
++        add("astar", caller, "goal_checks", checks);
++        let end = if goals_empty {
++            "empty"
++        } else if found {
++            "found"
++        } else if budget {
++            "budget"
++        } else {
++            "nopath"
++        };
++        add("astar", caller, end, 1);
++    }
++
++    /// Called at the end of every `World::step`: ticks where two dwarves share a tile, and ticks
++    /// where two dwarves traded tiles since the previous boundary.
++    pub(super) fn tick_boundary(world: &World) {
++        let now: Vec<(u32, Pos)> = world.dwarves().iter().map(|d| (d.0.0, d.1)).collect();
++        let tick = world.tick();
++        let shared = now
++            .iter()
++            .enumerate()
++            .any(|(i, a)| now[i + 1..].iter().any(|b| a.1 == b.1));
++        let swapped = PREV.with(|prev| {
++            let prev = prev.borrow();
++            prev.0 + 1 == tick
++                && now.iter().any(|a| {
++                    now.iter().any(|b| {
++                        a.0 != b.0
++                            && a.1 != b.1
++                            && prev.1.iter().any(|x| x.0 == a.0 && x.1 == b.1)
++                            && prev.1.iter().any(|x| x.0 == b.0 && x.1 == a.1)
++                    })
++                })
++        });
++        PREV.with(|prev| *prev.borrow_mut() = (tick, now));
++        add("emitter", "ticks", "shares", u64::from(shared));
++        add("emitter", "ticks", "swaps", u64::from(swapped));
++        add("emitter", "ticks", "boundaries", 1);
++    }
++
++    /// Returns the tallies, one line per (kind, name) with sorted `key=value` pairs, and resets.
++    pub fn take() -> Vec<String> {
++        let rows = ROWS.with(|r| std::mem::take(&mut *r.borrow_mut()));
++        PREV.with(|p| *p.borrow_mut() = (0, Vec::new()));
++        GOAL_CHECKS.with(|c| c.set(0));
++        CALLER.with(|c| c.set("other"));
++        let mut lines: BTreeMap<(&str, &str), String> = BTreeMap::new();
++        for ((kind, name, key), n) in rows {
++            let line = lines.entry((kind, name)).or_default();
++            line.push_str(&format!(" {key}={n}"));
++        }
++        lines
++            .into_iter()
++            .map(|((kind, name), pairs)| format!("{kind}:{name}{pairs}"))
++            .collect()
++    }
++}
++
+ #[cfg(test)]
+ mod tests {
+     /// No fire on the map — the pathing tests below are about terrain, not about issue #74's rule.
+diff --git a/crates/sim-core/tests/scenario.rs b/crates/sim-core/tests/scenario.rs
+index dfb2c28b..8db4aa5f 100644
+--- a/crates/sim-core/tests/scenario.rs
++++ b/crates/sim-core/tests/scenario.rs
+@@ -3122,6 +3122,9 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+         unfinished == UNFINISHED
+     );
+     eprintln!("census cage runs={runs} worked={worked}");
++    for line in sim_core::counters::take() {
++        eprintln!("census cage counters {line}");
++    }
+ }
+ 
+ /// 12.10: a standable cell beside dwarf 2 to dig or channel, a one-cell stockpile at dwarf 0 (12.9
+@@ -4729,6 +4732,9 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
+     eprintln!(
+         "census staircase2 worked={worked}/24 stalled={stalled:?} floated={floated:?} unsupported={unsupported}"
+     );
++    for line in sim_core::counters::take() {
++        eprintln!("census staircase2 counters {line}");
++    }
+ }
+ 
+ thread_local! {
+@@ -4832,6 +4838,9 @@ fn a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_eve
+         SHARES.with(|n| n.get()),
+         SWAPS.with(|n| n.get())
+     );
++    for line in sim_core::counters::take() {
++        eprintln!("census staircase1 counters {line}");
++    }
+ }
+ 
+ // #196 (12.10b review run 2, ruled into the story by Wolf): RED before the fix, level 2 never worked.
+@@ -4886,6 +4895,9 @@ fn job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever() {
+         SHARES.with(|n| n.get()),
+         SWAPS.with(|n| n.get())
+     );
++    for line in sim_core::counters::take() {
++        eprintln!("census headon counters {line}");
++    }
+ }
+ 
+ // ---- 12.12: the goal chain on DEFAULT_SEED ----
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 209d8224..00b4322a 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -288,6 +288,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         if cfg!(debug_assertions) {
+             eprintln!("DEBUG BUILD: figures are not a measurement");
+         }
++        sim_core::counters::take();
+         let mut world = scenario.world()?;
+         let mut schedule = scenario.schedule(world.tick());
+         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+@@ -325,6 +326,9 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         );
+         means.push(mean);
+         hashes.push(hash);
++        for line in sim_core::counters::take() {
++            println!("counters {name} run {run}/{runs} {line}");
++        }
+         let goals: Vec<String> = world
+             .goals()
+             .iter()

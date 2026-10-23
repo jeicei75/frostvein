@@ -28,11 +28,19 @@ export CARGO_BUILD_JOBS=8 CARGO_TARGET_DIR="${CENSUS_TARGET:-$WT/target}"
 cargo build -q --release -p simd
 cargo test -q --release -p sim-core --test scenario --lib --no-run
 
-echo "== reproducers (simd --bench FILE --runs 1; scenarios of $REPO)"
+echo "== reproducers (simd --bench FILE --runs 2; scenarios of $REPO)"
 for f in "$REPO"/scenarios/*.json; do
-  out=$("$CARGO_TARGET_DIR/release/simd" --bench "$f" --runs 1)
+  out=$("$CARGO_TARGET_DIR/release/simd" --bench "$f" --runs 2)
   grep ' end ' <<<"$out"
-  echo "$(grep -o 'bench [^ ]* run' <<<"$out" | head -1 | cut -d' ' -f2) $(grep -o 'state=[0-9a-f]*' <<<"$out" | head -1)"
+  name=$(grep -o 'bench [^ ]* run' <<<"$out" | head -1 | cut -d' ' -f2)
+  echo "$name $(grep -o 'state=[0-9a-f]*' <<<"$out" | head -1)"
+  # counters.patch: one block per run; two runs of one build must print the same block (13.2 AC 2).
+  run1=$(grep "^counters $name run 1/2 " <<<"$out" | sed 's| run 1/2||' || true)
+  run2=$(grep "^counters $name run 2/2 " <<<"$out" | sed 's| run 2/2||' || true)
+  if [[ -n $run1 ]]; then
+    echo "$run1"
+    [[ $run1 == "$run2" ]] && echo "counters $name IDENTICAL across 2 runs" || echo "counters $name DIFFER across 2 runs"
+  fi
 done
 
 echo "== sweeps"
