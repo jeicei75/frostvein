@@ -1,0 +1,71 @@
+# scale.sh with no option patch, assembled from four invocations (a kill stopped the first after four points; SCALE_ONLY re-ran the rest, same stack and patches)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 3 runs, mean 0.3996..0.4133 ms (spread 3.4%), state identical across 3 runs
+run 1 commands=46/46 mean=0.4019 p99=6.1347 max=9.873
+run 2 commands=46/46 mean=0.3996 p99=6.0872 max=10.689
+run 3 commands=46/46 mean=0.4133 p99=6.5431 max=10.234
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+-- scale-128-crew020
+bench scale-128-crew020 end tick=2000 marks=123 items=116 zones=180 goals=0/0/0
+bench scale-128-crew020: 3 runs, mean 5.2419..5.2574 ms (spread 0.3%), state identical across 3 runs
+run 1 commands=181/181 mean=5.2546 p99=22.5133 max=38.828
+run 2 commands=181/181 mean=5.2574 p99=22.8628 max=33.736
+run 3 commands=181/181 mean=5.2419 p99=21.6690 max=34.443
+totals astar_calls=2418 astar_nodes=1336575 route_calls=186 route_cells=224873 route_none=59 flood_cells=601219 exhausted_astar=0 share_ticks=0
+-- scale-128-crew050
+bench scale-128-crew050 end tick=2000 marks=343 items=221 zones=450 goals=6/0/0
+bench scale-128-crew050: 3 runs, mean 30.3257..31.3627 ms (spread 3.4%), state identical across 3 runs
+run 1 commands=451/451 mean=30.3257 p99=99.0109 max=113.251
+run 2 commands=451/451 mean=31.1072 p99=104.4657 max=121.007
+run 3 commands=451/451 mean=31.3627 p99=97.5055 max=112.806
+totals astar_calls=8499 astar_nodes=2914662 route_calls=402 route_cells=64877 route_none=85 flood_cells=1523151 exhausted_astar=0 share_ticks=0
+-- scale-128-crew100
+bench scale-128-crew100 end tick=2000 marks=754 items=288 zones=900 goals=10/0/0
+bench scale-128-crew100: 3 runs, mean 94.3793..97.4120 ms (spread 3.2%), state identical across 3 runs
+run 1 commands=901/901 mean=94.3793 p99=272.6607 max=303.618
+run 2 commands=901/901 mean=97.4120 p99=363.4656 max=425.818
+run 3 commands=901/901 mean=95.3548 p99=308.5239 max=448.784
+totals astar_calls=17741 astar_nodes=6666627 route_calls=682 route_cells=241116 route_none=126 flood_cells=2902763 exhausted_astar=0 share_ticks=0
+-- scale-128-crew200
+bench scale-128-crew200 end tick=2000 marks=1591 items=425 zones=1800 goals=3/0/0
+bench scale-128-crew200: 3 runs, mean 284.4475..353.2074 ms (spread 22.3%), state identical across 3 runs
+run 1 commands=1801/1801 mean=353.2074 p99=1220.8717 max=1622.000
+run 2 commands=1801/1801 mean=288.6884 p99=870.2532 max=1150.693
+run 3 commands=1801/1801 mean=284.4475 p99=822.8552 max=882.363
+totals astar_calls=47571 astar_nodes=18905469 route_calls=1543 route_cells=291569 route_none=381 flood_cells=5915334 exhausted_astar=0 share_ticks=0
+-- scale-256-crew200
+bench scale-256-crew200 end tick=2000 marks=1692 items=176 zones=1800 goals=0/0/0
+bench scale-256-crew200: 3 runs, mean 31.3886..32.3909 ms (spread 3.1%), state identical across 3 runs
+run 1 commands=1801/1801 mean=31.3886 p99=234.1500 max=333.047
+run 2 commands=1801/1801 mean=32.3909 p99=224.3308 max=267.288
+run 3 commands=1801/1801 mean=31.7041 p99=220.3868 max=258.034
+totals astar_calls=25468 astar_nodes=11920450 route_calls=1040 route_cells=502586 route_none=378 flood_cells=6471559 exhausted_astar=138 share_ticks=0
+-- scale-256-crew005
+bench scale-256-crew005 end tick=2000 marks=35 items=24 zones=45 goals=0/0/0
+bench scale-256-crew005: 3 runs, mean 0.2204..0.2457 ms (spread 10.7%), state identical across 3 runs
+run 1 commands=46/46 mean=0.2457 p99=0.5065 max=34.718
+run 2 commands=46/46 mean=0.2395 p99=0.5336 max=31.552
+run 3 commands=46/46 mean=0.2204 p99=0.4999 max=28.308
+totals astar_calls=363 astar_nodes=514643 route_calls=17 route_cells=58 route_none=2 flood_cells=163737 exhausted_astar=10 share_ticks=0
+-- scale-256-crew020
+bench scale-256-crew020 end tick=2000 marks=148 items=62 zones=180 goals=0/0/0
+bench scale-256-crew020: 3 runs, mean 0.9570..0.9693 ms (spread 1.3%), state identical across 3 runs
+run 1 commands=181/181 mean=0.9575 p99=4.5071 max=60.339
+run 2 commands=181/181 mean=0.9570 p99=4.6217 max=56.589
+run 3 commands=181/181 mean=0.9693 p99=4.4177 max=62.251
+totals astar_calls=1489 astar_nodes=587589 route_calls=61 route_cells=150170 route_none=15 flood_cells=654776 exhausted_astar=10 share_ticks=0
+-- scale-256-crew050
+bench scale-256-crew050 end tick=2000 marks=390 items=126 zones=450 goals=0/0/0
+bench scale-256-crew050: 3 runs, mean 8.8556..9.0773 ms (spread 2.5%), state identical across 3 runs
+run 1 commands=451/451 mean=8.8556 p99=61.8052 max=92.764
+run 2 commands=451/451 mean=9.0773 p99=63.0243 max=92.551
+run 3 commands=451/451 mean=8.8689 p99=63.9519 max=87.944
+totals astar_calls=6866 astar_nodes=7234046 route_calls=559 route_cells=551047 route_none=288 flood_cells=1549433 exhausted_astar=131 share_ticks=0
+-- scale-256-crew100
+bench scale-256-crew100 end tick=2000 marks=796 items=162 zones=900 goals=0/0/0
+bench scale-256-crew100: 3 runs, mean 20.7993..21.2763 ms (spread 2.3%), state identical across 3 runs
+run 1 commands=901/901 mean=20.7993 p99=133.5168 max=279.429
+run 2 commands=901/901 mean=21.2763 p99=136.8010 max=289.689
+run 3 commands=901/901 mean=21.0067 p99=132.3038 max=288.420
+totals astar_calls=17893 astar_nodes=12929702 route_calls=465 route_cells=651028 route_none=77 flood_cells=3021576 exhausted_astar=218 share_ticks=0

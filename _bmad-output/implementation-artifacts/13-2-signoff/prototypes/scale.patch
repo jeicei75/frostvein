@@ -1,0 +1,396 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 675f0a25..02acc658 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -2807,6 +2807,11 @@ impl World {
+     // z == 5 collapses the height range to a single level: no variation, no ramps.
+     // Small-world support arrives when a scenario test actually needs one.
+     pub fn generate(seed: u64, dims: Dims) -> World {
++        World::generate_scaled(seed, dims, 5)
++    }
++
++    /// 13.2 scale prototype: `generate` with a crew of `crew` dwarves (5 = today, byte for byte).
++    pub fn generate_scaled(seed: u64, dims: Dims, crew: usize) -> World {
+         debug_assert!(dims.z >= 6, "worldgen needs dims.z >= 6, got {}", dims.z);
+         debug_assert!(
+             dims.x >= 3 && dims.y >= 3,
+@@ -2860,7 +2865,7 @@ impl World {
+             Profession::Woodcutter,
+         ];
+         professions.shuffle(&mut profession_rng);
+-        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions);
++        world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions, crew);
+         world.spawn_emitters(camp_origin);
+         world
+     }
+@@ -3533,15 +3538,19 @@ impl World {
+         rng: &mut ChaCha8Rng,
+         identities: [Identity; 5],
+         professions: [Profession; 5],
++        crew: usize,
+     ) {
+         let emitter_positions: BTreeSet<_> = camp_emitters(camp)
+             .into_iter()
+             .map(|(pos, _)| pos)
+             .collect();
++        // 13.2 scale prototype: a crew that fits in the camp ring (5 .. ~48) draws exactly as
++        // before. A bigger one takes the `crew` walkable cells nearest the camp (breadth-first,
++        // so the ring widens over the camp's own ground, ramps included).
+         let mut candidates = {
+             let terrain = self.ecs.resource::<Terrain>();
+-            let mut candidates = Vec::new();
+             let radius = worldgen::CAMP_RADIUS as i32;
++            let mut candidates = Vec::new();
+             for y in camp.y - radius..=camp.y + radius {
+                 for x in camp.x - radius..=camp.x + radius {
+                     let pos = Pos { x, y, z: camp.z };
+@@ -3550,10 +3559,30 @@ impl World {
+                     }
+                 }
+             }
++            if candidates.len() < crew {
++                let blocked = emitter_positions.clone();
++                let mut seen = BTreeSet::from([camp]);
++                let mut queue = VecDeque::from([camp]);
++                candidates.clear();
++                while let Some(cell) = queue.pop_front() {
++                    for next in astar_neighbours(terrain, &blocked, cell) {
++                        if seen.insert(next) {
++                            candidates.push(next);
++                            queue.push_back(next);
++                        }
++                    }
++                    if candidates.len() >= crew {
++                        break;
++                    }
++                }
++                assert!(candidates.len() >= crew, "no ground for {crew} dwarves");
++                candidates.truncate(crew);
++            }
+             candidates
+         };
+ 
+-        for (identity, profession) in identities.into_iter().zip(professions) {
++        // NOTE: identities and professions cycle past five, so a big crew repeats them.
++        for (identity, profession) in (0..crew).map(|i| (identities[i % 5], professions[i % 5])) {
+             let candidate = rng.random_range(0..candidates.len());
+             let pos = candidates.swap_remove(candidate);
+             let id = self.ecs.resource_mut::<IdAllocator>().allocate();
+@@ -7827,3 +7856,244 @@ mod tests {
+         );
+     }
+ }
++
++/// 13.2 scale prototype (throwaway): writes the ten `scale/*.json` scenarios and measures the
++/// camp's walkable component (#159). Run:
++/// `SCALE_OUT=DIR SCALE_TICKS=N cargo test --release -p sim-core --lib scale_generate -- --ignored --nocapture`
++/// The commands come out of the generated world, so every mark and pile cell is valid by
++/// construction; the bench's `commands=applied/total` and the marks left at the end check it.
++#[cfg(test)]
++mod scale_gen {
++    use super::*;
++    use std::collections::{BTreeSet, VecDeque};
++
++    const SIDES: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
++    /// Work per dwarf: dig marks (stone to haul) and cut marks (wood to haul).
++    const DIGS_PER_DWARF: usize = 8;
++    const CUTS_PER_DWARF: usize = 1;
++
++    fn component(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos) -> BTreeSet<Pos> {
++        let mut seen = BTreeSet::from([from]);
++        let mut queue = VecDeque::from([from]);
++        while let Some(cell) = queue.pop_front() {
++            for next in astar_neighbours(terrain, blocked, cell) {
++                if seen.insert(next) {
++                    queue.push_back(next);
++                }
++            }
++        }
++        seen
++    }
++
++    fn is_tree(terrain: &Terrain, pos: Pos) -> bool {
++        matches!(
++            terrain.tile(pos),
++            Some(Tile::Solid(Material::TreeTrunk | Material::TreeFoliage))
++        )
++    }
++
++    fn near(a: Pos, target: (i32, i32)) -> i32 {
++        (a.x - target.0).abs() + (a.y - target.1).abs()
++    }
++
++    fn side(cell: Pos, (dx, dy): (i32, i32)) -> Pos {
++        Pos {
++            x: cell.x + dx,
++            y: cell.y + dy,
++            z: cell.z,
++        }
++    }
++
++    /// `want` dig marks: from the diggable cell beside the component nearest `target`, grown
++    /// through diggable side neighbours on that level (so each is reachable once its neighbour is
++    /// dug); the next-nearest edge cell once a level runs out.
++    fn dig_marks(
++        terrain: &Terrain,
++        comp: &BTreeSet<Pos>,
++        fires: &BTreeSet<Pos>,
++        target: (i32, i32),
++        want: usize,
++    ) -> Vec<Pos> {
++        let diggable = |p: Pos| {
++            matches!(terrain.tile(p), Some(Tile::Solid(_)))
++                && !is_tree(terrain, p)
++                && !fires.contains(&Pos { z: p.z + 1, ..p })
++        };
++        let mut edges: Vec<Pos> = comp
++            .iter()
++            .flat_map(|c| SIDES.map(|d| side(*c, d)))
++            .filter(|n| diggable(*n))
++            .collect();
++        edges.sort_by_key(|e| (near(*e, target), *e));
++        edges.dedup();
++        let mut taken = BTreeSet::new();
++        let mut order = Vec::new();
++        for edge in edges {
++            let mut queue = VecDeque::from([edge]);
++            while let Some(p) = queue.pop_front() {
++                if order.len() == want {
++                    return order;
++                }
++                if !taken.insert(p) {
++                    continue;
++                }
++                order.push(p);
++                queue.extend(
++                    SIDES
++                        .map(|d| side(p, d))
++                        .into_iter()
++                        .filter(|n| diggable(*n)),
++                );
++            }
++        }
++        order
++    }
++
++    fn cut_marks(
++        terrain: &Terrain,
++        comp: &BTreeSet<Pos>,
++        target: (i32, i32),
++        want: usize,
++    ) -> Vec<Pos> {
++        let mut bases: BTreeSet<Pos> = comp
++            .iter()
++            .flat_map(|c| SIDES.map(|d| side(*c, d)))
++            .filter_map(|n| tree_of(terrain, n).map(|(base, _)| base))
++            .collect();
++        // A tree is cut from beside its base.
++        bases.retain(|b| {
++            comp.iter()
++                .any(|c| c.z == b.z && SIDES.iter().any(|d| side(*c, *d) == *b))
++        });
++        let mut bases: Vec<Pos> = bases.into_iter().collect();
++        bases.sort_by_key(|b| (near(*b, target), *b));
++        bases.truncate(want);
++        bases
++    }
++
++    /// `want` walkable cells of the component nearest `target`, nearest first.
++    fn pile_cells(comp: &BTreeSet<Pos>, target: (i32, i32), want: usize) -> Vec<Pos> {
++        let mut cells: Vec<Pos> = comp.iter().copied().collect();
++        cells.sort_by_key(|c| (near(*c, target), *c));
++        cells.truncate(want);
++        cells
++    }
++
++    fn rect(p: Pos, q: Pos) -> String {
++        format!(
++            r#"{{"min":[{},{},{}],"max":[{},{},{}]}}"#,
++            p.x, p.y, p.z, q.x, q.y, q.z
++        )
++    }
++
++    #[test]
++    #[ignore = "generator: run by hand, see the module doc"]
++    fn scale_generate() {
++        let out = std::env::var("SCALE_OUT").expect("SCALE_OUT=DIR");
++        let ticks: u64 = std::env::var("SCALE_TICKS")
++            .expect("SCALE_TICKS=N")
++            .parse()
++            .unwrap();
++        for edge in [128u32, 256] {
++            let dims = Dims {
++                x: edge,
++                y: edge,
++                z: 32,
++            };
++            for crew in [5usize, 20, 50, 100, 200] {
++                let world = World::generate_scaled(DEFAULT_SEED, dims, crew);
++                let terrain = world.ecs.resource::<Terrain>();
++                let fires: BTreeSet<Pos> = world.emitters().into_iter().map(|e| e.1).collect();
++                let start = world.dwarves()[0].1;
++                let comp = component(terrain, &fires, start);
++                let walkable: usize = (0..dims.z as i32)
++                    .map(|z| {
++                        (0..edge as i32)
++                            .map(|y| {
++                                (0..edge as i32)
++                                    .filter(|x| terrain.is_standable(Pos { x: *x, y, z }))
++                                    .count()
++                            })
++                            .sum::<usize>()
++                    })
++                    .sum();
++                let e = edge as i32;
++                // Opposite quadrants, each a quarter of the way in from a corner: the camp is at
++                // the centre, so every haul crosses it, and the legs scale with the map.
++                let mine_at = (e / 4, e / 4);
++                let pile_at = (e * 3 / 4, e * 3 / 4);
++                let digs = dig_marks(terrain, &comp, &fires, mine_at, DIGS_PER_DWARF * crew);
++                let cuts = cut_marks(terrain, &comp, mine_at, CUTS_PER_DWARF * crew);
++                let cells = pile_cells(&comp, pile_at, digs.len() + cuts.len());
++                assert_eq!(digs.len(), DIGS_PER_DWARF * crew, "mine too small");
++                assert_eq!(cuts.len(), CUTS_PER_DWARF * crew, "not enough trees");
++                assert_eq!(cells.len(), digs.len() + cuts.len(), "pile too small");
++                let mut commands = Vec::new();
++                let mut command =
++                    |body: String| commands.push(format!(r#"{{"at":6,"command":{body}}}"#));
++                for (kind, marks) in [("dig", &digs), ("cut", &cuts)] {
++                    for p in marks {
++                        command(format!(
++                            r#"{{"type":"designate","kind":"{kind}","rect":{}}}"#,
++                            rect(*p, *p)
++                        ));
++                    }
++                }
++                // One rect per run of cells in a row.
++                let mut rows: BTreeMap<(i32, i32), Vec<i32>> = BTreeMap::new();
++                for c in &cells {
++                    rows.entry((c.z, c.y)).or_default().push(c.x);
++                }
++                let mut rects = Vec::new();
++                for ((z, y), mut xs) in rows {
++                    xs.sort_unstable();
++                    let mut run = (xs[0], xs[0]);
++                    for x in xs.into_iter().skip(1) {
++                        if x == run.1 + 1 {
++                            run.1 = x;
++                        } else {
++                            rects.push(rect(Pos { x: run.0, y, z }, Pos { x: run.1, y, z }));
++                            run = (x, x);
++                        }
++                    }
++                    rects.push(rect(Pos { x: run.0, y, z }, Pos { x: run.1, y, z }));
++                }
++                command(format!(
++                    r#"{{"type":"place_stockpile","rects":[{}]}}"#,
++                    rects.join(",")
++                ));
++                let name = format!("scale-{edge}-crew{crew:03}");
++                let about = format!(
++                    "13.2 Task 4: {crew} dwarves on {edge}x{edge}x32, DEFAULT_SEED. {} dig and {} cut marks nearest ({},{}), a {}-cell pile nearest ({},{}). Made by scale_generate.",
++                    digs.len(),
++                    cuts.len(),
++                    mine_at.0,
++                    mine_at.1,
++                    cells.len(),
++                    pile_at.0,
++                    pile_at.1
++                );
++                let json = format!(
++                    r#"{{"name":"{name}","about":"{about}","start":{{"seed":{DEFAULT_SEED},"dims":[{edge},{edge},32],"crew":{crew}}},"ticks":{ticks},"speed":"fast4x","commands":[{}]}}"#,
++                    commands.join(",\n")
++                );
++                std::fs::write(format!("{out}/{name}.json"), json).unwrap();
++                let mean = |v: &[Pos]| {
++                    (
++                        v.iter().map(|p| p.x as i64).sum::<i64>() / v.len() as i64,
++                        v.iter().map(|p| p.y as i64).sum::<i64>() / v.len() as i64,
++                    )
++                };
++                eprintln!(
++                    "scale {name} camp={:?} component={} walkable_all_levels={walkable} over_cap={} mine_centre={:?} pile_centre={:?} commands={}",
++                    world.camp_origin(),
++                    comp.len(),
++                    comp.len() > MAX_ASTAR_NODES,
++                    mean(&digs),
++                    mean(&cells),
++                    commands.len()
++                );
++            }
++        }
++    }
++}
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 00b4322a..76a123ce 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -25,16 +25,24 @@ struct File {
+     /// Required, never read: every file says what cost case it exercises and where its cells came from.
+     #[serde(rename = "about")]
+     _about: String,
+-    start: Start,
++    start: StartFile,
+     ticks: u64,
+     speed: protocol::Speed,
+     commands: Vec<Scheduled>,
+ }
+ 
++/// 13.2 scale prototype: `{"seed": N}` or `{"save": F}` as before; a seed may add `dims` and `crew`.
+ #[derive(Deserialize)]
+-#[serde(deny_unknown_fields, rename_all = "snake_case")]
++#[serde(deny_unknown_fields)]
++struct StartFile {
++    seed: Option<u64>,
++    save: Option<PathBuf>,
++    dims: Option<[u32; 3]>,
++    crew: Option<usize>,
++}
++
+ enum Start {
+-    Seed(u64),
++    Seed(u64, sim_core::Dims, usize),
+     /// Relative to the scenario file's own directory.
+     Save(PathBuf),
+ }
+@@ -101,8 +109,27 @@ impl Scenario {
+             }
+         }
+         let start = match start {
+-            Start::Seed(seed) => Start::Seed(seed),
+-            Start::Save(save) => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
++            StartFile {
++                seed: Some(seed),
++                save: None,
++                dims,
++                crew,
++            } => Start::Seed(
++                seed,
++                dims.map_or(sim_core::Dims::DEFAULT, |[x, y, z]| sim_core::Dims {
++                    x,
++                    y,
++                    z,
++                }),
++                crew.unwrap_or(5),
++            ),
++            StartFile {
++                seed: None,
++                save: Some(save),
++                dims: None,
++                crew: None,
++            } => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
++            _ => bail!("start needs a seed (with optional dims and crew) or a save"),
+         };
+         Ok(Self {
+             name,
+@@ -119,7 +146,9 @@ impl Scenario {
+     /// A fresh world on the start tick, every time it is called.
+     pub fn world(&self) -> anyhow::Result<sim_core::World> {
+         match &self.start {
+-            Start::Seed(seed) => Ok(sim_core::World::generate(*seed, sim_core::Dims::DEFAULT)),
++            Start::Seed(seed, dims, crew) => {
++                Ok(sim_core::World::generate_scaled(*seed, *dims, *crew))
++            }
+             Start::Save(save) => {
+                 let path = save.to_str().context("the save path is not UTF-8")?;
+                 crate::try_load_world_from(path).with_context(|| {
