@@ -8,7 +8,7 @@ SIGNOFF=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO=$(git -C "$SIGNOFF" rev-parse --show-toplevel)
 BASE=4f57027
 WT=$(mktemp -d)
-trap 'git -C "$REPO" worktree remove --force "$WT" >/dev/null 2>&1 || true; rm -rf "$WT"' EXIT
+trap 'git -C "$REPO" worktree remove --force "$WT/src" >/dev/null 2>&1 || true; rm -rf "$WT"' EXIT
 
 patches=("$SIGNOFF/prototypes/census.patch")
 for p in "$@"; do
@@ -41,8 +41,8 @@ run_tests() { # $1 = cargo target flags, rest = test names
   local flags=$1; shift
   local log="$WT/log"
   # shellcheck disable=SC2086
-  cargo test -q --release -p sim-core $flags -- --nocapture --test-threads=2 "$@" >"$log" 2>&1 || true
-  grep '^census ' "$log" || true
+  cargo test --release -p sim-core $flags -- --nocapture --test-threads=2 "$@" >"$log" 2>&1 || true
+  { grep '^census ' "$log" || true; } | sort
   for t in "$@"; do
     if grep -q "^test .*$t \.\.\. FAILED" "$log"; then
       echo "census $t PANICKED: $(grep -A1 "thread '.*$t' .*panicked" "$log" | tail -1)"

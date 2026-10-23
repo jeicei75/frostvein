@@ -1,0 +1,38 @@
+census stack: 4f57027
+census   + census.patch a0f22d82
+== reproducers (simd --bench FILE --runs 1; scenarios of /workspace/projects/frostvein)
+bench big-pile end tick=5006 marks=14 items=32 zones=518 goals=0/2/0
+big-pile state=d32911a55fd27058
+bench deep-pit end tick=3000 marks=0 items=28 zones=22 goals=0/0/0
+deep-pit state=14627076fa965c39
+bench dig-loop end tick=17640 marks=11 items=44 zones=21 goals=0/0/0
+dig-loop state=ab78f0f971e0326f
+bench full-pile-crowd end tick=10006 marks=0 items=46 zones=4 goals=0/0/0
+full-pile-crowd state=89f558d4764d66fb
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/6/1
+plan-compact-piles state=862f0e8814e04fb7
+bench plan-far-piles end tick=10006 marks=0 items=58 zones=90 goals=12/10/1
+plan-far-piles state=90471fafc3169ca6
+bench plan-spread-piles end tick=10006 marks=0 items=58 zones=203 goals=12/2/0
+plan-spread-piles state=5688e4a4e8105d21
+bench plan end tick=10006 marks=0 items=58 zones=78 goals=12/10/1
+plan state=2479b66a35ac887e
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/12/1
+seat-slow state=17b53b99e9161018
+bench stuck-tunnel end tick=28082 marks=3 items=57 zones=89 goals=38/4/0
+stuck-tunnel state=8365ab4d3aafed06
+== sweeps
+census cage frozen=[(10, 6, 0), (12, 4, 1), (12, 4, 4), (12, 6, 3)] pinned=true
+census cage frozen_full=[(10, 6, 0, 565, Pos { x: 65, y: 75, z: 27 }), (12, 4, 1, 3282, Pos { x: 66, y: 60, z: 10 }), (12, 4, 4, 2499, Pos { x: 69, y: 65, z: 10 }), (12, 6, 3, 2881, Pos { x: 64, y: 69, z: 10 })]
+census cage landed=[]
+census cage runs=32 worked=32
+census cage unfinished=[(11, 6, 1)] pinned=true
+census campfire-189 pickups_after_t2500=80 stored=23/24
+census headon levels=4/4 marks_left=0 shares=0 swaps=0
+census ring a_pile_round_enclosed_ground_still_fills_every_cell stored=20/20 free=0 hauls_retrying=6 last_rise_tick=1864 retry_ticks=0
+census ring a_pile_round_ground_beside_rock_still_fills_every_cell stored=20/20 free=0 hauls_retrying=6 last_rise_tick=1974 retry_ticks=20
+census ring census_207_four_bars_round_a_hole stored=14/24 free=10 hauls_retrying=12 last_rise_tick=1748 retry_ticks=1964
+census ring two_piles_that_ring_ground_together_still_fill_every_cell stored=19/19 free=0 hauls_retrying=7 last_rise_tick=1710 retry_ticks=0
+census staircase1 failed=[] levels=96/96 shares=0 swaps=0
+census staircase2 worked=24/24 stalled=[] floated=[] unsupported=0
+census pocket207 targets=24/24 outer_depth1=12/12 inner_depth2=12/12
