@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default; Wolf picked Opus 5.5 to IMPLEMENT too
 
 # Story 13.1: Scripted Runs and the Tick Bench
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -145,10 +145,10 @@ The questions as asked:
   3. Does `python3 scripts/bench/perf_summary.py <csv>` read the whole run?
 
   Push first (`scripts/push.sh --fast`) so the seat builds HEAD.
-- [ ] **Task 9: gate and close.** Fast tier on every commit. ONE full `scripts/gate.sh` (run with `RUST_TEST_THREADS=1`) at PR. Paste the block. Then the cost row (`session_tokens.py --phase dev --story 13-1-scripted-runs-and-the-tick-bench`), and `phase_state.py clear`.
+- [x] **Task 9: gate and close.** Fast tier on every commit. ONE full `scripts/gate.sh` (run with `RUST_TEST_THREADS=1`) at PR. Paste the block. Then the cost row (`session_tokens.py --phase dev --story 13-1-scripted-runs-and-the-tick-bench`), and `phase_state.py clear`.
   - [x] Fast tier green on every commit (pre-commit hook). Every `simd` test, `serve.rs` included, green on `de3e290`'s code (34 + 4 + 80).
   - [x] Dev cost row and `phase_state.py clear` (dev close).
-  - [ ] **The ONE full gate, at PR (M3-4, #212).** Deliberately not run at dev close: the rule is one full gate per story, at PR, after review and any patch pass.
+  - [x] **The ONE full gate, at PR (M3-4, #212).** Deliberately not run at dev close: the rule is one full gate per story, at PR, after review and any patch pass. **GATE GREEN on `c292dc5`, 3,860 s, `RUST_TEST_THREADS=1`** (cargo test 731 s, pixel guards 3,086 s, bench tests 21 s, mutation tables apply 11 s).
 
 ### Review Findings
 
@@ -419,6 +419,7 @@ claude-opus-5-5 (Opus 5.5), building directly in the creation session, with no s
 
 | Date | Change |
 | --- | --- |
+| 2026-10-23 | The ONE full gate: GREEN on `c292dc5` (3,860 s, `RUST_TEST_THREADS=1`). Status review; PR next. |
 | 2026-10-23 | AC 7 MET at the seat (Wolf, `2fb1f17`): the hash matched the bench, there was no manual input, and the CSV covers the run. F3 was late; the card now names the elapsed-10:00 stop as the end. The full gate at PR is the only open item. |
 | 2026-10-22 | Review-patch run 2 (Opus 5.5): all 5 landed (`8e14f7d`, `9ca72d2`, `8c44d89`). tick-bench gains a cross-build control: base rebuilt with `--shuffle-sections`, chosen over `-C metadata`, which read about −1.7%. Under the new verdict the identical-code reference pair still reads −5.5% BEYOND FLOOR (control −3.4%). The RED reads BEYOND by at most 0.3 points and is unvalidated across builds, and the cross-build resolution is about 6%. FAILED rows name every failed build; a panic shows its message. Fast tier green on each commit; the full gate is owed at PR. Status stays in-progress (AC 7). |
 | 2026-10-22 | Code review run 2 (fresh session), diff `9e86180..aba37d9`: closure 7/7 CLOSED, 0 REWORK; 0 HIGH, 5 patch (MED cross-build control, ruled fix now; 4 LOW), 3 defer. Stopping rule fired: no round 3. Patches left as action items. Status stays in-progress (AC 7 and the PR full gate are open). |

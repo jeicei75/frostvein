@@ -2736,7 +2736,9 @@ development_status:
   # the goal ("more ambitious") and adds its game stories here. Opened BEFORE the PRD with the two
   # stories any M4 goal needs: 13.1 builds the bench (#210), 13.2 spikes the movement layer with it
   # (#209), in parallel with the PRD draft. The PRD is final only after Wolf rules 13.2.
-  13-1-scripted-runs-and-the-tick-bench: in-progress
+  13-1-scripted-runs-and-the-tick-bench: review
+  # 13.1 2026-10-23: AC 7 MET at Wolf's seat (`2fb1f17`, hash 2479b66a35ac887e, no manual input);
+  # FULL GATE GREEN on `c292dc5` (3,860 s, RUST_TEST_THREADS=1). PR opened.
   # 13.1: Wolf picked Opus 5.5 to implement (2026-10-21). REVIEW RUN 1 (2026-10-21): 0 HIGH, 7 patch
   # (6 MED + 1 silent-failure LOW, LEFT AS ACTION ITEMS for a fresh bmad-review-patch session), 11
   # defer (#214 filed), 4 dismissed. AC 7 (seat) still open; the full gate is still owed at PR (M3-4).
