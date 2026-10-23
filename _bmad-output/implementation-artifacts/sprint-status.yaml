@@ -2745,7 +2745,11 @@ development_status:
   # PATCH PASS (2026-10-22): 7/7 landed. REVIEW RUN 2 (2026-10-22, diff 9e86180..aba37d9): closure
   # 7/7 CLOSED, 0 HIGH, 5 patch (1 MED cross-build control RULED fix now + 4 LOW), 3 defer; STOPPING
   # RULE FIRED (no round 3). Patches LEFT AS ACTION ITEMS for a fresh bmad-review-patch session.
-  13-2-the-way-through-pathfinding-and-reachability-spike: backlog
+  13-2-the-way-through-pathfinding-and-reachability-spike: ready-for-dev
+  # 13.2 CREATED 2026-10-23 (Opus 5.5) on db8fde3: a SPIKE, no sim change lands (prototypes are patches in
+  # 13-2-signoff/prototypes/). Found: NO M4 PRD draft exists (scale target -> Task 0 Q1); both issue saves freeze
+  # on HEAD (#206 marks=3, #203 marks=11 after adding `clearing`/`goals_completed`); ghost-dwarves RED freed #206
+  # but worsened 3 of 6 reproducers. Task 0 Q1-Q3 (scale curve, one story or split, commit the saves) await Wolf.
   epic-13-retrospective: optional
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).
