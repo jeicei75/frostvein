@@ -69,7 +69,7 @@ Sweeps (from the `census ...` lines):
 |---|---|---|
 | cage `frozen` | [(10,6,0), (12,4,1), (12,4,4), (12,6,3)] | [(2,6,1), (7,6,3), (8,6,4), (12,4,4), (12,6,3)] (2 kept, 2 gone, 3 new) |
 | cage `unfinished` @4000 | [(11,6,1)] | [(0,4,1), (6,6,1), (9,6,1), (12,6,6), (13,6,8)] |
-| cage `unfinished` @16000 (scratch run, TICKS=16_000) | [] | [(0,4,1), (6,6,1), (9,6,1), (13,6,1)]: stuck, not slow |
+| cage `unfinished` @16000 (`census.sh prototypes/counters.patch [prototypes/squeeze.patch] prototypes/census-16k.patch` → `census-16k.txt`, `census-squeeze-16k.txt`) | [] | [(0,4,1), (6,6,1), (9,6,1), (13,6,1)]: stuck, not slow |
 | cage `landed` / runs / worked | [] / 32 / 32 | [] / 32 / 32 |
 | two-wide staircase `worked` | 24/24, stalled [] | 24/24, stalled [] |
 | one-wide staircase `failed` | [] levels 96/96, swaps=0 | [] levels 96/96, **swaps=101** |
@@ -150,7 +150,7 @@ again with the swap rule in.
 
 ## Blockers / notes
 
-- No blocker. The 16k cage readings used a scratch edit (`TICKS = 16_000`) that is not in the patch.
+- No blocker. The 16k cage readings first came from a scratch edit (`TICKS = 16_000`); review-patch committed it as `prototypes/census-16k.patch` and re-ran both stacks to the same lists (`census-16k.txt`, `census-squeeze-16k.txt`).
 - `scale.sh` exists: see `scale-squeeze.txt` (appended when the run finished).
 
 ## Scale (`scale.sh prototypes/squeeze.patch` -> `scale-squeeze.txt`, PARTIAL)
