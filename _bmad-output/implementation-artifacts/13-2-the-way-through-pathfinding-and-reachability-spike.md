@@ -356,6 +356,11 @@ All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `
 - NEW `13-2-signoff/profile-table.md`, `13-2-signoff/scale-table.md`, `13-2-signoff/proto-{connectivity,squeeze,clamber}.md`, `13-2-signoff/proposal.md`
 - UPDATE `docs/technical-preferences.md` (ADR 5 scope line, per Wolf's ruling)
 - UPDATE this story, `sprint-status.yaml`
+- Review patch passes 1 and 2:
+  - NEW `13-2-signoff/prototypes/{census-16k,pile-memo-red-key-ignores-blocked,pile-memo-red-near-zone-only,red-counters-silent,red-counters-no-emitter}.patch`
+  - NEW `13-2-signoff/census-16k.txt`, `13-2-signoff/census-squeeze-16k.txt`, `13-2-signoff/census-pile-memo-red-{key,near}.txt`, `13-2-signoff/instrument-red.txt`, `13-2-signoff/scale-hash-{base,pile-memo}.txt`
+  - UPDATE `13-2-signoff/census.sh`, `13-2-signoff/scale.sh`, `13-2-signoff/proposal.md`, `13-2-signoff/proto-squeeze.md`, `deferred-work.md`
+  - UPDATE `planning-artifacts/epics.md` (Epic 13: stories 13.3, 13.4, 13.5)
 
 ## Change Log
 

@@ -118,3 +118,74 @@ run 1 commands=46/46 mean=0.4801 p99=7.3024 max=14.883 over10=20 state=dc12038e1
 totals astar_calls=0 astar_nodes=0 route_calls=0 route_cells=0 route_none=0 flood_cells=0 exhausted_astar=0 share_ticks=0
 totals COUNTERS MISSING: boundaries=0, every total above is blind
 exit 0
+
+# 13.2 review run 2, patch item 9: 'block present, emitter key absent'. 'new' = census.sh/scale.sh at 7cf68ec4.
+
+### red-new-census-no-emitter: census.sh prototypes/counters.patch prototypes/red-counters-no-emitter.patch (flag lines; old census.sh printed none)
+counters big-pile NO EMITTER
+counters big-pile IDENTICAL across 2 runs
+counters deep-pit NO EMITTER
+counters deep-pit IDENTICAL across 2 runs
+counters dig-loop NO EMITTER
+counters dig-loop IDENTICAL across 2 runs
+counters full-pile-crowd NO EMITTER
+counters full-pile-crowd IDENTICAL across 2 runs
+counters plan-compact-piles NO EMITTER
+counters plan-compact-piles IDENTICAL across 2 runs
+counters plan-far-piles NO EMITTER
+counters plan-far-piles IDENTICAL across 2 runs
+counters plan-spread-piles NO EMITTER
+counters plan-spread-piles IDENTICAL across 2 runs
+counters plan NO EMITTER
+counters plan IDENTICAL across 2 runs
+counters seat-slow NO EMITTER
+counters seat-slow IDENTICAL across 2 runs
+counters stuck-tunnel NO EMITTER
+counters stuck-tunnel IDENTICAL across 2 runs
+exit 0
+
+### healthy-new-census: census.sh prototypes/counters.patch -> byte-identical to census-counters.txt (diff empty), 0 NO EMITTER, 10 IDENTICAL
+
+### new-scale-no-emitter: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-no-emitter.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-no-emitter.patch 990507ff
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.3502 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.3502 p99=5.8726 max=9.461 over10=0 state=dc12038e172df5b2
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+totals NO EMITTER: boundaries=0, share_ticks is blind
+exit 0
+
+### new-scale-silent: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-silent.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-silent.patch a84add1c
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.3474 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.3474 p99=5.6464 max=8.871 over10=0 state=dc12038e172df5b2
+totals astar_calls=0 astar_nodes=0 route_calls=0 route_cells=0 route_none=0 flood_cells=0 exhausted_astar=0 share_ticks=0
+totals COUNTERS MISSING: no counters block, every total above is blind
+exit 0
+
+### new-scale-healthy: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh 
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.3738 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.3738 p99=5.7875 max=9.431 over10=0 state=dc12038e172df5b2
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+exit 0
+
