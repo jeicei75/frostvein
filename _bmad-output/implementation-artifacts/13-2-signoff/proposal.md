@@ -16,7 +16,7 @@ printed it. The stacks are throwaway patches under `prototypes/`, applied in ord
 
 Commands: `census.sh STACK...` (every reproducer's `end` line, state hash and counter block over `--runs 2`, plus the sweep lists),
 `scale.sh [OPTION]` (the ten `scale/*.json` points), `scripts/tick-bench.sh A B` (5 interleaved runs per build plus a
-shuffled-layout control). Raw outputs sit beside this file (`census-*.txt`, `scale-*.txt`, `tickbench.txt`); the per-option notes
+shuffled-layout control). The #187 16k-tick reading stacks `census-16k.patch` (the cage sweep's `TICKS = 16_000`) last. Raw outputs sit beside this file (`census-*.txt`, `scale-*.txt`, `tickbench.txt`); the per-option notes
 `proto-connectivity.md`, `proto-squeeze.md` and `proto-clamber.md` carry the long tables this file summarises.
 
 **Reading rule.** Counts decide between builds, because they are deterministic and identical across runs (10/10 blocks
@@ -90,14 +90,16 @@ once, so the shares are the reading and not the ms; state hashes equal base). Sh
 | scale-256-crew100 | 2000 | 24.9 | 62% | 37% | 0% | **74%** | 18% | 2% | 1% | 1% |
 | scale-256-crew200 | 2000 | 37.9 | 35% | 58% | 0% | **75%** | 11% | 2% | 0% | 6% |
 
-Raw: `timer.txt`. Columns are shares of the summed system time. `pile_targets` can exceed `claim_jobs` because the delivery in
+Raw: `timer.txt`. Columns are shares of the summed system time **plus** the counters' `tick_boundary` (which does not ship);
+the shares reproduce only with that denominator. `pile_targets` can exceed `claim_jobs` because the delivery in
 `execute_jobs` calls it too. Function times are inclusive (`walls_in_a_dwarf` counted net of the `stranded` it calls). The
 timer's own ms read higher than tick-bench's (plan-compact 1.83 against 1.39) because six runs shared the devpod.
 
 `pile_targets` is called from `work_positions` (each haul job a hauler weighs, every tick) and from the delivery in `execute_jobs`.
 On a hit it skips the entrance floods but still rebuilds the whole depth map: `is_walkable` and four side neighbours per zone cell,
 then a BFS into a fresh `BTreeMap`. That is about 57 µs a call at 203 zone cells, 233,692 calls in plan-compact. **Pathfinding is not
-the tick cost wherever the tick is expensive:** in the six scenarios over 0.1 ms and at every 128² scale point, `pile_targets` is
+the tick cost wherever the tick is expensive:** in the six scenarios over 0.1 ms and at the three 128² scale points timed (crews
+50, 100 and 200; crews 5 and 20 were not timed), `pile_targets` is
 69–94% and A\* 0–3%. A\* leads only in two cheap scenarios: stuck-tunnel (56%, the livelock's 69 no-path replans of about 16k nodes
 each) and deep-pit (26%).
 
@@ -112,9 +114,12 @@ each) and deep-pit (26%).
 | scale-256-crew100 | 2000 | 5.5 | 40% | 54% | 1% | **7%** | 67% | 6% | 2% | 5% |
 | scale-256-crew200 | 2000 | 8.1 | 15% | 59% | 2% | **7%** | 40% | 8% | 1% | 25% |
 
+Same denominator as above (systems plus `tick_boundary`). After the memo, `tick_boundary` is no longer small at scale (11%, 5% and
+25% of the 128² crew 200, 256² crew 100 and 256² crew 200 rows), so the published shares understate everything else there.
+
 `pile_targets` keeps 42–46% of the (now much smaller) tick on the pile scenarios: a memo hit still builds its key and clones the
 map, so there is more to take if it is ever needed. At scale **A\* becomes the next cost**: 24% at 128² crew 200, 67% and 40% at
-256² crews 100 and 200. The tick is far under budget at all three (5.5–18.9 ms, the counters' own `tick_boundary`, which does not
+256² crews 100 and 200, which is 27%, 70% and **54%** of the system time alone (`tick_boundary` left out of the denominator). The tick is far under budget at all three (5.5–18.9 ms, the counters' own `tick_boundary`, which does not
 ship, included). This is where the epic's `BTreeMap` storage question lands. A\* storage is not worth a story on 128², but it is
 the first thing to measure if M4 goes to 256² with hundreds of dwarves.
 
@@ -205,7 +210,9 @@ left out: it answered nothing at the three 128² points it ran (`scale-connectiv
 Reading:
 - **The tick budget is 100 ms (10 ticks a second).** Base passes it at crew 50 on 128² (31 ms), reaches it at crew 100 (96 ms)
   and is 3× over at crew 200 (313 ms). No movement option moves that: conn I removes 98% of the flood cells at crew 200
-  (5.9M → 90k) and the tick reads 303 ms. **pile-memo, with every count equal to base, reads 20.8 ms** (15× cheaper). Timer at
+  (5.9M → 90k) and the tick reads 303 ms. **pile-memo, with every count equal to base, reads 20.8 ms** (15× cheaper; mean only, p99 97.1 ms, see § Recommendation
+  item 1). Its state hash equals base's at all ten points (`scale.sh` prints run 1's `state=` since review-patch:
+  `scale-hash-base.txt`, `scale-hash-pile-memo.txt`). Timer at
   128² crew 50, 100 and 200: `pile_targets` is 92%, 94% and 94% of the tick.
 - **256² is cheaper per tick than 128²** at crews 20, 100 and 200: in 2,000 ticks nothing reaches the pile there (the walk is
   longer), so those points measure map-spanning searches, not a full pile. A\* is 18% and 11% of the tick at 256² crew 100 and 200
@@ -239,8 +246,17 @@ census RED, not an option: it made 3 of 6 reproducers worse, because occupancy f
    `PileGround` keeps the last answer keyed on that blocked subset. `set_tile` and a zones change drop it, as they already drop
    the entrance-flood answers. It changes no rule, so the hash must not move. Census (`census.sh prototypes/counters.patch
    prototypes/pile-memo.patch` → `census-pile-memo.txt`): **10/10 state hashes and end lines equal C0, every sweep line equal**,
-   and 233,593 of 233,692 calls are memo hits in plan-compact. RED: a key that ignores `blocked` moves all four hashes tried
-   (plan goals 12/10/1 → 12/5/1, big-pile marks 14 → 15). Tick-bench: see the table below.
+   and 233,593 of 233,692 calls are memo hits in plan-compact. Two REDs, each a committed patch on top of `pile-memo`
+   (`census.sh prototypes/counters.patch prototypes/pile-memo.patch prototypes/<red>.patch`):
+   - `pile-memo-red-key-ignores-blocked.patch` (the key is always empty) → `census-pile-memo-red-key.txt`: **8 of 10** state
+     hashes move (all but dig-loop and stuck-tunnel; plan goals 12/10/1 → 12/5/1, big-pile marks 14 → 15), and the cage, ring and
+     two-wide sweeps move too.
+   - `pile-memo-red-near-zone-only.patch` (the key reads the zone cells but not their side neighbours) →
+     `census-pile-memo-red-near.txt`: **all 10 state hashes stay equal.** The only census reading that moves is the cage sweep's
+     `frozen`, from `(10,6,0) (12,4,1) (12,4,4) (12,6,3)` to `(10,6,0) (12,6,3) (16,4,2)`. So no scenario guards the side-neighbour
+     ring that half the key exists for, and 13.3 needs its own test for it (§ Recommendation item 1).
+
+   Tick-bench: see the table below.
 
 **Every reproducer** (`census-*.txt`; end line `marks / items / goals`, then the option's tick-bench delta against C0 from
 `tickbench.txt` sections 2–6). "same" means the state hash equals base. Every option row has a shuffled-layout control within
@@ -270,7 +286,7 @@ costs more than that: about 16k cells per rebuild, 3.5–3.9M labelled per 10k t
 | reading | base | conn T and I | squeeze | clamber 4 |
 |---|---|---|---|---|
 | cage `frozen` (#186) | 4: (10,6,0) (12,4,1) (12,4,4) (12,6,3) | same | 5, 2 of base's kept | 5, none of base's kept |
-| cage `unfinished` @4000 (#187) | (11,6,1) | same | 5 entries; 4 still stuck at 16,000 ticks (base 0) | (13,6,1) |
+| cage `unfinished` @4000 (#187) | (11,6,1) | same | 5 entries; 4 still stuck at 16,000 ticks (base 0) (`census-16k.patch`: `census-squeeze-16k.txt` against C0 `census-16k.txt`) | (13,6,1) |
 | cage `landed` / runs / worked | [] / 32 / 32 | same | [] / 32 / 32 | [] / 32 / 32 (`landed_standing` []) |
 | two-wide staircase worked | 24/24 | same | 24/24 | 24/24 |
 | one-wide staircase | failed [] 96/96 | same | failed [] 96/96, 101 swaps | failed [] 96/96 |
@@ -304,7 +320,7 @@ One cell per issue per option, from the census and scale files named above. Vari
 |---|---|---|---|---|---|
 | #159 budget starvation | **fixed** in the unit shape: the lib test stamps `[120 ×10, 0]` (the unreachable ten answered for free, the reachable job claimed). Scenarios: unchanged, since no budget runs out (`budget=0` on every row). 256²: see § Scale | unchanged (not movement: claim_jobs budget) | unchanged: 256² budget-exhausted calls 10/10/131/218/138 → 11/8/142/74/126 (crews 5…200) | unchanged (hash equal) | A\* budget, live on 256² only |
 | #186 idle on a one-level island | unchanged (frozen identical) | worse/reshuffled: frozen 4 → 5, 2 kept | reshuffled: 4 → 5, none kept | unchanged (hash equal) | **not movement**: `wander` steps on one level only (the issue's own probe: 5/32 → 1/32) |
-| #187 refused channel loops | unchanged `[(11,6,1)]` | **worse**: unfinished 1 → 5, 4 stuck at 16k ticks | unchanged count, `[(11,6,1)]` → `[(13,6,1)]` | unchanged (hash equal) | **not movement**: let-go returns to the same refusal (job logic) |
+| #187 refused channel loops | unchanged `[(11,6,1)]` | **worse**: unfinished 1 → 5, 4 stuck at 16k ticks (`census-16k.patch`: `census-squeeze-16k.txt` against C0 `census-16k.txt`) | unchanged count, `[(11,6,1)]` → `[(13,6,1)]` | unchanged (hash equal) | **not movement**: let-go returns to the same refusal (job logic) |
 | #189 let-go hauler beside a boxed-in dwarf | unchanged 23/24 | **fixed** 24/24, pick-ups 80 → 0 | **fixed** 24/24, pick-ups 80 → 0 | unchanged (hash equal) | movement: both a swap and a clamber let the boxed-in dwarf out |
 | #203 a dig seals the miner | unchanged marks=11 (I: `claim_goals` 80,428 → 162 nodes, cost only) | marks 11 → 10 | **worse** 11 → 14 | unchanged (hash equal) | **not movement**: the dig takes the floor from under his only exit; terrain seals him |
 | #204 stones seal two miners (pile full) | unchanged (seat-slow 1 / 38/12/1, full-pile-crowd 0 / 46) | unchanged (seat-slow goals 12 → 11) | unchanged (same end lines) | unchanged (hash equal) | stone placement with the pile full; no option opens the four-stone pocket in the replay |
@@ -321,7 +337,7 @@ per tile at every tick boundary holds in all of them.
 
 1. **A swap (squeeze).** Two dwarves trade tiles in one step after a one-step-period wait (10 ticks), and two head-on job-holders
    swap instead of #196's yield. *Buys:* #206 and #189 fixed, #207 14 → 18 of 24. *Costs:* #187's sweep regresses (4 runs stuck at
-   16k ticks against base's 0); the #194/#196 back-out goes; `step_and_watch` and the 4 lib tests that pin "no swap" are rewritten to
+   16k ticks against base's 0, `census-16k.patch`: `census-squeeze-16k.txt` against C0 `census-16k.txt`); the #194/#196 back-out goes; `step_and_watch` and the 4 lib tests that pin "no swap" are rewritten to
    accept a swap and still fail on a shared tile. The gui would sell the swap with an animation (out of scope).
 2. **A dwarf may step onto and stand on a loose stone (clamber).** The planner cost is 4; the walk time is the same as any step.
    *Buys:* #189 and #207 fixed; A\* nodes −37% to −69% in 8 of 10 scenarios. *Costs:* #203's replay worse (11 → 14 marks); dwarves end
@@ -334,8 +350,8 @@ per tile at every tick boundary holds in all of them.
 ## Recommendation
 
 **What the spike found, in one line each.**
-- The tick cost is not pathfinding. `pile_targets` is 69–94% of the tick in every scenario over 0.1 ms and at every 128² scale
-  point, and a memo that changes no outcome takes 128² crew 200 from 313 to 21 ms.
+- The tick cost is not pathfinding. `pile_targets` is 69–94% of the tick in every scenario over 0.1 ms and at the three 128² scale
+  points timed (crews 50, 100, 200), and a memo that changes no outcome takes 128² crew 200 from 313 to 21 ms.
 - The eight cage issues are not one movement problem. Two are dwarf-blocks-dwarf (#206, #189) and two are stone-blocks-dwarf
   (#189, #207; #189 is both), four are not movement (#186 wander, #187 job refusal, #203 dig, #204 stone placement), and one is the A\* budget
   on a map bigger than today's (#159).
@@ -345,15 +361,22 @@ per tile at every tick boundary holds in all of them.
 **Options, in order, and the stories they become** (expected cost from this file's numbers):
 
 1. **pile-memo, no ruling needed** (story 13.3, small: the 25-line patch plus a test that a changed blocked cell beside the pile
-   gives the fresh answer). Expected (`tickbench.txt` section 6, C0 against pile-memo, state the same
-   on all 10): the tick falls 55–91% on the seven pile scenarios (plan-compact 1.39 → 0.15 ms, big-pile 1.05 → 0.09), moves −11% to
-   +4% on the other three (dig-loop +4.3% and full-pile-crowd +3.2% are inside the 6% cross-build noise). At scale 128² crews 50/100/200 read 2.75/7.23/20.8 ms against 30.8/95.5/313,
-   which puts a 200-dwarf crew at a fifth of the 100 ms budget. No hash moves. It also makes later A/B rows readable, because
+   gives the fresh answer). That test must put the blocked cell on a **non-zone side neighbour** of the pile, and it must kill
+   `pile-memo-red-near-zone-only.patch` as well as the key RED. The near RED leaves every scenario hash equal (§ Prototypes item 4). Expected (`tickbench.txt` section 6, C0 against pile-memo, state the same
+   on all 10): the tick falls 55–91% on **six** scenarios, the five pile layouts and seat-slow (plan-compact 1.39 → 0.15 ms,
+   big-pile 1.05 → 0.09), and moves −11% to +4% on the other **four**: deep-pit −10.6%, stuck-tunnel −1.9% (within floor), dig-loop
+   +4.3% and full-pile-crowd +3.2%. Those last two are weak evidence by the 6% cross-build rule, but they are **beyond the bench
+   floor** (controls +1.4% and −0.1%), so read them as a small real slowdown in those two worlds, not as noise. At scale 128² crews 50/100/200 read 2.75/7.23/20.8 ms
+   against 30.8/95.5/313, which puts a 200-dwarf crew's **mean** at a fifth of the 100 ms budget. **The tail does not fit that
+   picture:** at crew 200 the p99 is 97.1 ms and the max 134 ms (`scale-r1-pile-memo.txt`), and 1,030 of 2,000 ticks run over 10 ms
+   (review re-run; `scale-hash-pile-memo.txt` reads 1,081 under heavier load, p99 141.6, max 189.6). So the slowest 1% of ticks sit
+   at the budget, not a fifth of it. No hash moves: all ten scale points give base's `state=` (`scale-hash-base.txt`,
+   `scale-hash-pile-memo.txt`). It also makes later A/B rows readable, because
    today a pile scenario's ms is mostly this one function.
 2. **Squeeze-past, if Wolf rules the swap in** (Ruling 1; story 13.4, medium). It is the only option that fixes #206, the seat
    freeze, and it fixes #189 and takes #207 from 14 to 18 of 24. Expected cost: the swap adds no search (one lookup per blocked
    look). The ms moves only because the worlds differ (stuck-tunnel −71%, big-pile +34%). **The story must clear the #187
-   regression before it lands**: 4 cage-sweep runs stuck at 16,000 ticks where base has none. It rewrites `step_and_watch` and the 4
+   regression before it lands**: 4 cage-sweep runs stuck at 16,000 ticks where base has none (`census-16k.patch`: `census-squeeze-16k.txt` against C0 `census-16k.txt`). It rewrites `step_and_watch` and the 4
    lib tests that pin "no swap".
 3. **Clamber-over, only if Wolf rules a dwarf may stand on a stone** (Ruling 2; story 13.5, medium, after 13.4). It is the only
    option that fixes #207 fully. Expected cost: A\* nodes −37% to −69% in 8 of 10 scenarios, tick +6% to +35% in the changed
@@ -370,8 +393,8 @@ per tile at every tick boundary holds in all of them.
    only exit) and #204 (stone landings with the pile full). None of the three movement options fixed any of them.
 
 **ADR 5** (`docs/technical-preferences.md`: "Plain A\* pathfinding on the voxel grid for milestone 1. Hierarchical pathfinding is
-acknowledged future work, not scaffolded now."). The recommendation **keeps plain A\*** through M4 on 128². In every scenario over 0.1 ms and at every
-128² scale point A\* is 0–3% of the tick, and the scale curve fits the budget once pile-memo lands. What it changes is the scope line. ADR 5
+acknowledged future work, not scaffolded now."). The recommendation **keeps plain A\*** through M4 on 128². In every scenario over 0.1 ms and at the three
+128² scale points timed (crews 50, 100, 200) A\* is 0–3% of the tick, and the scale curve fits the budget once pile-memo lands. What it changes is the scope line. ADR 5
 should say "plain A\* with a fixed node budget holds while the walkable component is under `MAX_ASTAR_NODES`", because past that
 (256²: 64,300 cells) #159 is live. The first step past it is a budget or a heuristic, not a hierarchy. Hierarchical pathfinding stays
 unscaffolded.
@@ -384,6 +407,10 @@ unscaffolded.
    the M4 map size. #186, #187, #203 and #204 go to their own stories, outside the movement layer.
 2. **Ruling 1: the swap is allowed.** Squeeze-past (variant B) is the basis for 13.4, and 13.4 must clear the #187 cage-sweep
    regression before it lands.
+   **Not covered (code review run 1, 2026-10-24):** Rulings needed item 1 named only the timed swap and the head-on swap.
+   `squeeze.patch` also swaps an **idle blocker with no way out** after the wait, and moves his `home` to the holder's old tile
+   (`proto-squeeze.md` § Rule departures item 5). Ruling 1 was made on text that did not show that, so it does not cover it.
+   Wolf (2026-10-24): 13.4 asks it as its own Task 0 question (`epics.md` Story 13.4).
 3. **Ruling 2: decide after squeeze.** #207 is re-measured on top of 13.4; clamber-over is ruled then.
 4. **ADR 5: amended as proposed.** Plain A\* with a fixed node budget holds while the walkable component is under
    `MAX_ASTAR_NODES`. The next step past that is a budget or a heuristic, not a hierarchy (`docs/technical-preferences.md`).
