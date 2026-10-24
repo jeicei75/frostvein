@@ -119,8 +119,8 @@ Same denominator as above (systems plus `tick_boundary`). After the memo, `tick_
 
 `pile_targets` keeps 42–46% of the (now much smaller) tick on the pile scenarios: a memo hit still builds its key and clones the
 map, so there is more to take if it is ever needed. At scale **A\* becomes the next cost**: 24% at 128² crew 200, 67% and 40% at
-256² crews 100 and 200, which is 27%, 70% and **54%** of the system time alone (`tick_boundary` left out of the denominator). The tick is far under budget at all three (5.5–18.9 ms, the counters' own `tick_boundary`, which does not
-ship, included). This is where the epic's `BTreeMap` storage question lands. A\* storage is not worth a story on 128², but it is
+256² crews 100 and 200, which is 27%, 70% and **54%** of the system time alone (`tick_boundary` left out of the denominator). The tick's **mean** is far under budget at all three (5.5–18.9 ms, the counters' own `tick_boundary`, which does not
+ship, included), but its tail is not: p99 85.4, 64.6 and 62.2 ms, max 116.7, 233.3 and 103.2 ms (`timer-pile-memo.txt`). This is where the epic's `BTreeMap` storage question lands. A\* storage is not worth a story on 128², but it is
 the first thing to measure if M4 goes to 256² with hundreds of dwarves.
 
 ## Scale
@@ -252,9 +252,13 @@ census RED, not an option: it made 3 of 6 reproducers worse, because occupancy f
      hashes move (all but dig-loop and stuck-tunnel; plan goals 12/10/1 → 12/5/1, big-pile marks 14 → 15), and the cage, ring and
      two-wide sweeps move too.
    - `pile-memo-red-near-zone-only.patch` (the key reads the zone cells but not their side neighbours) →
-     `census-pile-memo-red-near.txt`: **all 10 state hashes stay equal.** The only census reading that moves is the cage sweep's
-     `frozen`, from `(10,6,0) (12,4,1) (12,4,4) (12,6,3)` to `(10,6,0) (12,6,3) (16,4,2)`. So no scenario guards the side-neighbour
-     ring that half the key exists for, and 13.3 needs its own test for it (§ Recommendation item 1).
+     `census-pile-memo-red-near.txt`: **all 10 state hashes stay equal**, so no scenario hash sees it. The counts do: the
+     `pile_targets` hits of big-pile, deep-pit and seat-slow, the two-wide sweep's (boundaries 51,058 → 51,610, `claim_delivery`
+     goal-checks 3.6M → 17.5M, `clearing_landing` cells 436k → 565k) and every cage-sweep counter. Of the outcome readings only
+     the cage sweep's `frozen` moves, from `(10,6,0) (12,4,1) (12,4,4) (12,6,3)` to `(10,6,0) (12,6,3) (16,4,2)` (`pinned=false`).
+     That is the comparison `main`'s `assert_eq!(frozen, ONE_LEVEL_ISLANDS)` makes, so the full gate fails under this RED, but
+     only incidentally: nothing guards the side-neighbour ring that half the key exists for, and 13.3 needs its own test for it
+     (§ Recommendation item 1).
 
    Tick-bench: see the table below.
 
@@ -366,10 +370,11 @@ per tile at every tick boundary holds in all of them.
    on all 10): the tick falls 55–91% on **six** scenarios, the five pile layouts and seat-slow (plan-compact 1.39 → 0.15 ms,
    big-pile 1.05 → 0.09), and moves −11% to +4% on the other **four**: deep-pit −10.6%, stuck-tunnel −1.9% (within floor), dig-loop
    +4.3% and full-pile-crowd +3.2%. Those last two are weak evidence by the 6% cross-build rule, but they are **beyond the bench
-   floor** (controls +1.4% and −0.1%), so read them as a small real slowdown in those two worlds, not as noise. At scale 128² crews 50/100/200 read 2.75/7.23/20.8 ms
+   floor** (controls +1.4% and −0.1%). At scale 128² crews 50/100/200 read 2.75/7.23/20.8 ms
    against 30.8/95.5/313, which puts a 200-dwarf crew's **mean** at a fifth of the 100 ms budget. **The tail does not fit that
-   picture:** at crew 200 the p99 is 97.1 ms and the max 134 ms (`scale-r1-pile-memo.txt`), and 1,030 of 2,000 ticks run over 10 ms
-   (review re-run; `scale-hash-pile-memo.txt` reads 1,081 under heavier load, p99 141.6, max 189.6). So the slowest 1% of ticks sit
+   picture:** at crew 200 the p99 is 97.1 ms and the max 134 ms (`scale-r1-pile-memo.txt`, which predates the over-10 ms count).
+   Two later committed runs read p99 85.4, max 116.7 and 1,030 of 2,000 ticks over 10 ms (`timer-pile-memo.txt`, with
+   `timer.patch` on top), and p99 141.6, max 189.6 and 1,081 over 10 ms under heavier load (`scale-hash-pile-memo.txt`). So the slowest 1% of ticks sit
    at the budget, not a fifth of it. No hash moves: all ten scale points give base's `state=` (`scale-hash-base.txt`,
    `scale-hash-pile-memo.txt`). It also makes later A/B rows readable, because
    today a pile scenario's ms is mostly this one function.
@@ -394,7 +399,8 @@ per tile at every tick boundary holds in all of them.
 
 **ADR 5** (`docs/technical-preferences.md`: "Plain A\* pathfinding on the voxel grid for milestone 1. Hierarchical pathfinding is
 acknowledged future work, not scaffolded now."). The recommendation **keeps plain A\*** through M4 on 128². In every scenario over 0.1 ms and at the three
-128² scale points timed (crews 50, 100, 200) A\* is 0–3% of the tick, and the scale curve fits the budget once pile-memo lands. What it changes is the scope line. ADR 5
+128² scale points timed (crews 50, 100, 200) A\* is 0–3% of the tick, and the scale curve's **mean** fits the budget once pile-memo lands (128² crew 200: 20.8 ms), though its tail does not
+(p99 97.1, max 134 ms, `scale-r1-pile-memo.txt`). What it changes is the scope line. ADR 5
 should say "plain A\* with a fixed node budget holds while the walkable component is under `MAX_ASTAR_NODES`", because past that
 (256²: 64,300 cells) #159 is live. The first step past it is a budget or a heuristic, not a hierarchy. Hierarchical pathfinding stays
 unscaffolded.
