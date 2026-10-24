@@ -14,6 +14,8 @@ patches=("$SIGNOFF/prototypes/census.patch")
 for p in "$@"; do
   [[ $p = /* ]] && patches+=("$p") || patches+=("$SIGNOFF/$p")
 done
+counted=0
+for p in "${patches[@]}"; do if [[ $(basename "$p") = counters.patch ]]; then counted=1; fi; done
 
 echo "census stack: $BASE"
 for p in "${patches[@]}"; do
@@ -40,6 +42,9 @@ for f in "$REPO"/scenarios/*.json; do
   if [[ -n $run1 ]]; then
     echo "$run1"
     [[ $run1 == "$run2" ]] && echo "counters $name IDENTICAL across 2 runs" || echo "counters $name DIFFER across 2 runs"
+  elif [[ $counted = 1 ]]; then
+    # counters.patch is in the stack but this scenario printed no block: a blind reading, not a clean one.
+    echo "counters $name MISSING"
   fi
 done
 

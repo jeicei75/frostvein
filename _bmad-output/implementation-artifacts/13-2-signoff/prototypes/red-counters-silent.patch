@@ -1,0 +1,17 @@
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 00b4322a..5ab14dd0 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -326,9 +326,9 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         );
+         means.push(mean);
+         hashes.push(hash);
+-        for line in sim_core::counters::take() {
+-            println!("counters {name} run {run}/{runs} {line}");
+-        }
++        // 13.2 RED (review-patch item 8): the counters are taken but never printed, so every
++        // reproducer's counters block is absent. census.sh must say MISSING; scale.sh must flag it.
++        let _ = sim_core::counters::take();
+         let goals: Vec<String> = world
+             .goals()
+             .iter()

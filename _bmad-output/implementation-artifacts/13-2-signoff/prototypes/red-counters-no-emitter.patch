@@ -1,0 +1,17 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 675f0a25..2853ba4c 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -3703,9 +3703,9 @@ pub mod counters {
+                 })
+         });
+         PREV.with(|prev| *prev.borrow_mut() = (tick, now));
+-        add("emitter", "ticks", "shares", u64::from(shared));
+-        add("emitter", "ticks", "swaps", u64::from(swapped));
+-        add("emitter", "ticks", "boundaries", 1);
++        // 13.2 RED (review-patch item 8): the share emitter records nothing, so its key is absent
++        // from every counters block. scale.sh must flag boundaries=0, not print share_ticks=0 as clean.
++        let _ = (shared, swapped);
+     }
+ 
+     /// Returns the tallies, one line per (kind, name) with sorted `key=value` pairs, and resets.
