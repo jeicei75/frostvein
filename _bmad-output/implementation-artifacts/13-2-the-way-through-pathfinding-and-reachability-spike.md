@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.2: The Way Through — Pathfinding and Reachability Spike
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -98,6 +98,50 @@ so that M4 builds on a movement layer that is fixed as a whole, not one cage sha
 - [x] **Task 9: Wolf rules, then close.**
   - Record the ruling in the Change Log and in the proposal's last section. Note any issue it re-scopes on that issue, with no closing keyword; nothing here closes an issue.
   - Then the ONE full gate (`RUST_TEST_THREADS=1 scripts/gate.sh`) and paste the block. Then the cost row (`session_tokens.py --phase dev --story 13-2-the-way-through-pathfinding-and-reachability-spike`) and `phase_state.py clear`.
+
+### Review Findings
+
+Code review run 1 (2026-10-24, a fresh session). Four layers ran on `4f57027..ccc1da07`. Each ran `cargo 1.97.1` in its own `CARGO_TARGET_DIR` on trees extracted with `git archive`. No layer timed out or failed. Nothing under `/workspace` was modified, and `git worktree list` is clean afterwards. Every recorded patch hash matches the committed patch.
+
+**What was re-run and matched:**
+- All 18 patch stacks apply to `4f57027`.
+- `census.sh` (base) matches `census-base.txt` except the header line.
+- `census.sh counters squeeze` is byte-identical to `census-squeeze.txt`.
+- **pile-memo at 128² crew 200:** 338.0 → 20.94 ms run back to back (feature), and 303.7 → 24.25 ms under shared load (acceptance). Counts are equal and `state=e0b2df85` matches base.
+- **Timer shares:** plan-compact 90% (committed 91%), plan-far 72% (73%).
+- **#187 at 16k ticks:** squeeze `[(0,4,1),(6,6,1),(9,6,1),(13,6,1)]`, C0 `[]`. Reproduced by two layers.
+- The pile-memo RED rebuilt from prose: plan 12/10/1 → 12/5/1, big-pile 14 → 15.
+- clamber cost 4 and cost 8, the counters RED (2x goal-checks, nodes unchanged) and both new scenarios (marks 3 and 11).
+- **Totals:** all 200 § Scale cells and every § Profile total.
+- **Fixtures:** all 10 regenerate byte-identical.
+
+**AC 7 holds:** the `crates/` diff is empty, and the ruling commit precedes Status review.
+
+**Totals:** no HIGH findings; 2 decision (both resolved into patches), 8 patch (left as action items, Wolf 2026-10-24), 13 defer, 1 dismissed. Review cost $23.83 / 405 turns (4 subagents = 82.9%). `reap-build-caches.sh --tmp-only --force` reaped 23 dirs (35.5 GB; 30.8 GB reclaimed). Convergence (layers that found the same thing independently) appears in 7 findings.
+
+- [x] [Review][Decision] **MED, acceptance (AC 5).** The idle-blocker swap is missing from § Rulings needed, so Ruling 1 never saw it. `proto-squeeze.md` § Rule departures item 5 says an idle blocker with no way out also swaps after the wait, and its `home` moves to the holder's old tile. The proposal's Rulings needed item 1 names only the timed swap and the head-on swap, and Wolf ruled "the swap is allowed (variant B)" on that text. Options: (a) Ruling 1 covers it; record that in § Ruling. (b) 13.4 asks it as its own Task 0 question. **Wolf (2026-10-24): (b).** It becomes the patch item below.
+- [x] [Review][Decision] **LOW-MED, feature.** 13.3, 13.4 and 13.5 exist only in prose. `epics.md` Epic 13 lists only 13.1 and 13.2, and `sprint-status.yaml` has no `13-3`/`13-4`/`13-5` keys, so `bmad-create-story` has no "next" to pick ([[board-order-contradicts-ruling]]). Options: (a) add the three epic entries and backlog keys on this branch, in the ruled order. (b) Leave it to `bmad-create-story 13.3`. **Wolf (2026-10-24): (a).** It becomes the patch item below.
+- [ ] [Review][Patch] **From decision 1.** Record that Ruling 1 did not cover the idle-blocker swap (its `home` moves) [`13-2-signoff/proposal.md` § Ruling], and carry it as a Task 0 question in 13.4's epic entry.
+- [ ] [Review][Patch] **From decision 2.** Add 13.3 pile-memo, 13.4 squeeze-past and 13.5 clamber-over to `planning-artifacts/epics.md` Epic 13, and add backlog keys to `sprint-status.yaml`, in the ruled order [`planning-artifacts/epics.md`, `sprint-status.yaml`].
+- [ ] [Review][Patch] **MED, acceptance + feature.** The pile-memo expected-cost line Wolf ruled on miscounts [`13-2-signoff/proposal.md:348-350`, story Debug Log]. `tickbench.txt` §6 has **six** scenarios at −55…−91% and **four** others (deep-pit −10.6, dig-loop +4.3, full-pile-crowd +3.2, stuck-tunnel −1.9), not seven and three. dig-loop and full-pile-crowd are BEYOND FLOOR (controls +1.4/−0.1), so "inside the noise" should read "weak evidence by the 6% rule, beyond the bench floor". A 13.3 target of "−55% on seven" cannot be met.
+- [ ] [Review][Patch] **LOW-MED, feature (same paragraph).** "A 200-dwarf crew at a fifth of the 100 ms budget" quotes the mean only [`proposal.md:350-351`]. pile-memo's p99 is 97.1 ms and its max is 134 ms (feature re-run: 95.6 / 129.6), and 1,030 of 2,000 ticks run over 10 ms. Fix: add the tail beside the mean.
+- [ ] [Review][Patch] **MED, feature + acceptance.** The #187 16k-tick reading that gates 13.4 has no committed producer [`proposal.md:273,307,323,356`; `proto-squeeze.md:153`]. It came from a scratch `TICKS = 16_000` edit, and `census.sh` runs 4,000 ticks. The number is right (reproduced by two layers). Fix: commit `prototypes/census-16k.patch` and name it wherever the reading is quoted.
+- [ ] [Review][Patch] **MED, feature + acceptance + blind.** The pile-memo RED is not committed, and it does not test half the key [`proposal.md:242-243`]. The "key ignores `blocked`" RED exists only as prose. Blind built a `near` = zone-cells-only RED, which stays hash-equal on all 8 scenarios, so no census guards the side-neighbour ring the key depends on. Fix: commit both REDs as patches with their readings, and say in Recommendation item 1 that 13.3's test must put the blocked cell on a non-zone side neighbour and kill the `near` RED.
+- [ ] [Review][Patch] **LOW (mislabelled instrument), feature + acceptance.** The timer tables' caption gives the wrong denominator, and "every 128² scale point" overclaims [`proposal.md:93,100,337`]. Shares reproduce only with systems + `tick_boundary` as the denominator. At 256² crew 200 after the memo, A\* is 40% published against 54% of the system time, which understates "A\* is next at 256²". Also, timer covers only 128² crews 50/100/200, not 5 or 20.
+- [ ] [Review][Patch] **LOW (latent silent-failure trap), edge + feature.** The instruments can print a blind reading that looks real. In `census.sh` [`13-2-signoff/census.sh:47-55`], an empty counters line skips the IDENTICAL/DIFFER check and prints nothing. In `scale.sh` [`13-2-signoff/scale.sh:42-47`], an absent key sums to a 0 that reads as clean, and the run's `state=` hash is stripped, so "hash equal to base at scale" is printed by no committed script. Fix: `counters NAME MISSING` in census; in scale, print run 1's `state=` and flag `boundaries=0`.
+- [x] [Review][Defer] The 313 → 20.8 ms headline compares a base run in a batch of four with a memo run beside one census [`proposal.md:208`] — deferred: review re-runs read 12.5x and 16x, the counts are equal, and "a fifth" survives
+- [x] [Review][Defer] The 256² cells never reach the pile in 2,000 ticks, so they are lower bounds [`proposal.md:210-212`, `scale-table.md`] — deferred: disclosed in § Scale reading
+- [x] [Review][Defer] § Issues cells use off-vocabulary words, and #159/squeeze has no number [`proposal.md:305-306`] — deferred, AC 4 wording
+- [x] [Review][Defer] The sweeps table has no pile-memo column, and squeeze variant A has no patch or raw output [`proposal.md` § Prototypes] — deferred: pile-memo's sweep lines were verified equal to C0
+- [x] [Review][Defer] Raw files miss stack or env headers, and the tick-bench SHAs are dangling objects [`census-clamber-cost8.txt`, `census-connectivity-i.txt`, `timer*.txt`, `tickbench.txt`, `census-base.txt` `--runs 1`] — deferred: every one reproduces from the committed patches
+- [x] [Review][Defer] The squeeze shares=64, clamber emitter 407 and connectivity ramps REDs are not committed [`proto-*.md`] — deferred: 13.4/13.5 rebuild them in real code
+- [x] [Review][Defer] "28 of 28 `walls_in_a_dwarf` calls in dig-loop" should read 28 of the 28 measured (42 calls) [`proposal.md:294`] — deferred, wording
+- [x] [Review][Defer] Profile labels and bookkeeping: the ticks column is the end tick; option deltas are against C0, not base; the control is one range; the issue-comment branch links are dead until push [`proposal.md` § Profile/§ Prototypes] — deferred, labels
+- [x] [Review][Defer] Crews above about 48 spawn across several z-levels, which `scale/README.md` does not say [`prototypes/scale.patch` spawn hunk] — deferred: all 200 spawn, distinct
+- [x] [Review][Defer] A SIGKILLed `census.sh`/`scale.sh` leaves a stale `.git/worktrees` entry [`census.sh:11`, `scale.sh:11`] — deferred: `git worktree prune`
+- [x] [Review][Defer] Timer figures are inclusive, and counter bookkeeping inside the timed `pile_targets` inflates its share by a few percent [`prototypes/timer.patch`] — deferred: does not change a conclusion
+- [x] [Review][Defer] `can_clamber` keys on the counters' sticky caller label [`prototypes/clamber.patch`] — deferred: a 13.5 note, do not copy the pattern
+- [x] [Review][Defer] Squeeze's wait timer is unsaved and unhashed, so a real 13.4 likely changes the save format and rots `scenarios/saves/*` [`prototypes/squeeze.patch`] — deferred: a 13.4 design note (use `serde(default)`)
 
 ## Dev Notes
 
