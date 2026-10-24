@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.2: The Way Through — Pathfinding and Reachability Spike
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -156,6 +156,75 @@ Code review run 1 (2026-10-24, a fresh session). Four layers ran on `4f57027..cc
 - [x] [Review][Defer] `can_clamber` keys on the counters' sticky caller label [`prototypes/clamber.patch`] — deferred: a 13.5 note, do not copy the pattern
 - [x] [Review][Defer] Squeeze's wait timer is unsaved and unhashed, so a real 13.4 likely changes the save format and rots `scenarios/saves/*` [`prototypes/squeeze.patch`] — deferred: a 13.4 design note (use `serde(default)`)
 
+**Code review run 2 (2026-10-24, a fresh session), on `28162c85..2a074218`, which is patch pass 1.**
+
+Three layers ran: Edge Case Hunter (Sonnet), Acceptance Auditor (Opus) and Feature Auditor (Opus).
+- Blind Hunter was **not launched**: its territory (`sim-core`, `client-core`, gui pure files) has zero lines in this diff.
+- Each layer ran `cargo 1.97.1` in its own `/tmp` target dir, on `git archive` trees or a `git clone --shared`.
+- No layer timed out. Nothing under `/workspace` was modified.
+- AC 7 still holds: `git diff 4f57027 2a074218 -- crates/` is empty.
+
+**Delta against run 1:**
+
+| | run 1 | run 2 |
+|---|---|---|
+| new findings | 0 HIGH (2 decision, 8 patch, 13 defer, 1 dismissed) | **0 HIGH**, 2 MED, 12 LOW (9 patch, 5 defer, 0 dismissed) |
+| rework | — | **2 of 8** closure rows (row 4 tail, row 6 near RED) |
+
+**STOPPING RULE FIRED:** every new finding is below HIGH, so there is no round 3. This is a spike with nothing under `crates/`, so the next spend goes to the one full gate at PR, not to another static round.
+
+**Re-run and matched:**
+- **Row 5:** the 16k producer reproduces both committed files byte-identical: squeeze `[(0,4,1),(6,6,1),(9,6,1),(13,6,1)]`, C0 `[]`.
+- **Row 6:**
+  - The near RED census is byte-identical to the committed file.
+  - The key RED moves 8 of 10 hashes.
+- **Row 8:**
+  - `census.sh` + `red-counters-silent` prints `counters NAME MISSING` ×10.
+  - `scale.sh` flags both REDs and stays silent on the healthy stack.
+- **Rows 3 and 7:** recomputed from the raw files.
+- **Row 2:** `bmad-create-story`'s first-`backlog` scan lands on `13-3`.
+- **Live 128² crew 200 pile-memo point:** hash `e0b2df85` = base; mean 19.2, p99 87.1, max 120.7 ms.
+
+**Closure table audit:** rows 1, 2, 3, 5, 7 and 8 are CLOSED; rows 4 and 6 are REWORK (patches 1 and 2 below).
+
+**Wolf (2026-10-24): leave the 9 patches as action items.** Review cost $14.40 / 254 turns (3 subagents = 81.9%). `reap-build-caches.sh --tmp-only --force` reaped 17 dirs (17.8 GB; 14.6 GB reclaimed).
+
+- [ ] [Review][Patch] **MED, feature + acceptance. REWORK of row 4: three mean-only "fits the budget" claims survive the tail fix** [`13-2-signoff/proposal.md:122`, `:397`; `planning-artifacts/epics.md:2879`].
+  - `:122` "far under budget at all three (5.5–18.9 ms)" and `:397` (the ADR 5 paragraph Wolf ruled on) "the scale curve fits the budget once pile-memo lands" are both means.
+  - 13.3's So-that line (written in this pass) says "a 200-dwarf crew fits the tick budget on today's map".
+  - The same committed files show maxima over 100 ms at 128² crew 200: 134 (`scale-r1`), 189.6 (`scale-hash`), 116.7 (`timer-pile-memo`), and 120.7 live. At 256² crew 100 the max is 233 ms.
+  - Fix: say "mean" in all three places and put the tail beside it. The ADR 5 premise that decides the ruling (A\* 0–3%) is unchanged.
+- [ ] [Review][Patch] **LOW, feature + acceptance. REWORK of row 6: "the only census reading that moves is the cage sweep's `frozen`" is false, and the gate already catches the near RED** [`proposal.md:255-257`, `epics.md:2889`].
+  - The two-wide sweep's counts move: boundaries 51,058 → 51,610, `claim_delivery` goal-checks 3.6M → 17.5M, `clearing_landing` cells 436k → 565k. Every cage-sweep counter moves too. Only the outcome lines stay equal.
+  - `pinned=false` is the exact comparison `main`'s `assert_eq!(frozen, ONE_LEVEL_ISLANDS)` makes, so the full gate fails under the near RED. That catch is incidental.
+  - Fix: no scenario **hash** sees it; the counts and `frozen` do; the gate's catch is incidental. 13.3's test is still required.
+- [ ] [Review][Patch] **LOW, acceptance. "Read them as a small real slowdown, not as noise" goes past the 6% rule in the same sentence** [`proposal.md:368-369`]. The two readings are dig-loop +4.3% and full-pile-crowd +3.2%. Fix: keep "weak evidence, beyond the bench floor" and drop the "real slowdown" clause.
+- [ ] [Review][Patch] **LOW, acceptance + feature. The 1,030 over-10 ms figure is credited to an uncommitted "review re-run"** [`proposal.md:371-372`]. The only committed 1,030 is in `timer-pile-memo.txt`, which is a different stack (p99 85.4, max 116.7). The tail line mixes three runs. Fix: name the committed source for each figure.
+- [ ] [Review][Patch] **LOW, acceptance. The File List was not updated by patch pass 1** [story § File List]. Missing:
+  - the five new patches;
+  - `census-16k.txt`, `census-squeeze-16k.txt`, `census-pile-memo-red-{key,near}.txt`, `instrument-red.txt`, `scale-hash-{base,pile-memo}.txt`;
+  - the UPDATE of `planning-artifacts/epics.md`.
+- [ ] [Review][Patch] **LOW, acceptance. 13.3 says "the six pile scenarios"** [`epics.md:2892`]. seat-slow is not a pile scenario. Use the proposal's wording, "the five pile layouts and seat-slow".
+- [ ] [Review][Patch] **LOW, feature. The epics name basis patches as if they apply to `main`** [`epics.md:2885`, `:2900`, `:2921`].
+  - `squeeze.patch` and `clamber.patch` fail `git apply --check` on bare `4f57027`.
+  - `pile-memo.patch` applies, but calls `counters::add`, which does not exist on `main`.
+  - Both REDs carry that line as context.
+  - Fix: one line saying these are C0-stack patches (census + counters), to be ported and their REDs re-expressed.
+- [ ] [Review][Patch] **LOW, feature. 13.4's #187 gate does not say how to run it on the 13.4 branch** [`epics.md:2907`; `census.sh:9` and `scale.sh:12` hardcode `BASE=4f57027`].
+  - `census-16k.patch` alone fails `main`'s pinned cage asserts at 16k.
+  - Fix: name the stack to hand-apply on the branch (`census` + `counters` + `census-16k`), and the C0 `unfinished=[]` it is compared against.
+- [ ] [Review][Patch] **LOW (latent silent-failure trap; frostvein exception), edge + acceptance + feature. Row 8's guards miss "block present, key absent", and `scale.sh`'s flag overclaims** [`census.sh:45-48`, `scale.sh:49-51`].
+  - `census.sh` on `counters` + `red-counters-no-emitter` prints the block with no `emitter:ticks` line, then `IDENTICAL`, and nothing else. AC 5's `shares=0` reading is blind there, and the script says nothing.
+  - `scale.sh` prints "every total above is blind" on the no-emitter RED, whose A\* and flood totals are real.
+  - Fix:
+    - `census.sh` prints `counters NAME NO EMITTER` when a counted block has no `emitter:ticks boundaries=`.
+    - `scale.sh`'s message names only the emitter totals as blind (`share_ticks`), or says "counters absent" when every total is 0.
+- [x] [Review][Defer] MISSING and COUNTERS MISSING print but never change either script's exit code [`census.sh:80`, `scale.sh` awk `END`] — deferred: item 8 asked for a printed flag, and no caller gates on these scripts' status
+- [x] [Review][Defer] `census.sh` arms MISSING only when a patch's basename is exactly `counters.patch` [`census.sh:18`] — deferred: every committed stack uses the canonical name
+- [x] [Review][Defer] The `scale.sh` digest sed matches single-digit run counts only, so `SCALE_RUNS>=10` prints raw `bench … run` lines [`scale.sh:41`] — deferred: the raw line still carries `state=` and `over10=`; nothing is hidden
+- [x] [Review][Defer] `13-5-…: backlog` is a plain board key, so a bare `create-story` would pick it after 13.4 [`sprint-status.yaml:2765`] — deferred: Wolf ruled (a), and the epic heading carries "*(only if ruled)*", which create-story reads ([[board-order-contradicts-ruling]] shape)
+- [x] [Review][Defer] Patch pass 1's "full gate green at `b3a4bf74` (3902 s)" has no pasted gate block, unlike Task 9 [story Change Log] — deferred: M3-4's one full gate at PR is the binding one, and it will be pasted
+
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
@@ -298,3 +367,4 @@ All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `
 | 2026-10-23 | **Wolf ruled the proposal** (four questions, each answered with the recommended option). Order as recommended: 13.3 pile-memo, 13.4 squeeze-past, 13.5 clamber-over only if ruled. Ruling 1: the swap is allowed, and 13.4 must clear the #187 sweep regression first. Ruling 2: clamber is decided after squeeze, once #207 is re-measured on 13.4. ADR 5 is amended as proposed (scope line in `docs/technical-preferences.md`). #159 waits for the M4 map size; #186/#187/#203/#204 get their own stories. Recorded in proposal § Ruling. |
 | 2026-10-23 | Full gate green at `18c56634` (6413 s). Status → review. |
 | 2026-10-24 | Review patch pass 1 (fresh session, Opus 5.5): 8/8 `[Review][Patch]` items landed in 5 commits (`739adfac`…`b3a4bf74`), each both-sides verified (closure table under Review Findings). Item 6 corrected its finding: the near RED is seen by the cage sweep's `frozen`, not by any scenario hash. Full gate green at `b3a4bf74` (`RUST_TEST_THREADS=1`, 3902 s). `git diff 4f57027 -- crates/` still empty. Status → review for round 2. Cost $11.78 / 192 turns. |
+| 2026-10-24 | Code review run 2 (fresh session, Opus 5.5) on `28162c85..2a074218`: 0 HIGH; closure rows 4 and 6 REWORK; 9 patch left as action items (Wolf), 5 deferred. The stopping rule fired: no round 3. Status → in-progress. |
