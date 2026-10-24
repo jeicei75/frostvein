@@ -41,11 +41,12 @@ for f in "$SIGNOFF"/scale/${SCALE_ONLY:-*}.json; do
   grep "^bench $name run " <<<"$out" | sed 's/.*run \([0-9]\)\/[0-9]:.* commands=\([0-9/]*\) mean=\([0-9.]*\) p99=\([0-9.]*\) max=\([0-9.]*\) over10=\([0-9]*\) state=\([0-9a-f]*\).*/run \1 commands=\2 mean=\3 p99=\4 max=\5 over10=\6 state=\7/'
   # Run 1's counters. A* nodes expanded and route_to_nearest cells popped are kept apart; flood
   # cells are every flood's visited cells; exhausted = A* calls that hit the node budget.
-  # boundaries=0 means the counters did not run (an absent key sums to 0), so it is flagged, not clean.
+  # An absent key sums to 0, so a missing block or a missing emitter is flagged, not read as clean.
   { grep "^counters $name run 1/$runs " <<<"$out" || true; } | awk '
     { kind = $5; sub(/:.*/, "", kind)
       for (i = 6; i <= NF; i++) { split($i, kv, "="); v[kind "." kv[1]] += kv[2] } }
     END { printf "totals astar_calls=%d astar_nodes=%d route_calls=%d route_cells=%d route_none=%d flood_cells=%d exhausted_astar=%d share_ticks=%d\n",
             v["astar.calls"], v["astar.nodes"], v["route.calls"], v["route.cells"], v["route.none"], v["flood.cells"], v["astar.budget"], v["emitter.shares"]
-          if (v["emitter.boundaries"] == 0) print "totals COUNTERS MISSING: boundaries=0, every total above is blind" }'
+          if (NR == 0) print "totals COUNTERS MISSING: no counters block, every total above is blind"
+          else if (v["emitter.boundaries"] == 0) print "totals NO EMITTER: boundaries=0, share_ticks is blind" }'
 done

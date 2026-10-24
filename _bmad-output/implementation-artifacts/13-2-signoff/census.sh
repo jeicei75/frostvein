@@ -41,6 +41,8 @@ for f in "$REPO"/scenarios/*.json; do
   run2=$(grep "^counters $name run 2/2 " <<<"$out" | sed 's| run 2/2||' || true)
   if [[ -n $run1 ]]; then
     echo "$run1"
+    # A block without the share emitter's line leaves AC 5's shares=0 reading blind.
+    grep -q "^counters $name emitter:ticks boundaries=" <<<"$run1" || echo "counters $name NO EMITTER"
     [[ $run1 == "$run2" ]] && echo "counters $name IDENTICAL across 2 runs" || echo "counters $name DIFFER across 2 runs"
   elif [[ $counted = 1 ]]; then
     # counters.patch is in the stack but this scenario printed no block: a blind reading, not a clean one.
