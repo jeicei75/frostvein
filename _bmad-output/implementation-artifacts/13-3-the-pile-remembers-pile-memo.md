@@ -111,6 +111,8 @@ What the layers re-ran: all five `13-3.sh` rows and `12-9.sh` row 20, applied by
 - [x] [Review][Defer] Test fixtures assign `Terrain.tiles` directly, bypassing `set_tile` [crates/sim-core/src/lib.rs:5290, :5369, :5446, :6862] — deferred, pre-existing (blind + feature + acceptance, read). The memo widens the `open` cache's existing exposure: a future test that rewrites `.tiles` after a `pile_targets` call reads a stale answer. No current instance (each writes before any tick); production writes go through `set_tile` only.
 - [x] [Review][Defer] `launch-gui.ps1` accepts a non-hex stamp that git resolves [scripts/launch-gui.ps1:212] — deferred, unreachable from `build.rs` (edge, RAN git): `gui build HEAD` or `main` resolves and verifies; a stamp starting with `-` (not `-dirty`) reaches git as an option. `build.rs` emits only hex, `unknown` or a suffixed hex form, so only a hand-faked binary gets there. Guard if ever needed: `$stamp -notmatch '^[0-9a-f]{4,40}$'`.
 
+Cost: review row $15.76 (276 turns; 4 subagents 71.0% of tokens). Reap after triage: 15 /tmp directories, 16.4 GB (11.8 GB free space reclaimed).
+
 Dismissed (5): hit-path key build + clone cost (blind; the story's own NOTE and scope guardrail); one-entry memo thrash between the two callers (blind; measured 99.9% hits); a refused channel cut drops the memo with terrain unchanged (feature; cost only, 1-49 drops per run); the scale headline exists only through the throwaway `scale.patch` (feature; by design, M2-26); the scale tail is load-sensitive (acceptance; the record already says the tail does not fit).
 
 ## Verification
