@@ -167,6 +167,8 @@ simd --bench _bmad-output/implementation-artifacts/13-2-signoff/scale/scale-128-
 
 ### Agent Model Used
 
+Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating (Wolf, 2026-10-25).
+
 ### Debug Log References
 
 ### Completion Notes List
