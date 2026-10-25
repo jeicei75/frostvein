@@ -1,0 +1,276 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 675f0a25..21aec9ea 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -563,6 +563,7 @@ fn claim_jobs(
+         .collect();
+     // Emitters plus every uncarried item (#162): items block claim-time reachability like fires.
+     let blocked = blocked_cells(emitters.iter().chain(items.values()));
++    terrain.conn_sync(&blocked, &emitters.iter().copied().collect());
+     // One budget per dwarf, indexed like the sorted `dwarves`.
+     let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];
+     // Walkable components that a COMPLETED failed search has already flooded this call (#132).
+@@ -707,6 +708,7 @@ struct Terrain {
+     tiles: Vec<Tile>,
+     dirty: BTreeSet<Pos>,
+     pile_ground: Mutex<PileGround>,
++    conn: Mutex<Connectivity>,
+ }
+ 
+ /// The ground `pile_targets`' entrance floods have classified, kept for the zones it was found
+@@ -718,6 +720,25 @@ struct PileGround {
+     open: BTreeMap<Pos, bool>,
+ }
+ 
++/// 13.2 prototype: a component id per walkable cell over `astar_neighbours`' rule with `key` closed,
++/// labelled lazily one component at a time. `FV_CONN` = off | t (terrain + emitters, the default)
++/// | i (terrain + emitters + items).
++#[derive(Default)]
++struct Connectivity {
++    key: BTreeSet<Pos>,
++    comp: BTreeMap<Pos, u32>,
++    sizes: Vec<u32>,
++}
++
++fn conn_mode() -> u8 {
++    static MODE: std::sync::OnceLock<u8> = std::sync::OnceLock::new();
++    *MODE.get_or_init(|| match std::env::var("FV_CONN").as_deref() {
++        Ok("off") => 0,
++        Ok("i") => 2,
++        _ => 1,
++    })
++}
++
+ impl Terrain {
+     fn tile(&self, p: Pos) -> Option<Tile> {
+         if p.x < 0
+@@ -746,6 +767,7 @@ impl Terrain {
+             .expect("nothing panics holding the pile ground")
+             .open
+             .clear();
++        self.conn_clear("rebuild_tile");
+         true
+     }
+ 
+@@ -761,6 +783,136 @@ impl Terrain {
+             .collect()
+     }
+ 
++    /// 13.2 connectivity map: drop every label (a tile changed). Counts only a drop that threw labels away.
++    fn conn_clear(&mut self, why: &'static str) {
++        let conn = self.conn.get_mut().expect("nothing panics holding the map");
++        if !conn.comp.is_empty() {
++            counters::add("conn", "map", why, 1);
++            counters::add("conn", "map", "cells_dropped", conn.comp.len() as u64);
++        }
++        conn.comp.clear();
++        conn.sizes.clear();
++    }
++
++    /// Point the map at the world's blocked cells: variant I keys it on terrain + emitters + items,
++    /// variant T on terrain + emitters. A changed key drops the labels.
++    fn conn_sync(&self, blocked: &BTreeSet<Pos>, emitters: &BTreeSet<Pos>) {
++        let mode = conn_mode();
++        if mode == 0 {
++            return;
++        }
++        let key = if mode == 2 { blocked } else { emitters };
++        let mut conn = self.conn.lock().expect("nothing panics holding the map");
++        if conn.key != *key {
++            if !conn.comp.is_empty() {
++                counters::add("conn", "map", "rebuild_key", 1);
++                counters::add("conn", "map", "cells_dropped", conn.comp.len() as u64);
++            }
++            conn.key = key.clone();
++            conn.comp.clear();
++            conn.sizes.clear();
++        }
++    }
++
++    /// Label `from`'s whole component under the map's key (once), and return its id.
++    /// `None` when the map cannot speak: off, key not inside `blocked`, or `from` not walkable.
++    fn conn_label(&self, conn: &mut Connectivity, blocked: &BTreeSet<Pos>, from: Pos) -> Option<u32> {
++        if conn_mode() == 0 {
++            return None;
++        }
++        if !conn.key.is_subset(blocked) {
++            counters::add("conn", "map", "skipped_not_subset", 1);
++            return None;
++        }
++        if let Some(&id) = conn.comp.get(&from) {
++            return Some(id);
++        }
++        if !is_walkable(self, &conn.key, from) {
++            return None;
++        }
++        let id = conn.sizes.len() as u32;
++        let key = std::mem::take(&mut conn.key);
++        let mut queue = VecDeque::from([from]);
++        conn.comp.insert(from, id);
++        let mut size = 0_u32;
++        while let Some(cell) = queue.pop_front() {
++            size += 1;
++            for next in astar_neighbours(self, &key, cell) {
++                if let std::collections::btree_map::Entry::Vacant(slot) = conn.comp.entry(next) {
++                    slot.insert(id);
++                    queue.push_back(next);
++                }
++            }
++        }
++        conn.key = key;
++        conn.sizes.push(size);
++        counters::add("conn", "map", "floods", 1);
++        counters::add("conn", "map", "cells", u64::from(size));
++        Some(id)
++    }
++
++    /// True when `from` and every goal lie in different components of the map: no path, whatever
++    /// else blocks (a superset of the key only closes more). Never answers "reachable".
++    fn conn_unreachable(&self, blocked: &BTreeSet<Pos>, from: Pos, goals: &BTreeSet<Pos>) -> bool {
++        let mut conn = self.conn.lock().expect("nothing panics holding the map");
++        let caller = counters::caller();
++        let Some(id) = self.conn_label(&mut conn, blocked, from) else {
++            counters::add("conn", caller, "silent", 1);
++            return false;
++        };
++        if goals.iter().any(|goal| conn.comp.get(goal) == Some(&id)) {
++            counters::add("conn", caller, "passed", 1);
++            return false;
++        }
++        counters::add("conn", caller, "answered", 1);
++        true
++    }
++
++    /// Probe for the one-question guard (counts only, variant I): at a `walls_in_a_dwarf` call, is some
++    /// dwarf ALREADY outside the largest component any dwarf stands in? Then "does every dwarf reach
++    /// the others" is false before the cell is even closed.
++    fn conn_probe_level(&self, blocked: &BTreeSet<Pos>, dwarves: &BTreeSet<Pos>) {
++        if conn_mode() != 2 {
++            return;
++        }
++        let mut conn = self.conn.lock().expect("nothing panics holding the map");
++        if conn.key != *blocked {
++            counters::add("conn", "guard", "silent", 1);
++            return;
++        }
++        let ids: Vec<Option<u32>> = dwarves
++            .iter()
++            .map(|dwarf| self.conn_label(&mut conn, blocked, *dwarf))
++            .collect();
++        let largest = ids
++            .iter()
++            .flatten()
++            .max_by_key(|id| (conn.sizes[**id as usize], std::cmp::Reverse(**id)))
++            .copied();
++        let split = ids.iter().any(|id| *id != largest);
++        counters::add("conn", "guard", if split { "already_split" } else { "whole" }, 1);
++    }
++
++    /// Variant I only, and only when `blocked` IS the key: `pos`'s component is bigger than `cap`,
++    /// so a flood from `pos` over `blocked` would run past it.
++    fn conn_pocket_too_big(&self, blocked: &BTreeSet<Pos>, pos: Pos, cap: usize) -> bool {
++        if conn_mode() != 2 {
++            return false;
++        }
++        let mut conn = self.conn.lock().expect("nothing panics holding the map");
++        if conn.key != *blocked {
++            counters::add("conn", "caging", "silent", 1);
++            return false;
++        }
++        let Some(id) = self.conn_label(&mut conn, blocked, pos) else {
++            counters::add("conn", "caging", "silent", 1);
++            return false;
++        };
++        let big = conn.sizes[id as usize] as usize > cap;
++        counters::add("conn", "caging", if big { "answered" } else { "small" }, 1);
++        big
++    }
++
+     fn is_standable(&self, p: Pos) -> bool {
+         matches!(self.tile(p), Some(Tile::Empty))
+             && matches!(
+@@ -969,6 +1121,7 @@ fn walls_in_a_dwarf(
+     cell: Pos,
+ ) -> bool {
+     counters::add("calls", "walls_in_a_dwarf", "calls", 1);
++    terrain.conn_probe_level(blocked, dwarves);
+     let sides = sides_of(terrain, blocked, cell);
+     let mut closed = blocked.clone();
+     closed.insert(cell);
+@@ -1178,6 +1331,9 @@ fn astar_with_budget_inner(
+     if goals.is_empty() {
+         return (None, false, BTreeSet::new());
+     }
++    if terrain.conn_unreachable(blocked, from, goals) {
++        return (None, false, BTreeSet::new());
++    }
+     let mut open = BinaryHeap::from([Reverse((astar_heuristic(from, goals), from))]);
+     let mut came_from = BTreeMap::new();
+     let mut costs = BTreeMap::from([(from, 0_u32)]);
+@@ -1911,6 +2067,9 @@ fn caging_stone(
+ ) -> Option<u32> {
+     const CAGE_CELLS: usize = 64;
+     counters::add("flood", "caging_stone", "calls", 1);
++    if terrain.conn_pocket_too_big(blocked, pos, CAGE_CELLS) {
++        return None;
++    }
+     // The cells reachable from `pos`, or `None` once there are more than `CAGE_CELLS`.
+     let pocket = |closed: &BTreeSet<Pos>| {
+         counters::add("flood", "caging_stone", "pockets", 1);
+@@ -2067,6 +2226,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+         let carrying = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0);
+         let stones = uncarried_stones(ecs);
+         let blocked = blocked_cells(emitters.iter().chain(stones.values()));
++        ecs.resource::<Terrain>()
++            .conn_sync(&blocked, &emitters.iter().copied().collect());
+         // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
+         // designation and claim stay his own job through lift, carry and set-down.
+         let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {
+@@ -2778,6 +2939,7 @@ fn assemble(
+         tiles,
+         dirty: BTreeSet::new(),
+         pile_ground: Mutex::default(),
++        conn: Mutex::default(),
+     });
+     let mut schedule = Schedule::default();
+     schedule.add_systems(
+@@ -3771,6 +3933,7 @@ mod tests {
+             tiles,
+             dirty: BTreeSet::new(),
+             pile_ground: Default::default(),
++            conn: Default::default(),
+         }
+     }
+ 
+@@ -3786,6 +3949,7 @@ mod tests {
+             ],
+             dirty: BTreeSet::new(),
+             pile_ground: Default::default(),
++            conn: Default::default(),
+         };
+ 
+         assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
+@@ -4442,6 +4606,7 @@ mod tests {
+             tiles,
+             dirty: BTreeSet::new(),
+             pile_ground: Default::default(),
++            conn: Default::default(),
+         };
+         let stone = Pos { x: 1, y: 0, z: 2 };
+         let pit = Pos { x: 2, y: 0, z: 1 };
+@@ -5774,6 +5939,7 @@ mod tests {
+             tiles: vec![Tile::Empty; 6],
+             dirty: BTreeSet::new(),
+             pile_ground: Default::default(),
++            conn: Default::default(),
+         };
+         terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
+         terrain.tiles[super::worldgen::index(dims, 1, 0, 1)] = Tile::Solid(Material::Stone);
+@@ -5800,6 +5966,7 @@ mod tests {
+             tiles: vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize],
+             dirty: BTreeSet::new(),
+             pile_ground: Default::default(),
++            conn: Default::default(),
+         };
+         let heights = [
+             ((0, 0), 3),

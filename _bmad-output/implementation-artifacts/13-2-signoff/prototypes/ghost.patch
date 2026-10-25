@@ -1,0 +1,15 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 904bb0b1..9f90f2db 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1198,7 +1198,9 @@ fn astar(
+ /// part of `blocked_cells`/`is_walkable`: those are static terrain-and-fire rules that A* and
+ /// claim-time reachability both read, and a dwarf moves within a system call.
+ fn dwarf_tiles<'a>(positions: impl Iterator<Item = &'a Pos>) -> BTreeSet<Pos> {
+-    positions.cloned().collect()
++    // GHOST PROBE (13.2 census RED): no dwarf ever blocks another. Throwaway; not a prototype.
++    let _ = positions;
++    BTreeSet::new()
+ }
+ 
+ /// Breadth-first from `from` (not itself a candidate) over the tiles `astar_neighbours` allows

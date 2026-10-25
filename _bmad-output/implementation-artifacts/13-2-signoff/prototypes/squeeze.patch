@@ -1,0 +1,182 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 675f0a25..63087225 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -42,6 +42,12 @@ const WANDER_REST_TICKS: u32 = 10;
+ /// gait cycles a second, under two frames per cycle at 60 fps. The legs aliased into a blur and
+ /// the figure read as sliding.
+ const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
++/// 13.2 squeeze-past: how many ticks a holder has been stuck behind one blocker before the two
++/// swap. One step period: the holder's second look at the same blocker (a blocked dwarf looks
++/// once per `STEP_REST_TICKS`).
++const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
++/// Variant switch: head-on movers swap before the escape ladder (true), or only where it would wait (false).
++const SQUEEZE_HEAD_ON_MOVERS: bool = true;
+ pub const MAX_DESIGNATIONS: usize = 4096;
+ const MAX_ASTAR_NODES: usize = 50_000;
+ /// Ticks of work a hauler spends picking a stone up, and again putting it down.
+@@ -1682,6 +1688,62 @@ fn closed_to_dwarves(
+     closed
+ }
+ 
++/// 13.2 squeeze-past. The ladder in `resolve_blocked_step` found no way for the holder to pass, and
++/// the blocker is idle or head-on (its path starts on the holder's tile). After `SQUEEZE_WAIT_TICKS`
++/// of the same stand-off the two trade tiles in this one call (the squeeze), so no tick boundary
++/// has two on a tile. Both rest a step period, as after any step. Returns `true` when it swapped:
++/// the holder's `path` is already advanced and its `Pos` set, so the caller must report "wait"
++/// (`false`), which stores the path and the rest period and leaves `occupied` as it is (the same
++/// two tiles stay taken).
++fn try_squeeze(
++    ecs: &mut EcsWorld,
++    (holder_id, pos): (Id, Pos),
++    path: &mut Vec<Pos>,
++    (blocker_id, blocker): (Id, Entity),
++    idle: bool,
++    blocker_path: &[Pos],
++) -> bool {
++    let next = path[0];
++    let now = ecs.resource::<Tick>().0;
++    let mut squeeze = ecs.resource_mut::<Squeeze>();
++    let first = match squeeze.0.get(&holder_id) {
++        Some(&(who, first, last))
++            if who == blocker_id && now - last <= 2 * u64::from(STEP_REST_TICKS) =>
++        {
++            first
++        }
++        _ => now,
++    };
++    if now - first < SQUEEZE_WAIT_TICKS {
++        squeeze.0.insert(holder_id, (blocker_id, first, now));
++        return false;
++    }
++    squeeze.0.remove(&holder_id);
++    let holder = ecs
++        .iter_entities()
++        .find(|entity| entity.get::<Id>() == Some(&holder_id))
++        .map(|entity| entity.id())
++        .expect("the holder is a dwarf");
++    *ecs.get_mut::<Pos>(holder)
++        .expect("every dwarf has a position") = next;
++    *ecs.get_mut::<Pos>(blocker)
++        .expect("every dwarf has a position") = pos;
++    path.remove(0);
++    let mut wander = ecs.get_mut::<Wander>(blocker).expect("every dwarf wanders");
++    wander.cooldown = STEP_REST_TICKS;
++    if idle {
++        wander.home = pos;
++    }
++    if idle || blocker_path.len() <= 1 {
++        ecs.entity_mut(blocker).remove::<Path>();
++    } else {
++        ecs.entity_mut(blocker)
++            .insert(Path(blocker_path[1..].to_vec()));
++    }
++    counters::add("squeeze", "swap", "n", 1);
++    true
++}
++
+ /// #185: the idle blocker on the holder's path has no way out because idle dwarves are lined up
+ /// behind it in a one-wide passage. Searches through the idle dwarves (never the holder, never a
+ /// dwarf with a job) for the nearest free tile off the holder's path, and sends the idle dwarf
+@@ -1804,6 +1866,15 @@ fn resolve_blocked_step(
+                 !occupied.contains(&tile) && !holder_tiles.contains(&tile)
+             })
+         }) else {
++            // 13.2: no way out for the idle blocker: squeeze past after the wait.
++            try_squeeze(
++                ecs,
++                (holder_id, pos),
++                path,
++                (blocker_id, blocker),
++                true,
++                &blocker_path,
++            );
+             return false;
+         };
+         blocker_path = route.clone();
+@@ -1811,6 +1882,14 @@ fn resolve_blocked_step(
+     }
+     if !head_on(&blocker_path) {
+         if idle {
++            try_squeeze(
++                ecs,
++                (holder_id, pos),
++                path,
++                (blocker_id, blocker),
++                true,
++                &blocker_path,
++            );
+             return false;
+         }
+         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
+@@ -1822,6 +1901,19 @@ fn resolve_blocked_step(
+         return true;
+     }
+ 
++    // 13.2: two head-on movers (the blocker holds a job) trade tiles after the wait, instead of one
++    // of them escaping down the line.
++    if SQUEEZE_HEAD_ON_MOVERS && !idle {
++        try_squeeze(
++            ecs,
++            (holder_id, pos),
++            path,
++            (blocker_id, blocker),
++            false,
++            &blocker_path,
++        );
++        return false;
++    }
+     let blocker_tiles: BTreeSet<Pos> = blocker_path.iter().copied().collect();
+     let (holder_escape, blocker_escape) = {
+         let terrain = ecs.resource::<Terrain>();
+@@ -1855,19 +1947,19 @@ fn resolve_blocked_step(
+         // keeping it would hold the idle dwarf still forever. The next blocked step derives a
+         // fresh one.
+         (None, None) => {
+-            // #194, #196 (idle blocker or not): the holder backs out past the dwarves behind it
+-            // (never the blocker) to the nearest free tile off the blocker's way out, and waits
+-            // for them to yield.
+-            let mut closed = blocked.clone();
+-            closed.insert(next);
+-            counters::at("resolve_back_out");
+-            let back_out = route_to_nearest(ecs.resource::<Terrain>(), &closed, pos, |tile| {
+-                !occupied.contains(&tile) && !blocker_tiles.contains(&tile)
+-            });
+-            if let Some(back_out) = back_out {
+-                *path = back_out;
++            // 13.2: head-on, neither can step off: squeeze past after the wait, instead of the
++            // holder backing out.
++            if try_squeeze(
++                ecs,
++                (holder_id, pos),
++                path,
++                (blocker_id, blocker),
++                idle,
++                &blocker_path,
++            ) {
+                 return false;
+             }
++            // The wait stands in for the back-out. #183: an idle blocker's exit `Path` is dropped.
+             if idle {
+                 ecs.entity_mut(blocker).remove::<Path>();
+             }
+@@ -2729,6 +2821,11 @@ fn wander(
+     }
+ }
+ 
++/// 13.2 squeeze-past: per holder, (blocker id, first tick, last tick) of the current stuck spell.
++/// Throwaway: not saved, not hashed.
++#[derive(Resource, Default)]
++struct Squeeze(BTreeMap<Id, (Id, u64, u64)>);
++
+ #[derive(Resource, Default)]
+ struct IdAllocator {
+     next: u32,
+@@ -2765,6 +2862,7 @@ fn assemble(
+ ) -> World {
+     let mut ecs = EcsWorld::new();
+     ecs.insert_resource(Tick(tick));
++    ecs.insert_resource(Squeeze::default());
+     ecs.insert_resource(Seed(seed));
+     ecs.insert_resource(WanderRng(wander_rng));
+     ecs.insert_resource(ids);

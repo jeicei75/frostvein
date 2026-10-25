@@ -484,6 +484,7 @@ Wolf starts a fresh world and can tell his five dwarves apart by name and colour
 It opens with groundwork from the M3-close retro (`epic-12-retro-2026-10-21.md` §4, §8). The movement layer is ad-hoc: reachability is recomputed per question, and four local wall-in guards conflict. No instrument measures sim cost, so cost regressions shipped with every test green. 13.1 builds the instrument, and 13.2 uses it to decide the movement layer.
 **FRs covered:** none yet; the M4 PRD adds them. The action items M3-2 (#210) and M3-1 (#209) are covered.
 **Order constraints:** 13.1 before 13.2, because the spike measures with the bench. 13.2 runs in parallel with the M4 PRD draft and uses the draft's scale numbers (dwarf count, map size, terrain-change rate). The PRD is final only after Wolf rules on 13.2's proposal.
+**Movement stories (13.2 ruling, 2026-10-23):** 13.3 pile-memo, then 13.4 squeeze-past, then 13.5 clamber-over only if ruled after 13.4.
 
 ---
 
@@ -2871,3 +2872,58 @@ So that M4 builds on a movement layer that is fixed as a whole, not one cage sha
 **Given** the end of the spike,
 **Then** it delivers a proposal with numbers. Wolf rules on it before any movement story is written and before the M4 PRD is final. The prototypes are throwaway.
 
+### Story 13.3: The Pile Remembers — pile-memo
+
+As the boss,
+I want `pile_targets` to keep its last answer until something it reads changes,
+So that a pile scenario's tick is no longer mostly one function, and a 200-dwarf crew's **mean** tick fits the budget on today's map (13.2 measured 20.8 ms mean at 128² crew 200; its tail does not fit: p99 97.1 ms, max 134 ms).
+
+Wolf ruled the 13.2 proposal on 2026-10-23: this is first, and it needs no rule change (13.2 `proposal.md` § Recommendation item 1, § Ruling).
+
+**Acceptance Criteria:**
+
+**Given** 13.2's `prototypes/pile-memo.patch` (the answer kept, keyed on the blocked cells among the zones and their side neighbours, and dropped by `set_tile` and a zones change),
+**Then** it lands as real code. The patch and its two REDs are 13.2 C0-stack patches (`census` + `counters` + the patch, on `4f57027`): they call `counters::add`, which `main` lacks, so they are ported, not applied, and the REDs are re-expressed against the real code. Every committed scenario's state hash and the cage-sweep lists equal `main`'s, because it changes no outcome.
+
+**Given** the memo's key,
+**Then** a test puts a blocked cell on a **non-zone side neighbour** of the pile and gets the fresh answer. It kills both of 13.2's committed REDs, `pile-memo-red-key-ignores-blocked.patch` and `pile-memo-red-near-zone-only.patch`. No scenario **hash** sees the second one: all 10 state hashes stay equal. The counts see it, and of the outcome readings only the cage sweep's `frozen` list moves, which `main`'s pinned assert catches only incidentally (13.2 `census-pile-memo-red-near.txt`, `proposal.md` § Prototypes item 4).
+
+**Given** 13.1's bench,
+**Then** the tick-bench against `main` reproduces 13.2's expected cost on the same scenarios. The five pile layouts and seat-slow fall about 55–91%, and the story reports the other four (deep-pit, dig-loop, full-pile-crowd, stuck-tunnel) as measured, not as noise. At 128² crew 200 it reports the p99 and max beside the mean.
+
+### Story 13.4: Squeeze Past — Two Dwarves Trade Tiles
+
+As the boss,
+I want a dwarf held up by another in a one-wide way to trade tiles with him after a short wait,
+So that the seat freeze (#206) and the boxed-in hauler (#189) stop happening, without giving up one dwarf per tile.
+
+Wolf ruled the 13.2 proposal on 2026-10-23 (Ruling 1): the swap is allowed, with 13.2's `prototypes/squeeze.patch` (variant B) as the basis. It is a C0-stack patch (it applies only on `4f57027` + `census` + `counters`), so it is ported, not applied, and its REDs are re-expressed. It comes after 13.3.
+
+**Task 0 question (code review of 13.2, Wolf 2026-10-24):** `squeeze.patch` also swaps an **idle blocker with no way out** after the wait, and moves his `home` to the holder's old tile (`proto-squeeze.md` § Rule departures item 5). Ruling 1 did not cover that, so Wolf rules on it before dev.
+
+**Acceptance Criteria:**
+
+**Given** the cage sweep `no_dwarf_is_caged_by_stones_over_the_probe_seeds`,
+**Then** the #187 regression is cleared before the story lands. On 13.2's `census-16k.patch` stack, squeeze leaves `[(0,4,1),(6,6,1),(9,6,1),(13,6,1)]` unfinished at 16,000 ticks where C0 (`main` plus the counters) leaves `[]`, and the landed swap must not. `census.sh` cannot run it on this branch (it hardcodes `BASE=4f57027`), and `census-16k.patch` alone fails the pinned cage asserts at 16k, so hand-apply 13.2's `census.patch` + `counters.patch` + `census-16k.patch` on the branch, run `cargo test --release -p sim-core --test scenario no_dwarf_is_caged_by_stones_over_the_probe_seeds -- --nocapture`, and compare its `census cage unfinished=` line with C0's `[]` (13.2 `census-16k.txt`).
+
+**Given** the swap,
+**Then** no two dwarves stand on one tile at any tick boundary. `step_and_watch` and the 4 lib tests that pin "no swap" are rewritten to accept a swap and still fail on a shared tile.
+
+**Given** the reproducers,
+**Then** #206's save finishes (marks 3 → 0) and #189's pile fills (24/24), and #207 is re-measured on top of the swap for Story 13.5's ruling.
+
+### Story 13.5: Clamber Over — a Dwarf May Step onto a Stone *(only if ruled)*
+
+As the boss,
+I want a dwarf to be able to step onto a loose stone at a planner cost,
+So that haulers no longer fill a pocket's only way out (#207).
+
+Wolf ruled the 13.2 proposal on 2026-10-23 (Ruling 2): **decide after squeeze.** #207 is re-measured on top of 13.4, and this story is written only if Wolf then rules that a dwarf may stand on a stone. Its basis is 13.2's `prototypes/clamber.patch` (step cost 4), a C0-stack patch (it applies only on `4f57027` + `census` + `counters`), ported rather than applied.
+
+**Acceptance Criteria:**
+
+**Given** Wolf's ruling after 13.4,
+**Then** the story either lands clamber-over or is dropped, and the ruling is recorded here.
+
+**Given** clamber-over lands,
+**Then** emitters stay blocking, no item-placing writer puts a stone on a dwarf (the cage sweep's `landed` stays empty), and the gui draws a dwarf standing on a stone.

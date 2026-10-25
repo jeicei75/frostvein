@@ -1,0 +1,302 @@
+census stack: 4f57027
+census   + census.patch a0f22d82
+census   + counters.patch 92c9db9f
+census   + pile-memo.patch 7c651e14
+census   + pile-memo-red-key-ignores-blocked.patch 91fc780a
+warning: field `near` is never read
+   --> crates/sim-core/src/lib.rs:721:5
+    |
+716 | struct PileGround {
+    |        ---------- field in this struct
+...
+721 |     near: BTreeSet<Pos>,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `near` is never read
+   --> crates/sim-core/src/lib.rs:721:5
+    |
+716 | struct PileGround {
+    |        ---------- field in this struct
+...
+721 |     near: BTreeSet<Pos>,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+== reproducers (simd --bench FILE --runs 2; scenarios of /workspace/projects/frostvein)
+bench big-pile end tick=5006 marks=15 items=31 zones=518 goals=0/2/0
+big-pile state=2dc79c9310889aa7
+counters big-pile astar:claim_delivery calls=301 empty=267 found=34 goal_checks=596 nodes=137
+counters big-pile astar:claim_goals calls=340 empty=271 found=66 goal_checks=104912 nodes=50059 nopath=3
+counters big-pile astar:clearing_kept_landing calls=2429 found=2429 goal_checks=33089 nodes=13730
+counters big-pile astar:execute_replan calls=188 found=187 goal_checks=46604 nodes=20321 nopath=1
+counters big-pile astar:resolve_reroute calls=19 found=18 goal_checks=33997 nodes=16580 nopath=1
+counters big-pile calls:closes_last_level_exit calls=2804
+counters big-pile calls:walls_in_a_dwarf calls=479
+counters big-pile emitter:ticks boundaries=5006 shares=0 swaps=0
+counters big-pile flood:caging_stone calls=5586 cells=253388 pockets=5622
+counters big-pile flood:nearest_free_cell calls=82 cells=562
+counters big-pile flood:pile_targets cache_misses=45 calls=67411 cells=113 memo_hits=67380
+counters big-pile flood:stranded calls=763 cells=5090
+counters big-pile route:clearing_landing calls=80 cells=509 found=80
+counters big-pile route:resolve_blocker_escape calls=13 cells=13 found=13
+counters big-pile route:resolve_holder_escape calls=13 cells=14 found=13
+counters big-pile IDENTICAL across 2 runs
+bench deep-pit end tick=3000 marks=1 items=24 zones=22 goals=0/0/0
+deep-pit state=2bf29c7c24897c6a
+counters deep-pit astar:claim_delivery calls=239 empty=200 found=39 goal_checks=2378 nodes=114
+counters deep-pit astar:claim_goals calls=87 empty=8 found=79 goal_checks=4065 nodes=477
+counters deep-pit astar:clearing_kept_landing calls=188 found=188 goal_checks=1627 nodes=501
+counters deep-pit astar:execute_replan calls=94 empty=2 found=92 goal_checks=7725 nodes=537
+counters deep-pit astar:resolve_reroute calls=39 found=22 goal_checks=1188765 nodes=224730 nopath=17
+counters deep-pit calls:closes_last_level_exit calls=299
+counters deep-pit calls:walls_in_a_dwarf calls=104
+counters deep-pit calls:walls_in_a_dwarf_from calls=48
+counters deep-pit emitter:ticks boundaries=3000 shares=0 swaps=0
+counters deep-pit flood:caging_stone calls=3389 cells=158405 pockets=3389
+counters deep-pit flood:nearest_free_cell calls=40 cells=123
+counters deep-pit flood:pile_targets cache_misses=284 calls=14098 cells=284 memo_hits=14050
+counters deep-pit flood:stranded calls=159 cells=939
+counters deep-pit route:clearing_landing calls=16 cells=32133 found=14 none=2
+counters deep-pit route:resolve_blocker_escape calls=7 cells=7 found=7
+counters deep-pit route:resolve_holder_escape calls=7 cells=8 found=7
+counters deep-pit IDENTICAL across 2 runs
+bench dig-loop end tick=17640 marks=11 items=44 zones=21 goals=0/0/0
+dig-loop state=ab78f0f971e0326f
+counters dig-loop astar:claim_delivery calls=22491 empty=22491 goal_checks=0 nodes=0
+counters dig-loop astar:claim_goals calls=455 empty=237 found=106 goal_checks=161276 nodes=80428 nopath=112
+counters dig-loop astar:clearing_kept_landing calls=97 found=97 goal_checks=833 nodes=373
+counters dig-loop astar:execute_replan calls=7 found=6 goal_checks=210 nodes=57 nopath=1
+counters dig-loop calls:closes_last_level_exit calls=121
+counters dig-loop calls:walls_in_a_dwarf calls=42
+counters dig-loop calls:walls_in_a_dwarf_from calls=10
+counters dig-loop emitter:ticks boundaries=10000 shares=0 swaps=0
+counters dig-loop flood:caging_stone calls=9727 cells=203434 pockets=44612
+counters dig-loop flood:nearest_free_cell calls=1414 cells=2852
+counters dig-loop flood:pile_targets calls=22682 memo_hits=22669
+counters dig-loop flood:stranded calls=75 cells=432
+counters dig-loop route:clearing_landing calls=4 cells=26 found=4
+counters dig-loop route:make_room calls=1 cells=2 none=1
+counters dig-loop route:resolve_back_out calls=1577 cells=1577 none=1577
+counters dig-loop route:resolve_back_up calls=1 cells=2 none=1
+counters dig-loop route:resolve_blocker_escape calls=1577 cells=1577 none=1577
+counters dig-loop route:resolve_exit calls=1 cells=2 none=1
+counters dig-loop route:resolve_holder_escape calls=1577 cells=1577 none=1577
+counters dig-loop IDENTICAL across 2 runs
+bench full-pile-crowd end tick=10006 marks=0 items=46 zones=4 goals=0/0/0
+full-pile-crowd state=d5df18c3332cc72e
+counters full-pile-crowd astar:claim_delivery calls=26869 empty=26862 found=7 goal_checks=433 nodes=15
+counters full-pile-crowd astar:claim_goals calls=467 empty=411 found=53 goal_checks=99762 nodes=48975 nopath=3
+counters full-pile-crowd astar:clearing_kept_landing calls=3999 found=3999 goal_checks=109173 nodes=43006
+counters full-pile-crowd astar:execute_replan calls=159 empty=2 found=156 goal_checks=50651 nodes=20102 nopath=1
+counters full-pile-crowd astar:resolve_reroute calls=3 found=2 goal_checks=32554 nodes=16073 nopath=1
+counters full-pile-crowd calls:closes_last_level_exit calls=4352
+counters full-pile-crowd calls:walls_in_a_dwarf calls=632
+counters full-pile-crowd emitter:ticks boundaries=10006 shares=0 swaps=0
+counters full-pile-crowd flood:caging_stone calls=8328 cells=392283 pockets=8346
+counters full-pile-crowd flood:nearest_free_cell calls=91 cells=1465
+counters full-pile-crowd flood:pile_targets cache_misses=33 calls=37106 cells=47 memo_hits=37060
+counters full-pile-crowd flood:stranded calls=1120 cells=9108
+counters full-pile-crowd route:clearing_landing calls=91 cells=1354 found=91
+counters full-pile-crowd route:resolve_blocker_escape calls=11 cells=84 found=2 none=9
+counters full-pile-crowd route:resolve_exit calls=9 cells=22 found=9
+counters full-pile-crowd route:resolve_holder_escape calls=11 cells=20 found=11
+counters full-pile-crowd IDENTICAL across 2 runs
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/3/0
+plan-compact-piles state=9ad925fe3c90b789
+counters plan-compact-piles astar:claim_delivery calls=58 found=58 goal_checks=5604 nodes=89
+counters plan-compact-piles astar:claim_goals calls=442 empty=330 found=107 goal_checks=186096 nodes=84697 nopath=5
+counters plan-compact-piles astar:clearing_kept_landing calls=3353 found=3353 goal_checks=51081 nodes=21952
+counters plan-compact-piles astar:execute_replan calls=294 found=293 goal_checks=193359 nodes=22739 nopath=1
+counters plan-compact-piles astar:resolve_reroute calls=8 found=6 goal_checks=35814 nodes=16098 nopath=2
+counters plan-compact-piles calls:closes_last_level_exit calls=3889
+counters plan-compact-piles calls:walls_in_a_dwarf calls=795
+counters plan-compact-piles emitter:ticks boundaries=10006 shares=0 swaps=0
+counters plan-compact-piles flood:caging_stone calls=7802 cells=357869 pockets=7844
+counters plan-compact-piles flood:nearest_free_cell calls=102 cells=834
+counters plan-compact-piles flood:pile_targets cache_hits=2646 cache_misses=1666 calls=272344 cells=15582 memo_hits=272295
+counters plan-compact-piles flood:stranded calls=1282 cells=9826
+counters plan-compact-piles route:clearing_landing calls=99 cells=725 found=99
+counters plan-compact-piles route:resolve_blocker_escape calls=12 cells=12 found=11 none=1
+counters plan-compact-piles route:resolve_holder_escape calls=12 cells=13 found=12
+counters plan-compact-piles IDENTICAL across 2 runs
+bench plan-far-piles end tick=10006 marks=0 items=58 zones=90 goals=12/5/1
+plan-far-piles state=f0455fc79f4778e2
+counters plan-far-piles astar:claim_delivery calls=95 found=95 goal_checks=3234 nodes=126
+counters plan-far-piles astar:claim_goals calls=471 empty=322 found=144 goal_checks=177455 nodes=82835 nopath=5
+counters plan-far-piles astar:clearing_kept_landing calls=3162 found=3162 goal_checks=47748 nodes=20356
+counters plan-far-piles astar:execute_replan calls=320 found=319 goal_checks=132768 nodes=22620 nopath=1
+counters plan-far-piles astar:resolve_reroute calls=10 found=8 goal_checks=34216 nodes=16114 nopath=2
+counters plan-far-piles calls:closes_last_level_exit calls=3760
+counters plan-far-piles calls:walls_in_a_dwarf calls=836
+counters plan-far-piles emitter:ticks boundaries=10006 shares=0 swaps=0
+counters plan-far-piles flood:caging_stone calls=7752 cells=354549 pockets=7788
+counters plan-far-piles flood:nearest_free_cell calls=103 cells=805
+counters plan-far-piles flood:pile_targets cache_hits=882 cache_misses=882 calls=241745 cells=8180 memo_hits=241696
+counters plan-far-piles flood:stranded calls=1296 cells=9826
+counters plan-far-piles route:clearing_landing calls=96 cells=681 found=96
+counters plan-far-piles route:resolve_blocker_escape calls=25 cells=85 found=14 none=11
+counters plan-far-piles route:resolve_exit calls=10 cells=23 found=10
+counters plan-far-piles route:resolve_holder_escape calls=25 cells=37 found=25
+counters plan-far-piles IDENTICAL across 2 runs
+bench plan-spread-piles end tick=10006 marks=0 items=58 zones=203 goals=12/1/0
+plan-spread-piles state=9fb5d49a709d65d8
+counters plan-spread-piles astar:claim_delivery calls=52 found=52 goal_checks=5192 nodes=83
+counters plan-spread-piles astar:claim_goals calls=428 empty=322 found=101 goal_checks=209555 nodes=88563 nopath=5
+counters plan-spread-piles astar:clearing_kept_landing calls=3184 found=3184 goal_checks=48482 nodes=20739
+counters plan-spread-piles astar:execute_replan calls=287 found=286 goal_checks=335938 nodes=24328 nopath=1
+counters plan-spread-piles astar:resolve_reroute calls=6 found=4 goal_checks=33707 nodes=16068 nopath=2
+counters plan-spread-piles calls:closes_last_level_exit calls=3693
+counters plan-spread-piles calls:walls_in_a_dwarf calls=744
+counters plan-spread-piles emitter:ticks boundaries=10006 shares=0 swaps=0
+counters plan-spread-piles flood:caging_stone calls=7774 cells=356526 pockets=7810
+counters plan-spread-piles flood:nearest_free_cell calls=99 cells=796
+counters plan-spread-piles flood:pile_targets cache_hits=3185 cache_misses=980 calls=305832 cells=67444 memo_hits=305783
+counters plan-spread-piles flood:stranded calls=1201 cells=9108
+counters plan-spread-piles route:clearing_landing calls=96 cells=685 found=96
+counters plan-spread-piles route:resolve_blocker_escape calls=12 cells=12 found=11 none=1
+counters plan-spread-piles route:resolve_holder_escape calls=12 cells=13 found=12
+counters plan-spread-piles IDENTICAL across 2 runs
+bench plan end tick=10006 marks=0 items=58 zones=78 goals=12/5/1
+plan state=c60c79b5f88ca682
+counters plan astar:claim_delivery calls=95 found=95 goal_checks=3234 nodes=126
+counters plan astar:claim_goals calls=471 empty=322 found=144 goal_checks=177455 nodes=82835 nopath=5
+counters plan astar:clearing_kept_landing calls=3162 found=3162 goal_checks=47748 nodes=20356
+counters plan astar:execute_replan calls=320 found=319 goal_checks=132768 nodes=22620 nopath=1
+counters plan astar:resolve_reroute calls=10 found=8 goal_checks=34216 nodes=16114 nopath=2
+counters plan calls:closes_last_level_exit calls=3760
+counters plan calls:walls_in_a_dwarf calls=836
+counters plan emitter:ticks boundaries=10006 shares=0 swaps=0
+counters plan flood:caging_stone calls=7752 cells=354549 pockets=7788
+counters plan flood:nearest_free_cell calls=103 cells=805
+counters plan flood:pile_targets cache_hits=588 cache_misses=588 calls=241745 cells=1912 memo_hits=241696
+counters plan flood:stranded calls=1296 cells=9826
+counters plan route:clearing_landing calls=96 cells=681 found=96
+counters plan route:resolve_blocker_escape calls=25 cells=85 found=14 none=11
+counters plan route:resolve_exit calls=10 cells=23 found=10
+counters plan route:resolve_holder_escape calls=25 cells=37 found=25
+counters plan IDENTICAL across 2 runs
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/10/1
+seat-slow state=8bc3d3224dfcee94
+counters seat-slow astar:claim_delivery calls=10 found=10 goal_checks=40 nodes=10
+counters seat-slow astar:claim_goals calls=10 empty=2 found=8 goal_checks=4852 nodes=2087
+counters seat-slow astar:execute_replan calls=16 found=16 goal_checks=5856 nodes=1470
+counters seat-slow astar:resolve_reroute calls=4 found=1 goal_checks=638 nodes=110 nopath=3
+counters seat-slow calls:closes_last_level_exit calls=3016
+counters seat-slow calls:walls_in_a_dwarf calls=3045
+counters seat-slow emitter:ticks boundaries=3000 shares=0 swaps=0
+counters seat-slow flood:nearest_free_cell calls=3007 cells=15036
+counters seat-slow flood:pile_targets cache_hits=15 cache_misses=26 calls=50904 cells=51 memo_hits=50903
+counters seat-slow flood:stranded calls=6074 cells=15750
+counters seat-slow route:resolve_blocker_escape calls=5 cells=19 found=5
+counters seat-slow route:resolve_holder_escape calls=5 cells=9 found=5
+counters seat-slow IDENTICAL across 2 runs
+bench stuck-tunnel end tick=28082 marks=3 items=57 zones=89 goals=38/4/0
+stuck-tunnel state=8365ab4d3aafed06
+counters stuck-tunnel astar:claim_delivery calls=1012 found=1012 goal_checks=293552 nodes=12938
+counters stuck-tunnel astar:claim_goals calls=1150 empty=1053 found=97 goal_checks=16243 nodes=3695
+counters stuck-tunnel astar:clearing_kept_landing calls=8507 found=8507 goal_checks=83632 nodes=37293
+counters stuck-tunnel astar:execute_replan calls=315 found=246 goal_checks=2214547 nodes=1106988 nopath=69
+counters stuck-tunnel astar:resolve_reroute calls=49 goal_checks=98 nodes=49 nopath=49
+counters stuck-tunnel calls:closes_last_level_exit calls=9460
+counters stuck-tunnel calls:walls_in_a_dwarf calls=1154
+counters stuck-tunnel emitter:ticks boundaries=10000 shares=0 swaps=0
+counters stuck-tunnel flood:caging_stone calls=9337 cells=459901 pockets=9985
+counters stuck-tunnel flood:nearest_free_cell calls=305 cells=1644
+counters stuck-tunnel flood:pile_targets cache_hits=3 cache_misses=15 calls=1182 cells=22 memo_hits=1181
+counters stuck-tunnel flood:stranded calls=2003 cells=15259
+counters stuck-tunnel route:clearing_landing calls=305 cells=1401 found=305
+counters stuck-tunnel route:resolve_blocker_escape calls=51 cells=275 found=24 none=27
+counters stuck-tunnel route:resolve_exit calls=1 cells=2 found=1
+counters stuck-tunnel route:resolve_holder_escape calls=51 cells=235 found=27 none=24
+counters stuck-tunnel IDENTICAL across 2 runs
+== sweeps
+census cage counters astar:claim_delivery calls=245263 empty=244781 found=482 goal_checks=24318 nodes=1738
+census cage counters astar:claim_goals calls=1819 empty=39 found=1766 goal_checks=706690 nodes=235007 nopath=14
+census cage counters astar:clearing_kept_landing calls=11609 found=11609 goal_checks=132619 nodes=45253
+census cage counters astar:execute_replan calls=3093 empty=86 found=2989 goal_checks=966053 nodes=308158 nopath=18
+census cage counters astar:resolve_reroute calls=792 found=625 goal_checks=2252738 nodes=616122 nopath=167
+census cage counters calls:closes_last_level_exit calls=15547
+census cage counters calls:walls_in_a_dwarf calls=3041
+census cage counters calls:walls_in_a_dwarf_from calls=1305
+census cage counters emitter:ticks boundaries=128000 shares=0 swaps=0
+census cage counters flood:caging_stone calls=119451 cells=5501331 pockets=119560
+census cage counters flood:nearest_free_cell calls=2217 cells=10866
+census cage counters flood:pile_targets cache_misses=2670 calls=716390 cells=2670 memo_hits=715091
+census cage counters flood:stranded calls=4480 cells=34171
+census cage counters route:clearing_landing calls=926 cells=1496598 found=833 none=93
+census cage counters route:make_room calls=1 cells=5 found=1
+census cage counters route:resolve_blocker_escape calls=195 cells=247 found=181 none=14
+census cage counters route:resolve_exit calls=28 cells=63 found=27 none=1
+census cage counters route:resolve_holder_escape calls=195 cells=227 found=190 none=5
+census cage frozen=[(11, 4, 2), (15, 6, 2), (16, 6, 1), (16, 6, 4)] pinned=false
+census cage frozen_full=[(11, 4, 2, 2766, Pos { x: 99, y: 61, z: 21 }), (15, 6, 2, 517, Pos { x: 69, y: 96, z: 10 }), (16, 6, 1, 599, Pos { x: 99, y: 65, z: 16 }), (16, 6, 4, 599, Pos { x: 99, y: 66, z: 16 })]
+census cage landed=[]
+census cage runs=32 worked=32
+census cage unfinished=[(0, 6, 1), (11, 6, 2), (12, 6, 1)] pinned=false
+census campfire-189 pickups_after_t2500=48 stored=23/24
+census headon counters astar:claim_delivery calls=14 found=14 goal_checks=550 nodes=41
+census headon counters astar:claim_goals calls=28 empty=1 found=27 goal_checks=2078 nodes=248
+census headon counters astar:clearing_kept_landing calls=124 found=124 goal_checks=1048 nodes=372
+census headon counters astar:execute_replan calls=54 found=54 goal_checks=7504 nodes=404
+census headon counters astar:resolve_reroute calls=7 found=4 goal_checks=96908 nodes=48244 nopath=3
+census headon counters calls:closes_last_level_exit calls=194
+census headon counters calls:walls_in_a_dwarf calls=79
+census headon counters calls:walls_in_a_dwarf_from calls=14
+census headon counters emitter:ticks boundaries=1242 shares=0 swaps=0
+census headon counters flood:caging_stone calls=1165 cells=51812 pockets=1165
+census headon counters flood:nearest_free_cell calls=24 cells=98
+census headon counters flood:pile_targets cache_misses=130 calls=6634 cells=130 memo_hits=6621
+census headon counters flood:stranded calls=113 cells=656
+census headon counters route:clearing_landing calls=11 cells=36 found=11
+census headon counters route:resolve_blocker_escape calls=4 cells=8 found=2 none=2
+census headon counters route:resolve_exit calls=2 cells=6 found=2
+census headon counters route:resolve_holder_escape calls=4 cells=5 found=4
+census headon levels=4/4 marks_left=0 shares=0 swaps=0
+census ring a_pile_round_enclosed_ground_still_fills_every_cell stored=11/20 free=9 hauls_retrying=15 last_rise_tick=3712 retry_ticks=1313
+census ring a_pile_round_ground_beside_rock_still_fills_every_cell stored=8/20 free=12 hauls_retrying=18 last_rise_tick=5326 retry_ticks=1354
+census ring census_207_four_bars_round_a_hole stored=7/24 free=17 hauls_retrying=19 last_rise_tick=4168 retry_ticks=2282
+census ring two_piles_that_ring_ground_together_still_fill_every_cell stored=2/19 free=17 hauls_retrying=24 last_rise_tick=201 retry_ticks=0
+census staircase1 counters astar:claim_delivery calls=560 found=560 goal_checks=22886 nodes=1685
+census staircase1 counters astar:claim_goals calls=899 empty=94 found=805 goal_checks=51418 nodes=5587
+census staircase1 counters astar:clearing_kept_landing calls=4071 found=4071 goal_checks=45912 nodes=15355
+census staircase1 counters astar:execute_replan calls=1294 found=1294 goal_checks=125317 nodes=9863
+census staircase1 counters astar:resolve_reroute calls=338 found=191 goal_checks=3937725 nodes=1735285 nopath=147
+census staircase1 counters calls:closes_last_level_exit calls=6100
+census staircase1 counters calls:walls_in_a_dwarf calls=2299
+census staircase1 counters calls:walls_in_a_dwarf_from calls=339
+census staircase1 counters emitter:ticks boundaries=30921 shares=0 swaps=0
+census staircase1 counters flood:caging_stone calls=32790 cells=1453741 pockets=32790
+census staircase1 counters flood:nearest_free_cell calls=553 cells=2142
+census staircase1 counters flood:pile_targets cache_misses=3183 calls=172717 cells=3183 memo_hits=172398
+census staircase1 counters flood:stranded calls=3126 cells=17280
+census staircase1 counters route:clearing_landing calls=229 cells=953 found=229
+census staircase1 counters route:make_room calls=3 cells=13 none=3
+census staircase1 counters route:resolve_back_out calls=3 cells=6 found=3
+census staircase1 counters route:resolve_back_up calls=3 cells=14 found=3
+census staircase1 counters route:resolve_blocker_escape calls=131 cells=197 found=98 none=33
+census staircase1 counters route:resolve_exit calls=47 cells=152 found=44 none=3
+census staircase1 counters route:resolve_holder_escape calls=131 cells=162 found=126 none=5
+census staircase1 failed=[] levels=96/96 shares=0 swaps=0
+census staircase2 counters astar:claim_delivery calls=5129 empty=1924 found=973 goal_checks=286203505 nodes=35765729 nopath=2232
+census staircase2 counters astar:claim_goals calls=2339 empty=213 found=1547 goal_checks=37165328 nodes=9286612 nopath=579
+census staircase2 counters astar:clearing_kept_landing calls=10633 found=10633 goal_checks=129795 nodes=43965
+census staircase2 counters astar:execute_replan calls=2685 empty=24 found=2653 goal_checks=641398 nodes=147066 nopath=8
+census staircase2 counters astar:resolve_reroute calls=781 found=422 goal_checks=9673897 nodes=2410683 nopath=359
+census staircase2 counters calls:closes_last_level_exit calls=13981
+census staircase2 counters calls:walls_in_a_dwarf calls=3557
+census staircase2 counters calls:walls_in_a_dwarf_from calls=782
+census staircase2 counters emitter:ticks boundaries=59708 shares=0 swaps=0
+census staircase2 counters flood:caging_stone calls=64366 cells=2971930 pockets=64366
+census staircase2 counters flood:nearest_free_cell calls=1226 cells=5349
+census staircase2 counters flood:pile_targets cache_misses=6206 calls=407308 cells=6206 memo_hits=406544
+census staircase2 counters flood:stranded calls=5175 cells=34775
+census staircase2 counters route:clearing_landing calls=579 cells=99442 found=573 none=6
+census staircase2 counters route:resolve_blocker_escape calls=248 cells=343 found=233 none=15
+census staircase2 counters route:resolve_exit calls=41 cells=97 found=41
+census staircase2 counters route:resolve_holder_escape calls=248 cells=308 found=245 none=3
+census staircase2 worked=23/24 stalled=[(20, 3)] floated=[] unsupported=0
+census pocket207 targets=24/24 outer_depth1=12/12 inner_depth2=12/12
+exit 0

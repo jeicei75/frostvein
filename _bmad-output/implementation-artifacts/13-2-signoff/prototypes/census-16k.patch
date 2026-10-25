@@ -1,0 +1,14 @@
+diff --git a/crates/sim-core/tests/scenario.rs b/crates/sim-core/tests/scenario.rs
+index 8db4aa5f..17a3a0f7 100644
+--- a/crates/sim-core/tests/scenario.rs
++++ b/crates/sim-core/tests/scenario.rs
+@@ -2944,7 +2944,8 @@ fn spawn_places_five_dwarves_on_distinct_tiles_for_every_small_seed() {
+ // that leave marks are the pinned ones.
+ #[test]
+ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+-    const TICKS: u64 = 4_000;
++    // 13.2 census-16k (review-patch item 5): the #187 reading that gates 13.4 runs the sweep 4x longer.
++    const TICKS: u64 = 16_000;
+     const STILL_BOUND: u64 = 500;
+     // (seed, channel width, dwarf). An idle dwarf whose every same-level neighbour is a stone,
+     // rock, a drop or another dwarf: `wander` is same-z only, so it stands until a job routes it

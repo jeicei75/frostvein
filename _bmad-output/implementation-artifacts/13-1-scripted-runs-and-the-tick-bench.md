@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default; Wolf picked Opus 5.5 to IMPLEMENT too
 
 # Story 13.1: Scripted Runs and the Tick Bench
 
-Status: review
+Status: done
 
 ## Story
 
@@ -419,6 +419,7 @@ claude-opus-5-5 (Opus 5.5), building directly in the creation session, with no s
 
 | Date | Change |
 | --- | --- |
+| 2026-10-23 | Pushed (`2c64519`) and merged as PR #215 (`4f57027`); closes #210, #50 stays open. Status -> done. |
 | 2026-10-23 | The ONE full gate: GREEN on `c292dc5` (3,860 s, `RUST_TEST_THREADS=1`). Status review; PR next. |
 | 2026-10-23 | AC 7 MET at the seat (Wolf, `2fb1f17`): the hash matched the bench, there was no manual input, and the CSV covers the run. F3 was late; the card now names the elapsed-10:00 stop as the end. The full gate at PR is the only open item. |
 | 2026-10-22 | Review-patch run 2 (Opus 5.5): all 5 landed (`8e14f7d`, `9ca72d2`, `8c44d89`). tick-bench gains a cross-build control: base rebuilt with `--shuffle-sections`, chosen over `-C metadata`, which read about −1.7%. Under the new verdict the identical-code reference pair still reads −5.5% BEYOND FLOOR (control −3.4%). The RED reads BEYOND by at most 0.3 points and is unvalidated across builds, and the cross-build resolution is about 6%. FAILED rows name every failed build; a panic shows its message. Fast tier green on each commit; the full gate is owed at PR. Status stays in-progress (AC 7). |

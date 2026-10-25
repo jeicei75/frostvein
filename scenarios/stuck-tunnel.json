@@ -1,0 +1,10 @@
+{
+ "name": "stuck-tunnel",
+ "about": "Reproduces #206 (a dwarf-blocks-dwarf freeze in a tunnel; the issue names no file, so the match rests on its name, date and tick): Wolf's 2026-10-19 12.12 seat save (~/frostvein-saves/12-12-seat-loop.save, tick 18,082), copied byte for byte. Marks freeze from about t19082. No commands. Rots at the next save-format change: re-capture or patch it then.",
+ "start": {
+  "save": "saves/12-12-seat-loop.save"
+ },
+ "ticks": 10000,
+ "speed": "fast4x",
+ "commands": []
+}

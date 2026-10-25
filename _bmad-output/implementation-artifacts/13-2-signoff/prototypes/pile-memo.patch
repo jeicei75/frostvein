@@ -1,0 +1,59 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 675f0a25..bee415ac 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -716,6 +716,10 @@ struct Terrain {
+ struct PileGround {
+     zones: BTreeSet<Pos>,
+     open: BTreeMap<Pos, bool>,
++    // 13.2 pile-memo probe: the zone cells and their side neighbours (the only cells whose
++    // `blocked` the depth map reads), and the last answer with the blocked cells among them.
++    near: BTreeSet<Pos>,
++    memo: Option<(BTreeSet<Pos>, BTreeMap<Pos, u32>)>,
+ }
+ 
+ impl Terrain {
+@@ -741,11 +745,9 @@ impl Terrain {
+         let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
+         self.tiles[index] = tile;
+         self.dirty.insert(p);
+-        self.pile_ground
+-            .get_mut()
+-            .expect("nothing panics holding the pile ground")
+-            .open
+-            .clear();
++        let kept = self.pile_ground.get_mut().expect("nothing panics holding the pile ground");
++        kept.open.clear();
++        kept.memo = None;
+         true
+     }
+ 
+@@ -872,8 +874,20 @@ fn pile_targets(
+         *kept = PileGround {
+             zones: zones.clone(),
+             open: BTreeMap::new(),
++            near: zones
++                .iter()
++                .flat_map(|&cell| side_neighbours(cell).into_iter().chain([cell]))
++                .collect(),
++            memo: None,
+         };
+     }
++    let key: BTreeSet<Pos> = blocked.iter().copied().filter(|p| kept.near.contains(p)).collect();
++    if let Some((memo_key, memo)) = &kept.memo {
++        if *memo_key == key {
++            counters::add("flood", "pile_targets", "memo_hits", 1);
++            return memo.clone();
++        }
++    }
+     let ground = &mut kept.open;
+     let mut open_ground = |start: Pos| -> bool {
+         if let Some(&open) = ground.get(&start) {
+@@ -928,6 +942,7 @@ fn pile_targets(
+             }
+         }
+     }
++    kept.memo = Some((key, depth.clone()));
+     depth
+ }
+ 

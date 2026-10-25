@@ -1,0 +1,57 @@
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + pile-memo.patch 7c651e14
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.2180 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.2180 p99=7.1484 max=16.602 over10=19 state=dc12038e172df5b2
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+-- scale-128-crew020
+bench scale-128-crew020 end tick=2000 marks=123 items=116 zones=180 goals=0/0/0
+bench scale-128-crew020: 1 run, mean 1.1079 ms (1 run: no floor)
+run 1 commands=181/181 mean=1.1079 p99=11.5795 max=34.733 over10=43 state=eb7851886b98c9ff
+totals astar_calls=2418 astar_nodes=1336575 route_calls=186 route_cells=224873 route_none=59 flood_cells=601219 exhausted_astar=0 share_ticks=0
+-- scale-128-crew050
+bench scale-128-crew050 end tick=2000 marks=343 items=221 zones=450 goals=6/0/0
+bench scale-128-crew050: 1 run, mean 3.3295 ms (1 run: no floor)
+run 1 commands=451/451 mean=3.3295 p99=21.6398 max=41.165 over10=120 state=d2212a1be8fd317c
+totals astar_calls=8499 astar_nodes=2914662 route_calls=402 route_cells=64877 route_none=85 flood_cells=1523151 exhausted_astar=0 share_ticks=0
+-- scale-128-crew100
+bench scale-128-crew100 end tick=2000 marks=754 items=288 zones=900 goals=10/0/0
+bench scale-128-crew100: 1 run, mean 7.1161 ms (1 run: no floor)
+run 1 commands=901/901 mean=7.1161 p99=36.2391 max=47.843 over10=571 state=2b6ec7abea2f389d
+totals astar_calls=17741 astar_nodes=6666627 route_calls=682 route_cells=241116 route_none=126 flood_cells=2902763 exhausted_astar=0 share_ticks=0
+-- scale-128-crew200
+bench scale-128-crew200 end tick=2000 marks=1591 items=425 zones=1800 goals=3/0/0
+bench scale-128-crew200: 1 run, mean 27.3178 ms (1 run: no floor)
+run 1 commands=1801/1801 mean=27.3178 p99=141.6038 max=189.633 over10=1081 state=e0b2df85768ab3de
+totals astar_calls=47571 astar_nodes=18905469 route_calls=1543 route_cells=291569 route_none=381 flood_cells=5915334 exhausted_astar=0 share_ticks=0
+-- scale-256-crew005
+bench scale-256-crew005 end tick=2000 marks=35 items=24 zones=45 goals=0/0/0
+bench scale-256-crew005: 1 run, mean 0.2425 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.2425 p99=0.2762 max=45.438 over10=10 state=baea8ff5c52a02fc
+totals astar_calls=363 astar_nodes=514643 route_calls=17 route_cells=58 route_none=2 flood_cells=163737 exhausted_astar=10 share_ticks=0
+-- scale-256-crew020
+bench scale-256-crew020 end tick=2000 marks=148 items=62 zones=180 goals=0/0/0
+bench scale-256-crew020: 1 run, mean 0.4822 ms (1 run: no floor)
+run 1 commands=181/181 mean=0.4822 p99=1.6558 max=78.564 over10=12 state=2ada1437baa13271
+totals astar_calls=1489 astar_nodes=587589 route_calls=61 route_cells=150170 route_none=15 flood_cells=654776 exhausted_astar=10 share_ticks=0
+-- scale-256-crew050
+bench scale-256-crew050 end tick=2000 marks=390 items=126 zones=450 goals=0/0/0
+bench scale-256-crew050: 1 run, mean 3.8888 ms (1 run: no floor)
+run 1 commands=451/451 mean=3.8888 p99=47.1595 max=85.882 over10=134 state=58d03012a89bdc9b
+totals astar_calls=6866 astar_nodes=7234046 route_calls=559 route_cells=551047 route_none=288 flood_cells=1549433 exhausted_astar=131 share_ticks=0
+-- scale-256-crew100
+bench scale-256-crew100 end tick=2000 marks=796 items=162 zones=900 goals=0/0/0
+bench scale-256-crew100: 1 run, mean 7.6442 ms (1 run: no floor)
+run 1 commands=901/901 mean=7.6442 p99=92.4883 max=327.590 over10=214 state=b012cde7d86aa137
+totals astar_calls=17893 astar_nodes=12929702 route_calls=465 route_cells=651028 route_none=77 flood_cells=3021576 exhausted_astar=218 share_ticks=0
+-- scale-256-crew200
+bench scale-256-crew200 end tick=2000 marks=1692 items=176 zones=1800 goals=0/0/0
+bench scale-256-crew200: 1 run, mean 10.3213 ms (1 run: no floor)
+run 1 commands=1801/1801 mean=10.3213 p99=81.0222 max=131.499 over10=393 state=29c78d908e1aa843
+totals astar_calls=25468 astar_nodes=11920450 route_calls=1040 route_cells=502586 route_none=378 flood_cells=6471559 exhausted_astar=138 share_ticks=0
+exit 0

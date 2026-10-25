@@ -1,0 +1,271 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 675f0a25..1712871c 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -563,6 +563,7 @@ fn claim_jobs(
+         .collect();
+     // Emitters plus every uncarried item (#162): items block claim-time reachability like fires.
+     let blocked = blocked_cells(emitters.iter().chain(items.values()));
++    set_clamber(emitters.iter(), items.values());
+     // One budget per dwarf, indexed like the sorted `dwarves`.
+     let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];
+     // Walkable components that a COMPLETED failed search has already flooded this call (#132).
+@@ -806,9 +807,49 @@ fn world_blocked(ecs: &mut EcsWorld) -> BTreeSet<Pos> {
+         .copied()
+         .collect();
+     let stones = uncarried_stones(ecs);
++    set_clamber(emitters.iter(), stones.values());
+     blocked_cells(emitters.iter().chain(stones.values()))
+ }
+ 
++// 13.2 clamber prototype: the loose-stone cells a dwarf may cross at a higher step cost. `blocked` still holds
++// them (every guard and flood reads it unchanged); only A* and `route_to_nearest` consult this set.
++thread_local! {
++    static CLAMBER: std::cell::RefCell<BTreeSet<Pos>> = const { std::cell::RefCell::new(BTreeSet::new()) };
++    // Dwarf tiles the last `closed_to_dwarves` closed: a dwarf standing on a stone cell is a wall, not a clamber.
++    static DWARF_CLOSED: std::cell::RefCell<BTreeSet<Pos>> = const { std::cell::RefCell::new(BTreeSet::new()) };
++}
++
++/// Step cost onto a stone cell. `FV_CLAMBER_COST` is a knob for the 4-vs-8 A/B only.
++fn clamber_cost() -> u32 {
++    static COST: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
++    *COST.get_or_init(|| {
++        std::env::var("FV_CLAMBER_COST")
++            .ok()
++            .and_then(|v| v.parse().ok())
++            .unwrap_or(4)
++    })
++}
++
++/// Records the uncarried stone cells (emitter cells excluded: fires stay walls).
++fn set_clamber<'a>(
++    emitters: impl Iterator<Item = &'a Pos>,
++    stones: impl Iterator<Item = &'a Pos>,
++) {
++    let emitters: BTreeSet<Pos> = emitters.copied().collect();
++    let cells: BTreeSet<Pos> = stones.filter(|p| !emitters.contains(p)).copied().collect();
++    CLAMBER.with(|c| *c.borrow_mut() = cells);
++    DWARF_CLOSED.with(|c| c.borrow_mut().clear());
++}
++
++fn on_stone(p: Pos) -> bool {
++    CLAMBER.with(|c| c.borrow().contains(&p))
++}
++
++/// A stone cell is crossable by a search, except for `settle`'s landing (that places a dwarf, it is not a walk).
++fn can_clamber(p: Pos) -> bool {
++    counters::caller() != "settle_landing" && on_stone(p) && !DWARF_CLOSED.with(|c| c.borrow().contains(&p))
++}
++
+ fn side_neighbours(p: Pos) -> [Pos; 4] {
+     [(-1, 0), (1, 0), (0, -1), (0, 1)].map(|(dx, dy)| Pos {
+         x: p.x + dx,
+@@ -1092,6 +1133,24 @@ fn stranded(
+ }
+ 
+ fn astar_neighbours(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos) -> Vec<Pos> {
++    neighbours_with(terrain, blocked, from, false)
++}
++
++/// The cells a dwarf can MOVE to: `astar_neighbours` plus, when `clamber`, the loose-stone cells.
++fn move_neighbours(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos) -> Vec<Pos> {
++    neighbours_with(terrain, blocked, from, true)
++}
++
++fn neighbours_with(
++    terrain: &Terrain,
++    blocked: &BTreeSet<Pos>,
++    from: Pos,
++    clamber: bool,
++) -> Vec<Pos> {
++    let is_walkable = |terrain: &Terrain, blocked: &BTreeSet<Pos>, candidate: Pos| {
++        terrain.is_standable(candidate)
++            && (!blocked.contains(&candidate) || (clamber && can_clamber(candidate)))
++    };
+     const DIRECTIONS: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+     let mut neighbours = Vec::with_capacity(12);
+     for (dx, dy) in DIRECTIONS {
+@@ -1202,8 +1261,9 @@ fn astar_with_budget_inner(
+             return (Some(path), false, BTreeSet::new());
+         }
+ 
+-        for neighbour in astar_neighbours(terrain, blocked, current) {
+-            let next_cost = current_cost + 1;
++        for neighbour in move_neighbours(terrain, blocked, current) {
++            // The heuristic stays admissible: the cheapest step is still 1.
++            let next_cost = current_cost + if on_stone(neighbour) { clamber_cost() } else { 1 };
+             if next_cost < costs.get(&neighbour).copied().unwrap_or(u32::MAX) {
+                 costs.insert(neighbour, next_cost);
+                 came_from.insert(neighbour, current);
+@@ -1272,19 +1332,33 @@ fn route_to_nearest_inner(
+     accept: impl Fn(Pos) -> bool,
+     nodes_remaining: &mut usize,
+ ) -> Option<Vec<Pos>> {
++    // Uniform-cost search: with no stone cell in play every step costs 1 and the (cost, seq) heap order is the
++    // old FIFO order. A stone cell is crossed but never stopped on. A cell accepted on discovery came by a unit step
++    // from the cheapest open cell, so its cost is minimal.
+     let mut parents = BTreeMap::new();
+-    let mut queue = VecDeque::from([from]);
+-    while let Some(cell) = queue.pop_front() {
++    let mut costs = BTreeMap::from([(from, 0_u32)]);
++    let mut seq = 0_u64;
++    let mut open = BinaryHeap::from([Reverse((0_u32, seq, from))]);
++    while let Some(Reverse((cost, _, cell))) = open.pop() {
++        if cost != costs[&cell] {
++            continue;
++        }
+         if *nodes_remaining == 0 {
+             return None;
+         }
+         *nodes_remaining -= 1;
+-        for next in astar_neighbours(terrain, blocked, cell) {
+-            if next == from || parents.contains_key(&next) {
++        for next in move_neighbours(terrain, blocked, cell) {
++            if next == from {
+                 continue;
+             }
++            let stone = on_stone(next);
++            let next_cost = cost + if stone { clamber_cost() } else { 1 };
++            if next_cost >= costs.get(&next).copied().unwrap_or(u32::MAX) {
++                continue;
++            }
++            costs.insert(next, next_cost);
+             parents.insert(next, cell);
+-            if accept(next) {
++            if !stone && accept(next) {
+                 let mut route = vec![next];
+                 while let Some(&parent) = parents.get(route.last().expect("route is non-empty")) {
+                     route.push(parent);
+@@ -1293,7 +1367,8 @@ fn route_to_nearest_inner(
+                 route.reverse();
+                 return Some(route);
+             }
+-            queue.push_back(next);
++            seq += 1;
++            open.push(Reverse((next_cost, seq, next)));
+         }
+     }
+     None
+@@ -1679,6 +1754,9 @@ fn closed_to_dwarves(
+ ) -> BTreeSet<Pos> {
+     let mut closed = blocked.clone();
+     closed.extend(occupied.iter().filter(|tile| !except.contains(tile)));
++    DWARF_CLOSED.with(|c| {
++        *c.borrow_mut() = occupied.iter().filter(|tile| !except.contains(tile)).copied().collect()
++    });
+     closed
+ }
+ 
+@@ -2067,6 +2145,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+         let carrying = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0);
+         let stones = uncarried_stones(ecs);
+         let blocked = blocked_cells(emitters.iter().chain(stones.values()));
++        set_clamber(emitters.iter(), stones.values());
+         // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
+         // designation and claim stay his own job through lift, carry and set-down.
+         let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {
+@@ -2188,7 +2267,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 .unwrap_or_default();
+             // A stored path can lead onto an item that landed after it was computed (a delivery
+             // changes no terrain, so `clear_paths` never ran): plan again rather than step in.
+-            if path.is_empty() || blocked.contains(&path[0]) {
++            if path.is_empty() || (blocked.contains(&path[0]) && !on_stone(path[0])) {
+                 let terrain = ecs.resource::<Terrain>();
+                 counters::at("execute_replan");
+                 let Some(computed) = astar(terrain, &blocked, pos, &work_positions) else {
+@@ -2234,6 +2313,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 continue;
+             }
+             let next = path.remove(0);
++            if on_stone(next) {
++                counters::add("clamber", "steps", "execute", 1);
++            }
+             *ecs.get_mut::<Pos>(entity)
+                 .expect("every dwarf has a position") = next;
+             occupied.remove(&pos);
+@@ -2659,6 +2741,13 @@ fn wander(
+                 .map(|(_, pos)| pos),
+         ),
+     );
++    set_clamber(
++        emitters.iter(),
++        items
++            .iter()
++            .filter(|(id, _)| !carried.contains(&id.0))
++            .map(|(_, pos)| pos),
++    );
+ 
+     for (entity, _, mut pos, mut wander, mut state, current_job, path, _) in dwarves {
+         if current_job.0.is_some() {
+@@ -2679,7 +2768,7 @@ fn wander(
+             *state = JobState::Idle;
+             if let Some(&next) = path.0.first() {
+                 // An item landed on the route after it was planned: give the route up and stay.
+-                if blocked.contains(&next) {
++                if blocked.contains(&next) && !on_stone(next) {
+                     wander.home = here;
+                     commands.entity(entity).remove::<Path>();
+                     continue;
+@@ -2688,6 +2777,9 @@ fn wander(
+                     continue;
+                 }
+                 path.0.remove(0);
++                if on_stone(next) {
++                    counters::add("clamber", "steps", "wander", 1);
++                }
+                 occupied.remove(&here);
+                 occupied.insert(next);
+                 *pos = next;
+@@ -3702,10 +3794,19 @@ pub mod counters {
+                     })
+                 })
+         });
+-        PREV.with(|prev| *prev.borrow_mut() = (tick, now));
++        PREV.with(|prev| *prev.borrow_mut() = (tick, now.clone()));
+         add("emitter", "ticks", "shares", u64::from(shared));
+         add("emitter", "ticks", "swaps", u64::from(swapped));
+         add("emitter", "ticks", "boundaries", 1);
++        // clamber: ticks that end with a dwarf standing on a loose stone's cell (a rule departure).
++        let stones = super::uncarried_stones(&world.ecs);
++        let on = now.iter().filter(|d| stones.values().any(|p| *p == d.1)).count() as u64;
++        add("clamber", "boundaries", "dwarf_on_stone_ticks", u64::from(on > 0));
++        // AC 5 emitter: a fire must stay a wall. Ticks that end with a dwarf standing on an emitter's cell.
++        let fires: Vec<Pos> = world.emitters().iter().map(|e| e.1).collect();
++        let on_fire = now.iter().filter(|d| fires.contains(&d.1)).count() as u64;
++        add("clamber", "boundaries", "dwarf_on_emitter_ticks", u64::from(on_fire > 0));
++        add("clamber", "boundaries", "dwarf_on_stone_dwarfticks", on);
+     }
+ 
+     /// Returns the tallies, one line per (kind, name) with sorted `key=value` pairs, and resets.
+diff --git a/crates/sim-core/tests/scenario.rs b/crates/sim-core/tests/scenario.rs
+index 8db4aa5f..efee3acd 100644
+--- a/crates/sim-core/tests/scenario.rs
++++ b/crates/sim-core/tests/scenario.rs
+@@ -3007,6 +3007,7 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+     let mut frozen = Vec::new();
+     let mut unfinished = Vec::new();
+     let mut landed = Vec::new();
++    let mut landed_standing = Vec::new();
+     let mut worked = 0;
+     for seed in 0..=16_u64 {
+         for (west, south, east, north) in [(1, -3, 4, 3), (-1, -5, 4, 4)] {
+@@ -3082,6 +3083,11 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+                         continue;
+                     }
+                     if let Some(dwarf) = now.iter().position(|p| p == pos) {
++                        // clamber: a dwarf already standing there at the previous boundary is a stone put under a
++                        // dwarf (a writer's fault); one that stepped onto a fresh stone this tick is the clamber departure.
++                        if previous[dwarf] == *pos {
++                            landed_standing.push((seed, width, world.tick(), *item, dwarf));
++                        }
+                         landed.push((seed, width, world.tick(), *item, dwarf));
+                     }
+                 }
+@@ -3112,6 +3118,7 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+         .map(|(seed, width, dwarf, ..)| (*seed, *width, *dwarf))
+         .collect::<Vec<_>>();
+     eprintln!("census cage landed={landed:?}");
++    eprintln!("census cage landed_standing={landed_standing:?}");
+     eprintln!(
+         "census cage frozen={frozen_keys:?} pinned={}",
+         frozen_keys == ONE_LEVEL_ISLANDS

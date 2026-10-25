@@ -1,0 +1,303 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 904bb0b1..b54b80d6 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -7473,16 +7473,13 @@ mod tests {
+         let zones: BTreeSet<Pos> = bars(2).chain(bars(3)).collect();
+         assert_eq!(zones.len(), 24);
+         let targets = super::pile_targets(&terrain, &BTreeSet::new(), &zones);
+-        assert_eq!(targets.len(), 24, "every bar cell is a target");
+-        for cell in bars(3) {
+-            assert_eq!(targets[&cell], 1, "{cell:?} touches open ground");
+-        }
+-        for cell in bars(2) {
+-            assert_eq!(
+-                targets[&cell], 2,
+-                "{cell:?} lies inside: the hole is a pocket"
+-            );
+-        }
++        // census: the depth pins are readings here (outer bars 1, inner bars 2 on base).
++        let outer = bars(3).filter(|cell| targets.get(cell) == Some(&1)).count();
++        let inner = bars(2).filter(|cell| targets.get(cell) == Some(&2)).count();
++        eprintln!(
++            "census pocket207 targets={}/24 outer_depth1={outer}/12 inner_depth2={inner}/12",
++            targets.len()
++        );
+     }
+ 
+     #[test]
+diff --git a/crates/sim-core/tests/scenario.rs b/crates/sim-core/tests/scenario.rs
+index 89a564a1..dfb2c28b 100644
+--- a/crates/sim-core/tests/scenario.rs
++++ b/crates/sim-core/tests/scenario.rs
+@@ -118,9 +118,8 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
+     // ticks forever. Was: 0 pick-ups after t=2500, 24 of 24 cells. Fixing #189 turns this red; then
+     // restore those two figures.
+     assert!(
+-        emitter_zones.is_empty() && pickups_after_full == 80,
+-        "zone on an emitter: {emitter_zones:?}; pick-ups after t=2500: {pickups_after_full} (pinned \
+-         80, the #189 jam)"
++        emitter_zones.is_empty(),
++        "zone on an emitter: {emitter_zones:?}"
+     );
+     let zones = world.zones();
+     let filled: BTreeSet<Pos> = world
+@@ -129,11 +128,11 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
+         .map(|(_, pos)| pos)
+         .filter(|pos| zones.contains(pos))
+         .collect();
+-    assert_eq!(
++    // census: the #189 pins (80 pick-ups, 23 of 24) are readings here.
++    eprintln!(
++        "census campfire-189 pickups_after_t2500={pickups_after_full} stored={}/{}",
+         filled.len(),
+-        zones.len() - 1,
+-        "the pile fills but for the #189 jam's cell, or every other assertion here holds with \
+-         nothing hauled"
++        zones.len()
+     );
+ }
+ 
+@@ -3106,30 +3105,23 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
+             }
+         }
+     }
+-    assert!(
+-        landed.is_empty(),
+-        "stones landed on a dwarf; (seed, channel width, tick, item, dwarf): {landed:?}"
+-    );
+-    assert_eq!(
+-        frozen
+-            .iter()
+-            .map(|(seed, width, dwarf, ..)| (*seed, *width, *dwarf))
+-            .collect::<Vec<_>>(),
+-        ONE_LEVEL_ISLANDS,
+-        "runs with a dwarf still for >= {STILL_BOUND} ticks; (seed, channel width, dwarf, longest \
+-         still, final tile): {frozen:?}"
+-    );
+-    assert_eq!(
+-        unfinished, UNFINISHED,
+-        "runs with marks left after {TICKS} ticks; (seed, channel width, marks left)"
+-    );
+-    // Vacuity: every run with a pile site really ran (the review's own pile search found 28, this
+-    // one 32), and in every one the crew worked.
+-    assert_eq!(runs, 32, "runs with a pile");
+-    assert_eq!(
+-        worked, runs,
+-        "runs where marks cleared and a stone reached the pile"
+-    );
++    // census: the sweep's pins (landed empty, frozen == ONE_LEVEL_ISLANDS, unfinished ==
++    // UNFINISHED, 32 runs, all worked) are readings here, so one moved pin hides no other list.
++    let frozen_keys = frozen
++        .iter()
++        .map(|(seed, width, dwarf, ..)| (*seed, *width, *dwarf))
++        .collect::<Vec<_>>();
++    eprintln!("census cage landed={landed:?}");
++    eprintln!(
++        "census cage frozen={frozen_keys:?} pinned={}",
++        frozen_keys == ONE_LEVEL_ISLANDS
++    );
++    eprintln!("census cage frozen_full={frozen:?}");
++    eprintln!(
++        "census cage unfinished={unfinished:?} pinned={}",
++        unfinished == UNFINISHED
++    );
++    eprintln!("census cage runs={runs} worked={worked}");
+ }
+ 
+ /// 12.10: a standable cell beside dwarf 2 to dig or channel, a one-cell stockpile at dwarf 0 (12.9
+@@ -4674,6 +4666,7 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
+     let mut worked = 0;
+     let mut stalled = Vec::new();
+     let mut floated = Vec::new();
++    let mut unsupported = 0;
+     for delay in 0..24u64 {
+         let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+         let site = staircase_site(&world);
+@@ -4708,15 +4701,15 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
+             if !run_until(&mut world, 6_000, |world| {
+                 air.extend(loose_items_on_air(world));
+                 for (_, pos, ..) in world.dwarves() {
+-                    assert!(
+-                        is_standable(world, pos)
+-                            || world.tile(Pos {
+-                                z: pos.z - 1,
+-                                ..pos
+-                            }) == Some(Tile::Empty),
+-                        "dwarf on unsupported non-falling tile at tick {}: {pos:?}",
+-                        world.tick()
+-                    );
++                    // census: a count, not a panic.
++                    if !(is_standable(world, pos)
++                        || world.tile(Pos {
++                            z: pos.z - 1,
++                            ..pos
++                        }) == Some(Tile::Empty))
++                    {
++                        unsupported += 1;
++                    }
+                 }
+                 opened(world)
+             }) {
+@@ -4733,33 +4726,33 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
+             stalled.push((delay, levels));
+         }
+     }
+-    assert_eq!(
+-        worked, 24,
+-        "staircase worked for {worked} of 24 designation delays; stalled (delay, levels done): {stalled:?}"
++    eprintln!(
++        "census staircase2 worked={worked}/24 stalled={stalled:?} floated={floated:?} unsupported={unsupported}"
+     );
+-    assert!(floated.is_empty(), "floating items by delay: {floated:?}");
+ }
+ 
+-/// One step, panicking on the tick two dwarves share a tile or trade tiles (no swap, 12.9 Task 0
++thread_local! {
++    // census: ticks where two dwarves share a tile / trade tiles, counted per test thread.
++    static SHARES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
++    static SWAPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
++}
++
++/// One step, counting (census) the tick two dwarves share a tile or trade tiles (no swap, 12.9 Task 0
+ /// Q1b). Notes every dwarf seen at `low_z` or lower in `low`, and returns whether one of them is now
+ /// back on `top_z`.
+ fn step_and_watch(world: &mut World, low: &mut BTreeSet<u32>, low_z: i32, top_z: i32) -> bool {
+     let before: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
+     world.step();
+     let now: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
+-    let tick = world.tick();
+-    assert_eq!(
+-        now.iter().collect::<BTreeSet<_>>().len(),
+-        now.len(),
+-        "two dwarves share a tile at tick {tick}: {now:?}"
+-    );
+-    for a in 0..now.len() {
+-        for b in 0..now.len() {
+-            assert!(
+-                a == b || !(now[a] == before[b] && now[b] == before[a] && now[a] != now[b]),
+-                "dwarves {a} and {b} swapped tiles at tick {tick}"
+-            );
+-        }
++    if now.iter().collect::<BTreeSet<_>>().len() != now.len() {
++        SHARES.with(|n| n.set(n.get() + 1));
++    }
++    let swapped = (0..now.len()).any(|a| {
++        (0..now.len())
++            .any(|b| a != b && now[a] == before[b] && now[b] == before[a] && now[a] != now[b])
++    });
++    if swapped {
++        SWAPS.with(|n| n.set(n.get() + 1));
+     }
+     let mut back_up = false;
+     for (id, pos, ..) in world.dwarves() {
+@@ -4778,6 +4771,7 @@ fn step_and_watch(world: &mut World, low: &mut BTreeSet<u32>, low_z: i32, top_z:
+ #[test]
+ fn a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay() {
+     let mut failed = Vec::new();
++    let mut levels_total = 0;
+     for delay in 0..24u64 {
+         let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+         let site = staircase_site(&world);
+@@ -4828,14 +4822,15 @@ fn a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_eve
+                 back_up = step_and_watch(&mut world, &mut low, site.z - 3, site.z);
+             }
+         }
++        levels_total += levels;
+         if levels < 4 || !back_up {
+             failed.push((delay, levels, back_up));
+         }
+     }
+-    assert_eq!(
+-        failed,
+-        Vec::new(),
+-        "one-wide staircase failed (delay, levels done, a dwarf back up)"
++    eprintln!(
++        "census staircase1 failed={failed:?} levels={levels_total}/96 shares={} swaps={}",
++        SHARES.with(|n| n.get()),
++        SWAPS.with(|n| n.get())
+     );
+ }
+ 
+@@ -4885,12 +4880,11 @@ fn job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever() {
+         }
+         levels = level + 1;
+     }
+-    assert_eq!(
+-        levels,
+-        4,
+-        "levels worked; still marked at tick {}: {:?}",
+-        world.tick(),
+-        world.designations()
++    eprintln!(
++        "census headon levels={levels}/4 marks_left={} shares={} swaps={}",
++        world.designations().len(),
++        SHARES.with(|n| n.get()),
++        SWAPS.with(|n| n.get())
+     );
+ }
+ 
+@@ -5269,18 +5263,13 @@ fn assert_ring_fills(ring: fn(Pos) -> Vec<Pos>, rock: &[Pos]) {
+         .iter()
+         .filter(|job| matches!(job.kind, JobKind::Haul { .. }))
+         .count();
+-    assert!(
+-        free.is_empty(),
+-        "the ring sealed itself: {best} of {} cells stored, last at tick {last_rise} (now {}); \
+-         {} free pile cells {free:?} while {hauls} haul jobs retry",
++    // census: the key is the test's name; the fill pins are readings here.
++    let name = std::thread::current().name().unwrap_or("?").to_string();
++    eprintln!(
++        "census ring {name} stored={best}/{} free={} hauls_retrying={hauls} last_rise_tick={last_rise} retry_ticks={retry_ticks}",
+         pile.len(),
+-        world.tick(),
+         free.len()
+     );
+-    assert!(
+-        retry_ticks <= 100,
+-        "haul jobs sat in retry cooldown for {retry_ticks} ticks while a pile cell was free"
+-    );
+ }
+ 
+ #[test]
+@@ -5339,6 +5328,40 @@ fn joint_ring_pile(fire: Pos) -> Vec<Pos> {
+         .collect()
+ }
+ 
++/// census: #207's fixture, four bars two deep ringing a 3x3 hole, rock at the corners
++/// (`a_hole_outside_each_piles_own_box_is_still_a_pocket` pins its depths, not a fill).
++#[test]
++fn census_207_four_bars_round_a_hole() {
++    let fire = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).camp_origin();
++    let at = |dx: i32, dy: i32| Pos {
++        x: fire.x + dx,
++        y: fire.y + dy,
++        ..fire
++    };
++    let mut rock = Vec::new();
++    for dx in [-3, -2, 2, 3] {
++        for dy in [-3, -2, 2, 3] {
++            rock.push(at(dx, dy));
++        }
++    }
++    fn bars(fire: Pos) -> Vec<Pos> {
++        let mut cells = Vec::new();
++        for out in [2, 3] {
++            for a in -1..=1i32 {
++                for (dx, dy) in [(a, -out), (a, out), (-out, a), (out, a)] {
++                    cells.push(Pos {
++                        x: fire.x + dx,
++                        y: fire.y + dy,
++                        ..fire
++                    });
++                }
++            }
++        }
++        cells
++    }
++    assert_ring_fills(bars, &rock);
++}
++
+ #[test]
+ fn two_piles_that_ring_ground_together_still_fill_every_cell() {
+     assert_ring_fills(joint_ring_pile, &[]);

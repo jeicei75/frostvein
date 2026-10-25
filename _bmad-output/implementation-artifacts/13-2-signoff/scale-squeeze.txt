@@ -1,0 +1,34 @@
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + squeeze.patch f39a569f
+== scale points (simd --bench FILE --runs 3; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=24 items=43 zones=45 goals=0/0/0
+bench scale-128-crew005: 3 runs, mean 0.3619..0.3827 ms (spread 5.6%), state identical across 3 runs
+run 1 commands=46/46 mean=0.3749 p99=3.4159 max=9.975
+run 2 commands=46/46 mean=0.3827 p99=3.9430 max=10.294
+run 3 commands=46/46 mean=0.3619 p99=3.7771 max=10.295
+totals astar_calls=373 astar_nodes=271479 route_calls=19 route_cells=80307 route_none=5 flood_cells=151162 exhausted_astar=0 share_ticks=0
+-- scale-128-crew020
+bench scale-128-crew020 end tick=2000 marks=126 items=115 zones=180 goals=0/0/0
+bench scale-128-crew020: 3 runs, mean 5.1953..6.0631 ms (spread 15.3%), state identical across 3 runs
+run 1 commands=181/181 mean=5.1953 p99=24.4470 max=42.229
+run 2 commands=181/181 mean=5.7937 p99=21.0798 max=30.421
+run 3 commands=181/181 mean=6.0631 p99=23.5016 max=32.722
+totals astar_calls=2150 astar_nodes=851719 route_calls=56 route_cells=160601 route_none=10 flood_cells=553681 exhausted_astar=0 share_ticks=0
+-- scale-128-crew050
+bench scale-128-crew050 end tick=2000 marks=338 items=217 zones=450 goals=5/0/0
+bench scale-128-crew050: 3 runs, mean 29.8589..31.7433 ms (spread 6.1%), state identical across 3 runs
+run 1 commands=451/451 mean=29.8589 p99=101.9043 max=121.661
+run 2 commands=451/451 mean=30.4645 p99=95.8293 max=111.973
+run 3 commands=451/451 mean=31.7433 p99=101.5107 max=113.216
+totals astar_calls=7728 astar_nodes=2062684 route_calls=119 route_cells=224507 route_none=22 flood_cells=1460470 exhausted_astar=0 share_ticks=0
+-- scale-128-crew100
+bench scale-128-crew100 end tick=2000 marks=748 items=304 zones=900 goals=6/0/0
+bench scale-128-crew100: 3 runs, mean 95.4300..97.5262 ms (spread 2.2%), state identical across 3 runs
+run 1 commands=901/901 mean=95.4300 p99=288.5209 max=319.810
+run 2 commands=901/901 mean=97.5262 p99=415.8457 max=480.413
+run 3 commands=901/901 mean=96.3857 p99=283.1266 max=318.897
+totals astar_calls=18455 astar_nodes=7305834 route_calls=280 route_cells=384693 route_none=72 flood_cells=3032956 exhausted_astar=0 share_ticks=0

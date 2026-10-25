@@ -1,0 +1,54 @@
+-- scale-128-crew005 FV_CONN=off
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+state=dc12038e172df5b2
+totals astar_calls=694 astar_nodes=351729 flood_cells=148722 exhausted=0 conn_answered=0
+-- scale-128-crew005 FV_CONN=t
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+state=dc12038e172df5b2
+  conn:map cells=321327
+  conn:map cells_dropped=305258
+  conn:map floods=20
+  conn:map rebuild_tile=19
+totals astar_calls=694 astar_nodes=351729 flood_cells=148722 exhausted=0 conn_answered=0
+-- scale-128-crew005 FV_CONN=i
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+state=dc12038e172df5b2
+  conn:map cells=593990
+  conn:map cells_dropped=577944
+  conn:map floods=38
+  conn:map rebuild_key=17
+  conn:map rebuild_tile=19
+totals astar_calls=694 astar_nodes=239352 flood_cells=1948 exhausted=0 conn_answered=3283
+-- scale-128-crew020 FV_CONN=off
+bench scale-128-crew020 end tick=2000 marks=123 items=116 zones=180 goals=0/0/0
+state=eb7851886b98c9ff
+totals astar_calls=2418 astar_nodes=1336575 flood_cells=601219 exhausted=0 conn_answered=0
+-- scale-128-crew020 FV_CONN=t
+bench scale-128-crew020 end tick=2000 marks=123 items=116 zones=180 goals=0/0/0
+state=eb7851886b98c9ff
+  conn:map cells=932195
+  conn:map cells_dropped=916114
+  conn:map floods=58
+  conn:map rebuild_tile=57
+totals astar_calls=2418 astar_nodes=1336575 flood_cells=601219 exhausted=0 conn_answered=0
+-- scale-128-crew020 FV_CONN=i
+bench scale-128-crew020 end tick=2000 marks=123 items=116 zones=180 goals=0/0/0
+state=eb7851886b98c9ff
+  conn:map cells=1764604
+  conn:map cells_dropped=1748578
+  conn:map floods=110
+  conn:map rebuild_key=52
+  conn:map rebuild_tile=57
+totals astar_calls=2418 astar_nodes=1336575 flood_cells=7366 exhausted=0 conn_answered=13016
+-- scale-128-crew050 FV_CONN=off
+bench scale-128-crew050 end tick=2000 marks=343 items=221 zones=450 goals=6/0/0
+state=d2212a1be8fd317c
+totals astar_calls=8499 astar_nodes=2914662 flood_cells=1523151 exhausted=0 conn_answered=0
+-- scale-128-crew050 FV_CONN=t
+bench scale-128-crew050 end tick=2000 marks=343 items=221 zones=450 goals=6/0/0
+state=d2212a1be8fd317c
+  conn:map cells=1737217
+  conn:map cells_dropped=1721114
+  conn:map floods=108
+  conn:map rebuild_tile=107
+totals astar_calls=8499 astar_nodes=2914662 flood_cells=1523151 exhausted=0 conn_answered=0

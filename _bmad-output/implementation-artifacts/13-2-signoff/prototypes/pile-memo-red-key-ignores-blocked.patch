@@ -1,0 +1,15 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index bee415ac..117aa9dc 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -881,7 +881,9 @@ fn pile_targets(
+             memo: None,
+         };
+     }
+-    let key: BTreeSet<Pos> = blocked.iter().copied().filter(|p| kept.near.contains(p)).collect();
++    // 13.2 pile-memo RED (review-patch item 6): the key ignores `blocked`, so the first answer is kept
++    // until `set_tile` or a zones change drops it.
++    let key: BTreeSet<Pos> = BTreeSet::new();
+     if let Some((memo_key, memo)) = &kept.memo {
+         if *memo_key == key {
+             counters::add("flood", "pile_targets", "memo_hits", 1);

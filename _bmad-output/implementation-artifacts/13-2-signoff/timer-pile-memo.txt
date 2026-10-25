@@ -1,0 +1,24 @@
+bench plan-compact-piles run 1/1: ticks=10006 commands=55/55 mean=0.1589 p99=0.3364 max=9.823 over10=0 state=862f0e8814e04fb7
+counters plan-compact-piles run 1/1 time:fn_ns astar_with_budget_inner=68279028 caging_stone=62606738 closes_last_level_exit=537610 nearest_free_cell=3453990 pile_targets=680396236 route_to_nearest_inner=189527 stranded=2980142 tick_boundary=8833063 walls_in_a_dwarf=3804613
+counters plan-compact-piles run 1/1 time:system_ns advance_goals=44004231 advance_tick=762969 carry_items=11482571 claim_jobs=1090252659 create_haul_jobs=35100741 create_jobs=3632937 execute_jobs=309843390 settle=63454985 wander=18240664
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/6/1
+bench big-pile run 1/1: ticks=5006 commands=47/47 mean=0.0956 p99=0.2341 max=9.612 over10=0 state=d32911a55fd27058
+counters big-pile run 1/1 time:fn_ns astar_with_budget_inner=55165091 caging_stone=42901481 closes_last_level_exit=412263 nearest_free_cell=3436160 pile_targets=198262081 route_to_nearest_inner=191409 stranded=3151049 tick_boundary=3740402 walls_in_a_dwarf=3659011
+counters big-pile run 1/1 time:system_ns advance_goals=10719208 advance_tick=355805 carry_items=4478698 claim_jobs=258699310 create_haul_jobs=8962241 create_jobs=2404166 execute_jobs=162075308 settle=19806767 wander=5671632
+bench big-pile end tick=5006 marks=14 items=32 zones=518 goals=0/2/0
+bench seat-slow run 1/1: ticks=3000 commands=0/0 mean=0.1774 p99=0.3388 max=9.191 over10=0 state=17b53b99e9161018
+counters seat-slow run 1/1 time:fn_ns astar_with_budget_inner=10506859 closes_last_level_exit=515363 nearest_free_cell=15795739 pile_targets=245957250 route_to_nearest_inner=5760 stranded=4776194 tick_boundary=3937666 walls_in_a_dwarf=12218695
+counters seat-slow run 1/1 time:system_ns advance_goals=40068899 advance_tick=254228 carry_items=8820280 claim_jobs=271839933 create_haul_jobs=30532024 create_jobs=629754 execute_jobs=123468689 settle=40390459 wander=11003034
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/12/1
+bench scale-128-crew200 run 1/1: ticks=2000 commands=1801/1801 mean=18.8599 p99=85.3992 max=116.693 over10=1030 state=e0b2df85768ab3de
+counters scale-128-crew200 run 1/1 time:fn_ns astar_with_budget_inner=9222178685 caging_stone=1430056247 closes_last_level_exit=4326175 nearest_free_cell=5935422 pile_targets=9389587622 route_to_nearest_inner=100684127 stranded=3523584 tick_boundary=4032248657 walls_in_a_dwarf=5391370
+counters scale-128-crew200 run 1/1 time:system_ns advance_goals=24750205 advance_tick=636565 carry_items=51911345 claim_jobs=15234793731 create_haul_jobs=43565847 create_jobs=108418229 execute_jobs=18083476238 settle=84825615 wander=51921267
+bench scale-128-crew200 end tick=2000 marks=1591 items=425 zones=1800 goals=3/0/0
+bench scale-256-crew100 run 1/1: ticks=2000 commands=901/901 mean=5.4978 p99=64.6035 max=233.341 over10=183 state=b012cde7d86aa137
+counters scale-256-crew100 run 1/1 time:fn_ns astar_with_budget_inner=7325172616 caging_stone=626291689 closes_last_level_exit=1378049 nearest_free_cell=2423394 pile_targets=750454825 route_to_nearest_inner=240259068 stranded=1383604 tick_boundary=572366248 walls_in_a_dwarf=2036871
+counters scale-256-crew100 run 1/1 time:system_ns advance_goals=8537491 advance_tick=286871 carry_items=6003081 claim_jobs=4364519601 create_haul_jobs=14134100 create_jobs=53113080 execute_jobs=5915565324 settle=35144353 wander=23931816
+bench scale-256-crew100 end tick=2000 marks=796 items=162 zones=900 goals=0/0/0
+bench scale-256-crew200 run 1/1: ticks=2000 commands=1801/1801 mean=8.1048 p99=62.2093 max=103.151 over10=305 state=29c78d908e1aa843
+counters scale-256-crew200 run 1/1 time:fn_ns astar_with_budget_inner=6535090937 caging_stone=1336835768 closes_last_level_exit=1193154 nearest_free_cell=1243748 pile_targets=1161991334 route_to_nearest_inner=187522831 stranded=680933 tick_boundary=4044892790 walls_in_a_dwarf=1066290
+counters scale-256-crew200 run 1/1 time:system_ns advance_goals=11992215 advance_tick=448477 carry_items=7993194 claim_jobs=2399456836 create_haul_jobs=20346123 create_jobs=108501980 execute_jobs=9509199160 settle=56910524 wander=47105816
+bench scale-256-crew200 end tick=2000 marks=1692 items=176 zones=1800 goals=0/0/0

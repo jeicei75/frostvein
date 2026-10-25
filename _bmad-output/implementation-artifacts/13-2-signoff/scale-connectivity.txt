@@ -1,0 +1,27 @@
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + connectivity.patch f6c799bc
+== scale points (simd --bench FILE --runs 3; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 3 runs, mean 0.4316..0.4434 ms (spread 2.7%), state identical across 3 runs
+run 1 commands=46/46 mean=0.4434 p99=8.2831 max=13.651
+run 2 commands=46/46 mean=0.4361 p99=8.4527 max=13.314
+run 3 commands=46/46 mean=0.4316 p99=7.9619 max=13.220
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+-- scale-128-crew020
+bench scale-128-crew020 end tick=2000 marks=123 items=116 zones=180 goals=0/0/0
+bench scale-128-crew020: 3 runs, mean 5.1130..5.2121 ms (spread 1.9%), state identical across 3 runs
+run 1 commands=181/181 mean=5.1430 p99=21.7080 max=33.753
+run 2 commands=181/181 mean=5.1130 p99=21.6028 max=33.542
+run 3 commands=181/181 mean=5.2121 p99=22.7883 max=35.183
+totals astar_calls=2418 astar_nodes=1336575 route_calls=186 route_cells=224873 route_none=59 flood_cells=601219 exhausted_astar=0 share_ticks=0
+-- scale-128-crew050
+bench scale-128-crew050 end tick=2000 marks=343 items=221 zones=450 goals=6/0/0
+bench scale-128-crew050: 3 runs, mean 29.4468..30.7670 ms (spread 4.4%), state identical across 3 runs
+run 1 commands=451/451 mean=30.7670 p99=124.2960 max=146.807
+run 2 commands=451/451 mean=29.4468 p99=102.2232 max=126.602
+run 3 commands=451/451 mean=29.9906 p99=96.4992 max=109.340
+totals astar_calls=8499 astar_nodes=2914662 route_calls=402 route_cells=64877 route_none=85 flood_cells=1523151 exhausted_astar=0 share_ticks=0

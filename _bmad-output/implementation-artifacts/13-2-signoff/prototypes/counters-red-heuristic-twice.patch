@@ -1,0 +1,15 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 675f0a25..21aa8132 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1133,8 +1133,10 @@ fn astar_neighbours(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos) -> Ve
+ }
+ 
+ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
++    // RED (13.2 Task 3): visit every goal twice. Same min, twice the goal-checks.
+     goals
+         .iter()
++        .chain(goals.iter())
+         .map(|goal| {
+             counters::goal_check();
+             let horizontal = from.x.abs_diff(goal.x) + from.y.abs_diff(goal.y);

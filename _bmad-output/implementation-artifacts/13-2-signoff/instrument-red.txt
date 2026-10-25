@@ -1,0 +1,191 @@
+# 13.2 review-patch item 8: instrument REDs. 'old' = census.sh/scale.sh at 28162c85, 'new' = this commit.
+# Fixtures: prototypes/red-counters-silent.patch (no counters block printed), prototypes/red-counters-no-emitter.patch (block printed, emitter key absent).
+
+### red-old-census: census.sh prototypes/counters.patch prototypes/red-counters-silent.patch (reproducer section)
+== reproducers (simd --bench FILE --runs 2; scenarios of /workspace/projects/frostvein)
+bench big-pile end tick=5006 marks=14 items=32 zones=518 goals=0/2/0
+big-pile state=d32911a55fd27058
+bench deep-pit end tick=3000 marks=0 items=28 zones=22 goals=0/0/0
+deep-pit state=14627076fa965c39
+bench dig-loop end tick=17640 marks=11 items=44 zones=21 goals=0/0/0
+dig-loop state=ab78f0f971e0326f
+bench full-pile-crowd end tick=10006 marks=0 items=46 zones=4 goals=0/0/0
+full-pile-crowd state=89f558d4764d66fb
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/6/1
+plan-compact-piles state=862f0e8814e04fb7
+bench plan-far-piles end tick=10006 marks=0 items=58 zones=90 goals=12/10/1
+plan-far-piles state=90471fafc3169ca6
+bench plan-spread-piles end tick=10006 marks=0 items=58 zones=203 goals=12/2/0
+plan-spread-piles state=5688e4a4e8105d21
+bench plan end tick=10006 marks=0 items=58 zones=78 goals=12/10/1
+plan state=2479b66a35ac887e
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/12/1
+seat-slow state=17b53b99e9161018
+bench stuck-tunnel end tick=28082 marks=3 items=57 zones=89 goals=38/4/0
+stuck-tunnel state=8365ab4d3aafed06
+== sweeps
+exit 0
+
+### red-new-census: census.sh prototypes/counters.patch prototypes/red-counters-silent.patch (reproducer section)
+== reproducers (simd --bench FILE --runs 2; scenarios of /workspace/projects/frostvein)
+bench big-pile end tick=5006 marks=14 items=32 zones=518 goals=0/2/0
+big-pile state=d32911a55fd27058
+counters big-pile MISSING
+bench deep-pit end tick=3000 marks=0 items=28 zones=22 goals=0/0/0
+deep-pit state=14627076fa965c39
+counters deep-pit MISSING
+bench dig-loop end tick=17640 marks=11 items=44 zones=21 goals=0/0/0
+dig-loop state=ab78f0f971e0326f
+counters dig-loop MISSING
+bench full-pile-crowd end tick=10006 marks=0 items=46 zones=4 goals=0/0/0
+full-pile-crowd state=89f558d4764d66fb
+counters full-pile-crowd MISSING
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/6/1
+plan-compact-piles state=862f0e8814e04fb7
+counters plan-compact-piles MISSING
+bench plan-far-piles end tick=10006 marks=0 items=58 zones=90 goals=12/10/1
+plan-far-piles state=90471fafc3169ca6
+counters plan-far-piles MISSING
+bench plan-spread-piles end tick=10006 marks=0 items=58 zones=203 goals=12/2/0
+plan-spread-piles state=5688e4a4e8105d21
+counters plan-spread-piles MISSING
+bench plan end tick=10006 marks=0 items=58 zones=78 goals=12/10/1
+plan state=2479b66a35ac887e
+counters plan MISSING
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/12/1
+seat-slow state=17b53b99e9161018
+counters seat-slow MISSING
+bench stuck-tunnel end tick=28082 marks=3 items=57 zones=89 goals=38/4/0
+stuck-tunnel state=8365ab4d3aafed06
+counters stuck-tunnel MISSING
+== sweeps
+exit 0
+
+### red-old-scale: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-<fixture>.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-silent.patch a84add1c
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.3940 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.3940 p99=7.2296 max=13.434
+totals astar_calls=0 astar_nodes=0 route_calls=0 route_cells=0 route_none=0 flood_cells=0 exhausted_astar=0 share_ticks=0
+exit 1
+
+### red-old-scale-no-emitter: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-<fixture>.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-no-emitter.patch 990507ff
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.4571 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.4571 p99=6.9489 max=12.909
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+exit 0
+
+### red-new-scale-no-emitter: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-<fixture>.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-no-emitter.patch 990507ff
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.6731 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.6731 p99=7.8048 max=22.868 over10=20 state=dc12038e172df5b2
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+totals COUNTERS MISSING: boundaries=0, every total above is blind
+exit 0
+
+### red-new-scale-silent: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-<fixture>.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-silent.patch a84add1c
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.4801 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.4801 p99=7.3024 max=14.883 over10=20 state=dc12038e172df5b2
+totals astar_calls=0 astar_nodes=0 route_calls=0 route_cells=0 route_none=0 flood_cells=0 exhausted_astar=0 share_ticks=0
+totals COUNTERS MISSING: boundaries=0, every total above is blind
+exit 0
+
+# 13.2 review run 2, patch item 9: 'block present, emitter key absent'. 'new' = census.sh/scale.sh at 7cf68ec4.
+
+### red-new-census-no-emitter: census.sh prototypes/counters.patch prototypes/red-counters-no-emitter.patch (flag lines; old census.sh printed none)
+counters big-pile NO EMITTER
+counters big-pile IDENTICAL across 2 runs
+counters deep-pit NO EMITTER
+counters deep-pit IDENTICAL across 2 runs
+counters dig-loop NO EMITTER
+counters dig-loop IDENTICAL across 2 runs
+counters full-pile-crowd NO EMITTER
+counters full-pile-crowd IDENTICAL across 2 runs
+counters plan-compact-piles NO EMITTER
+counters plan-compact-piles IDENTICAL across 2 runs
+counters plan-far-piles NO EMITTER
+counters plan-far-piles IDENTICAL across 2 runs
+counters plan-spread-piles NO EMITTER
+counters plan-spread-piles IDENTICAL across 2 runs
+counters plan NO EMITTER
+counters plan IDENTICAL across 2 runs
+counters seat-slow NO EMITTER
+counters seat-slow IDENTICAL across 2 runs
+counters stuck-tunnel NO EMITTER
+counters stuck-tunnel IDENTICAL across 2 runs
+exit 0
+
+### healthy-new-census: census.sh prototypes/counters.patch -> byte-identical to census-counters.txt (diff empty), 0 NO EMITTER, 10 IDENTICAL
+
+### new-scale-no-emitter: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-no-emitter.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-no-emitter.patch 990507ff
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.3502 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.3502 p99=5.8726 max=9.461 over10=0 state=dc12038e172df5b2
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+totals NO EMITTER: boundaries=0, share_ticks is blind
+exit 0
+
+### new-scale-silent: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh prototypes/red-counters-silent.patch
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + red-counters-silent.patch a84add1c
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.3474 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.3474 p99=5.6464 max=8.871 over10=0 state=dc12038e172df5b2
+totals astar_calls=0 astar_nodes=0 route_calls=0 route_cells=0 route_none=0 flood_cells=0 exhausted_astar=0 share_ticks=0
+totals COUNTERS MISSING: no counters block, every total above is blind
+exit 0
+
+### new-scale-healthy: SCALE_RUNS=1 SCALE_ONLY=scale-128-crew005 scale.sh 
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.3738 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.3738 p99=5.7875 max=9.431 over10=0 state=dc12038e172df5b2
+totals astar_calls=694 astar_nodes=351729 route_calls=31 route_cells=32198 route_none=2 flood_cells=148722 exhausted_astar=0 share_ticks=0
+exit 0
+

@@ -1,0 +1,52 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 1712871c..20bb5d00 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -841,6 +841,11 @@ fn set_clamber<'a>(
+     DWARF_CLOSED.with(|c| c.borrow_mut().clear());
+ }
+ 
++/// clamber-guards: `blocked` without the loose-stone cells: a stone walls nobody in once any dwarf can cross it.
++fn without_stones(blocked: &BTreeSet<Pos>) -> BTreeSet<Pos> {
++    CLAMBER.with(|c| blocked.difference(&c.borrow()).copied().collect())
++}
++
+ fn on_stone(p: Pos) -> bool {
+     CLAMBER.with(|c| c.borrow().contains(&p))
+ }
+@@ -1010,6 +1015,7 @@ fn walls_in_a_dwarf(
+     cell: Pos,
+ ) -> bool {
+     counters::add("calls", "walls_in_a_dwarf", "calls", 1);
++    let blocked = &without_stones(blocked);
+     let sides = sides_of(terrain, blocked, cell);
+     let mut closed = blocked.clone();
+     closed.insert(cell);
+@@ -1040,7 +1046,7 @@ fn closes_last_level_exit(
+ /// The tiles a dwarf can step to from `cell`, with `cell` itself closed: where the floods of
+ /// `walls_in_a_dwarf` start.
+ fn sides_of(terrain: &Terrain, blocked: &BTreeSet<Pos>, cell: Pos) -> Vec<Pos> {
+-    let mut closed = blocked.clone();
++    let mut closed = without_stones(blocked);
+     closed.insert(cell);
+     astar_neighbours(terrain, &closed, cell)
+ }
+@@ -1056,6 +1062,7 @@ fn walls_in_a_dwarf_from(
+     sides: Vec<Pos>,
+ ) -> bool {
+     counters::add("calls", "walls_in_a_dwarf_from", "calls", 1);
++    let blocked = &without_stones(blocked);
+     let mut closed = blocked.clone();
+     closed.insert(cell);
+     !stranded(terrain, &closed, dwarves, sides).is_empty()
+@@ -1989,6 +1996,10 @@ fn caging_stone(
+ ) -> Option<u32> {
+     const CAGE_CELLS: usize = 64;
+     counters::add("flood", "caging_stone", "calls", 1);
++    // clamber-guards: a dwarf crosses any stone, so no stone cages him.
++    if true {
++        return None;
++    }
+     // The cells reachable from `pos`, or `None` once there are more than `CAGE_CELLS`.
+     let pocket = |closed: &BTreeSet<Pos>| {
+         counters::add("flood", "caging_stone", "pockets", 1);

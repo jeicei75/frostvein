@@ -1,0 +1,56 @@
+scale stack: 4f57027
+scale   + census.patch a0f22d82
+scale   + counters.patch 92c9db9f
+scale   + scale.patch 32abef2a
+scale   + connectivity.patch f6c799bc
+== scale points (simd --bench FILE --runs 1; scale/*.json of /workspace/projects/frostvein/_bmad-output/implementation-artifacts/13-2-signoff)
+-- scale-128-crew005
+bench scale-128-crew005 end tick=2000 marks=26 items=41 zones=45 goals=0/0/0
+bench scale-128-crew005: 1 run, mean 0.7068 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.7068 p99=9.7308 max=18.603
+totals astar_calls=694 astar_nodes=239352 route_calls=31 route_cells=32198 route_none=2 flood_cells=1948 exhausted_astar=0 share_ticks=0
+-- scale-128-crew020
+bench scale-128-crew020 end tick=2000 marks=123 items=116 zones=180 goals=0/0/0
+bench scale-128-crew020: 1 run, mean 5.5626 ms (1 run: no floor)
+run 1 commands=181/181 mean=5.5626 p99=23.7691 max=35.478
+totals astar_calls=2418 astar_nodes=1336575 route_calls=186 route_cells=224873 route_none=59 flood_cells=7366 exhausted_astar=0 share_ticks=0
+-- scale-128-crew050
+bench scale-128-crew050 end tick=2000 marks=343 items=221 zones=450 goals=6/0/0
+bench scale-128-crew050: 1 run, mean 30.1846 ms (1 run: no floor)
+run 1 commands=451/451 mean=30.1846 p99=99.9949 max=122.294
+totals astar_calls=8499 astar_nodes=2898673 route_calls=402 route_cells=64877 route_none=85 flood_cells=18178 exhausted_astar=0 share_ticks=0
+-- scale-128-crew100
+bench scale-128-crew100 end tick=2000 marks=754 items=288 zones=900 goals=10/0/0
+bench scale-128-crew100: 1 run, mean 92.6855 ms (1 run: no floor)
+run 1 commands=901/901 mean=92.6855 p99=268.1384 max=283.886
+totals astar_calls=17741 astar_nodes=6570895 route_calls=682 route_cells=241116 route_none=126 flood_cells=51906 exhausted_astar=0 share_ticks=0
+-- scale-128-crew200
+bench scale-128-crew200 end tick=2000 marks=1591 items=425 zones=1800 goals=3/0/0
+bench scale-128-crew200: 1 run, mean 303.0167 ms (1 run: no floor)
+run 1 commands=1801/1801 mean=303.0167 p99=911.0024 max=975.347
+totals astar_calls=49463 astar_nodes=18282688 route_calls=1543 route_cells=291569 route_none=381 flood_cells=89814 exhausted_astar=0 share_ticks=0
+-- scale-256-crew005
+bench scale-256-crew005 end tick=2000 marks=35 items=24 zones=45 goals=0/0/0
+bench scale-256-crew005: 1 run, mean 0.4446 ms (1 run: no floor)
+run 1 commands=46/46 mean=0.4446 p99=20.9819 max=31.692
+totals astar_calls=363 astar_nodes=514643 route_calls=17 route_cells=58 route_none=2 flood_cells=603 exhausted_astar=10 share_ticks=0
+-- scale-256-crew020
+bench scale-256-crew020 end tick=2000 marks=148 items=62 zones=180 goals=0/0/0
+bench scale-256-crew020: 1 run, mean 1.5454 ms (1 run: no floor)
+run 1 commands=181/181 mean=1.5454 p99=26.3257 max=63.673
+totals astar_calls=1489 astar_nodes=587589 route_calls=61 route_cells=150170 route_none=15 flood_cells=3418 exhausted_astar=10 share_ticks=0
+-- scale-256-crew050
+bench scale-256-crew050 end tick=2000 marks=390 items=126 zones=450 goals=0/0/0
+bench scale-256-crew050: 1 run, mean 10.3767 ms (1 run: no floor)
+run 1 commands=451/451 mean=10.3767 p99=77.3934 max=111.480
+totals astar_calls=6866 astar_nodes=7234046 route_calls=559 route_cells=551047 route_none=288 flood_cells=10935 exhausted_astar=131 share_ticks=0
+-- scale-256-crew100
+bench scale-256-crew100 end tick=2000 marks=794 items=164 zones=900 goals=0/0/0
+bench scale-256-crew100: 1 run, mean 22.3332 ms (1 run: no floor)
+run 1 commands=901/901 mean=22.3332 p99=133.1523 max=211.336
+totals astar_calls=18318 astar_nodes=6903257 route_calls=505 route_cells=451125 route_none=107 flood_cells=31785 exhausted_astar=97 share_ticks=0
+-- scale-256-crew200
+bench scale-256-crew200 end tick=2000 marks=1692 items=176 zones=1800 goals=0/0/0
+bench scale-256-crew200: 1 run, mean 34.4624 ms (1 run: no floor)
+run 1 commands=1801/1801 mean=34.4624 p99=241.7073 max=312.157
+totals astar_calls=25468 astar_nodes=11670450 route_calls=1040 route_cells=502586 route_none=378 flood_cells=63039 exhausted_astar=133 share_ticks=0

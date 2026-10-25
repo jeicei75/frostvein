@@ -1,0 +1,18 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index bee415ac..4bc09844 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -874,10 +874,9 @@ fn pile_targets(
+         *kept = PileGround {
+             zones: zones.clone(),
+             open: BTreeMap::new(),
+-            near: zones
+-                .iter()
+-                .flat_map(|&cell| side_neighbours(cell).into_iter().chain([cell]))
+-                .collect(),
++            // 13.2 pile-memo RED (review-patch item 6): the key reads the zone cells only, not their
++            // side neighbours, so a blocked cell beside the pile no longer refreshes the answer.
++            near: zones.clone(),
+             memo: None,
+         };
+     }
