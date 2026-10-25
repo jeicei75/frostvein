@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.3: The Pile Remembers — pile-memo
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -95,7 +95,7 @@ What the probe established:
   .\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')        # expect "verified — gui.exe <8 chars>, checkout <7 chars>"
   ```
   Questions for Wolf: (1) Did the old binary read MISMATCH? (2) Did the rebuilt one read `verified` with two different lengths? If both print the same length, the lengths did not differ, so the pass proves nothing; say so. (3) The unresolvable-stamp branch (AC 6's third case) is shown at the seat by `-Exe` with a binary built from a commit the Windows checkout has not fetched. If none is at hand, record it as unseen. Record the answers in the card. No sim seat is needed: sim work is judged by scenario tests (M2-26).
-- [ ] **Task 7: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (about 45–65 min). Paste the block under Debug Log References. Then the cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-3-the-pile-remembers-pile-memo`), `phase_state.py clear`, and Status → review on the story and the board.
+- [x] **Task 7: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (about 45–65 min). Paste the block under Debug Log References. Then the cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-3-the-pile-remembers-pile-memo`), `phase_state.py clear`, and Status → review on the story and the board.
 
 ## Verification
 
@@ -220,11 +220,32 @@ main run 1/1: ticks=2000 commands=1801/1801 mean=273.2888 p99=794.6823 max=863.5
 
 Identical state (`e0b2df85768ab3de`, = creation and 13.2's C0 base). Mean -93.9% (273.3 -> 16.7-16.9 ms, spread 1.2%), p99 794.7 -> ~86 ms, over-10 ms ticks 1305 -> ~949. The tail does NOT fit the 100 ms budget: max 114-117 ms, as 13.2 said.
 
+**Task 7, full gate** on `46f9afa1` (`RUST_TEST_THREADS=1 scripts/gate.sh`):
+
+```
+frostvein gate
+  cargo fmt --check           ok  1s
+  cargo clippy -D warnings    ok  2s
+  cargo test                  ok  683s
+  cargo test (pixel guards)   ok  3057s
+  tui has no sim-core edge                ok
+  client-core has no sim-core edge        ok
+  gui has no sim-core edge                ok
+  metrics ledger tests        ok  0s
+  bench tests                 ok  19s
+  mutation tables still apply ok  13s
+reaped 16 stale build artifacts from target (0.0 GB)
+GATE GREEN  3785s
+```
+
+No pin edited; every scenario test, the cage, ring and two-wide sweeps included, passed (AC 4).
+
 ### Completion Notes List
 
 - Implementer: one Sonnet 5.5 subagent wrote Tasks 1, 2 and 5 (lib.rs port + two tests, launch-gui.ps1), checking each of the five sabotages by hand. Opus orchestrated, reviewed the diff, re-pointed `12-9.sh` row 20, wrote and ran the mutation table, ran every tick-bench and scale run, and wrote the card.
 - The hit check is a let-chain (`if let ... && *memo_key == key`): clippy's `collapsible_if` flagged the nested form. No `type_complexity` warning, so no alias.
 - AC 1-3: lib tests + 5/5 KILLED. AC 4: `same` 10/10 on tick-bench and an identical state at the scale point; the full gate (scenario pins, sweeps) is Task 7. AC 5: the table and scale lines above. AC 6: `launch-gui.ps1` is unrun here (no `pwsh`); the seat card is its only test.
+- **Task 6 is open on purpose:** the card is written and the branch pushed (`push.sh --fast` VERIFIED `46f9afa1`), but its answers are Wolf's to give at the seat. Status goes to review per Task 7 with AC 6 unseen; the sitting is recorded in the card when it happens.
 
 ### File List
 
@@ -240,4 +261,5 @@ Identical state (`e0b2df85768ab3de`, = creation and 13.2's C0 base). Mean -93.9%
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Dev (Sonnet 5.5 subagent + Opus): pile-memo in `pile_targets`, two lib tests, `mutations/13-3.sh` 5/5 KILLED, `12-9.sh` row 20 re-pointed, launch-gui full-SHA compare, seat card. tick-bench `same` 10/10, six rows -58..-92%; scale 128^2 crew 200 mean 273.3 -> 16.8 ms, same state. Full gate GREEN on `46f9afa1` (3785 s). Status review; AC 6 seat pending. |
 | 2026-10-25 | Story created (Opus 5.5) from Epic 13 Story 13.3 and the 13.2 proposal, with the launch-gui full-SHA fix folded in per Wolf's ruling. The creation probe ran pile-memo ported onto `main` against `main` (see Found at creation). Status ready-for-dev. |
