@@ -60,30 +60,30 @@ What the probe established:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: port pile-memo into `sim-core` (AC 1, 4).** UPDATE `crates/sim-core/src/lib.rs`. Port `13-2-signoff/prototypes/pile-memo.patch`; do not `git apply` it. It applies on `main`, but it calls `counters::add`, and `main` has no `counters` module, so it does not compile.
-  - [ ] `PileGround` (`lib.rs:713-717`) gains two fields: `near: BTreeSet<Pos>` (the zone cells and their `side_neighbours`, which are the only cells whose `blocked` the depth map reads) and `memo: Option<(BTreeSet<Pos>, BTreeMap<Pos, u32>)>` (the key, which is the blocked cells among `near`, and the last answer).
-  - [ ] `Terrain::set_tile` (`lib.rs:742-746`) sets `memo = None` beside `open.clear()`.
-  - [ ] `pile_targets` (`lib.rs:851`). The zones-change reset (`:868-873`) also builds `near` and sets `memo: None`. Before the floods, build `key = blocked ∩ near`. If it equals the memo's key, return the memo's answer. Otherwise compute as today and store `(key, depth.clone())` before returning. No `counters::add` line.
-  - [ ] `#[cfg(test)] thread_local! static MEMO_HITS` beside `FLOODED` (`lib.rs:818-822`), incremented on a hit. Task 2's hit test reads it.
-  - [ ] Rewrite the doc comments on `PileGround` (`:710-712`) and the last paragraph of `pile_targets`' (`:847-850`): what is kept, the key, and what drops it. Add `// NOTE: a hit still builds its key and clones the map (13.2: pile_targets is still 42–46% of a pile scenario's tick after the memo); not optimised further.`
-- [ ] **Task 2: lib tests (AC 1, 2, 3).** In `lib.rs`'s test module, beside `the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change` (`:7405`). Use the same helpers (`flat_terrain`, `at1`), and change tiles through `set_tile` only.
-  - [ ] `a_blocked_cell_beside_the_pile_gives_the_fresh_answer` (AC 2). Fixture: one zone cell `c` with rock on three of its side neighbours, so its fourth, `door`, is its only way in (the creation probe's fixture: `flat_terrain(12, 12)`, `c = (5,5,1)`, rock at `(6,5,1)` `(5,4,1)` `(5,6,1)`, `door = (4,5,1)`). (i) With `blocked` empty, assert `{c: 1}`. (ii) With `blocked = {door}` on the SAME terrain, assert the answer equals a fresh terrain's answer for `{door}` (the oracle: rebuild the fixture, so its `pile_ground` is empty) and is not `{c: 1}`. (iii) With `blocked` empty again, assert `{c: 1}`. (iv) Repeat (i)–(iii) with the blocked cell on a zone cell: a two-cell zone, the far cell blocked.
-  - [ ] `the_pile_answer_is_kept_until_a_tile_or_the_zones_change` (AC 3). Same inputs twice: `MEMO_HITS` goes up by 1 and the answers are equal. After a `set_tile` (any cell): no hit on the next call. After a zones change: no hit on the next call.
-- [ ] **Task 3: the mutation table (AC 2, 3).** NEW `_bmad-output/implementation-artifacts/mutations/13-3.sh`, in `13-1.sh`'s shape (python heredoc, `assert s.count(old) == 1`). Run it alone, after commit: `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/13-3.sh`. Every row must be KILLED at its own assert (memory: strengthened test needs re-mutation). Re-express the REDs as rows, because their hunks carry the `counters::add` context line and will not apply:
+- [x] **Task 1: port pile-memo into `sim-core` (AC 1, 4).** UPDATE `crates/sim-core/src/lib.rs`. Port `13-2-signoff/prototypes/pile-memo.patch`; do not `git apply` it. It applies on `main`, but it calls `counters::add`, and `main` has no `counters` module, so it does not compile.
+  - [x] `PileGround` (`lib.rs:713-717`) gains two fields: `near: BTreeSet<Pos>` (the zone cells and their `side_neighbours`, which are the only cells whose `blocked` the depth map reads) and `memo: Option<(BTreeSet<Pos>, BTreeMap<Pos, u32>)>` (the key, which is the blocked cells among `near`, and the last answer).
+  - [x] `Terrain::set_tile` (`lib.rs:742-746`) sets `memo = None` beside `open.clear()`.
+  - [x] `pile_targets` (`lib.rs:851`). The zones-change reset (`:868-873`) also builds `near` and sets `memo: None`. Before the floods, build `key = blocked ∩ near`. If it equals the memo's key, return the memo's answer. Otherwise compute as today and store `(key, depth.clone())` before returning. No `counters::add` line.
+  - [x] `#[cfg(test)] thread_local! static MEMO_HITS` beside `FLOODED` (`lib.rs:818-822`), incremented on a hit. Task 2's hit test reads it.
+  - [x] Rewrite the doc comments on `PileGround` (`:710-712`) and the last paragraph of `pile_targets`' (`:847-850`): what is kept, the key, and what drops it. Add `// NOTE: a hit still builds its key and clones the map (13.2: pile_targets is still 42–46% of a pile scenario's tick after the memo); not optimised further.`
+- [x] **Task 2: lib tests (AC 1, 2, 3).** In `lib.rs`'s test module, beside `the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change` (`:7405`). Use the same helpers (`flat_terrain`, `at1`), and change tiles through `set_tile` only.
+  - [x] `a_blocked_cell_beside_the_pile_gives_the_fresh_answer` (AC 2). Fixture: one zone cell `c` with rock on three of its side neighbours, so its fourth, `door`, is its only way in (the creation probe's fixture: `flat_terrain(12, 12)`, `c = (5,5,1)`, rock at `(6,5,1)` `(5,4,1)` `(5,6,1)`, `door = (4,5,1)`). (i) With `blocked` empty, assert `{c: 1}`. (ii) With `blocked = {door}` on the SAME terrain, assert the answer equals a fresh terrain's answer for `{door}` (the oracle: rebuild the fixture, so its `pile_ground` is empty) and is not `{c: 1}`. (iii) With `blocked` empty again, assert `{c: 1}`. (iv) Repeat (i)–(iii) with the blocked cell on a zone cell: a two-cell zone, the far cell blocked.
+  - [x] `the_pile_answer_is_kept_until_a_tile_or_the_zones_change` (AC 3). Same inputs twice: `MEMO_HITS` goes up by 1 and the answers are equal. After a `set_tile` (any cell): no hit on the next call. After a zones change: no hit on the next call.
+- [x] **Task 3: the mutation table (AC 2, 3).** NEW `_bmad-output/implementation-artifacts/mutations/13-3.sh`, in `13-1.sh`'s shape (python heredoc, `assert s.count(old) == 1`). Run it alone, after commit: `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/13-3.sh`. Every row must be KILLED at its own assert (memory: strengthened test needs re-mutation). Re-express the REDs as rows, because their hunks carry the `counters::add` context line and will not apply:
   1. the key ignores `blocked` (`let key: BTreeSet<Pos> = BTreeSet::new();`, from `pile-memo-red-key-ignores-blocked.patch`) → `a_blocked_cell_beside_the_pile_gives_the_fresh_answer`;
   2. `near` reads the zone cells only (`near: zones.clone()`, from `pile-memo-red-near-zone-only.patch`) → the same test, at case (ii);
   3. `set_tile` keeps the memo → `the_pile_answer_is_kept_until_a_tile_or_the_zones_change`;
   4. a zones change keeps the memo → the same test;
   5. the memo is never stored → the same test (no hit).
-- [ ] **Task 4: the instrument, RED first (AC 4, 5).** The instrument is 13.1's `scripts/tick-bench.sh`. Its `state` column (`tick-bench.sh:147`, from `--bench`'s `state=` at `crates/simd/src/scenario.rs:320-321`) judges AC 4, and its delta and control columns judge AC 5. It is tested by `crates/simd/tests/bench.rs` and `mutations/13-1.sh`. Run nothing else at the same time (no gate, no `mutate.sh`).
-  - [ ] **RED.** In a scratch worktree off HEAD, apply row 1's sabotage and commit it `--no-verify` (memory: worktree commit runs the gate). Run `RUNS=3 scripts/tick-bench.sh main <red-sha> scenarios/plan.json scenarios/big-pile.json`. Expected: `differ` on both rows (creation: `differ`, `differ`). Paste it, then remove the worktree.
-  - [ ] **Green.** `RUNS=5 scripts/tick-bench.sh main HEAD`. Expected: `same` ×10, the six rows at −55% or better and BEYOND FLOOR, and the other four as measured (creation figures above). Paste the table in the Debug Log.
-  - [ ] **Scale point (AC 5).** `crew` exists only in 13.2's `prototypes/scale.patch`, which applies on `main` alone (checked at creation). Make two throwaway `--no-verify` commits in scratch worktrees: `main` + `scale.patch`, and HEAD + `scale.patch`. Build each in release from its own worktree (memory: CARGO_TARGET_DIR builds cwd sources, `-j 8`). Run `simd --bench _bmad-output/implementation-artifacts/13-2-signoff/scale/scale-128-crew200.json`, `--runs 3` on HEAD and `--runs 1` on `main` (about 10 min a run). Paste both summary lines. Expected: identical `state=` (creation: `e0b2df85768ab3de` on both), with HEAD's mean, p99, max and over10 beside `main`'s. Remove both worktrees.
-- [ ] **Task 5: `launch-gui.ps1` compares full SHAs (AC 6).** UPDATE `scripts/launch-gui.ps1`.
-  - [ ] `:133-140`: read `$headFull = git -C $Checkout rev-parse HEAD`, and keep `$head = ... rev-parse --short HEAD` for display only. Rewrite the `:133-134` comment. Its premise, "`build.rs` uses `--short`, so this must too", is what broke: `--short`'s length depends on the repo's object count (7 characters below about 16k objects, 8 above), and the devpod build and the Windows checkout differ.
-  - [ ] Replace `:201`'s `$stamp -ne $head` string compare. Run `$stampFull = git -C $Checkout rev-parse --verify --quiet "$stamp^{commit}"`, and check `$LASTEXITCODE`, as the `:146-149` comment explains. If it fails or is empty, `Fail` with: the checkout has no single commit for stamp `$stamp` (not fetched, or an ambiguous prefix); rebuild `gui.exe` at `$head`. If `$stampFull -ne $headFull`, keep the existing MISMATCH text, which shows the short forms.
-  - [ ] Do not touch `crates/gui/build.rs`. The stamp stays short.
-  - [ ] There is no `pwsh` on the devpod, so this cannot run here. The seat sitting (Task 6) is its only test. Say so in the commit message.
+- [x] **Task 4: the instrument, RED first (AC 4, 5).** The instrument is 13.1's `scripts/tick-bench.sh`. Its `state` column (`tick-bench.sh:147`, from `--bench`'s `state=` at `crates/simd/src/scenario.rs:320-321`) judges AC 4, and its delta and control columns judge AC 5. It is tested by `crates/simd/tests/bench.rs` and `mutations/13-1.sh`. Run nothing else at the same time (no gate, no `mutate.sh`).
+  - [x] **RED.** In a scratch worktree off HEAD, apply row 1's sabotage and commit it `--no-verify` (memory: worktree commit runs the gate). Run `RUNS=3 scripts/tick-bench.sh main <red-sha> scenarios/plan.json scenarios/big-pile.json`. Expected: `differ` on both rows (creation: `differ`, `differ`). Paste it, then remove the worktree.
+  - [x] **Green.** `RUNS=5 scripts/tick-bench.sh main HEAD`. Expected: `same` ×10, the six rows at −55% or better and BEYOND FLOOR, and the other four as measured (creation figures above). Paste the table in the Debug Log.
+  - [x] **Scale point (AC 5).** `crew` exists only in 13.2's `prototypes/scale.patch`, which applies on `main` alone (checked at creation). Make two throwaway `--no-verify` commits in scratch worktrees: `main` + `scale.patch`, and HEAD + `scale.patch`. Build each in release from its own worktree (memory: CARGO_TARGET_DIR builds cwd sources, `-j 8`). Run `simd --bench _bmad-output/implementation-artifacts/13-2-signoff/scale/scale-128-crew200.json`, `--runs 3` on HEAD and `--runs 1` on `main` (about 10 min a run). Paste both summary lines. Expected: identical `state=` (creation: `e0b2df85768ab3de` on both), with HEAD's mean, p99, max and over10 beside `main`'s. Remove both worktrees.
+- [x] **Task 5: `launch-gui.ps1` compares full SHAs (AC 6).** UPDATE `scripts/launch-gui.ps1`.
+  - [x] `:133-140`: read `$headFull = git -C $Checkout rev-parse HEAD`, and keep `$head = ... rev-parse --short HEAD` for display only. Rewrite the `:133-134` comment. Its premise, "`build.rs` uses `--short`, so this must too", is what broke: `--short`'s length depends on the repo's object count (7 characters below about 16k objects, 8 above), and the devpod build and the Windows checkout differ.
+  - [x] Replace `:201`'s `$stamp -ne $head` string compare. Run `$stampFull = git -C $Checkout rev-parse --verify --quiet "$stamp^{commit}"`, and check `$LASTEXITCODE`, as the `:146-149` comment explains. If it fails or is empty, `Fail` with: the checkout has no single commit for stamp `$stamp` (not fetched, or an ambiguous prefix); rebuild `gui.exe` at `$head`. If `$stampFull -ne $headFull`, keep the existing MISMATCH text, which shows the short forms.
+  - [x] Do not touch `crates/gui/build.rs`. The stamp stays short.
+  - [x] There is no `pwsh` on the devpod, so this cannot run here. The seat sitting (Task 6) is its only test. Say so in the commit message.
 - [ ] **Task 6: the seat card (AC 6).** NEW `_bmad-output/implementation-artifacts/13-3-signoff/vehicle-card.md`. Give short inline steps, with no wrapper script (Wolf rejected one at 13.1). Push first: `scripts/push.sh --fast` (standing-authorised for vehicle testing).
   ```powershell
   # PowerShell, Windows checkout. Undo the 2026-10-25 workaround so the lengths differ again:
@@ -171,9 +171,70 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 
 ### Debug Log References
 
+**Task 3, mutation table** (`mutations/13-3.sh`, run alone after commit `2a5a86d8`): 5/5 KILLED, each at its own assert.
+
+| row | sabotage | killed by | at |
+|---|---|---|---|
+| 1 | the key ignores `blocked` (`.filter(\|_\| false)`) | `a_blocked_cell_beside_the_pile_gives_the_fresh_answer` | `lib.rs:7521`, "(ii) a blocked (4,5,1) gives the fresh answer" |
+| 2 | `near` reads the zone cells only (`.copied()`) | the same test | `lib.rs:7521`, the same (ii) assert |
+| 3 | `set_tile` keeps the memo | `the_pile_answer_is_kept_until_a_tile_or_the_zones_change` | `lib.rs:7553`, "a set_tile drops the memo" |
+| 4 | a zones change keeps the memo (`memo: kept.memo.take()`) | the same test | `lib.rs:7563`, "a zones change drops the memo" |
+| 5 | the memo is never stored | the same test | `lib.rs:7547`, "unchanged inputs are a hit" |
+
+Rows 1-2 stop at the one-cell fixture, so case (iv) (the zone-cell case) has no row of its own; rows 3-4 also fail the unedited `the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change` (implementer's hand check). **`12-9.sh` row 20 re-pointed:** its second anchor (`}` `}` `depth`) ran into the new memo store, so the fast gate's "mutation tables still apply" check went red at the first commit attempt. The retain now lands BEFORE `kept.memo = Some(...)`, so the kept answer is the sabotaged one too. Re-run alone: KILLED, `a_walled_in_free_cell_does_not_stop_the_pile` at its `watch` bound (`lib.rs:6925`, the delivery never lands).
+
+**Task 4 RED** (row 1's sabotage as throwaway `f7ed06fb` in a scratch worktree, removed): `RUNS=3 scripts/tick-bench.sh main f7ed06fb scenarios/plan.json scenarios/big-pile.json`, load 4.77 before / 6.69 after:
+
+```
+scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+plan                       0.2409     0.0980   -59.3%    -6.4%      30.2%      48.1%      41.4%  differ BEYOND FLOOR
+big-pile                   1.1440     0.1272   -88.9%   +10.3%       7.9%      79.5%      33.4%  differ BEYOND FLOOR
+```
+
+**Task 4 green:** `RUNS=5 scripts/tick-bench.sh main HEAD` (HEAD `2a5a86d8`), load 4.51 before / 1.36 after. `same` counted: 10 of 10.
+
+```
+scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+big-pile                   1.0573     0.0887   -91.6%    -2.7%       1.7%       2.6%       2.1%  same   BEYOND FLOOR
+deep-pit                   0.0379     0.0338   -10.8%    -1.5%       1.8%       2.4%       2.9%  same   BEYOND FLOOR
+dig-loop                   0.0349     0.0357    +2.2%    +1.1%       3.2%       2.5%       2.8%  same   within floor
+full-pile-crowd            0.0311     0.0328    +5.5%    +0.6%       3.5%       3.4%       5.4%  same   BEYOND FLOOR
+plan-compact-piles         1.4132     0.1456   -89.7%    -2.3%       1.5%       5.4%       5.0%  same   BEYOND FLOOR
+plan-far-piles             0.2250     0.0834   -62.9%    -3.4%       2.3%       1.7%       1.8%  same   BEYOND FLOOR
+plan-spread-piles          1.6895     0.1614   -90.4%    -2.7%       3.4%       3.0%       1.8%  same   BEYOND FLOOR
+plan                       0.1874     0.0780   -58.4%    -3.1%       0.9%       1.3%       0.8%  same   BEYOND FLOOR
+seat-slow                  0.4687     0.1613   -65.6%    -6.3%       2.3%       3.3%       2.8%  same   BEYOND FLOOR
+stuck-tunnel               0.0964     0.0940    -2.4%    +0.5%       0.7%       0.5%       1.2%  same   BEYOND FLOOR
+```
+
+The six pile/seat rows read -58.4..-91.6%, all BEYOND FLOOR, every floor under 10% (quiet devpod; no rerun needed). The other four, as measured: deep-pit -10.8%, stuck-tunnel -2.4%, dig-loop +2.2% (within floor), and **full-pile-crowd +5.5% BEYOND FLOOR** (control +0.6%). That is inside the ~6% cross-build resolution (13.1 review run 2), so it is not established, but it is plausible: a scenario whose `blocked ∩ near` changes on most calls pays the key build and the clone on every miss. Not optimised (scope guardrail); noted for review.
+
+**Task 4 scale point** (`scale.patch` on `main` = `8a75da2e`, on HEAD = `0a2d1455`, throwaway, each built in release from its own worktree, removed), `simd --bench 13-2-signoff/scale/scale-128-crew200.json`:
+
+```
+HEAD run 1/3: ticks=2000 commands=1801/1801 mean=16.6793 p99=85.5127 max=116.787 over10=947 state=e0b2df85768ab3de
+HEAD run 2/3: ticks=2000 commands=1801/1801 mean=16.8790 p99=86.6331 max=114.000 over10=951 state=e0b2df85768ab3de
+HEAD run 3/3: ticks=2000 commands=1801/1801 mean=16.8892 p99=85.5163 max=117.399 over10=948 state=e0b2df85768ab3de
+main run 1/1: ticks=2000 commands=1801/1801 mean=273.2888 p99=794.6823 max=863.505 over10=1305 state=e0b2df85768ab3de
+```
+
+Identical state (`e0b2df85768ab3de`, = creation and 13.2's C0 base). Mean -93.9% (273.3 -> 16.7-16.9 ms, spread 1.2%), p99 794.7 -> ~86 ms, over-10 ms ticks 1305 -> ~949. The tail does NOT fit the 100 ms budget: max 114-117 ms, as 13.2 said.
+
 ### Completion Notes List
 
+- Implementer: one Sonnet 5.5 subagent wrote Tasks 1, 2 and 5 (lib.rs port + two tests, launch-gui.ps1), checking each of the five sabotages by hand. Opus orchestrated, reviewed the diff, re-pointed `12-9.sh` row 20, wrote and ran the mutation table, ran every tick-bench and scale run, and wrote the card.
+- The hit check is a let-chain (`if let ... && *memo_key == key`): clippy's `collapsible_if` flagged the nested form. No `type_complexity` warning, so no alias.
+- AC 1-3: lib tests + 5/5 KILLED. AC 4: `same` 10/10 on tick-bench and an identical state at the scale point; the full gate (scenario pins, sweeps) is Task 7. AC 5: the table and scale lines above. AC 6: `launch-gui.ps1` is unrun here (no `pwsh`); the seat card is its only test.
+
 ### File List
+
+- `crates/sim-core/src/lib.rs` (modified)
+- `scripts/launch-gui.ps1` (modified)
+- `_bmad-output/implementation-artifacts/mutations/13-3.sh` (new)
+- `_bmad-output/implementation-artifacts/mutations/12-9.sh` (modified: row 20 re-pointed)
+- `_bmad-output/implementation-artifacts/13-3-signoff/vehicle-card.md` (new)
+- `_bmad-output/implementation-artifacts/13-3-the-pile-remembers-pile-memo.md` (this record)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (status)
 
 ## Change Log
 
