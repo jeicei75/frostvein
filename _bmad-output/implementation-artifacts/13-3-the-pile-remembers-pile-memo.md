@@ -84,7 +84,7 @@ What the probe established:
   - [x] Replace `:201`'s `$stamp -ne $head` string compare. Run `$stampFull = git -C $Checkout rev-parse --verify --quiet "$stamp^{commit}"`, and check `$LASTEXITCODE`, as the `:146-149` comment explains. If it fails or is empty, `Fail` with: the checkout has no single commit for stamp `$stamp` (not fetched, or an ambiguous prefix); rebuild `gui.exe` at `$head`. If `$stampFull -ne $headFull`, keep the existing MISMATCH text, which shows the short forms.
   - [x] Do not touch `crates/gui/build.rs`. The stamp stays short.
   - [x] There is no `pwsh` on the devpod, so this cannot run here. The seat sitting (Task 6) is its only test. Say so in the commit message.
-- [ ] **Task 6: the seat card (AC 6).** NEW `_bmad-output/implementation-artifacts/13-3-signoff/vehicle-card.md`. Give short inline steps, with no wrapper script (Wolf rejected one at 13.1). Push first: `scripts/push.sh --fast` (standing-authorised for vehicle testing).
+- [x] **Task 6: the seat card (AC 6).** NEW `_bmad-output/implementation-artifacts/13-3-signoff/vehicle-card.md`. Give short inline steps, with no wrapper script (Wolf rejected one at 13.1). Push first: `scripts/push.sh --fast` (standing-authorised for vehicle testing).
   ```powershell
   # PowerShell, Windows checkout. Undo the 2026-10-25 workaround so the lengths differ again:
   git -C D:\Workspace\frostvein config --unset core.abbrev
@@ -245,7 +245,7 @@ No pin edited; every scenario test, the cage, ring and two-wide sweeps included,
 - Implementer: one Sonnet 5.5 subagent wrote Tasks 1, 2 and 5 (lib.rs port + two tests, launch-gui.ps1), checking each of the five sabotages by hand. Opus orchestrated, reviewed the diff, re-pointed `12-9.sh` row 20, wrote and ran the mutation table, ran every tick-bench and scale run, and wrote the card.
 - The hit check is a let-chain (`if let ... && *memo_key == key`): clippy's `collapsible_if` flagged the nested form. No `type_complexity` warning, so no alias.
 - AC 1-3: lib tests + 5/5 KILLED. AC 4: `same` 10/10 on tick-bench and an identical state at the scale point; the full gate (scenario pins, sweeps) is Task 7. AC 5: the table and scale lines above. AC 6: `launch-gui.ps1` is unrun here (no `pwsh`); the seat card is its only test.
-- **Task 6 is open on purpose:** the card is written and the branch pushed (`push.sh --fast` VERIFIED `46f9afa1`), but its answers are Wolf's to give at the seat. Status goes to review per Task 7 with AC 6 unseen; the sitting is recorded in the card when it happens.
+- **Task 6 (seat, 2026-10-25):** Wolf: "so script fix works now" (recorded in the card; Q3 unseen). Before that, Task 6 was open on purpose: the card is written and the branch pushed (`push.sh --fast` VERIFIED `46f9afa1`), but its answers are Wolf's to give at the seat. Status goes to review per Task 7 with AC 6 unseen; the sitting is recorded in the card when it happens.
 
 ### File List
 
@@ -261,5 +261,6 @@ No pin edited; every scenario test, the cage, ring and two-wide sweeps included,
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | AC 6 seat: Wolf, "so script fix works now"; Q3 (unfetched stamp) unseen. Task 6 checked. |
 | 2026-10-25 | Dev (Sonnet 5.5 subagent + Opus): pile-memo in `pile_targets`, two lib tests, `mutations/13-3.sh` 5/5 KILLED, `12-9.sh` row 20 re-pointed, launch-gui full-SHA compare, seat card. tick-bench `same` 10/10, six rows -58..-92%; scale 128^2 crew 200 mean 273.3 -> 16.8 ms, same state. Full gate GREEN on `46f9afa1` (3785 s). Status review; AC 6 seat pending. |
 | 2026-10-25 | Story created (Opus 5.5) from Epic 13 Story 13.3 and the 13.2 proposal, with the launch-gui full-SHA fix folded in per Wolf's ruling. The creation probe ran pile-memo ported onto `main` against `main` (see Found at creation). Status ready-for-dev. |
