@@ -2761,7 +2761,10 @@ development_status:
   # b3a4bf74 (3902 s). Status -> review for round 2. Unpushed.
   # MERGED 2026-10-25: PR #216 (ca862749), closing #209. Its prose "fixes #206 and #189" also closed #189/#206
   # (13.4's targets; not intended). -> done.
-  13-3-the-pile-remembers-pile-memo: backlog
+  13-3-the-pile-remembers-pile-memo: ready-for-dev
+  # 13.3 CREATED 2026-10-25 (Opus 5.5) on b245ba5f: pile-memo ported (no counters) + launch-gui full-SHA compare (Wolf:
+  # folded in). Creation probe: memo on main is state-same 10/10, six pile/seat rows -55.6..-90.8%; key RED -> differ;
+  # 128^2 crew 200 640 -> 31.7 ms mean, same state e0b2df85. Ask which implementer before dev.
   13-4-squeeze-past-two-dwarves-trade-tiles: backlog
   # 13.4 Task 0 (13.2 review decision 1, Wolf 2026-10-24): the idle-blocker swap (its `home` moves) was not under Ruling 1.
   13-5-clamber-over-a-dwarf-may-step-onto-a-stone: backlog
