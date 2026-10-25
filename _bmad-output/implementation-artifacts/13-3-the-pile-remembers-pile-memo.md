@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.3: The Pile Remembers — pile-memo
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -96,6 +96,22 @@ What the probe established:
   ```
   Questions for Wolf: (1) Did the old binary read MISMATCH? (2) Did the rebuilt one read `verified` with two different lengths? If both print the same length, the lengths did not differ, so the pass proves nothing; say so. (3) The unresolvable-stamp branch (AC 6's third case) is shown at the seat by `-Exe` with a binary built from a commit the Windows checkout has not fetched. If none is at hand, record it as unseen. Record the answers in the card. No sim seat is needed: sim work is judged by scenario tests (M2-26).
 - [x] **Task 7: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (about 45–65 min). Paste the block under Debug Log References. Then the cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-3-the-pile-remembers-pile-memo`), `phase_state.py clear`, and Status → review on the story and the board.
+
+### Review Findings
+
+Code review run 1 (2026-10-25, a fresh session), on `ca862749..f284a0dd`. Four layers, each ran `cargo 1.97.1` in its own `CARGO_TARGET_DIR` on trees extracted with `git archive`; none timed out or failed. Territories: Blind Hunter (Sonnet) `crates/sim-core`; Edge Case Hunter (Sonnet) `launch-gui.ps1` + `mutations/`; Acceptance and Feature Auditors (Opus) the whole diff. Nothing under `/workspace` was modified.
+
+What the layers re-ran: all five `13-3.sh` rows and `12-9.sh` row 20, applied by hand on copies, each KILLED at its recorded assert (edge + acceptance); row 1 also dies at case (iv) alone (acceptance). `--bench` state on all 10 scenarios HEAD vs `ca862749`: `same` 10/10 (feature + acceptance, independently); row 1's sabotage in release reads `differ` on plan/big-pile/seat-slow. Memo hit rate on the live path (feature, instrumented copy): 99.5-100% on all 10 scenarios, at most 1 miss per tick; live daemon on big-pile with `tui --frames 30` 99.88%; scale 128² crew 200 at most 2 misses per tick. Scale point: `main` 291.9 / 289.0 ms mean vs HEAD 19.0 / 19.7 ms, state `e0b2df85768ab3de` on both (feature / acceptance; HEAD tail p99 98-106 ms, max 150-161 ms under sibling load). `git rev-parse --verify --quiet "<stamp>^{commit}"` on Linux git: 7, 8 and 40-char forms of HEAD resolve; another commit resolves to a different SHA; unknown, too-short and ambiguous prefixes give rc 1 with empty output (edge + feature + acceptance). No layer could run `pwsh`.
+
+- [x] [Review][Decision] AC 6 cases 1-2 rest on one unitemised sentence (acceptance MED + feature; severity MED) — Task 6 asks Q1 "did the old binary read MISMATCH?" and Q2 "did the rebuilt one read `verified` with two different lengths?", and says a same-length pass proves nothing. The card records only "so script fix works now", and itself says the lengths were not separately read; the seat had `core.abbrev 8` set before the sitting. Task 6 is ticked, and the Completion Notes and Change Log treat AC 6 as seated. Options: (a) Wolf answers Q1/Q2 now and the card records them; (b) record cases 1-2 as "asserted, not itemised" and keep Task 6 ticked; (c) re-sit.
+  **Resolved 2026-10-25: (a).** Asked Q1 (old binary MISMATCH?) and Q2 (rebuilt binary `verified` with two different lengths, `core.abbrev` unset?), Wolf: "yes it's ok". Becomes the patch below.
+- [ ] [Review][Patch] Record Wolf's Q1/Q2 answers in the card's § Sitting [13-3-signoff/vehicle-card.md § Sitting] — replace "Q1 and Q2 were not answered one by one" with the itemised answers and their wording; Q3 stays unseen.
+- [ ] [Review][Patch] The Debug Log's cause for full-pile-crowd's +5.5% is contradicted by measurement (feature; LOW, patched under the frostvein exception: a wrong recorded cause steers a future optimisation) [13-3-the-pile-remembers-pile-memo.md § Debug Log, Task 4 green paragraph] — it says `blocked ∩ near` "changes on most calls", so every miss pays key + clone; measured 4 key misses in 36,626 calls (99.9% hits). If the cost is real (+2-4% in review, inside the ~6% cross-build resolution), it is the hit path itself: the key scans all of `blocked` (46 loose stones) and clones the map, on a 4-cell pile whose fresh compute is cheap.
+- [ ] [Review][Patch] Record text stale after the seat sitting (acceptance; LOW, same lines this record touches) [sprint-status.yaml:2770, story § Completion Notes Task 6 bullet, § File List] — the board comment still says "AC 6 seat card pending Wolf"; the Task 6 completion note keeps "Status goes to review … with AC 6 unseen; the sitting is recorded in the card when it happens"; the File List omits `metrics/13-3-the-pile-remembers-pile-memo.md`, `metrics/.session-cursors.json` and the 13.2 story file (done-mark `b245ba5f`).
+- [x] [Review][Defer] Test fixtures assign `Terrain.tiles` directly, bypassing `set_tile` [crates/sim-core/src/lib.rs:5290, :5369, :5446, :6862] — deferred, pre-existing (blind + feature + acceptance, read). The memo widens the `open` cache's existing exposure: a future test that rewrites `.tiles` after a `pile_targets` call reads a stale answer. No current instance (each writes before any tick); production writes go through `set_tile` only.
+- [x] [Review][Defer] `launch-gui.ps1` accepts a non-hex stamp that git resolves [scripts/launch-gui.ps1:212] — deferred, unreachable from `build.rs` (edge, RAN git): `gui build HEAD` or `main` resolves and verifies; a stamp starting with `-` (not `-dirty`) reaches git as an option. `build.rs` emits only hex, `unknown` or a suffixed hex form, so only a hand-faked binary gets there. Guard if ever needed: `$stamp -notmatch '^[0-9a-f]{4,40}$'`.
+
+Dismissed (5): hit-path key build + clone cost (blind; the story's own NOTE and scope guardrail); one-entry memo thrash between the two callers (blind; measured 99.9% hits); a refused channel cut drops the memo with terrain unchanged (feature; cost only, 1-49 drops per run); the scale headline exists only through the throwaway `scale.patch` (feature; by design, M2-26); the scale tail is load-sensitive (acceptance; the record already says the tail does not fit).
 
 ## Verification
 
@@ -261,6 +277,7 @@ No pin edited; every scenario test, the cage, ring and two-wide sweeps included,
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Code review run 1 (fresh session, 4 layers, none timed out) on `ca862749..f284a0dd`: 0 HIGH. Memo hits 99.5-100% live, state `same` 10/10 re-verified, scale 128^2 crew200 ~290 -> ~19 ms mean same state. Decision (AC 6 seat itemised) resolved: Wolf, Q1/Q2 "yes it's ok". 3 record patches LEFT AS ACTION ITEMS; 2 deferred; 5 dismissed. Status in-progress. |
 | 2026-10-25 | AC 6 seat: Wolf, "so script fix works now"; Q3 (unfetched stamp) unseen. Task 6 checked. |
 | 2026-10-25 | Dev (Sonnet 5.5 subagent + Opus): pile-memo in `pile_targets`, two lib tests, `mutations/13-3.sh` 5/5 KILLED, `12-9.sh` row 20 re-pointed, launch-gui full-SHA compare, seat card. tick-bench `same` 10/10, six rows -58..-92%; scale 128^2 crew 200 mean 273.3 -> 16.8 ms, same state. Full gate GREEN on `46f9afa1` (3785 s). Status review; AC 6 seat pending. |
 | 2026-10-25 | Story created (Opus 5.5) from Epic 13 Story 13.3 and the 13.2 proposal, with the launch-gui full-SHA fix folded in per Wolf's ruling. The creation probe ran pile-memo ported onto `main` against `main` (see Found at creation). Status ready-for-dev. |
