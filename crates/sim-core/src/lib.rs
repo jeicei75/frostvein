@@ -707,13 +707,18 @@ struct Terrain {
     pile_ground: Mutex<PileGround>,
 }
 
-/// The ground `pile_targets`' entrance floods have classified, kept for the zones it was found
-/// for: true when its flood found open ground. The floods read terrain and zones only, so the
-/// answers hold until one changes; `set_tile` drops them.
+/// What `pile_targets` keeps, for the zones it was found for. `open`: the ground its entrance
+/// floods have classified, true when a flood found open ground; the floods read terrain and zones
+/// only, so the answers hold until one changes. `memo`: the last depth map, with its key, the
+/// `blocked` cells among `near` (the zone cells and their side neighbours, the only cells whose
+/// `blocked` the map reads). An equal key means the same answer. `set_tile` drops `open` and
+/// `memo`; a zones change resets everything.
 #[derive(Default)]
 struct PileGround {
     zones: BTreeSet<Pos>,
     open: BTreeMap<Pos, bool>,
+    near: BTreeSet<Pos>,
+    memo: Option<(BTreeSet<Pos>, BTreeMap<Pos, u32>)>,
 }
 
 impl Terrain {
@@ -739,11 +744,12 @@ impl Terrain {
         let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
         self.tiles[index] = tile;
         self.dirty.insert(p);
-        self.pile_ground
+        let kept = self
+            .pile_ground
             .get_mut()
-            .expect("nothing panics holding the pile ground")
-            .open
-            .clear();
+            .expect("nothing panics holding the pile ground");
+        kept.open.clear();
+        kept.memo = None;
         true
     }
 
@@ -819,6 +825,8 @@ fn side_neighbours(p: Pos) -> [Pos; 4] {
 thread_local! {
     /// Cells `pile_targets`' entrance floods have taken off the queue: the cost test's count.
     static FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// `pile_targets` calls answered from the memo: the hit test's count.
+    static MEMO_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -848,6 +856,13 @@ thread_local! {
 /// the tick (12.12 Task 2b). Ground between spread piles lies inside the box, so its floods still
 /// run to the cap; the answers are kept in `Terrain::pile_ground` until a tile or the zones change
 /// (review run 2), so they run again after each dig, not on each claim.
+///
+/// The depth map itself is kept too, keyed by the `blocked` cells among the zone cells and their
+/// side neighbours: nothing else in `blocked` is read. A call with an equal key returns the last
+/// answer; a `set_tile` or a zones change drops it.
+///
+/// NOTE: a hit still builds its key and clones the map (13.2: pile_targets is still 42–46% of a
+/// pile scenario's tick after the memo); not optimised further.
 fn pile_targets(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -869,7 +884,24 @@ fn pile_targets(
         *kept = PileGround {
             zones: zones.clone(),
             open: BTreeMap::new(),
+            near: zones
+                .iter()
+                .flat_map(|&cell| side_neighbours(cell).into_iter().chain([cell]))
+                .collect(),
+            memo: None,
         };
+    }
+    let key: BTreeSet<Pos> = blocked
+        .iter()
+        .copied()
+        .filter(|p| kept.near.contains(p))
+        .collect();
+    if let Some((memo_key, memo)) = &kept.memo
+        && *memo_key == key
+    {
+        #[cfg(test)]
+        MEMO_HITS.with(|n| n.set(n.get() + 1));
+        return memo.clone();
     }
     let ground = &mut kept.open;
     let mut open_ground = |start: Pos| -> bool {
@@ -922,6 +954,7 @@ fn pile_targets(
             }
         }
     }
+    kept.memo = Some((key, depth.clone()));
     depth
 }
 
@@ -7447,6 +7480,87 @@ mod tests {
             1,
             "the hole opens north once those cells leave the zone"
         );
+    }
+
+    // 13.3: `pile_targets` keeps its last answer, keyed by the `blocked` cells among the zone cells
+    // and their side neighbours. A cell `c` with rock on three sides is entered by its fourth, the
+    // door; blocking the door (a neighbour OUTSIDE the zone) must give the fresh answer, and so must
+    // blocking a zone cell. The oracle is the same fixture rebuilt, whose `pile_ground` is empty.
+    #[test]
+    fn a_blocked_cell_beside_the_pile_gives_the_fresh_answer() {
+        let at1 = |x, y| Pos { x, y, z: 1 };
+        let rock = |terrain: &mut Terrain, cells: &[Pos]| {
+            for &cell in cells {
+                terrain.set_tile(cell, Tile::Solid(Material::Stone));
+            }
+        };
+        let one_cell = || {
+            let mut terrain = flat_terrain(12, 12);
+            rock(&mut terrain, &[at1(6, 5), at1(5, 4), at1(5, 6)]);
+            (terrain, BTreeSet::from([at1(5, 5)]))
+        };
+        // Case (iv): the far cell of a two-cell zone is blocked; the near one is the way in.
+        let two_cells = || {
+            let mut terrain = flat_terrain(12, 12);
+            rock(
+                &mut terrain,
+                &[at1(5, 4), at1(5, 6), at1(6, 4), at1(6, 6), at1(7, 5)],
+            );
+            (terrain, BTreeSet::from([at1(5, 5), at1(6, 5)]))
+        };
+        let none = BTreeSet::new();
+        let check = |fixture: &dyn Fn() -> (Terrain, BTreeSet<Pos>),
+                     blocked_cell: Pos,
+                     open: BTreeMap<Pos, u32>| {
+            let (terrain, zones) = fixture();
+            let blocked = BTreeSet::from([blocked_cell]);
+            assert_eq!(super::pile_targets(&terrain, &none, &zones), open, "(i)");
+            let (fresh_terrain, fresh_zones) = fixture();
+            let fresh = super::pile_targets(&fresh_terrain, &blocked, &fresh_zones);
+            assert_ne!(fresh, open, "the fixture's blocked cell must matter");
+            assert_eq!(
+                super::pile_targets(&terrain, &blocked, &zones),
+                fresh,
+                "(ii) a blocked {blocked_cell:?} gives the fresh answer"
+            );
+            assert_eq!(super::pile_targets(&terrain, &none, &zones), open, "(iii)");
+        };
+        check(&one_cell, at1(4, 5), BTreeMap::from([(at1(5, 5), 1)]));
+        check(
+            &two_cells,
+            at1(6, 5),
+            BTreeMap::from([(at1(5, 5), 1), (at1(6, 5), 2)]),
+        );
+    }
+
+    // 13.3: the same inputs twice are one computation; a tile or the zones changing drops the memo.
+    #[test]
+    fn the_pile_answer_is_kept_until_a_tile_or_the_zones_change() {
+        let at1 = |x, y| Pos { x, y, z: 1 };
+        let hits = || super::MEMO_HITS.with(|n| n.get());
+        let mut terrain = flat_terrain(12, 12);
+        let mut zones = BTreeSet::from([at1(5, 5), at1(6, 5)]);
+        let blocked = BTreeSet::new();
+
+        let first = super::pile_targets(&terrain, &blocked, &zones);
+        let before = hits();
+        let again = super::pile_targets(&terrain, &blocked, &zones);
+        assert_eq!(hits(), before + 1, "unchanged inputs are a hit");
+        assert_eq!(again, first);
+
+        terrain.set_tile(at1(0, 0), Tile::Solid(Material::Stone));
+        let before = hits();
+        super::pile_targets(&terrain, &blocked, &zones);
+        assert_eq!(hits(), before, "a set_tile drops the memo");
+
+        let before = hits();
+        super::pile_targets(&terrain, &blocked, &zones);
+        assert_eq!(hits(), before + 1, "and the answer is kept again");
+
+        zones.remove(&at1(6, 5));
+        let before = hits();
+        super::pile_targets(&terrain, &blocked, &zones);
+        assert_eq!(hits(), before, "a zones change drops the memo");
     }
 
     // 12.12 review run 3: four bars, two deep, ring a 3x3 hole at (8,8), with rock at the corners
