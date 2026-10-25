@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-24
+# last_updated: 2026-10-25
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-24
+last_updated: 2026-10-25
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2745,7 +2745,7 @@ development_status:
   # PATCH PASS (2026-10-22): 7/7 landed. REVIEW RUN 2 (2026-10-22, diff 9e86180..aba37d9): closure
   # 7/7 CLOSED, 0 HIGH, 5 patch (1 MED cross-build control RULED fix now + 4 LOW), 3 defer; STOPPING
   # RULE FIRED (no round 3). Patches LEFT AS ACTION ITEMS for a fresh bmad-review-patch session.
-  13-2-the-way-through-pathfinding-and-reachability-spike: review
+  13-2-the-way-through-pathfinding-and-reachability-spike: done
   # 13.2 CREATED 2026-10-23 (Opus 5.5) on db8fde3: a SPIKE, no sim change lands (prototypes are patches in
   # 13-2-signoff/prototypes/). Found: NO M4 PRD draft exists (scale target -> Task 0 Q1); both issue saves freeze
   # on HEAD (#206 marks=3, #203 marks=11 after adding `clearing`/`goals_completed`); ghost-dwarves RED freed #206
@@ -2759,6 +2759,8 @@ development_status:
   # Patches LEFT AS ACTION ITEMS for a fresh bmad-review-patch session.
   # PATCH PASS 1 (2026-10-24): 8/8 landed (739adfac..b3a4bf74), closure table in the story; FULL GATE GREEN on
   # b3a4bf74 (3902 s). Status -> review for round 2. Unpushed.
+  # MERGED 2026-10-25: PR #216 (ca862749), closing #209. Its prose "fixes #206 and #189" also closed #189/#206
+  # (13.4's targets; not intended). -> done.
   13-3-the-pile-remembers-pile-memo: backlog
   13-4-squeeze-past-two-dwarves-trade-tiles: backlog
   # 13.4 Task 0 (13.2 review decision 1, Wolf 2026-10-24): the idle-blocker swap (its `home` moves) was not under Ruling 1.
