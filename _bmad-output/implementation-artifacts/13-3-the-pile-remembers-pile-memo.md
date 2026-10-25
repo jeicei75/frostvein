@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.3: The Pile Remembers — pile-memo
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
