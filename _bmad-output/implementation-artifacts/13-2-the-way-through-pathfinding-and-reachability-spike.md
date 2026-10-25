@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.2: The Way Through — Pathfinding and Reachability Spike
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -350,6 +350,21 @@ Wolf picked Sonnet 5.5 (`claude-sonnet-5-5`) subagents for the implementation (2
     mutation tables still apply ok  25s
   GATE GREEN  6413s
   ```
+- **The full gate at PR, after patch pass 2 (Opus; `RUST_TEST_THREADS=1 scripts/gate.sh` at `d6e0ed97`).** Green, 3764 s:
+  ```
+  frostvein gate
+    cargo fmt --check           ok  0s
+    cargo clippy -D warnings    ok  3s
+    cargo test                  ok  748s
+    cargo test (pixel guards)   ok  2975s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  19s
+    mutation tables still apply ok  11s
+  GATE GREEN  3764s
+  ```
 
 ### Completion Notes List
 
@@ -388,3 +403,4 @@ All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `
 | 2026-10-24 | Review patch pass 1 (fresh session, Opus 5.5): 8/8 `[Review][Patch]` items landed in 5 commits (`739adfac`…`b3a4bf74`), each both-sides verified (closure table under Review Findings). Item 6 corrected its finding: the near RED is seen by the cage sweep's `frozen`, not by any scenario hash. Full gate green at `b3a4bf74` (`RUST_TEST_THREADS=1`, 3902 s). `git diff 4f57027 -- crates/` still empty. Status → review for round 2. Cost $11.78 / 192 turns. |
 | 2026-10-24 | Code review run 2 (fresh session, Opus 5.5) on `28162c85..2a074218`: 0 HIGH; closure rows 4 and 6 REWORK; 9 patch left as action items (Wolf), 5 deferred. The stopping rule fired: no round 3. Status → in-progress. |
 | 2026-10-24 | Review patch pass 2 (fresh session, Opus 5.5): 9/9 `[Review][Patch]` items landed in 4 commits (`7cf68ec4`…`0e5c0308`), each both-sides verified (pass 2 closure table under Review Findings; rows 1, 2 and 9 are REWORK). Each commit's fast gate was green. **The full gate was NOT completed:** Wolf stopped it at 16 min (`fmt`, `clippy` and `cargo test` were ok in 715 s; the pixel guards and `serve.rs` were not run), to be resumed in the next session. `git diff 4f57027 -- crates/` is still empty. Status stays in-progress. |
+| 2026-10-25 | The full gate at PR is green at `d6e0ed97` (`RUST_TEST_THREADS=1`, 3764 s; block under Debug Log References). `git diff 4f57027 -- crates/` is still empty. Status → review. |
