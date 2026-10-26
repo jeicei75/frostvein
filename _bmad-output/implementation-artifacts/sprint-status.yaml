@@ -2778,6 +2778,8 @@ development_status:
   # 13.4 CREATED 2026-10-26 (Opus 5.5) on 380fd789. Probe: 13.2's squeeze numbers reproduce on HEAD; the idle-blocker
   # swap moves only #207 (13 -> 18 of 24); the 4 stuck 16k cage runs are #187's refused cut and a stone-walled mark
   # with the pile full, landed by timing (waits 10/20/30 -> 4/2/1 different runs). Task 0 Q1-Q4 await Wolf.
+  # 13.4 Task 0 RULED 2026-10-26 (Wolf "1 ok 2 a 3 a 4 yes"): idle swap allowed; #187 fix folded in; timer = plain Option;
+  # seat sitting yes.
   13-5-clamber-over-a-dwarf-may-step-onto-a-stone: backlog
   # 13.5 only if ruled (13.2 Ruling 2): #207 is re-measured on top of 13.4 first; the story may be dropped.
   epic-13-retrospective: optional

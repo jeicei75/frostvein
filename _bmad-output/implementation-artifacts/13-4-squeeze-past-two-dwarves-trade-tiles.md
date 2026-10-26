@@ -21,6 +21,8 @@ so that the seat freeze (#206) and the boxed-in hauler (#189) stop happening, wi
 
 ## Task 0 — Wolf rules before dev
 
+**RULED 2026-10-26 (Wolf: "1 ok 2 a 3 a 4 yes"):** every recommended option. Q1 (a) the idle-blocker swap is allowed, `home` moves. Q2 (a) the #187 fix is folded in, judged at waits 10/20/30, with the split point after Task 3. Q3 (a) the timer is a plain `Option`, so a pre-13.4 save loads with no stand-off. Q4 (a) a short seat sitting (Task 7). The ACs and Tasks stand as written.
+
 Each question has a recommendation. The ACs and Tasks below are written for the recommended answers; a different answer amends the ACs named.
 
 - **Q1. The idle-blocker swap** (13.2 review decision 1, epics.md Story 13.4). `squeeze.patch` also swaps an idle blocker that has no tile aside and no exit, and moves his `home` to the holder's old tile. Ruling 1 did not cover it. Measured at creation (`variant-n.patch`: only head-on job-holders swap; idle blockers keep `main`'s ladder, #194 back-out included):
@@ -200,4 +202,5 @@ python3 scripts/audit-mutations.py
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Task 0 ruled by Wolf: Q1 (a) allow the idle-blocker swap; Q2 (a) fold the #187 fix in (16k sweep clean at waits 10/20/30, split point after Task 3); Q3 (a) plain `Option` timer field, old saves load; Q4 (a) short seat sitting. No AC amended. |
 | 2026-10-26 | Story created (Opus 5.5) from Epic 13 Story 13.4 and the 13.2 proposal. Creation probe on HEAD `380fd789`: 13.2's squeeze numbers reproduce exactly; the idle-blocker swap (Q1) moves only #207; the 4 stuck cage runs are #187's refused cut and a stone-walled mark with the pile full, landed by timing (waits 10/20/30 → 4/2/1 different runs) (Q2). Task 0 Q1–Q4 await Wolf. Status ready-for-dev. |
