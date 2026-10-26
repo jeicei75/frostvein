@@ -7074,6 +7074,23 @@ mod tests {
         })
     }
 
+    /// How many times, over `trace`, two dwarves traded tiles between consecutive rows.
+    fn tile_trades(trace: &[Vec<Pos>]) -> usize {
+        trace
+            .windows(2)
+            .map(|rows| {
+                (0..rows[0].len())
+                    .flat_map(|i| (i + 1..rows[0].len()).map(move |j| (i, j)))
+                    .filter(|&(i, j)| {
+                        rows[0][i] != rows[0][j]
+                            && rows[1][i] == rows[0][j]
+                            && rows[1][j] == rows[0][i]
+                    })
+                    .count()
+            })
+            .sum()
+    }
+
     /// Two miners meet head-on in the tunnel: the first (id 0) to `first_target`, the second
     /// (id 1) to `second_target`, each starting on its own cell.
     fn head_on(first: (Pos, Pos), second: (Pos, Pos)) -> (World, Vec<Vec<Pos>>) {
@@ -7116,6 +7133,31 @@ mod tests {
         assert_eq!(world.tile(ROOM_WALL), Some(Tile::Empty));
         // Positive: the two swapped (nobody was released, both jobs done).
         assert!(traded_places(&trace), "dwarves 0 and 1 never swapped");
+    }
+
+    // 12.9 AC3(b), 13.4 rule: the escape/yield match is reached only for an IDLE head-on blocker
+    // (two job-holders swap before it). An idle dwarf (id 0) stands on the only work position at the
+    // tunnel's dead end; the miner (id 1, the HIGHER id) walks to it. The idle dwarf's exit runs
+    // back through the miner's tile, so they meet head-on; only the miner has an escape (the room),
+    // so the higher id must yield, and the idle dwarf follows it out. Nobody trades tiles: the
+    // yield acts before the squeeze's wait.
+    #[test]
+    fn a_higher_id_miner_yields_to_an_idle_dwarf_at_the_dead_end_when_only_it_has_an_escape() {
+        let mut world = room_and_tunnel();
+        crew_at(&mut world, at(16, FIX_Y, FIX_Z), at(13, FIX_Y, FIX_Z), &[1]);
+        insert_dig(&mut world, 1, EAST_END);
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let trace = watch(&mut world, 1_000, assert_nobody_released, |world| {
+            world.jobs().is_empty()
+        });
+        assert_eq!(world.tile(EAST_END), Some(Tile::Empty));
+        // Positive: the higher id backed out west of where it started, and no one swapped.
+        assert!(trace.iter().any(|positions| positions[1].x < 13));
+        assert_eq!(
+            tile_trades(&trace),
+            0,
+            "dwarves traded tiles instead of the yield"
+        );
     }
 
     // 12.9 review #183: a head-on where neither side has an escape. The idle blocker's exit `Path`
@@ -7283,8 +7325,16 @@ mod tests {
         world.ecs.resource_mut::<super::Tick>().0 = 100;
 
         // Done by about tick 400 (the mirrored layout: 370); the bound is 2.5x that, not a tuned fit.
-        watch(&mut world, 1_000, |_| {}, |world| world.jobs().is_empty());
+        let trace = watch(&mut world, 1_000, |_| {}, |world| world.jobs().is_empty());
         assert_eq!(world.tile(ROOM_WALL), Some(Tile::Empty));
+        // 13.4: the squeeze backstops the chain shift, so completion alone cannot tell the shift
+        // ran: without it the miner trades tiles with three of the four woodcutters (3), with it
+        // with two (2), the shifted line having made room for the rest.
+        assert!(
+            tile_trades(&trace) <= 2,
+            "{} tile trades: the idle chain did not shift",
+            tile_trades(&trace)
+        );
     }
 
     // 12.9 AC4: a dwarf falls onto a tile another dwarf stands on (an overhang dug over a cave).

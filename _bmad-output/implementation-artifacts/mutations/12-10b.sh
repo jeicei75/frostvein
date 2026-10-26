@@ -72,6 +72,8 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == [at[0], at[1], -1]\n'))
 PY
 
+# 13.4: the squeeze finishes this dig too without the shift (one trade later), so the test pins the
+# shift by the number of tile trades.
 mutation "6 the Task 4 fix is reverted (no idle chain shift)" sim-core a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
