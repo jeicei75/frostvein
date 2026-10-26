@@ -1031,11 +1031,21 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
         while control.tick() < save_tick {
             control.step();
         }
-        saved_a_timer |= control
-            .to_save()
-            .dwarves
-            .iter()
-            .any(|d| d.squeeze.is_some());
+        let saved = control.to_save();
+        saved_a_timer |= saved.dwarves.iter().any(|d| d.squeeze.is_some());
+        // Each side times the other, so a timer naming any id but the other dwarf's (the fixture
+        // has ids 0 and 1) is a corrupt save that the step comparison below can miss: the other
+        // side's timer still swaps on time.
+        for d in &saved.dwarves {
+            if let Some(squeeze) = &d.squeeze {
+                assert_eq!(
+                    squeeze.blocker,
+                    1 - d.id,
+                    "dwarf {} saved a stand-off timer naming the wrong blocker at tick {save_tick}",
+                    d.id
+                );
+            }
+        }
         let mut loaded = World::from_save(control.to_save());
         for _ in save_tick..last + 40 {
             loaded.step();

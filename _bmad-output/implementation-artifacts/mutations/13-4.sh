@@ -89,3 +89,14 @@ old = '                    squeeze: entity.get::<Squeeze>().map(|squeeze| SavedS
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    squeeze: entity.get::<Squeeze>().filter(|_| false).map(|squeeze| SavedSqueeze {\n'))
 PY
+
+# Review run 1: the stand-off save test compared only dwarves, claims, jobs and paths, and both
+# sides time each other, so one side's corrupted blocker id went unseen. Killed by the test's
+# independent blocker-id assert (the other dwarf's id, from the fixture).
+mutation "5c to_save writes blocker 0 (AC 4)" sim-core a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                        blocker: squeeze.blocker.0,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                        blocker: 0,\n'))
+PY
