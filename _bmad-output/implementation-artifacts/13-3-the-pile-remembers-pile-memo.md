@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.3: The Pile Remembers — pile-memo
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -105,11 +105,19 @@ What the layers re-ran: all five `13-3.sh` rows and `12-9.sh` row 20, applied by
 
 - [x] [Review][Decision] AC 6 cases 1-2 rest on one unitemised sentence (acceptance MED + feature; severity MED) — Task 6 asks Q1 "did the old binary read MISMATCH?" and Q2 "did the rebuilt one read `verified` with two different lengths?", and says a same-length pass proves nothing. The card records only "so script fix works now", and itself says the lengths were not separately read; the seat had `core.abbrev 8` set before the sitting. Task 6 is ticked, and the Completion Notes and Change Log treat AC 6 as seated. Options: (a) Wolf answers Q1/Q2 now and the card records them; (b) record cases 1-2 as "asserted, not itemised" and keep Task 6 ticked; (c) re-sit.
   **Resolved 2026-10-25: (a).** Asked Q1 (old binary MISMATCH?) and Q2 (rebuilt binary `verified` with two different lengths, `core.abbrev` unset?), Wolf: "yes it's ok". Becomes the patch below.
-- [ ] [Review][Patch] Record Wolf's Q1/Q2 answers in the card's § Sitting [13-3-signoff/vehicle-card.md § Sitting] — replace "Q1 and Q2 were not answered one by one" with the itemised answers and their wording; Q3 stays unseen.
-- [ ] [Review][Patch] The Debug Log's cause for full-pile-crowd's +5.5% is contradicted by measurement (feature; LOW, patched under the frostvein exception: a wrong recorded cause steers a future optimisation) [13-3-the-pile-remembers-pile-memo.md § Debug Log, Task 4 green paragraph] — it says `blocked ∩ near` "changes on most calls", so every miss pays key + clone; measured 4 key misses in 36,626 calls (99.9% hits). If the cost is real (+2-4% in review, inside the ~6% cross-build resolution), it is the hit path itself: the key scans all of `blocked` (46 loose stones) and clones the map, on a 4-cell pile whose fresh compute is cheap.
-- [ ] [Review][Patch] Record text stale after the seat sitting (acceptance; LOW, same lines this record touches) [sprint-status.yaml:2770, story § Completion Notes Task 6 bullet, § File List] — the board comment still says "AC 6 seat card pending Wolf"; the Task 6 completion note keeps "Status goes to review … with AC 6 unseen; the sitting is recorded in the card when it happens"; the File List omits `metrics/13-3-the-pile-remembers-pile-memo.md`, `metrics/.session-cursors.json` and the 13.2 story file (done-mark `b245ba5f`).
+- [x] [Review][Patch] Record Wolf's Q1/Q2 answers in the card's § Sitting [13-3-signoff/vehicle-card.md § Sitting] — replace "Q1 and Q2 were not answered one by one" with the itemised answers and their wording; Q3 stays unseen.
+- [x] [Review][Patch] The Debug Log's cause for full-pile-crowd's +5.5% is contradicted by measurement (feature; LOW, patched under the frostvein exception: a wrong recorded cause steers a future optimisation) [13-3-the-pile-remembers-pile-memo.md § Debug Log, Task 4 green paragraph] — it says `blocked ∩ near` "changes on most calls", so every miss pays key + clone; measured 4 key misses in 36,626 calls (99.9% hits). If the cost is real (+2-4% in review, inside the ~6% cross-build resolution), it is the hit path itself: the key scans all of `blocked` (46 loose stones) and clones the map, on a 4-cell pile whose fresh compute is cheap.
+- [x] [Review][Patch] Record text stale after the seat sitting (acceptance; LOW, same lines this record touches) [sprint-status.yaml:2770, story § Completion Notes Task 6 bullet, § File List] — the board comment still says "AC 6 seat card pending Wolf"; the Task 6 completion note keeps "Status goes to review … with AC 6 unseen; the sitting is recorded in the card when it happens"; the File List omits `metrics/13-3-the-pile-remembers-pile-memo.md`, `metrics/.session-cursors.json` and the 13.2 story file (done-mark `b245ba5f`).
 - [x] [Review][Defer] Test fixtures assign `Terrain.tiles` directly, bypassing `set_tile` [crates/sim-core/src/lib.rs:5290, :5369, :5446, :6862] — deferred, pre-existing (blind + feature + acceptance, read). The memo widens the `open` cache's existing exposure: a future test that rewrites `.tiles` after a `pile_targets` call reads a stale answer. No current instance (each writes before any tick); production writes go through `set_tile` only.
 - [x] [Review][Defer] `launch-gui.ps1` accepts a non-hex stamp that git resolves [scripts/launch-gui.ps1:212] — deferred, unreachable from `build.rs` (edge, RAN git): `gui build HEAD` or `main` resolves and verifies; a stamp starting with `-` (not `-dirty`) reaches git as an option. `build.rs` emits only hex, `unknown` or a suffixed hex form, so only a hand-faked binary gets there. Guard if ever needed: `$stamp -notmatch '^[0-9a-f]{4,40}$'`.
+
+Patch pass 1 (2026-10-26, a fresh session): 3/3 landed, `865dd6b2`, `6d2d3ffa`, `960d4a3a`. All three are record text, so there is no code change, no new test and nothing to mutate. Full gate skipped on Wolf's ruling ("skip full gate", 2026-10-26): no code has changed since the GREEN full gate on `46f9afa1`, and the fast tier ran on each commit through the pre-commit hook. Cost row $1.70 (43 turns).
+
+| item | side written for | side tested | pre-existing state checked against |
+|---|---|---|---|
+| card § Sitting Q1/Q2 | the record states what Wolf answered | the old text: "not answered one by one" is gone, Q3 still unseen | Decision 1's resolution above (Wolf, "yes it's ok", 2026-10-25) |
+| full-pile-crowd cause | the Debug Log names the measured cause | the old claim: "changes on most calls" is withdrawn in place, not deleted silently | review run 1's measurement (feature layer, 4 misses / 36,626 calls) |
+| stale record text | board, Task 6 note and File List match the tree | `git show --stat b245ba5f`; `git log ca862749..HEAD --name-only` for the metrics files | the files `ca862749..7299df62` actually touched |
 
 Cost: review row $15.76 (276 turns; 4 subagents 71.0% of tokens). Reap after triage: 15 /tmp directories, 16.4 GB (11.8 GB free space reclaimed).
 
@@ -282,6 +290,7 @@ No pin edited; every scenario test, the cage, ring and two-wide sweeps included,
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Patch pass 1 (fresh session): 3/3 record patches landed (`865dd6b2`, `6d2d3ffa`, `960d4a3a`), closure table under Review Findings. No code change; full gate skipped on Wolf's ruling (GREEN on `46f9afa1` stands). No round 2 (prose only). Status review, ready for PR on Wolf's yes. |
 | 2026-10-25 | Code review run 1 (fresh session, 4 layers, none timed out) on `ca862749..f284a0dd`: 0 HIGH. Memo hits 99.5-100% live, state `same` 10/10 re-verified, scale 128^2 crew200 ~290 -> ~19 ms mean same state. Decision (AC 6 seat itemised) resolved: Wolf, Q1/Q2 "yes it's ok". 3 record patches LEFT AS ACTION ITEMS; 2 deferred; 5 dismissed. Status in-progress. |
 | 2026-10-25 | AC 6 seat: Wolf, "so script fix works now"; Q3 (unfetched stamp) unseen. Task 6 checked. |
 | 2026-10-25 | Dev (Sonnet 5.5 subagent + Opus): pile-memo in `pile_targets`, two lib tests, `mutations/13-3.sh` 5/5 KILLED, `12-9.sh` row 20 re-pointed, launch-gui full-SHA compare, seat card. tick-bench `same` 10/10, six rows -58..-92%; scale 128^2 crew 200 mean 273.3 -> 16.8 ms, same state. Full gate GREEN on `46f9afa1` (3785 s). Status review; AC 6 seat pending. |
