@@ -77,8 +77,8 @@ PY
 mutation "6 the Task 4 fix is reverted (no idle chain shift)" sim-core a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-14 (12.10b review patch, #194): the idle chain is now tried inside the exit's
-# `or_else`; reverting it means it never runs and its shift is never tried.
+# Re-anchored 2026-10-26 (13.4, e9712e5f): the #194 exit and its `or_else` are gone; the idle chain
+# is a bare call before the squeeze. Reverting it means its shift is never tried.
 old = '            make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles);\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ''))

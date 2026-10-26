@@ -2784,6 +2784,7 @@ development_status:
   # 13.4 DEV started 2026-10-26 (session 5e2fdff8): Sonnet agents + Opus. -> in-progress.
   # 13.4 DEV DONE 2026-10-26: swap + saved timer; AC 5 amended at the split point (16k cage runs pinned, #218);
   # seat Q1 pass, Q2 -> #219. Full gate GREEN on 1aeb4bf8 (4278 s). Pushed (no PR). -> review.
+  # Then e9712e5f (#194 branch removed, Wolf "clean code also") postdates that gate: the full gate is owed again at PR.
   # 13.4 REVIEW RUN 1 2026-10-26 on 8ac4deb8: 4 layers, 0 HIGH; decision 1 (a) keep the idle-with-an-exit swap; 5 patches
   # LEFT AS ACTION ITEMS (save test blind to the blocker id; pin idle `||`; reach claim; AC 7/epics; stale text). -> in-progress.
   13-5-clamber-over-a-dwarf-may-step-onto-a-stone: backlog
