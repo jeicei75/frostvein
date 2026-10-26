@@ -64,6 +64,16 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    if idle {\n        return false;\n    }\n' + old))
 PY
 
+# Review run 1, decision 1 (a): the swapped idle blocker keeps the tail of his exit `Path`, which
+# now starts two tiles from him (the idle-with-an-exit site is the only one where it is longer than 1).
+mutation "4c the swapped idle blocker keeps his exit Path (AC 1, decision 1 a)" sim-core an_idle_blocker_with_an_exit_ahead_swaps_after_the_wait <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    if idle || blocker_path.len() <= 1 {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if blocker_path.len() <= 1 {\n'))
+PY
+
 mutation "5 from_save drops the stand-off timer (AC 4)" sim-core a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
