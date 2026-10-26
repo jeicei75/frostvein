@@ -52,6 +52,8 @@ Afterwards you can leave `core.abbrev` unset: the launcher no longer depends on 
 
 ## Sitting
 
-2026-10-25, Wolf, on `46f9afa1`: "so script fix works now". Recorded as given: Q1 and Q2 were not answered
-one by one, so whether the two lengths differed during the sitting is his statement, not a separate reading.
-Q3 (a stamp from an unfetched commit): unseen.
+2026-10-25, Wolf, on `46f9afa1`: "so script fix works now". Asked one by one at code review run 1 (2026-10-25):
+
+- Q1, did the old binary read MISMATCH? Q2, did the rebuilt binary read `verified` with two different lengths,
+  `core.abbrev` unset? Wolf, to both: "yes it's ok".
+- Q3 (a stamp from an unfetched commit): unseen.
