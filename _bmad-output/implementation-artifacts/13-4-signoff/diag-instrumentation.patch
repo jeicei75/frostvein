@@ -1,0 +1,150 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 94916d06..f55db48c 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -607,6 +607,25 @@ fn claim_jobs(
+             )),
+             _ => None,
+         };
++        {
++            let from: u64 = std::env::var("DIAG_FROM").ok().and_then(|v| v.parse().ok()).unwrap_or(u64::MAX);
++            if tick.0 >= from + 500 && tick.0 < from + 520 {
++                if let JobKind::Haul { item } = job.kind {
++                    let flood = |start: Pos| -> BTreeSet<Pos> {
++                        let mut seen = BTreeSet::from([start]);
++                        let mut q = VecDeque::from([start]);
++                        while let Some(t) = q.pop_front() {
++                            if seen.len() > 600 { break; }
++                            for n in astar_neighbours(&terrain, &blocked, t) { if seen.insert(n) { q.push_back(n); } }
++                        }
++                        seen
++                    };
++                    let d = delivery.as_ref().unwrap();
++                    let hauler_reach: Vec<(u32, bool, bool)> = dwarves.iter().filter(|(_, _, _, _, _, pr)| trade(job.kind) == **pr).map(|(_, i, p, ..)| { let pc = flood(**p); (i.0, goals.iter().any(|g| pc.contains(g)), d.iter().any(|g| pc.contains(g))) }).collect();
++                    eprintln!("DIAG HAULJOB t={} job={} item={} at={:?} retry_after={} pickup_goals={} delivery_cells={:?} haulers(id,reaches_pickup,reaches_delivery)={:?}", tick.0, job.id.0, item, items.get(&item), job.retry_after, goals.len(), d, hauler_reach);
++                }
++            }
++        }
+         let mut attempted = false;
+         let mut assigned = false;
+         // Some eligible dwarf had no budget left, so this job was not really tried by him.
+@@ -674,6 +693,12 @@ fn claim_jobs(
+                         unreachable!("a completed search cannot exhaust its budget")
+                     }
+                 };
++                if job.kind == JobKind::Channel {
++                    let from: u64 = std::env::var("DIAG_FROM").ok().and_then(|v| v.parse().ok()).unwrap_or(u64::MAX);
++                    if tick.0 >= from {
++                        eprintln!("DIAG CLAIM t={} dwarf={} at={:?} job={} target={:?} goals={:?}", tick.0, id.0, pos, job.id.0, job.target, goals);
++                    }
++                }
+                 current.0 = Some(job.id);
+                 commands
+                     .entity(*entity)
+@@ -683,6 +708,35 @@ fn claim_jobs(
+                 break;
+             }
+         }
++        if job.kind == JobKind::Channel && !assigned {
++            let from: u64 = std::env::var("DIAG_FROM").ok().and_then(|v| v.parse().ok()).unwrap_or(u64::MAX);
++            if tick.0 >= from {
++                eprintln!("DIAG NOCLAIM t={} job={} target={:?} attempted={attempted} sat_out={sat_out} goals={:?}", tick.0, job.id.0, job.target, goals);
++                if tick.0 >= from + 500 && tick.0 < from + 520 {
++                    let flood = |start: Pos| -> BTreeSet<Pos> {
++                        let mut seen = BTreeSet::from([start]);
++                        let mut q = VecDeque::from([start]);
++                        while let Some(t) = q.pop_front() {
++                            if seen.len() > 600 { break; }
++                            for n in astar_neighbours(&terrain, &blocked, t) { if seen.insert(n) { q.push_back(n); } }
++                        }
++                        seen
++                    };
++                    for g in &goals {
++                        let piece = flood(*g);
++                        let mut wall: BTreeMap<u32, Pos> = BTreeMap::new();
++                        for t in &piece { for n in astar_neighbours(&terrain, &BTreeSet::new(), *t) { if !piece.contains(&n) { for (iid, ip) in &items { if *ip == n { wall.insert(*iid, *ip); } } } } }
++                        let ds: Vec<_> = dwarves.iter().filter(|(_, _, p, ..)| piece.contains(*p)).map(|(_, i, p, _, _, pr)| (i.0, **p, **pr)).collect();
++                        eprintln!("DIAG GOALPIECE job={} goal={:?} piece_size={} cells={:?} dwarves_in_piece={:?} walling_stones={:?}", job.id.0, g, piece.len(), if piece.len() < 40 { format!("{piece:?}") } else { "big".into() }, ds, wall);
++                    }
++                    for (_, i, p, _, _, pr) in dwarves.iter() {
++                        let piece = flood(**p);
++                        eprintln!("DIAG DWARFPIECE job={} dwarf={} at={:?} prof={:?} piece_size={} reaches_goal={}", job.id.0, i.0, p, pr, piece.len(), goals.iter().any(|g| piece.contains(g)));
++                    }
++                }
++
++            }
++        }
+         if attempted && !assigned && !sat_out {
+             jobs.get_mut(job.id)
+                 .expect("iterated job still exists")
+@@ -1616,7 +1670,18 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
+     entity.remove::<WorkProgress>();
+ }
+ 
++#[track_caller]
+ fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
++    {
++        let t = ecs.resource::<Tick>().0;
++        let from: u64 = std::env::var("DIAG_FROM").ok().and_then(|v| v.parse().ok()).unwrap_or(u64::MAX);
++        if t >= from {
++            let id = ecs.get::<Id>(entity).map(|i| i.0);
++            let pos = ecs.get::<Pos>(entity).copied();
++            let job = ecs.resource::<Jobs>().by_id.get(&job_id).copied();
++            eprintln!("DIAG RETRY t={t} dwarf={id:?} at={pos:?} job={:?} line={}", job.map(|j| (j.id.0, j.kind, j.target)), std::panic::Location::caller().line());
++        }
++    }
+     let retry_after = ecs.resource::<Tick>().0.saturating_add(RETRY_COOLDOWN);
+     if let Some(job) = ecs.resource_mut::<Jobs>().get_mut(job_id) {
+         job.retry_after = retry_after;
+@@ -2526,7 +2591,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             }
+             let column = |cell: Pos| (cell.x, cell.y) == (job.target.x, job.target.y);
+             let found =
+-                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides) {
++                if walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides.clone()) {
+                     None
+                 } else {
+                     nearest_free_cell(terrain, &blocked, pos, |cell| {
+@@ -2536,6 +2601,42 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                             || walls_in_a_dwarf(terrain, &blocked, &dwarves, cell)
+                     })
+                 };
++            {
++                let t = ecs.resource::<Tick>().0;
++                let from: u64 = std::env::var("DIAG_FROM").ok().and_then(|v| v.parse().ok()).unwrap_or(u64::MAX);
++                if t >= from && found.is_none() {
++                    let wall = walls_in_a_dwarf_from(terrain, &blocked, &dwarves, job.target, target_sides.clone());
++                    let mut closed = blocked.clone();
++                    closed.insert(job.target);
++                    let str_ = stranded(terrain, &closed, &dwarves, target_sides.clone());
++                    {
++                        let stones = uncarried_stones(ecs);
++                        let who: Vec<(u32, Pos, String)> = ecs.iter_entities().filter(|e| e.contains::<Dwarf>()).filter_map(|e| Some((e.get::<Id>()?.0, *e.get::<Pos>()?, format!("{:?}/{:?}", e.get::<Profession>()?, e.get::<JobState>()?)))).collect();
++                        for sp in &str_ {
++                            let mut pocket: BTreeSet<Pos> = BTreeSet::from([*sp]);
++                            let mut q = VecDeque::from([*sp]);
++                            while let Some(tile) = q.pop_front() {
++                                if pocket.len() > 400 { break; }
++                                for n in astar_neighbours(terrain, &closed, tile) {
++                                    if pocket.insert(n) { q.push_back(n); }
++                                }
++                            }
++                            let mut wall: BTreeMap<u32, Pos> = BTreeMap::new();
++                            for tile in &pocket {
++                                for n in astar_neighbours(terrain, &BTreeSet::new(), *tile) {
++                                    if !pocket.contains(&n) {
++                                        for (id, ip) in &stones { if *ip == n { wall.insert(*id, *ip); } }
++                                    }
++                                }
++                            }
++                            let inpocket: Vec<_> = who.iter().filter(|(_, p, _)| pocket.contains(p)).collect();
++                            eprintln!("DIAG STRANDED t={t} cell={sp:?} piece_size={} cells={} dwarves_in_piece={:?} stones_walling_piece={:?} worker_in_piece={}", pocket.len(), if pocket.len() < 40 { format!("{pocket:?}") } else { "big".into() }, inpocket, wall, pocket.contains(&pos));
++                        }
++                        eprintln!("DIAG ALLDWARVES t={t} {who:?}");
++                    }
++                    eprintln!("DIAG CUTREFUSED t={t} worker_at={pos:?} target={:?} cut_wall_in={wall} stranded={str_:?} occupied={occupied:?} dwarves_adj={dwarves:?} target_sides={target_sides:?}", job.target);
++                }
++            }
+             let Some(found) = found else {
+                 for (cell, old) in undo {
+                     let old = old.expect("a changed cell was in bounds");
