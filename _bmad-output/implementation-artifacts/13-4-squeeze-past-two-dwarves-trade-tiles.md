@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.4: Squeeze Past — Two Dwarves Trade Tiles
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -81,7 +81,7 @@ Throwaway scratch worktrees, never committed. Stacks are 13.2's: **C0** = `censu
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings (Q1–Q4).** Record the answers in the Change Log and amend the ACs they name. Then ASK which implementer before dev (memory: `dev-implementer-is-sonnet-not-codex`).
+- [x] **Task 0: Wolf's rulings (Q1–Q4).** Record the answers in the Change Log and amend the ACs they name. Then ASK which implementer before dev (memory: `dev-implementer-is-sonnet-not-codex`).
 - [ ] **Task 1: port the swap (AC 1).** UPDATE `crates/sim-core/src/lib.rs`. Port `13-2-signoff/prototypes/squeeze.patch` by hand: it is a C0-stack patch, and its back-out hunk carries `counters::at`, which `main` lacks. Hunks 1–5, 7 and 8 apply on HEAD with offsets; hunk 6 is ported by hand (creation did exactly this).
   - [ ] **Done means B's readings reproduce** (the timer as a component must not change an outcome): `simd --bench` ends stuck-tunnel `tick=28082 marks=0 items=60 zones=89 goals=38/4/1`, big-pile `marks=12 items=34 … goals=0/1/0`, dig-loop `marks=10 items=44`, seat-slow `marks=1 items=129 … goals=38/11/1`; the 4,000-tick cage `frozen` reads `[(2,6,1),(7,6,3),(8,6,4),(12,4,4),(12,6,3)]`. Compare end lines, not `state=`: the hash covers the save encoding, which gains the new field.
   - [ ] `SQUEEZE_WAIT_TICKS` beside `STEP_REST_TICKS` (`:44`). Drop `SQUEEZE_HEAD_ON_MOVERS`: variant B is ruled, so no switch (YAGNI).
