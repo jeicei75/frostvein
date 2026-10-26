@@ -2942,10 +2942,14 @@ fn spawn_places_five_dwarves_on_distinct_tiles_for_every_small_seed() {
 // dwarf, or a delivery walled one into a dead end, and the dwarf never moved again: 8 of 28 runs
 // ended with a dwarf still for >= 2,251 ticks (longest still on 26185a0: <= 60). No stone lands on
 // a dwarf, every dwarf still for long is one of the known one-level islands (#186), and the runs
-// that leave marks are the pinned ones.
+// that leave marks are the pinned ones. 13.4: each run goes on to 16,000 ticks, and the marks
+// left then are pinned too.
 #[test]
 fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     const TICKS: u64 = 4_000;
+    // 13.4: each run goes on to this tick once; `frozen`, `unfinished` and `worked` are read at
+    // TICKS, `landed` over the whole run, and the marks left here are `UNFINISHED_LATE`.
+    const LATE_TICKS: u64 = 16_000;
     const STILL_BOUND: u64 = 500;
     // (seed, channel width, dwarf). An idle dwarf whose every same-level neighbour is a stone,
     // rock, a drop or another dwarf: `wander` is same-z only, so it stands until a job routes it
@@ -3023,22 +3027,35 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // (`caging_stone`), and seed 6 now finishes inside the 4,000.
     // 13.4 re-pin (was [(11, 6, 1)]), each run read by dump at tick 4,000 and run on to 16,000.
     // (11,6,1) is gone: the crew finishes it at t3,947. (12,6,6) is SLOW, not stuck: six marks at
-    // 4,000, two miners walking, finished at t4,439. The other four are #187's stuck shapes (13.4
-    // Task 0 Q2, fixed by Task 4; the entries leave this list with it). They do not finish by
-    // 16,000, and each ends with the pile full:
-    // (0,4,1): the mark (68,64,12) has a miner in the pit below it (68,65,11), working; his claim
-    // is retried (retry_after 3961) and the cut is refused again, 1 mark left at 16,000.
-    // (6,6,1): the mark (68,60,8) has an idle dwarf standing ON it (68,60,8) and the miner
-    // (dwarf 0, job 44) walking; the refusal never lifts, 1 mark left at 16,000.
-    // (9,6,1): every dwarf idle and nobody holds a claim; the mark (68,64,8) is stamped with a
-    // retry (4010) and re-stamped, no work cell reachable (the #182 mode ii shape), 1 mark at 16,000.
-    // (13,6,8): slow and then stuck: 8 marks at 4,000 with two miners at work, down to 1 mark at
-    // 16,000 (#187's refused cut again).
+    // 4,000, two miners walking, finished at t4,439. The other four do not finish by 16,000: they
+    // are `UNFINISHED_LATE`, traced there. (13,6,8) is slow first, 8 marks at 4,000 with two miners
+    // at work, down to 1 at 16,000.
     const UNFINISHED: [(u64, i32, usize); 5] =
         [(0, 4, 1), (6, 6, 1), (9, 6, 1), (12, 6, 6), (13, 6, 8)];
+    // (seed, channel width, marks left) after `LATE_TICKS`. 13.4 (Wolf, 2026-10-26: land the
+    // squeeze, pin these; the shapes are on #218): each was traced over its last 1,000 ticks at
+    // 16,000 (`13-4-signoff/diag-traces-waits-10-20-30.txt`). In every one the pile has no delivery
+    // cell (full, or on (13,6,1) its floor cut away by the channel it overlaps), so the stones that
+    // wall a pit are never hauled. A channel cut is refused only by its wall-in check
+    // (`walls_in_a_dwarf_from` at completion, then `retry_claim`): claim, refusal 52 ticks later,
+    // a 20-tick cooldown, over and over. `main` reads none here; which runs land is timing (at
+    // `SQUEEZE_WAIT_TICKS` 20 it is (0,4,1) and (12,6,1), at 30 only (4,6,1)).
+    // (0,4,1) mark (68,64,12): the miner (dwarf 1) works from inside his own 5-cell pit piece at
+    // z11, walled by stones 26, 28, 31, 32, 33; the cut would strand him alone. Its rim goal
+    // (69,64,13) is outside, but A* picks the inside one.
+    // (6,6,1) mark (68,60,8): the miner (dwarf 0) and two idle dwarves (1 and 4) share an 11-cell
+    // pit at z7 walled by 20 stones; any one of them refuses the cut. Dwarf 2 standing ON the mark
+    // is incidental (not #195's refusal).
+    // (9,6,1) mark (68,64,8): nobody ever claims it. Its three work cells are one 5-cell piece
+    // walled by stones 35, 41, 42, 43, 46, 51, every dwarf is outside, and the goals are not
+    // empty, so `work_positions`' fallback never fires (#182 mode ii, with the cells free).
+    // (13,6,1) mark (98,60,22): the same, its only goal (97,60,21) in a 4-cell piece walled by 9
+    // stones.
+    const UNFINISHED_LATE: [(u64, i32, usize); 4] = [(0, 4, 1), (6, 6, 1), (9, 6, 1), (13, 6, 1)];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
+    let mut unfinished_late = Vec::new();
     let mut landed = Vec::new();
     let mut worked = 0;
     for seed in 0..=16_u64 {
@@ -3098,14 +3115,16 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
             let mut longest = [0_u64; 5];
             let mut previous: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
             let mut loose_before = loose(&world);
-            for _ in 0..TICKS {
+            for _ in 0..LATE_TICKS {
                 world.step();
                 let now: Vec<Pos> = world.dwarves().iter().map(|(_, p, ..)| *p).collect();
-                for dwarf in 0..5 {
-                    if now[dwarf] != previous[dwarf] {
-                        last_move[dwarf] = world.tick();
+                if world.tick() <= TICKS {
+                    for dwarf in 0..5 {
+                        if now[dwarf] != previous[dwarf] {
+                            last_move[dwarf] = world.tick();
+                        }
+                        longest[dwarf] = longest[dwarf].max(world.tick() - last_move[dwarf]);
                     }
-                    longest[dwarf] = longest[dwarf].max(world.tick() - last_move[dwarf]);
                 }
                 // A stone placed this tick (spawned, delivered or dropped) onto a dwarf, the
                 // dropper's own tile included (12.9 review run 2, Wolf: never under any dwarf).
@@ -3120,21 +3139,28 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
                 }
                 loose_before = loose_now;
                 previous = now;
-            }
-            for (dwarf, still) in longest.iter().copied().enumerate() {
-                if still >= STILL_BOUND {
-                    frozen.push((seed, width, dwarf, still, previous[dwarf]));
+                if world.tick() == TICKS {
+                    for (dwarf, still) in longest.iter().copied().enumerate() {
+                        if still >= STILL_BOUND {
+                            frozen.push((seed, width, dwarf, still, previous[dwarf]));
+                        }
+                    }
+                    let marks_left = world.designations().len();
+                    if marks_left > 0 {
+                        unfinished.push((seed, width, marks_left));
+                    }
+                    let on_pile = world.items().iter().any(|(_, p)| {
+                        (pile.min.x..=pile.max.x).contains(&p.x)
+                            && (pile.min.y..=pile.max.y).contains(&p.y)
+                    });
+                    if world.designations().len() < marks && on_pile {
+                        worked += 1;
+                    }
                 }
             }
             let marks_left = world.designations().len();
             if marks_left > 0 {
-                unfinished.push((seed, width, marks_left));
-            }
-            let on_pile = world.items().iter().any(|(_, p)| {
-                (pile.min.x..=pile.max.x).contains(&p.x) && (pile.min.y..=pile.max.y).contains(&p.y)
-            });
-            if world.designations().len() < marks && on_pile {
-                worked += 1;
+                unfinished_late.push((seed, width, marks_left));
             }
         }
     }
@@ -3154,6 +3180,10 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     assert_eq!(
         unfinished, UNFINISHED,
         "runs with marks left after {TICKS} ticks; (seed, channel width, marks left)"
+    );
+    assert_eq!(
+        unfinished_late, UNFINISHED_LATE,
+        "runs with marks left after {LATE_TICKS} ticks; (seed, channel width, marks left)"
     );
     // Vacuity: every run with a pile site really ran (the review's own pile search found 28, this
     // one 32), and in every one the crew worked.
