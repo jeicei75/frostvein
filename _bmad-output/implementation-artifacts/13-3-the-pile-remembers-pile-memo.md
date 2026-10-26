@@ -263,7 +263,7 @@ No pin edited; every scenario test, the cage, ring and two-wide sweeps included,
 - Implementer: one Sonnet 5.5 subagent wrote Tasks 1, 2 and 5 (lib.rs port + two tests, launch-gui.ps1), checking each of the five sabotages by hand. Opus orchestrated, reviewed the diff, re-pointed `12-9.sh` row 20, wrote and ran the mutation table, ran every tick-bench and scale run, and wrote the card.
 - The hit check is a let-chain (`if let ... && *memo_key == key`): clippy's `collapsible_if` flagged the nested form. No `type_complexity` warning, so no alias.
 - AC 1-3: lib tests + 5/5 KILLED. AC 4: `same` 10/10 on tick-bench and an identical state at the scale point; the full gate (scenario pins, sweeps) is Task 7. AC 5: the table and scale lines above. AC 6: `launch-gui.ps1` is unrun here (no `pwsh`); the seat card is its only test.
-- **Task 6 (seat, 2026-10-25):** Wolf: "so script fix works now" (recorded in the card; Q3 unseen). Before that, Task 6 was open on purpose: the card is written and the branch pushed (`push.sh --fast` VERIFIED `46f9afa1`), but its answers are Wolf's to give at the seat. Status goes to review per Task 7 with AC 6 unseen; the sitting is recorded in the card when it happens.
+- **Task 6 (seat, 2026-10-25):** Wolf: "so script fix works now"; Q1/Q2 answered one by one at code review run 1, "yes it's ok" (recorded in the card; Q3 unseen). The card was written and the branch pushed (`push.sh --fast` VERIFIED `46f9afa1`) before the sitting.
 
 ### File List
 
@@ -274,6 +274,9 @@ No pin edited; every scenario test, the cage, ring and two-wide sweeps included,
 - `_bmad-output/implementation-artifacts/13-3-signoff/vehicle-card.md` (new)
 - `_bmad-output/implementation-artifacts/13-3-the-pile-remembers-pile-memo.md` (this record)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (status)
+- `_bmad-output/implementation-artifacts/13-2-the-way-through-pathfinding-and-reachability-spike.md` (modified: done-mark `b245ba5f`)
+- `_bmad-output/implementation-artifacts/metrics/13-3-the-pile-remembers-pile-memo.md` (new: cost rows)
+- `_bmad-output/implementation-artifacts/metrics/.session-cursors.json` (modified: metric cursor)
 
 ## Change Log
 
