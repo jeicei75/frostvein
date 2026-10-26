@@ -121,15 +121,10 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                if walls_in_a_dwarf(terrain, &blocked, &dwarves, job.target) {\n'))
 PY
 
-# 12.10b review patch (#194), first half: the idle blocker's way out back up the line is never
-# found, so it has no exit and nothing backs out.
-mutation "11 no exit back up the line for an idle blocker" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| {\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '            route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| false && {\n'))
-PY
+# Row 11 (no exit back up the line for an idle blocker, #194's first half) was deleted in 13.4: the
+# exit is still found (4 times in its staircase test), but with the holder unable to escape the head-on
+# match lands in (None, None), which drops that exit `Path` and squeezes after the wait. With the row's
+# sabotage applied, all 101 swaps in the test matched HEAD tick for tick, so no test can see it.
 
 # Row 12 (the holder never backs out of the line) was deleted in 13.4: the #194/#196 back-out it sabotaged is gone, replaced by the squeeze.
 
