@@ -225,7 +225,7 @@ seat-slow                  0.4687     0.1613   -65.6%    -6.3%       2.3%       
 stuck-tunnel               0.0964     0.0940    -2.4%    +0.5%       0.7%       0.5%       1.2%  same   BEYOND FLOOR
 ```
 
-The six pile/seat rows read -58.4..-91.6%, all BEYOND FLOOR, every floor under 10% (quiet devpod; no rerun needed). The other four, as measured: deep-pit -10.8%, stuck-tunnel -2.4%, dig-loop +2.2% (within floor), and **full-pile-crowd +5.5% BEYOND FLOOR** (control +0.6%). That is inside the ~6% cross-build resolution (13.1 review run 2), so it is not established, but it is plausible: a scenario whose `blocked ∩ near` changes on most calls pays the key build and the clone on every miss. Not optimised (scope guardrail); noted for review.
+The six pile/seat rows read -58.4..-91.6%, all BEYOND FLOOR, every floor under 10% (quiet devpod; no rerun needed). The other four, as measured: deep-pit -10.8%, stuck-tunnel -2.4%, dig-loop +2.2% (within floor), and **full-pile-crowd +5.5% BEYOND FLOOR** (control +0.6%). That is inside the ~6% cross-build resolution (13.1 review run 2), so it is not established. Corrected at code review run 1: the cause first written here, that `blocked ∩ near` changes on most calls so every miss pays the key build and the clone, is wrong. Measured, 4 key misses in 36,626 calls (99.9% hits). If the cost is real (+2-4% in review), it is the hit path itself: the key scans all of `blocked` (46 loose stones) and clones the map, on a 4-cell pile whose fresh compute is cheap. Not optimised (scope guardrail).
 
 **Task 4 scale point** (`scale.patch` on `main` = `8a75da2e`, on HEAD = `0a2d1455`, throwaway, each built in release from its own worktree, removed), `simd --bench 13-2-signoff/scale/scale-128-crew200.json`:
 
