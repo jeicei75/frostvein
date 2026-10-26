@@ -2780,6 +2780,7 @@ development_status:
   # with the pile full, landed by timing (waits 10/20/30 -> 4/2/1 different runs). Task 0 Q1-Q4 await Wolf.
   # 13.4 Task 0 RULED 2026-10-26 (Wolf "1 ok 2 a 3 a 4 yes"): idle swap allowed; #187 fix folded in; timer = plain Option;
   # seat sitting yes.
+  # 13.4: Wolf picked Sonnet 5.5 subagents to implement (2026-10-26); Opus orchestrates.
   13-5-clamber-over-a-dwarf-may-step-onto-a-stone: backlog
   # 13.5 only if ruled (13.2 Ruling 2): #207 is re-measured on top of 13.4 first; the story may be dropped.
   epic-13-retrospective: optional

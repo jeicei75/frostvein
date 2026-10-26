@@ -192,6 +192,8 @@ python3 scripts/audit-mutations.py
 
 ### Agent Model Used
 
+Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating (Wolf, 2026-10-26).
+
 ### Debug Log References
 
 ### Completion Notes List
@@ -202,5 +204,6 @@ python3 scripts/audit-mutations.py
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Implementer: Wolf picked Sonnet 5.5 subagents, Opus orchestrating. |
 | 2026-10-26 | Task 0 ruled by Wolf: Q1 (a) allow the idle-blocker swap; Q2 (a) fold the #187 fix in (16k sweep clean at waits 10/20/30, split point after Task 3); Q3 (a) plain `Option` timer field, old saves load; Q4 (a) short seat sitting. No AC amended. |
 | 2026-10-26 | Story created (Opus 5.5) from Epic 13 Story 13.4 and the 13.2 proposal. Creation probe on HEAD `380fd789`: 13.2's squeeze numbers reproduce exactly; the idle-blocker swap (Q1) moves only #207; the 4 stuck cage runs are #187's refused cut and a stone-walled mark with the pile full, landed by timing (waits 10/20/30 → 4/2/1 different runs) (Q2). Task 0 Q1–Q4 await Wolf. Status ready-for-dev. |
