@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.2: The Way Through — Pathfinding and Reachability Spike
 
-Status: review
+Status: done
 
 ## Story
 
@@ -404,3 +404,4 @@ All under `_bmad-output/implementation-artifacts/` unless noted; nothing under `
 | 2026-10-24 | Code review run 2 (fresh session, Opus 5.5) on `28162c85..2a074218`: 0 HIGH; closure rows 4 and 6 REWORK; 9 patch left as action items (Wolf), 5 deferred. The stopping rule fired: no round 3. Status → in-progress. |
 | 2026-10-24 | Review patch pass 2 (fresh session, Opus 5.5): 9/9 `[Review][Patch]` items landed in 4 commits (`7cf68ec4`…`0e5c0308`), each both-sides verified (pass 2 closure table under Review Findings; rows 1, 2 and 9 are REWORK). Each commit's fast gate was green. **The full gate was NOT completed:** Wolf stopped it at 16 min (`fmt`, `clippy` and `cargo test` were ok in 715 s; the pixel guards and `serve.rs` were not run), to be resumed in the next session. `git diff 4f57027 -- crates/` is still empty. Status stays in-progress. |
 | 2026-10-25 | The full gate at PR is green at `d6e0ed97` (`RUST_TEST_THREADS=1`, 3764 s; block under Debug Log References). `git diff 4f57027 -- crates/` is still empty. Status → review. |
+| 2026-10-25 | Merged as PR #216 (`ca862749`), closing #209. The PR body's prose "fixes #206 and #189" / "fixes #189" also closed #189 and #206, which 13.4 targets (not intended). Status → done. |

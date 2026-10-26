@@ -188,9 +188,11 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '            if zones.contains(&n) && is_walkable(terrain, blocked, n) && !depth.contains_key(&n) {\n'
 assert s.count(old) == 1
 s = s.replace(old, '            if zones.contains(&n) && terrain.is_standable(n) && !depth.contains_key(&n) {\n')
-old = '        }\n    }\n    depth\n}\n'
+# 13.3: the memo store now sits between the floods and `depth`; the retain goes BEFORE it, so the
+# kept answer is the sabotaged one too.
+old = '        }\n    }\n    kept.memo = Some((key, depth.clone()));\n    depth\n}\n'
 assert s.count(old) == 1
-s = s.replace(old, '        }\n    }\n    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));\n    depth\n}\n')
+s = s.replace(old, '        }\n    }\n    depth.retain(|cell, _| is_walkable(terrain, blocked, *cell));\n    kept.memo = Some((key, depth.clone()));\n    depth\n}\n')
 p.write_text(s)
 PY
 

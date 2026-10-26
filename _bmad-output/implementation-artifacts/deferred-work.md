@@ -2773,3 +2773,8 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **The `scale.sh` digest sed is single-digit** (`scale.sh:41`, edge, RAN `--runs 10`). It matches `run \([0-9]\)\/[0-9]:`, so `SCALE_RUNS>=10` passes the raw `bench … run` lines through. `state=` and `over10=` stay visible.
 - **`13-5-clamber-over-…: backlog` is a plain board key** (`sprint-status.yaml:2765`, feature + acceptance, traced). create-story's first-`backlog` scan picks it once 13.4 leaves backlog. Only the epic heading "*(only if ruled)*" and a YAML comment carry Ruling 2. Wolf ruled (a) at run 1. This is the board-order-contradicts-ruling shape, so check it when 13.4 closes.
 - **Patch pass 1's "full gate green at `b3a4bf74` (3902 s)" has no pasted block** (story Change Log, acceptance, read; not re-run). M3-4's one full gate at PR is the binding one.
+
+## Deferred from: code review of 13-3-the-pile-remembers-pile-memo (2026-10-25)
+
+- **Test fixtures assign `Terrain.tiles` directly, bypassing `set_tile`** (`crates/sim-core/src/lib.rs:5290`, `:5369`, `:5446`, `:6862`, blind + feature + acceptance, read). Pre-existing for the `open` cache; the 13.3 memo widens it. A future test that rewrites `.tiles` after a `pile_targets` call gets a stale depth map. No current instance: each fixture writes before any tick. Production writes go through `set_tile` only.
+- **`launch-gui.ps1` accepts a non-hex stamp that git resolves** (`scripts/launch-gui.ps1:212`, edge, RAN git). `gui build HEAD` or `gui build main` resolves and verifies; a stamp starting with `-` (other than `-dirty`) reaches git as an option. Unreachable from `crates/gui/build.rs`, which emits only hex, `unknown` or a suffixed hex form. Guard if ever needed: `$stamp -notmatch '^[0-9a-f]{4,40}$'`.

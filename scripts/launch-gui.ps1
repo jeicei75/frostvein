@@ -130,8 +130,16 @@ if (-not (Test-Path -LiteralPath $assets -PathType Container)) {
 # checkout moves only when Wolf pulls it himself; the check still refuses a binary that does not
 # match, so a pull without a rebuild is caught rather than run.
 
-# The checkout's HEAD, short, to compare against the stamp. `build.rs` uses `git rev-parse --short`,
-# so this must too, or the comparison is between two different lengths of the same commit.
+# The checkout's HEAD, in full, to compare against the stamp once that is resolved to a full SHA.
+# `build.rs` stamps `git rev-parse --short`, whose length depends on the repo's object count (7
+# characters below about 16k objects, 8 above) and so differs between the devpod build and this
+# checkout: a string compare of the two short forms refused a binary built at the very same commit.
+# The short form below is for display only.
+$headFull = (& git -C $Checkout rev-parse HEAD)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($headFull)) {
+    Fail 'cannot read the checkout HEAD'
+}
+$headFull = $headFull.Trim()
 $head = (& git -C $Checkout rev-parse --short HEAD)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($head)) {
     Fail 'cannot read the checkout HEAD'
@@ -198,7 +206,14 @@ the binary is stamped '$stamp' — it was built from an UNCOMMITTED tree, so its
 describe what is running and no exact comparison exists. Commit the source and rebuild.
 "@
 }
-if ($stamp -ne $head) {
+# The stamp is a short SHA of whatever length the build's repo gave it: resolve it to the one commit
+# it names in THIS checkout. Exit code checked, as above; --verify --quiet prints nothing and exits
+# non-zero when the stamp names no commit here or an ambiguous prefix.
+$stampFull = (& git -C $Checkout rev-parse --verify --quiet "$stamp^{commit}")
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($stampFull)) {
+    Fail "the checkout has no single commit for stamp $stamp (not fetched, or an ambiguous prefix); rebuild gui.exe at $head"
+}
+if ($stampFull.Trim() -ne $headFull) {
     Fail @"
 MISMATCH — the binary and the checkout are different commits.
     gui.exe   $stamp
