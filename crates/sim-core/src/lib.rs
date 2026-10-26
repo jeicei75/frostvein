@@ -42,6 +42,10 @@ const WANDER_REST_TICKS: u32 = 10;
 /// gait cycles a second, under two frames per cycle at 60 fps. The legs aliased into a blur and
 /// the figure read as sliding.
 const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
+/// 13.4 squeeze-past: how many ticks a holder has been stuck behind one blocker before the two
+/// swap. One step period: the holder's second look at the same blocker (a blocked dwarf looks
+/// once per `STEP_REST_TICKS`).
+const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
 pub const MAX_DESIGNATIONS: usize = 4096;
 const MAX_ASTAR_NODES: usize = 50_000;
 /// Ticks of work a hauler spends picking a stone up, and again putting it down.
@@ -305,6 +309,16 @@ struct Clearing {
     item: u32,
     landing: Option<Pos>,
     drop_from: Option<Pos>,
+}
+
+/// 13.4 squeeze-past: a holder's current stand-off. `blocker` has held his next tile since tick
+/// `since`; `last` is the tick of his latest look at it. Set by the first blocked look, kept while
+/// the same blocker holds him within `2 * STEP_REST_TICKS` of `last`, removed by the swap.
+#[derive(Component)]
+struct Squeeze {
+    blocker: Id,
+    since: u64,
+    last: u64,
 }
 
 #[derive(Component)]
@@ -1652,11 +1666,71 @@ fn closed_to_dwarves(
     closed
 }
 
+/// 13.4 squeeze-past. The ladder in `resolve_blocked_step` found no way for the holder to pass, and
+/// the blocker is idle or head-on (its path starts on the holder's tile). After `SQUEEZE_WAIT_TICKS`
+/// of the same stand-off the two trade tiles in this one call (the squeeze), so no tick boundary
+/// has two on a tile. Both rest a step period, as after any step. Returns `true` when it swapped:
+/// the holder's `path` is already advanced and its `Pos` set, so the caller must report "wait"
+/// (`false`), which stores the path and the rest period and leaves `occupied` as it is (the same
+/// two tiles stay taken).
+fn try_squeeze(
+    ecs: &mut EcsWorld,
+    (holder_id, pos): (Id, Pos),
+    path: &mut Vec<Pos>,
+    (blocker_id, blocker): (Id, Entity),
+    idle: bool,
+    blocker_path: &[Pos],
+) -> bool {
+    let next = path[0];
+    let now = ecs.resource::<Tick>().0;
+    let holder = ecs
+        .iter_entities()
+        .find(|entity| entity.get::<Id>() == Some(&holder_id))
+        .map(|entity| entity.id())
+        .expect("the holder is a dwarf");
+    let since = match ecs.get::<Squeeze>(holder) {
+        Some(squeeze)
+            if squeeze.blocker == blocker_id
+                && now - squeeze.last <= 2 * u64::from(STEP_REST_TICKS) =>
+        {
+            squeeze.since
+        }
+        _ => now,
+    };
+    if now - since < SQUEEZE_WAIT_TICKS {
+        ecs.entity_mut(holder).insert(Squeeze {
+            blocker: blocker_id,
+            since,
+            last: now,
+        });
+        return false;
+    }
+    ecs.entity_mut(holder).remove::<Squeeze>();
+    *ecs.get_mut::<Pos>(holder)
+        .expect("every dwarf has a position") = next;
+    *ecs.get_mut::<Pos>(blocker)
+        .expect("every dwarf has a position") = pos;
+    path.remove(0);
+    let mut wander = ecs.get_mut::<Wander>(blocker).expect("every dwarf wanders");
+    wander.cooldown = STEP_REST_TICKS;
+    if idle {
+        wander.home = pos;
+    }
+    if idle || blocker_path.len() <= 1 {
+        ecs.entity_mut(blocker).remove::<Path>();
+    } else {
+        ecs.entity_mut(blocker)
+            .insert(Path(blocker_path[1..].to_vec()));
+    }
+    true
+}
+
 /// #185: the idle blocker on the holder's path has no way out because idle dwarves are lined up
 /// behind it in a one-wide passage. Searches through the idle dwarves (never the holder, never a
 /// dwarf with a job) for the nearest free tile off the holder's path, and sends the idle dwarf
 /// nearest that tile out on the rest of the route. The line shifts a dwarf at a time and the
-/// holder waits meanwhile. No swap: nobody changes places. `false` when no route was found.
+/// holder waits meanwhile. Nobody changes places here (the squeeze is `try_squeeze`'s).
+/// `false` when no route was found.
 fn make_room_down_the_idle_chain(
     ecs: &mut EcsWorld,
     blocked: &BTreeSet<Pos>,
@@ -1702,20 +1776,23 @@ fn make_room_down_the_idle_chain(
 ///    an exit `Path` to the nearest free tile off the holder's path, which starts on the holder's
 ///    tile, so this becomes case 3. With none past the other dwarves either, the idle dwarves in
 ///    the way shift (#185); and with no such shift, the exit runs back past the holder and the
-///    dwarves behind it (#194).
+///    dwarves behind it (#194). With no exit at all, the holder waits, and after
+///    `SQUEEZE_WAIT_TICKS` of the same stand-off the two swap (13.4).
 /// 2. The blocker holds a job and is not coming the other way: re-route around every dwarf.
 /// 3. Head-on (the blocker's path starts on the holder's tile): each side's ESCAPE is the nearest
 ///    tile, reached without passing the other dwarf, that is off the other's remaining path. The
 ///    lower id yields if it has one, else the other does. The yield IS the yielder's `Path`.
 ///    A per-step "back off if you can" rule livelocks in a dead end (see the story); an escape
 ///    gets nearer as the yielder retreats and never appears for the dwarf that advances.
-///    #194: with neither escape and an idle blocker whose way out is back up the line, the holder
-///    backs out past the dwarves behind it and waits; each of those meets it head-on in turn
-///    and yields, so the line backs out a dwarf at a time. #196: a blocker holding a job is met
-///    the same way, or a line of job holders head-on in a one-wide stair waits forever.
+///    13.4: where the blocker holds a job (two head-on job-holders) the escape is not used: the
+///    two swap after the wait. #194/#196's back-out is gone; the swap resolves a line of
+///    head-on dwarves in a one-wide way a pair at a time.
 /// 4. Otherwise wait.
 ///
-/// NOTE: no swap anywhere (Wolf, Task 0 Q1b). Two dwarves sealed in one pocket both wait, and a
+/// NOTE: the swap (13.4, Wolf's Ruling 1) takes two dwarves that have met the same way for
+/// `SQUEEZE_WAIT_TICKS`: two head-on job-holders, or a holder and an idle blocker with no tile
+/// aside and no exit (his `home` becomes the holder's old tile). A job-holder who is not coming
+/// the other way is never swapped; he re-routes. Two dwarves sealed in one pocket both wait, and a
 /// ring of dwarves each waiting on the next waits too; neither is detected.
 fn resolve_blocked_step(
     ecs: &mut EcsWorld,
@@ -1771,6 +1848,15 @@ fn resolve_blocked_step(
                 !occupied.contains(&tile) && !holder_tiles.contains(&tile)
             })
         }) else {
+            // 13.4: no way out for the idle blocker: squeeze past after the wait.
+            try_squeeze(
+                ecs,
+                (holder_id, pos),
+                path,
+                (blocker_id, blocker),
+                true,
+                &blocker_path,
+            );
             return false;
         };
         blocker_path = route.clone();
@@ -1778,6 +1864,14 @@ fn resolve_blocked_step(
     }
     if !head_on(&blocker_path) {
         if idle {
+            try_squeeze(
+                ecs,
+                (holder_id, pos),
+                path,
+                (blocker_id, blocker),
+                true,
+                &blocker_path,
+            );
             return false;
         }
         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
@@ -1788,6 +1882,19 @@ fn resolve_blocked_step(
         return true;
     }
 
+    // 13.4: two head-on movers (the blocker holds a job) trade tiles after the wait, instead of one
+    // of them escaping down the line.
+    if !idle {
+        try_squeeze(
+            ecs,
+            (holder_id, pos),
+            path,
+            (blocker_id, blocker),
+            false,
+            &blocker_path,
+        );
+        return false;
+    }
     let blocker_tiles: BTreeSet<Pos> = blocker_path.iter().copied().collect();
     let (holder_escape, blocker_escape) = {
         let terrain = ecs.resource::<Terrain>();
@@ -1810,23 +1917,24 @@ fn resolve_blocked_step(
         (Some(_), Some(_)) => holder_id < blocker_id,
         (Some(_), None) => true,
         (None, Some(_)) => false,
-        // Both wait, unless the holder backs out. An idle blocker's exit `Path` is dropped (#183):
+        // Both wait, unless the wait has run and they swap. An idle blocker's exit `Path` is dropped (#183):
         // it was derived when the holder stood elsewhere and can lead back through the holder, so
         // keeping it would hold the idle dwarf still forever. The next blocked step derives a
         // fresh one.
         (None, None) => {
-            // #194, #196 (idle blocker or not): the holder backs out past the dwarves behind it
-            // (never the blocker) to the nearest free tile off the blocker's way out, and waits
-            // for them to yield.
-            let mut closed = blocked.clone();
-            closed.insert(next);
-            let back_out = route_to_nearest(ecs.resource::<Terrain>(), &closed, pos, |tile| {
-                !occupied.contains(&tile) && !blocker_tiles.contains(&tile)
-            });
-            if let Some(back_out) = back_out {
-                *path = back_out;
+            // 13.4: head-on, neither can step off: squeeze past after the wait, instead of the
+            // holder backing out.
+            if try_squeeze(
+                ecs,
+                (holder_id, pos),
+                path,
+                (blocker_id, blocker),
+                idle,
+                &blocker_path,
+            ) {
                 return false;
             }
+            // The wait stands in for the back-out. #183: an idle blocker's exit `Path` is dropped.
             if idle {
                 ecs.entity_mut(blocker).remove::<Path>();
             }
@@ -6908,8 +7016,9 @@ mod tests {
         z: FIX_Z,
     };
 
-    /// Steps until `done` or `limit` ticks, panicking on the tick two dwarves share a tile or
-    /// swap tiles. Calls `each_tick` after every step. Returns every tick's positions by id.
+    /// Steps until `done` or `limit` ticks, panicking on the tick two dwarves share a tile. A swap
+    /// is legal (13.4): it trades two tiles in one write, so no tick boundary has two on one.
+    /// Calls `each_tick` after every step. Returns every tick's positions by id.
     fn watch(
         world: &mut World,
         limit: u64,
@@ -6924,21 +7033,12 @@ mod tests {
             assert!(world.tick() < limit, "not done by tick {limit}");
             world.step();
             let now = positions(world);
-            let before = trace.last().unwrap();
             let tick = world.tick();
             assert_eq!(
                 now.iter().collect::<BTreeSet<_>>().len(),
                 now.len(),
                 "two dwarves share a tile at tick {tick}: {now:?}"
             );
-            for a in 0..now.len() {
-                for b in 0..now.len() {
-                    assert!(
-                        a == b || !(now[a] == before[b] && now[b] == before[a] && now[a] != now[b]),
-                        "dwarves {a} and {b} swapped tiles at tick {tick}: {before:?} -> {now:?}"
-                    );
-                }
-            }
             each_tick(world);
             trace.push(now);
         }
@@ -6953,6 +7053,13 @@ mod tests {
             let holder = world.claims()[job.id.0 as usize].1;
             assert_eq!(holder, Some(job.id), "dwarf {} lost its job", job.id.0);
         }
+    }
+
+    /// Whether dwarves 0 and 1 traded tiles between two consecutive rows of `trace`.
+    fn traded_places(trace: &[Vec<Pos>]) -> bool {
+        trace.windows(2).any(|rows| {
+            rows[1][0] == rows[0][1] && rows[1][1] == rows[0][0] && rows[0][0] != rows[0][1]
+        })
     }
 
     /// Two miners meet head-on in the tunnel: the first (id 0) to `first_target`, the second
@@ -6970,8 +7077,8 @@ mod tests {
         (world, trace)
     }
 
-    // 12.9 AC3(a): the LOWER id is nearer the open end. It has an escape (the room), so it
-    // yields; the other walks out of the tunnel's way, then the lower id goes back in.
+    // 12.9 AC3(a), 13.4 rule: the LOWER id is nearer the open end and has an escape (the room), but
+    // two head-on job-holders no longer use it: after the wait they trade tiles, and both dig.
     #[test]
     fn head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_open_end() {
         let (world, trace) = head_on(
@@ -6980,16 +7087,13 @@ mod tests {
         );
         assert_eq!(world.tile(EAST_END), Some(Tile::Empty));
         assert_eq!(world.tile(ROOM_WALL), Some(Tile::Empty));
-        // Positive: the lower id really did back off (it started at x = 12 and its work lies east).
-        assert!(
-            trace.iter().any(|positions| positions[0].x < 12),
-            "the lower id never backed out of the tunnel"
-        );
+        // Positive: the two swapped (nobody was released, both jobs done).
+        assert!(traded_places(&trace), "dwarves 0 and 1 never swapped");
     }
 
-    // 12.9 AC3(b): the LOWER id is nearer the dead end and the higher id's work position is the
-    // tunnel's last cell. The lower has no escape, so the higher must back off. A per-step flip
-    // rule livelocks here (the story's hand trace); this must resolve.
+    // 12.9 AC3(b), 13.4 rule: the LOWER id is nearer the dead end and the higher id's work position
+    // is the tunnel's last cell. The lower has no escape; the two trade tiles after the wait. A
+    // per-step flip rule livelocks here (the story's hand trace); this must resolve.
     #[test]
     fn head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_dead_end() {
         let (world, trace) = head_on(
@@ -6998,11 +7102,8 @@ mod tests {
         );
         assert_eq!(world.tile(EAST_END), Some(Tile::Empty));
         assert_eq!(world.tile(ROOM_WALL), Some(Tile::Empty));
-        // Positive: the higher id (its work is east) backed out west of where it started.
-        assert!(
-            trace.iter().any(|positions| positions[1].x < 12),
-            "the higher id never backed out of the tunnel"
-        );
+        // Positive: the two swapped (nobody was released, both jobs done).
+        assert!(traded_places(&trace), "dwarves 0 and 1 never swapped");
     }
 
     // 12.9 review #183: a head-on where neither side has an escape. The idle blocker's exit `Path`
@@ -7042,6 +7143,114 @@ mod tests {
         assert!(
             world.ecs.get::<super::Path>(entity).is_none(),
             "the idle blocker kept its stale exit path"
+        );
+    }
+
+    // 13.4 AC3: the wait is real. A holder stuck behind the same blocker does not swap on his first
+    // look; once `SQUEEZE_WAIT_TICKS` have passed the two trade tiles in one write.
+    #[test]
+    fn a_held_dwarf_swaps_only_after_the_wait() {
+        let tick_on = |world: &mut World, ticks: u64| {
+            world.ecs.resource_mut::<super::Tick>().0 += ticks;
+        };
+        // Two head-on job-holders in the tunnel: dwarf 0 at x 13 walking east, dwarf 1 at x 14
+        // walking west.
+        let mut world = room_and_tunnel();
+        let spots = [13, 14, 12, 11, 10].map(|x| at(x, FIX_Y, FIX_Z));
+        stand_miners_at(&mut world, spots);
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let (holder, blocker) = (spots[0], spots[1]);
+        let entity = dwarf_entity(&world, 1);
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(super::JobId(1));
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert(super::Path(vec![holder, spots[2], spots[3]]));
+        let mut occupied: BTreeSet<Pos> = spots.into_iter().collect();
+        let mut path = vec![blocker, at(15, FIX_Y, FIX_Z)];
+
+        let mut look = |world: &mut World, path: &mut Vec<Pos>| {
+            super::resolve_blocked_step(
+                &mut world.ecs,
+                &BTreeSet::new(),
+                &mut occupied,
+                (super::Id(0), holder),
+                path,
+                &BTreeSet::new(),
+            )
+        };
+        // First look: the holder waits and nobody moves.
+        assert!(!look(&mut world, &mut path));
+        assert_eq!(path, vec![blocker, at(15, FIX_Y, FIX_Z)]);
+        assert_eq!(world.dwarves()[0].1, holder);
+        assert_eq!(world.dwarves()[1].1, blocker);
+        // One tick short of the wait: still no swap.
+        tick_on(&mut world, super::SQUEEZE_WAIT_TICKS - 1);
+        assert!(!look(&mut world, &mut path));
+        assert_eq!(world.dwarves()[0].1, holder);
+        assert_eq!(world.dwarves()[1].1, blocker);
+        // The wait has run: the two trade tiles, the holder's path is advanced, and so is the
+        // blocker's. The call still reports "wait" (the caller stores the path and the rest).
+        tick_on(&mut world, 1);
+        assert!(!look(&mut world, &mut path));
+        assert_eq!(world.dwarves()[0].1, blocker);
+        assert_eq!(world.dwarves()[1].1, holder);
+        assert_eq!(path, vec![at(15, FIX_Y, FIX_Z)]);
+        assert_eq!(occupied, spots.into_iter().collect());
+        assert_eq!(
+            world.ecs.get::<super::Path>(entity).unwrap().0,
+            vec![spots[2], spots[3]]
+        );
+        assert_eq!(
+            world.ecs.get::<super::Wander>(entity).unwrap().cooldown,
+            super::STEP_REST_TICKS
+        );
+        assert!(
+            world
+                .ecs
+                .get::<super::Squeeze>(dwarf_entity(&world, 0))
+                .is_none(),
+            "the swap did not end the stand-off"
+        );
+
+        // An idle blocker with no way out, at a dead end behind a line of dwarves: the same wait,
+        // then the swap, and his `home` is the holder's old tile.
+        let mut world = room_and_tunnel();
+        let spots = [16, 15, 14, 13, 12].map(|x| at(x, FIX_Y, FIX_Z));
+        stand_miners_at(&mut world, spots);
+        set_profession(&mut world, 1, super::Profession::Woodcutter);
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let (holder, blocker) = (spots[0], spots[1]);
+        let entity = dwarf_entity(&world, 1);
+        assert_eq!(world.ecs.get::<super::CurrentJob>(entity).unwrap().0, None);
+        world
+            .ecs
+            .entity_mut(entity)
+            .insert(super::Path(vec![holder]));
+        let mut occupied: BTreeSet<Pos> = spots.into_iter().collect();
+        let mut path = vec![blocker];
+        let mut look = |world: &mut World, path: &mut Vec<Pos>| {
+            super::resolve_blocked_step(
+                &mut world.ecs,
+                &BTreeSet::new(),
+                &mut occupied,
+                (super::Id(0), holder),
+                path,
+                &BTreeSet::new(),
+            )
+        };
+        assert!(!look(&mut world, &mut path));
+        assert_eq!(world.dwarves()[0].1, holder);
+        assert_eq!(world.dwarves()[1].1, blocker);
+        tick_on(&mut world, super::SQUEEZE_WAIT_TICKS);
+        assert!(!look(&mut world, &mut path));
+        assert_eq!(world.dwarves()[0].1, blocker);
+        assert_eq!(world.dwarves()[1].1, holder);
+        assert_eq!(occupied, spots.into_iter().collect());
+        assert_eq!(world.ecs.get::<super::Wander>(entity).unwrap().home, holder);
+        assert!(
+            world.ecs.get::<super::Path>(entity).is_none(),
+            "the idle blocker kept his exit path"
         );
     }
 

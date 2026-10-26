@@ -112,15 +112,14 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         );
     }
     assert_eq!(max_stones_on_emitter, 0, "stone on an emitter cell");
-    // 12.9 review run 2 re-pin (Wolf: land "never under any dwarf", file the jam, pin it): a
-    // let-go stone now lands beside its hauler, and this seed jams (#189). Idle dwarf 2 stands on
-    // the last free pile cell, boxed in, and the hauler beside it picks up and lets go every ~6
-    // ticks forever. Was: 0 pick-ups after t=2500, 24 of 24 cells. Fixing #189 turns this red; then
-    // restore those two figures.
+    // 13.4: #189's jam is fixed by the squeeze. A let-go stone lands beside its hauler, and idle
+    // dwarf 2 used to stand on the last free pile cell, boxed in, with the hauler beside it picking
+    // up and letting go every ~6 ticks forever (80 pick-ups after t=2500, 23 of 24 cells). The
+    // hauler now trades tiles with him after the wait: 0 pick-ups, every cell filled.
     assert!(
-        emitter_zones.is_empty() && pickups_after_full == 80,
+        emitter_zones.is_empty() && pickups_after_full == 0,
         "zone on an emitter: {emitter_zones:?}; pick-ups after t=2500: {pickups_after_full} (pinned \
-         80, the #189 jam)"
+         0)"
     );
     let zones = world.zones();
     let filled: BTreeSet<Pos> = world
@@ -131,9 +130,8 @@ fn a_stockpile_around_the_campfire_never_zones_or_receives_the_fire() {
         .collect();
     assert_eq!(
         filled.len(),
-        zones.len() - 1,
-        "the pile fills but for the #189 jam's cell, or every other assertion here holds with \
-         nothing hauled"
+        zones.len(),
+        "the pile does not fill, or every other assertion here holds with nothing hauled"
     );
 }
 
@@ -2985,8 +2983,26 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // 12.11 review run 1 (Wolf, 2026-10-17): (12,4,4) stays pinned under the (12,4,1) ruling. His
     // own clearing set-down took one exit, but a channel cut closed the last one, so it is closed
     // by a cut, not a placement; noted on #186.
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 4] =
-        [(10, 6, 0), (12, 4, 1), (12, 4, 4), (12, 6, 3)];
+    // 13.4 re-pin (the squeeze changes who stands where, so the list reshuffles: 2 kept, 2 gone, 3
+    // new), each run read by dump at tick 4,000. Was [(10,6,0), (12,4,1), (12,4,4), (12,6,3)].
+    // (10,6,0) and (12,4,1) are GONE: both keep wandering (still for 21 and 20 ticks at most,
+    // moved at t3994); the crew's order moved, so (12,4,1) is no longer in the pocket a cut closed.
+    // (12,4,4) and (12,6,3) stay, on tiles of their own now. All three new ones are the #186 shape:
+    // an idle dwarf, no mark and no claim left (but see UNFINISHED for seed 12's 6-wide run),
+    // on a cell whose same-level sides are rock, a drop or a loose block, and which `wander`
+    // (same-z only) cannot leave.
+    // (2,6,1) [69,67,12] idle since t2900: west a drop, east and south snow rock, north a loose
+    // block (item 53, over a ramp).
+    // (7,6,3) [69,62,19] idle since t3188: west a drop, and a loose block on each of the other
+    // three sides (items 59, 60, 62).
+    // (8,6,4) [69,63,7] idle since t3173: west a drop, east snow rock, a loose block north (42) and
+    // south (36).
+    // (12,4,4) [69,64,10] idle since t1623: west a drop, east snow rock, a loose block north (21)
+    // and south (37).
+    // (12,6,3) [63,68,9] idle since t2130, home [63,67,9]: south soil rock, east and north a loose
+    // block (28, 37), west a ramp up that `wander` does not take.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 5] =
+        [(2, 6, 1), (7, 6, 3), (8, 6, 4), (12, 4, 4), (12, 6, 3)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
@@ -3003,7 +3019,21 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // finishes at t4,080 and seed 11 at t4,100; seed 12 now finishes inside the 4,000.
     // 12.11 dig-loop re-pin (was (6, 6, 2) too): a miner caged by one stone carries it out
     // (`caging_stone`), and seed 6 now finishes inside the 4,000.
-    const UNFINISHED: [(u64, i32, usize); 1] = [(11, 6, 1)];
+    // 13.4 re-pin (was [(11, 6, 1)]), each run read by dump at tick 4,000 and run on to 16,000.
+    // (11,6,1) is gone: the crew finishes it at t3,947. (12,6,6) is SLOW, not stuck: six marks at
+    // 4,000, two miners walking, finished at t4,439. The other four are #187's stuck shapes (13.4
+    // Task 0 Q2, fixed by Task 4; the entries leave this list with it). They do not finish by
+    // 16,000, and each ends with the pile full:
+    // (0,4,1): the mark (68,64,12) has a miner in the pit below it (68,65,11), working; his claim
+    // is retried (retry_after 3961) and the cut is refused again, 1 mark left at 16,000.
+    // (6,6,1): the mark (68,60,8) has an idle dwarf standing ON it (68,60,8) and the miner
+    // (dwarf 0, job 44) walking; the refusal never lifts, 1 mark left at 16,000.
+    // (9,6,1): every dwarf idle and nobody holds a claim; the mark (68,64,8) is stamped with a
+    // retry (4010) and re-stamped, no work cell reachable (the #182 mode ii shape), 1 mark at 16,000.
+    // (13,6,8): slow and then stuck: 8 marks at 4,000 with two miners at work, down to 1 mark at
+    // 16,000 (#187's refused cut again).
+    const UNFINISHED: [(u64, i32, usize); 5] =
+        [(0, 4, 1), (6, 6, 1), (9, 6, 1), (12, 6, 6), (13, 6, 8)];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
@@ -4740,11 +4770,10 @@ fn a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay() {
     assert!(floated.is_empty(), "floating items by delay: {floated:?}");
 }
 
-/// One step, panicking on the tick two dwarves share a tile or trade tiles (no swap, 12.9 Task 0
-/// Q1b). Notes every dwarf seen at `low_z` or lower in `low`, and returns whether one of them is now
+/// One step, panicking on the tick two dwarves share a tile. A swap is legal (13.4): it trades two
+/// tiles in one write, so no tick boundary has two on one. Notes every dwarf seen at `low_z` or lower in `low`, and returns whether one of them is now
 /// back on `top_z`.
 fn step_and_watch(world: &mut World, low: &mut BTreeSet<u32>, low_z: i32, top_z: i32) -> bool {
-    let before: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
     world.step();
     let now: Vec<Pos> = world.dwarves().iter().map(|dwarf| dwarf.1).collect();
     let tick = world.tick();
@@ -4753,14 +4782,6 @@ fn step_and_watch(world: &mut World, low: &mut BTreeSet<u32>, low_z: i32, top_z:
         now.len(),
         "two dwarves share a tile at tick {tick}: {now:?}"
     );
-    for a in 0..now.len() {
-        for b in 0..now.len() {
-            assert!(
-                a == b || !(now[a] == before[b] && now[b] == before[a] && now[a] != now[b]),
-                "dwarves {a} and {b} swapped tiles at tick {tick}"
-            );
-        }
-    }
     let mut back_up = false;
     for (id, pos, ..) in world.dwarves() {
         if pos.z <= low_z {
