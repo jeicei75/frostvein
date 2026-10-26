@@ -17,3 +17,8 @@ plan                       0.0866     0.0920    +6.3%    +1.5%       3.2%       
 seat-slow                  0.1771     0.1812    +2.3%    +6.7%       5.6%       3.2%       1.1%  differ within floor
 stuck-tunnel               0.1028     0.0302   -70.6%    +0.6%       1.1%       5.0%       1.0%  differ BEYOND FLOOR
 load after: 3.12, 6.20, 7.06
+
+# Reading (13.4 code review run 1, 2026-10-26): `differ` on all 10 rows is behaviour, not only the new
+# `squeeze` save field. With `squeeze` skipped when None (encoding = main's), state still differs on all 10,
+# and the swap fires on every scenario (plan / full-pile-crowd / plan-compact / -far / -spread: 9/2/14/9/9).
+# So plan's +6.3% BEYOND FLOOR is partly a behaviour change. Story § Debug Log, Task 7.
