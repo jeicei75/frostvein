@@ -55,6 +55,19 @@ pub struct SavedDwarf {
     // load restarted a lift or set-down and lost the kept landing.
     #[serde(deserialize_with = "Option::deserialize")]
     pub clearing: Option<SavedClearing>,
+    // NOTE: a plain `Option`, unlike `clearing` (Wolf, 13.4 Task 0 Q3): serde reads a missing
+    // field as `None`, and a pre-13.4 save cannot hold a stand-off timer, so `None` is exact. A
+    // pre-13.4 save loads, with no stand-off under way.
+    pub squeeze: Option<SavedSqueeze>,
+}
+
+/// A holder's stand-off behind one blocker (13.4): who holds him, since which tick, and the tick
+/// of his latest look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedSqueeze {
+    pub blocker: u32,
+    pub since: u64,
+    pub last: u64,
 }
 
 /// A miner carrying a stone out of his own way (12.11 D6): the stone, and where he sets it down

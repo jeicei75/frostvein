@@ -3,7 +3,7 @@
 mod save;
 mod worldgen;
 
-pub use save::{SaveState, SavedClearing, SavedDwarf};
+pub use save::{SaveState, SavedClearing, SavedDwarf, SavedSqueeze};
 
 use std::{
     cmp::Reverse,
@@ -2961,6 +2961,11 @@ impl World {
                         landing: clear.landing,
                         drop_from: clear.drop_from,
                     }),
+                    squeeze: entity.get::<Squeeze>().map(|squeeze| SavedSqueeze {
+                        blocker: squeeze.blocker.0,
+                        since: squeeze.since,
+                        last: squeeze.last,
+                    }),
                 })
             })
             .collect();
@@ -3075,6 +3080,13 @@ impl World {
                     item: clear.item,
                     landing: clear.landing,
                     drop_from: clear.drop_from,
+                });
+            }
+            if let Some(squeeze) = dwarf.squeeze {
+                world.ecs.entity_mut(entity).insert(Squeeze {
+                    blocker: Id(squeeze.blocker),
+                    since: squeeze.since,
+                    last: squeeze.last,
                 });
             }
         }
