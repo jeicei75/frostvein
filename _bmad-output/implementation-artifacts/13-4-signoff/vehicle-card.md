@@ -54,4 +54,9 @@ relaunch the gui. The hold happens only for the first client.
 
 ## Sitting
 
-(not yet sat)
+2026-10-26, Wolf, on `1aeb4bf8`: "1 yes 2 not really ..they are just going through".
+
+- Q1, did they get past each other and finish the marks? **Yes.**
+- Q2, does a pass read acceptably with no animation? **No:** the two dwarves visibly walk through each other (the
+  gui blends both along the same line in opposite directions). Filed as #219 (`enhancement`, `route:story`), per
+  Task 0 Q4: a bad read becomes an issue, not 13.4's work.

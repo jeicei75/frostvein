@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.4: Squeeze Past — Two Dwarves Trade Tiles
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -110,8 +110,8 @@ Throwaway scratch worktrees, never committed. Stacks are 13.2's: **C0** = `censu
 - [ ] **Task 7: the instrument, RED first (AC 6, 8), and the seat (Q4 a).** The instrument is `simd --bench` (its end line, `crates/simd/src/scenario.rs:334`, and `state=` at `:321`), driven by 13.1's `scripts/tick-bench.sh`, which is tested by `crates/simd/tests/bench.rs` and `mutations/13-1.sh`. Run nothing else at the same time.
   - [x] **RED:** `main`'s binary on `scenarios/stuck-tunnel.json` ends `marks=3` (creation: C0 `marks=3 … goals=38/4/0`). **Green:** HEAD ends `marks=0`. Then `RUNS=3 scripts/tick-bench.sh main HEAD`: paste the table, count the `differ` cells, and check that each build's runs agree.
   - [x] Re-measure #207: hand-apply `13-2-signoff/prototypes/census.patch` on a scratch worktree of HEAD if it applies (else port only `census_207_four_bars_round_a_hole` from it). Paste the `census ring` line (creation, B: `stored=18/24 free=6 … last_rise_tick=5989`) for 13.5's ruling.
-  - [ ] Seat card, NEW `_bmad-output/implementation-artifacts/13-4-signoff/vehicle-card.md`: push first (`scripts/push.sh --fast`), then a release `simd 7451 --scenario scenarios/stuck-tunnel.json` in WSL (13.1's card: restart both if the gui exits) and `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')` at the seat. The stand-off is in the tunnel x 77, y 64–71, z 10, from about t19,082. Put the camera flag there only after checking it headless (lavapipe, memory: `headless-gui-instruments`). Questions for Wolf: (1) did the two pass and the marks finish? (2) does the pass read acceptably without an animation? Record the answers in the card.
-- [ ] **Task 8: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~45–65 min, memory: `gate-ooms-at-default-parallelism`). Paste the block under Debug Log References. Cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-4-squeeze-past-two-dwarves-trade-tiles`), `phase_state.py clear`, Status → review on the story and the board.
+  - [x] Seat card, NEW `_bmad-output/implementation-artifacts/13-4-signoff/vehicle-card.md`: push first (`scripts/push.sh --fast`), then a release `simd 7451 --scenario scenarios/stuck-tunnel.json` in WSL (13.1's card: restart both if the gui exits) and `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')` at the seat. The stand-off is in the tunnel x 77, y 64–71, z 10, from about t19,082. Put the camera flag there only after checking it headless (lavapipe, memory: `headless-gui-instruments`). Questions for Wolf: (1) did the two pass and the marks finish? (2) does the pass read acceptably without an animation? Record the answers in the card.
+- [x] **Task 8: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~45–65 min, memory: `gate-ooms-at-default-parallelism`). Paste the block under Debug Log References. Cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-4-squeeze-past-two-dwarves-trade-tiles`), `phase_state.py clear`, Status → review on the story and the board.
 
 ## Verification
 
@@ -217,8 +217,32 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
   - **big-pile +120% is a freeze, not swap cost, and the freeze is pre-existing (#218).** HEAD's big-pile freezes at 11 marks from about t5,500 (10,000 ticks: `main` marks=0, HEAD marks=11). From t4,073 the run has an 8 ms tick every 20 ticks (`RETRY_COOLDOWN`): two idle dwarves fail claims on 11 digs, and each failure floods the 16k-cell component. The squeeze swaps only 8 times in the run, with no pair more than twice, so there is no ping-pong. Sonnet agent D traced it: stones 15 and 21 plug two one-wide dead-end corridors. They are never hauled because a clearing set-down at t1717 (stone 25 on (52,71,12)) orphaned the pile's interior (free delivery cells 156 -> 1-2), and the lone cell's refusal makes each release set the stone back on its plug. That is #218 shape B, reached through the full-pile never-drop rule. **Reproduced by Opus on a clean `main` build:** big-pile with its tick-6 commands moved to tick 10 ends 16,000 ticks frozen at `marks=13` (HEAD at the same shift: `marks=2`). Agent D's sweep of shifts 6-45: marks left at 12,000 ticks for 24/40 shifts on `main` and 26/40 on HEAD. The squeeze changes which timing draw big-pile lands on. Posted on #218 (comment 6413682356). Other scenarios at doubled ticks: only big-pile is worse on HEAD, stuck-tunnel is better, and dig-loop freezes on both.
   - **#207 re-measured** on HEAD `9d6810d9` (scratch worktree, `census.patch`'s `assert_ring_fills` census hunk + `census_207_four_bars_round_a_hole` ported by hand, as `census.patch` no longer applies whole): `census ring census_207_four_bars_round_a_hole stored=18/24 free=6 hauls_retrying=8 last_rise_tick=5989 retry_ticks=2631`, identical to creation's B reading. For 13.5's ruling: 18/24 on top of the squeeze (`main` 14/24).
   - **Seat card** `13-4-signoff/vehicle-card.md`: it uses `13-4-signoff/stuck-tunnel-seat.json`, a Normal-speed copy of `stuck-tunnel.json` with the same `--bench` state `a5d257cac0182a1f`, because at the scenario's fast4x the first swap lands 0.3 s after connect. The swap times are taken from a probe (all seven swaps in the run, t18,143..t19,205; the story's "from about t19,082" was `main`'s freeze tick). The framing is `--z 10 --select 4`, checked headless (`seat-framing-select4-z10.png`). Two flags failed on the way: `--camera` focus points that missed the tunnel, and `--at-tick`, which counts ticks after start and tripped the capture's motion guard after 1 observed tick.
+- **Seat sitting (Q4 a), 2026-10-26, Wolf on `1aeb4bf8`:** "1 yes 2 not really ..they are just going through". Q1 PASS: the dwarves got past each other and the marks finished. Q2: the pass does not read acceptably without an animation (the two figures blend through each other). Filed as **#219**, as Q4 ruled. Recorded in the card's § Sitting.
+- **Task 8, FULL GATE GREEN on `1aeb4bf8`** (`RUST_TEST_THREADS=1 scripts/gate.sh`; the only later changes are this record and the seat card):
+  ```
+  frostvein gate
+    cargo fmt --check           ok  0s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  1144s
+    cargo test (pixel guards)   ok  3094s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  19s
+    mutation tables still apply ok  11s
+  reaped 1082 stale build artifacts from target (2.9 GB)
+  GATE GREEN  4278s
+  ```
 
 ### Completion Notes List
+
+- The squeeze is ported from 13.2's variant B with no change of outcome: the bench end lines equal B's on all four reference scenarios. Two head-on job-holders, or a holder and an idle blocker with no way out (whose `home` moves), trade tiles in one write once the same stand-off has lasted `SQUEEZE_WAIT_TICKS` (10). The #194/#196 back-out is gone. The timer is a saved per-dwarf `Squeeze` component, a plain `Option` in `SavedDwarf`, so old saves load.
+- #206 and #189 are fixed: stuck-tunnel ends `marks=0` (`main` 3, -70.6% tick), and the campfire pile reaches 0 pick-ups after t2500 with every cell filled. #207's ring reads 18/24 (13.5's input).
+- **AC 5 was amended by Wolf at Task 3's split point.** The 16k cage sweep pins its four stuck runs instead of clearing them; the shapes (all from the full pile with the cut wall-in) are filed as #218.
+- Evidence beyond the plan: three older mutation rows went inert under the squeeze. Two are re-pinned and kill again; 12-10b row 11 is deleted, and its #194 `or_else` branch may now be dead (kept; Wolf's call). big-pile's +120% is a freeze `main` shares at other command timings (#218 comment).
+- Seat: Q1 pass; Q2 the pass reads as walking through each other -> #219 (gui animation, not 13.4's work).
+- Not done here, open for Wolf: reopening #189/#206 (closed by #216's prose) and the PR's closing keywords; whether #187 closes (its loop still exists, pinned as #218's shapes).
 
 ### File List
 
@@ -230,6 +254,8 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 - `_bmad-output/implementation-artifacts/mutations/12-9.sh` (modified)
 - `_bmad-output/implementation-artifacts/mutations/13-4.sh` (new)
 - `_bmad-output/implementation-artifacts/13-4-signoff/{vehicle-card.md,stuck-tunnel-seat.json,tick-bench-main-HEAD.txt,seat-framing-select4-z10.png}` (new, Task 7)
+- `_bmad-output/implementation-artifacts/metrics/13-4-squeeze-past-two-dwarves-trade-tiles.md` (cost rows)
+- `_bmad-output/implementation-artifacts/metrics/.session-cursors.json` (modified: metric cursor)
 - `_bmad-output/implementation-artifacts/13-4-squeeze-past-two-dwarves-trade-tiles.md` (modified)
 - `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified)
 - `_bmad-output/implementation-artifacts/13-4-signoff/{sweep16k.patch,diag-instrumentation.patch,probe187-extended.rs,diag-traces-waits-10-20-30.txt}` (new, Task 3 evidence)
@@ -238,6 +264,8 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Dev complete: full gate GREEN on `1aeb4bf8` (4278 s). Status review. |
+| 2026-10-26 | Seat sitting (Wolf, `1aeb4bf8`): Q1 pass (the dwarves pass and the marks finish); Q2 the pass reads as walking through each other with no animation -> #219. |
 | 2026-10-26 | Task 3 split point fired: four shapes (A1/A2/A3/B), not two, and A2/A3/B need new behaviour on the #180/FR8 never-drop rule. Wolf ruled "land squeeze, pin 16k": AC 5 and Task 4 amended, the cage sweep runs to 16,000 ticks and pins `UNFINISHED_LATE`, the shapes are filed as #218, #187 has a comment. The test keeps its name `no_dwarf_is_caged_by_stones_over_the_probe_seeds`, because 10 mutation rows in 12-9/12-10b/12-11 select it. |
 | 2026-10-26 | Implementer: Wolf picked Sonnet 5.5 subagents, Opus orchestrating. |
 | 2026-10-26 | Task 0 ruled by Wolf: Q1 (a) allow the idle-blocker swap; Q2 (a) fold the #187 fix in (16k sweep clean at waits 10/20/30, split point after Task 3); Q3 (a) plain `Option` timer field, old saves load; Q4 (a) short seat sitting. No AC amended. |
