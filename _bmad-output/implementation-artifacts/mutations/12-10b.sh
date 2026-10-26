@@ -79,9 +79,9 @@ import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-14 (12.10b review patch, #194): the idle chain is now tried inside the exit's
 # `or_else`; reverting it means it never runs and its shift is never tried.
-old = '            if make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles) {\n'
+old = '            make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if false && make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles) {\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "7 a channel's block may land below its worker" sim-core a_channel_never_lands_its_stone_below_the_worker <<'PY'
@@ -125,6 +125,8 @@ PY
 # exit is still found (4 times in its staircase test), but with the holder unable to escape the head-on
 # match lands in (None, None), which drops that exit `Path` and squeezes after the wait. With the row's
 # sabotage applied, all 101 swaps in the test matched HEAD tick for tick, so no test can see it.
+# Wolf ("clean code also"): the branch is removed too. With it gone, all 10 scenarios plus big-pile
+# at 10,000 ticks and at a shifted command tick read the same `--bench` state hash as before.
 
 # Row 12 (the holder never backs out of the line) was deleted in 13.4: the #194/#196 back-out it sabotaged is gone, replaced by the squeeze.
 

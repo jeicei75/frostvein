@@ -1730,14 +1730,13 @@ fn try_squeeze(
 /// dwarf with a job) for the nearest free tile off the holder's path, and sends the idle dwarf
 /// nearest that tile out on the rest of the route. The line shifts a dwarf at a time and the
 /// holder waits meanwhile. Nobody changes places here (the squeeze is `try_squeeze`'s).
-/// `false` when no route was found.
 fn make_room_down_the_idle_chain(
     ecs: &mut EcsWorld,
     blocked: &BTreeSet<Pos>,
     occupied: &BTreeSet<Pos>,
     (pos, next): (Pos, Pos),
     holder_tiles: &BTreeSet<Pos>,
-) -> bool {
+) {
     let idle: BTreeMap<Pos, Entity> = ecs
         .iter_entities()
         .filter(|entity| entity.contains::<Dwarf>())
@@ -1754,7 +1753,7 @@ fn make_room_down_the_idle_chain(
     let Some(route) = route_to_nearest(ecs.resource::<Terrain>(), &closed, next, |tile| {
         !occupied.contains(&tile) && !holder_tiles.contains(&tile)
     }) else {
-        return false;
+        return;
     };
     // The last idle dwarf on the route has the free tile ahead of it; the others follow it later.
     if let Some((at, rest)) = route
@@ -1765,7 +1764,6 @@ fn make_room_down_the_idle_chain(
     {
         ecs.entity_mut(idle[&route[at]]).insert(Path(rest.to_vec()));
     }
-    true
 }
 
 /// The next tile of a holder's `path` holds another dwarf (FR49). Returns `true` when `path` now
@@ -1775,9 +1773,8 @@ fn make_room_down_the_idle_chain(
 /// 1. The blocker is idle: it steps to a free neighbour off the holder's path. With none, it gets
 ///    an exit `Path` to the nearest free tile off the holder's path, which starts on the holder's
 ///    tile, so this becomes case 3. With none past the other dwarves either, the idle dwarves in
-///    the way shift (#185); and with no such shift, the exit runs back past the holder and the
-///    dwarves behind it (#194). With no exit at all, the holder waits, and after
-///    `SQUEEZE_WAIT_TICKS` of the same stand-off the two swap (13.4).
+///    the way shift (#185) and the holder waits; after `SQUEEZE_WAIT_TICKS` of the same stand-off
+///    the two swap (13.4). #194's exit back up the line is gone: the squeeze does that work.
 /// 2. The blocker holds a job and is not coming the other way: re-route around every dwarf.
 /// 3. Head-on (the blocker's path starts on the holder's tile): each side's ESCAPE is the nearest
 ///    tile, reached without passing the other dwarf, that is off the other's remaining path. The
@@ -1839,16 +1836,10 @@ fn resolve_blocked_step(
         let exit = route_to_nearest(terrain, &closed, next, |tile| {
             tile != pos && !holder_tiles.contains(&tile)
         });
-        let Some(route) = exit.or_else(|| {
-            if make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles) {
-                return None;
-            }
-            // #194: the only way out is back up the line the holder came down.
-            route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| {
-                !occupied.contains(&tile) && !holder_tiles.contains(&tile)
-            })
-        }) else {
-            // 13.4: no way out for the idle blocker: squeeze past after the wait.
+        let Some(route) = exit else {
+            // #185: the idle dwarves in the way shift if they can. Either way the holder waits, and
+            // with no way out for the idle blocker the two squeeze past after the wait (13.4).
+            make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles);
             try_squeeze(
                 ecs,
                 (holder_id, pos),
