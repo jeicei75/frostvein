@@ -2790,3 +2790,9 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **The stale-timer window and the blocker-id check are killed only by the cage sweep** (`crates/sim-core/tests/scenario.rs:3171`, `:3180`, edge, RAN). No `13-4.sh` row for either.
 - **No mutation row pins AC 2's one-write sabotage against `step_and_watch`** (`mutations/13-4.sh` row 2, acceptance, RAN). The payload does fail `step_and_watch` (`scenario.rs:4813`), but the row selects only the lib `watch` test.
 - **The `UNFINISHED_LATE` comment cites traces holding only 2 of its 4 runs** (`scenario.rs` `UNFINISHED_LATE`; `13-4-signoff/diag-traces-waits-10-20-30.txt`, acceptance, RAN). Seeds 9 and 13 (shape B) are absent; `probe187-extended.rs CASES=9:6,13:6` on HEAD confirms the shape.
+
+## Deferred from: code review of 13-4-squeeze-past-two-dwarves-trade-tiles, run 2 (2026-10-27)
+
+- **The new idle-exit-ahead test jumps the clock by `SQUEEZE_WAIT_TICKS` in one hop** (`crates/sim-core/src/lib.rs:7344`, blind, read). It passes only while the wait is at most the 20-tick `last` window. Raising the wait would make it fail loudly.
+- **The new test does not assert the holder's `Squeeze` is gone after the swap** (`lib.rs:7344-7351`, blind, read). `occupied` is never read back either.
+- **The new test's fixture is not a live shape** (`lib.rs:7309-7354`, feature, RAN). Live, an idle blocker walks a free exit within 10 ticks (30 of 30 looks). The branch is reached only through a timer carried over from a head-on stand-off (a cancel mid-stand-off). A tick-driven cancel case would pin the real route; it waits on 13.4 run-2 decision 1.
