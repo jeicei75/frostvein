@@ -1773,10 +1773,12 @@ fn make_room_down_the_idle_chain(
 /// 1. The blocker is idle: it steps to a free neighbour off the holder's path. With none, it gets
 ///    an exit `Path` to the nearest free tile off the holder's path. One that starts on the
 ///    holder's tile makes this case 3; one that runs ahead along the holder's path leaves the
-///    holder waiting, and the two swap after `SQUEEZE_WAIT_TICKS` if the blocker has not moved
-///    off (13.4). With no exit past the other dwarves either, the idle dwarves in the way shift
-///    (#185) and the holder waits; after the same wait the two swap. #194's exit back up the line
-///    is gone: the squeeze does that work.
+///    holder waiting, and the two swap once the holder has waited on this blocker for
+///    `SQUEEZE_WAIT_TICKS` (13.4). The wait is counted per blocker, whatever way the two met, so a
+///    cancel that turns a head-on job-holder idle can swap here on the first look (#220). With no
+///    exit past the other dwarves either, the idle dwarves in the way shift (#185) and the holder
+///    waits; after the same wait the two swap. #194's exit back up the line is gone: the squeeze
+///    does that work.
 /// 2. The blocker holds a job and is not coming the other way: re-route around every dwarf.
 /// 3. Head-on (the blocker's path starts on the holder's tile): each side's ESCAPE is the nearest
 ///    tile, reached without passing the other dwarf, that is off the other's remaining path. The
@@ -1788,12 +1790,14 @@ fn make_room_down_the_idle_chain(
 ///    head-on dwarves in a one-wide way a pair at a time.
 /// 4. Otherwise wait.
 ///
-/// NOTE: the swap (13.4, Wolf's Ruling 1) takes two dwarves that have met the same way for
-/// `SQUEEZE_WAIT_TICKS`: two head-on job-holders, or a holder and an idle blocker that has not
-/// moved off for the wait, exit or not (his `home` becomes the holder's old tile and any exit
-/// `Path` is dropped, since it no longer starts next to him). A job-holder who is not coming
-/// the other way is never swapped; he re-routes. Two dwarves sealed in one pocket both wait, and a
-/// ring of dwarves each waiting on the next waits too; neither is detected.
+/// NOTE: the swap (13.4, Wolf's Ruling 1) takes a holder and the dwarf that has held him for
+/// `SQUEEZE_WAIT_TICKS`: a head-on job-holder, or an idle blocker, exit or not (his `home` becomes
+/// the holder's old tile and any exit `Path` is dropped; an exit running ahead along the holder's
+/// path would no longer start next to him). The wait is counted per blocker while the holder looks
+/// again within `2 * STEP_REST_TICKS`, whatever way the two meet: a timer carried across a change
+/// of case is kept (#220). A job-holder who is not coming the other way is never swapped; he
+/// re-routes. Two dwarves sealed in one pocket both wait, and a ring of dwarves each waiting on the
+/// next waits too; neither is detected.
 fn resolve_blocked_step(
     ecs: &mut EcsWorld,
     blocked: &BTreeSet<Pos>,
