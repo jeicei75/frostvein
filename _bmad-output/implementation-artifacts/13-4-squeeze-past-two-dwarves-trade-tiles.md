@@ -328,6 +328,21 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
     mutation tables still apply ok  10s
   GATE GREEN  4140s
   ```
+- **Review-patch run 2, FULL GATE GREEN on `c22450eb`** (`RUST_TEST_THREADS=1 scripts/gate.sh`, exit 0; covers all seven patches):
+  ```
+  frostvein gate
+    cargo fmt --check           ok  1s
+    cargo clippy -D warnings    ok  1s
+    cargo test                  ok  1127s
+    cargo test (pixel guards)   ok  3102s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  20s
+    mutation tables still apply ok  10s
+  GATE GREEN  4268s
+  ```
 
 ### Completion Notes List
 
@@ -358,6 +373,7 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 
 | Date | Change |
 |---|---|
+| 2026-10-27 | Review-patch run 2 (fresh session): 7/7 patches landed (`e0a3b352` `7da43b46` `c22450eb`); row 5c re-pointed to `blocker: 1` (REWORK) and row 5d added, both KILLED, 5c still KILLED with the partner's `Squeeze` removed; stuck-tunnel `state=` unchanged; FULL GATE GREEN on `c22450eb` (4268 s); cost $7.53. Status stays in-progress: Q4's seat card is next. |
 | 2026-10-26 | Review-patch run 1 (fresh session): 5/5 patches landed (`78bf1d41` `c906be17` `b0c82211` `e972ccba` `a0ae8a23`); rows 4c and 5c KILLED at their own asserts; FULL GATE GREEN on `a0ae8a23` (4140 s), which also covers `e9712e5f`. Status review, for a round-2 review (patches 1-2 are test code). |
 | 2026-10-26 | Code review run 1 (fresh session) on `8ac4deb8`: 4 layers, none timed out, 0 HIGH. Decision 1 (idle blocker with an exit is swapped) -> Wolf (a) keep + pin. 5 patches left as action items, 9 deferred, 6 dismissed. Status in-progress. Full gate still owed at PR (`e9712e5f` postdates the GREEN on `1aeb4bf8`). |
 | 2026-10-26 | Wolf: "clean code also": #194's exit back up the line removed (`e9712e5f`), behaviour-neutral (12 `--bench` state hashes identical); 12-10b row 6 re-anchored and KILLED. Full gate owed again at PR. |

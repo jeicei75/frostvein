@@ -2792,6 +2792,9 @@ development_status:
   # 13.4 REVIEW RUN 2 2026-10-27 on 7a1cd12e..2f050a07: 4 layers, 0 HIGH (2 MED, 8 LOW), 1 REWORK (row 5c kills only on a
   # leftover timer); decision 1 (a) keep B's carried timer, amend wording, filed #220. 7 patches LEFT AS ACTION ITEMS.
   # No HIGH: static audit ends; next spend is Q4's seat card. -> in-progress.
+  # 13.4 REVIEW-PATCH RUN 2 2026-10-27: 7/7 landed (e0a3b352, 7da43b46, c22450eb); rows 5c (blocker 1) and 5d KILLED, 5c
+  # still KILLED with the partner's Squeeze removed; FULL GATE GREEN on c22450eb (4268 s). Cost $7.53. Stays in-progress:
+  # next is Q4's seat card (Wolf), or a round-2 review of this diff on Wolf's call. Unpushed.
   13-5-clamber-over-a-dwarf-may-step-onto-a-stone: backlog
   # 13.5 only if ruled (13.2 Ruling 2): #207 is re-measured on top of 13.4 first; the story may be dropped.
   epic-13-retrospective: optional
