@@ -1033,9 +1033,10 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
         }
         let saved = control.to_save();
         saved_a_timer |= saved.dwarves.iter().any(|d| d.squeeze.is_some());
-        // Each side times the other, so a timer naming any id but the other dwarf's (the fixture
-        // has ids 0 and 1) is a corrupt save that the step comparison below can miss: the other
-        // side's timer still swaps on time.
+        // A saved timer must name the other dwarf (the fixture has ids 0 and 1). Only dwarf 1 times
+        // this stand-off (ticks 101-111, blocker 0); dwarf 0's timer appears on the swap tick, from
+        // his own look earlier that tick, and is a leftover. So this assert must see a wrong id on
+        // dwarf 1's real timer, not only on dwarf 0's leftover.
         for d in &saved.dwarves {
             if let Some(squeeze) = &d.squeeze {
                 assert_eq!(

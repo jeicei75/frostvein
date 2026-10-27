@@ -65,7 +65,8 @@ p.write_text(s.replace(old, '    if idle {\n        return false;\n    }\n' + ol
 PY
 
 # Review run 1, decision 1 (a): the swapped idle blocker keeps the tail of his exit `Path`, which
-# now starts two tiles from him (the idle-with-an-exit site is the only one where it is longer than 1).
+# now starts two tiles from him (the idle-with-an-exit site is the only one with a `Path` longer than
+# 1 that a test pins; the scenario suite also drops a 2-tile one at an idle head-on swap, unpinned).
 mutation "4c the swapped idle blocker keeps his exit Path (AC 1, decision 1 a)" sim-core an_idle_blocker_with_an_exit_ahead_swaps_after_the_wait <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
@@ -90,13 +91,25 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                    squeeze: entity.get::<Squeeze>().filter(|_| false).map(|squeeze| SavedSqueeze {\n'))
 PY
 
-# Review run 1: the stand-off save test compared only dwarves, claims, jobs and paths, and both
-# sides time each other, so one side's corrupted blocker id went unseen. Killed by the test's
-# independent blocker-id assert (the other dwarf's id, from the fixture).
-mutation "5c to_save writes blocker 0 (AC 4)" sim-core a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically <<'PY'
+# Review run 1: the stand-off save test compared only dwarves, claims, jobs and paths, so a
+# corrupted blocker id went unseen. Killed by the test's independent blocker-id assert (the other
+# dwarf's id, from the fixture). Review run 2 (REWORK): only dwarf 1 times the stand-off, with
+# blocker 0, so `blocker: 0` was the CORRECT value for the real timer and killed only on dwarf 0's
+# swap-tick leftover. `blocker: 1` corrupts the real timer.
+mutation "5c to_save writes blocker 1 (AC 4)" sim-core a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '                        blocker: squeeze.blocker.0,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                        blocker: 0,\n'))
+p.write_text(s.replace(old, '                        blocker: 1,\n'))
+PY
+
+# Review run 2: the load side of 5c. `Id(0)` is the correct value for dwarf 1's real timer, so it
+# is not the row; `Id(1)` restarts dwarf 1's wait on load, and the loaded world diverges.
+mutation "5d from_save reads blocker 1 (AC 4)" sim-core a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    blocker: Id(squeeze.blocker),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    blocker: Id(1),\n'))
 PY
