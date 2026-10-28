@@ -1,8 +1,9 @@
 ---
 # M1 pass (2026-08-02) completed steps 1-3. M2 pass (2026-08-09) restarts the count.
 # M3 pass (2026-09-28) restarts it again; M2 finished at [1, 2, 3, 4].
+# M4 pass (2026-10-28) restarts it again; M3 finished at [1, 2, 3, 4].
 stepsCompleted: [1, 2, 3, 4]
-milestone: 3
+milestone: 4
 inputDocuments:
   # Milestone 1 (inherited by reference, still binding)
   - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-08-01/prd.md
@@ -26,6 +27,14 @@ inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-09-28/reconcile-inputs.md
   - _bmad-output/implementation-artifacts/epic-8-retro-2026-09-28.md
   - GitHub issues #132-#136 (defects), #142-#148 (retro action items)
+  # Milestone 4 (2026-10-28, additive — nothing above regenerated; no M4 architecture, the M2 spine + ADR 5 as amended bind)
+  - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-10-28/prd.md
+  - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-10-28/addendum.md
+  - _bmad-output/planning-artifacts/prds/prd-frostvein-2026-10-28/reconcile-inputs.md
+  - _bmad-output/implementation-artifacts/13-2-signoff/proposal.md
+  - _bmad-output/implementation-artifacts/epic-12-retro-2026-10-21.md
+  - docs/technical-preferences.md
+  - GitHub issues #159 #186 #187 #203 #204 #207 #218 #220 (movement), #170 #214 #118 #50 #179 (scale traps)
 ---
 
 # frostvein - Epic Breakdown
@@ -123,6 +132,41 @@ FR50 (#134): Stockpile placement, hauls and falling items never leave an item on
 FR51 (#132): No dwarf stays stuck after digging. A dwarf that cannot reach its job, or whose job lost its support, releases it within a bounded number of ticks and goes on with other work; the designation stays queued and retried, never silently dropped (M1 FR8 holds). Reproduced first as a red scenario test.
 FR52 (#135): Nothing is left floating above a dug-out block — items fall to the next supporting surface, trees fall or are removed, no dwarf stands on air. The story picks the simplest rule that reads right. Unsupported terrain and cave-ins stay out.
 
+#### Milestone 4 — A Living Fortress (FR53–FR68)
+
+Source: `prds/prd-frostvein-2026-10-28/prd.md` (final) and its `addendum.md`. FR IDs continue the global numbering; feature groups continue at F18. M1–M3 FRs stay binding except where the PRD's **What M4 changes** reopens or narrows them: M3's "the count stays five" (arrivals to 200), `Dims::DEFAULT` 128×128×32 (now 256×256×32), M3's "no needs" (hunger, cold and sleep only), M3's "resources are not used" (eating food and burning wood only), M3 FR38/FR39 (colours repeat; a dwarf is identified by selection), M3 FR43 (six trades, the embark group holds one of each), M3 FR47 (burning wood can lower the wood goal's progress; a completed goal stays completed), M3 FR49 (as amended by 13.4: a head-on pair may swap tiles), M3 FR50 (stands: stoked wood is consumed, never left on the fire), M1's "no temperature" and "nothing from off the map" (cold; arrivals and animals entering at the edge), M3 FR42's idle clause (needs come before trades), and the always-lit campfire (fires now burn wood and go out).
+
+**F18 — A crowd on a bigger valley (first).**
+
+FR53: The starting crew size and the map size are world settings: seeded, deterministic, saved, and settable from a scenario file. Worldgen produces a playable 256×256×32 valley, and a fresh game defaults to it. The starting crew spawns on walkable ground near the camp even when there are more dwarves than the camp ring holds. Arrivals (FR56) run on any map size. The story that adds the settings keeps every committed scenario's outcome unchanged. Later stories that add worldgen content (plants, animals) re-pin old scenarios, each with its reason on the record.
+FR54: The committed scenario set gains a **256² crew-200 scenario that does real work**: within the bench window, items are delivered to the pile and every job kind in the scenario completes at least once. The tick bench reads it from the first M4 game story, and every later story reports its delta against `main` there. A seat run of the same scenario records the gui frame rate with 200 dwarves, with the daemon's wire traffic in the loop. No terrain-change rate is set as a target; the bench reports the rate the working mix produces, as cells changed per window.
+FR55 (#159): On 256², a reachable job is never starved because the walkable component exceeds the path-search budget. ADR 5's amendment applies: the budget is sized to the walkable component or the heuristic is improved, with no hierarchy. Red first, as a scenario test.
+
+**F19 — Arrivals.**
+
+FR56: New dwarves arrive at the valley edge during play, in groups of about 5–20, until the crew reaches 200. The first group arrives at embark and includes at least one dwarf of each of the six trades. Each arrival walks to the camp, has an identity and a profession seeded towards a working mix, and joins the work. The cadence is a hardcoded constant tuned in the story.
+FR57: Every dwarf has a name unique within the crew (combinations such as first name + epithet, so 200 never run out). Colours repeat. Selecting a dwarf names it, and the TUI shows names. No crew list or roster is planned; whether 200 dwarves need one is judged at the seat once arrivals land (Wolf).
+
+**F20 — Food.** Three trades are added (hunter, fisher, cook), for six professions in all.
+
+FR58: Worldgen places forageable plants on the surface, seeded. Woodcutters forage the plants in a designated forage area, again and again as they regrow. Each foraged plant yields raw food, hauled to the pile.
+FR59: Animals live in the valley. They wander, and they enter at the edges over time, so game is renewable. A hunter tracks a designated animal or the nearest animal, kills it, and the carcass is hauled to the pile. Animals are harmless and do not fight back.
+FR60: On the frozen lake, a fisher works a fishing hole designated on lake ice and catches fish at a slow, steady rate. The hole stays until the player removes it. Fishing off the ice is refused loudly (NFR11).
+FR61: A cook turns raw food (plants, carcasses, fish) into meals at a lit fire. Fires burn wood and go out when they run dry. Stoking is a hauler's job: a haul of wood from the pile to the fire, consumed on delivery (FR50 holds).
+FR62: A hungry dwarf of any trade leaves its work to eat from the pile, preferring a meal to raw food. Eating relieves hunger.
+
+**F21 — Cold, sleep, misery and idle life.**
+
+FR63: Dwarves grow cold on the surface and away from a lit fire, and warm up near one. Underground is warmer the deeper it goes, so a deep working is never cold. A cold dwarf of any trade goes to a fire to warm up. Torches give light, not warmth.
+FR64: Dwarves tire as they work and need to sleep. A tired dwarf of any trade lies down to sleep; with no shelters, on the ground, near a fire if one is close. Sleep relieves tiredness, and a sleeping dwarf keeps losing warmth like any other.
+FR65: A dwarf whose hunger, cold or tiredness passes a threshold becomes **miserable**: visibly so in the Bevy client (posture or animation, driven by sim state) and shown in the TUI, and it refuses trade work until relieved. It never refuses **self-care**: it eats from the pile, or straight from a plant if the pile has no food; it warms at a lit fire, or deep underground if no fire is lit; it sleeps wherever it is. Neglect never locks the fortress up. No dwarf dies.
+FR66: An idle dwarf does small, visible, "stupid" things that come from sim state: it wanders, gathers at the fire, follows a nearby animal, and naps. All of it is deterministic. The exact set is tuned at the seat; the bar is Wolf's "not boring when not actively doing anything". Art follows the M2-24 hard stop.
+
+**F22 — A fortress that runs itself.**
+
+FR67: Once the standing work is set up (a pile, a forage area, a fishing hole, trees marked for cutting), the fortress runs with no further orders. Hunters pick the nearest animal, cooks cook whatever raw food the pile holds, and haulers stoke whichever fire is lowest. On the bench scenario, the food and wood stock never runs down to nothing over the window. Checked by every food and fuel story, not built once.
+FR68: The player can place a fire the way they place a stockpile: a marked spot haulers bring wood to, which then burns and is stoked like the campfire (FR61). The one exception to "no building". A fire placed where it cannot burn (on rock, on lake ice, on a stockpile) is refused loudly (NFR11).
+
 ### NonFunctional Requirements
 
 NFR1: Platform — phase one targets the WSL2 devpod and any decent terminal emulator over SSH; no other platforms. Nothing in phase one may preclude the long-term multi-machine server + client shape, and nothing builds for it.
@@ -163,6 +207,16 @@ NFR8: **Gate grows sibling probes.** `scripts/gate.sh` gains the `gui` and `clie
 NFR9: **Determinism holds.** Identity, professions, resources, goals and one-per-tile movement all live in sim state; seed + command log ⇒ identical state; scenario tests cover each.
 NFR10: **Parity rule, narrowed (amendment on the record).** Every sim change reaches the TUI as display — names, professions, new item kinds, goal progress (professions added by Wolf, 2026-09-28; M1 FR22 anticipated them). Profession assignment and tree designation are Bevy-only commands in M3; the TUI gains no new input. Side effect: the TUI can no longer drive a cut or a profession change end to end; scenario tests cover the sim.
 NFR11: **Refuse loudly.** A command the sim refuses (a stockpile on rock, a cut on a non-tree tile, …) is visible to the player, never silently discarded. M3 adds several new filters; this is the known trap for them (8.2's silent-filter class; `deferred-work.md:406`).
+
+#### Milestone 4 (NFR9–NFR11 extended; NFR12–NFR13 new)
+
+The M4 PRD keeps M3's IDs for NFR9–NFR11 and widens their reach; the M3 text above stands, extended as follows.
+
+NFR9 (M4 extension): **Determinism holds** for crew and map settings, arrivals, animals, plants and regrowth, fires and fuel, placed fires, hunger, cold, sleep and misery. Seed + command log ⇒ identical state, and save → load → tick N ≡ never-saved → tick N, for each.
+NFR10 (M4 extension): **Parity rule, as narrowed.** Every new sim state reaches the TUI as display (animals, food, fires, sleep, misery). New commands (forage area, hunt, fishing hole, place fire, the new professions) are Bevy-only. The TUI gains no new input.
+NFR11 (M4 extension): **Refuse loudly**, for every new filter. Known breach on the record: #214 (an off-map rect is accepted silently), which now meets the map edge where arrivals and animals enter.
+NFR12: **The tick fits at the target scale.** On the 256² crew-200 bench scenario, tick mean ≤ 25 ms and p99 < 100 ms (Wolf), measured by `tick-bench.sh`: release build, interleaved runs, a machine running nothing else, p99 taken as the median across runs. A single run is not a reading. The bar gates the milestone close. Each story reports its delta from the first story on; a regression beyond the recorded noise floor needs Wolf's ruling. Optimization still waits for a profile. 200 is the target with no fallback floor: a miss is measured and ruled by Wolf (2026-10-28).
+NFR13: **The seat holds at the target scale.** M2's NFR6 bars (60 fps working zoom, ≥30 fps full vista, on the gingerspice vehicle) hold with 200 dwarves on 256², or the miss is measured and ruled by Wolf. Measured early (FR54), not at the close. #179 (frame rate swings 20–180) is the known defect this bar meets first.
 
 ### Additional Requirements
 
@@ -242,6 +296,36 @@ From the Architecture Spine (AD-1…AD-12, conventions, stack, structural seed):
   - **#132 is fixed before #133 lands**, so that a collision deadlock cannot be confused with #132's unknown stall (reconcile 1.2).
 - **Baseline:** today's five dwarves and today's worldgen. No TUI regression ships.
 
+#### Milestone 4 — from the PRD, its addendum, the 13.2 rulings and the reconciliation
+
+**No M4 architecture pass (Wolf, 2026-10-28, as M3).** The M2 spine binds unchanged, with ADR 5 as amended by the 13.2 ruling (budget sized to the walkable component or a better heuristic; no hierarchy). No new crate, no new dependency edge. **Each wire change lands in `protocol` with the story that needs it** (AD-6), and that story names its wire diff. NDJSON stays; new state gets new message fields. No chunking, interest management or protocol redesign unless the bench or the seat profile shows one is needed.
+
+- **Wire growth M4 implies** (per story, never up front): crew and map settings; animals as a new world entity; plants and their regrowth; food and meal item kinds; fire fuel state and lit/out; placed fires; per-dwarf hunger, cold, tiredness, sleeping and miserable; three new professions; new Bevy-only commands (forage area, hunt, fishing hole, place fire), each riding the AD-10 queue with an NFR11 refusal.
+- **AD-11:** every new saved field goes through the save → load → tick N gate. The state hash covers the save encoding, so a new saved field moves every hash; read the end lines, not the hash alone.
+- **AD-7:** plants, animals, arrivals and names come from purpose-named seed streams; every tie-break is by entity id, never iteration order.
+- **Scale first (Wolf, 2026-10-28):** the first M4 game story adds the crew/map settings and the 256² crew-200 bench scenario (FR53, FR54), re-baselined on `main` (13.2's figures came from the spike stack). No game story merges without its bench delta against `main` there. NFR12 starts from 13.2's 8.5 ms mean / 65–81 ms p99, measured before any work reached the pile, so the real 256² cost is unknown until FR54's scenario works.
+- **Traps the scale story checks first** (addendum § What the code fixes at five; reconcile 6.1, 6.2): `Dims::DEFAULT`; `[Identity; 5]` / `[Profession; 5]`; 16 names, 5 colours; `CAMP_RADIUS` 3 (spawn panics past about 49 dwarves); `MAX_ASTAR_NODES` 50,000 vs 64,300 walkable cells on 256²; `MAX_DESIGNATIONS` 4096 vs 1,800 marks in 13.2's crew-200 scenario alone, and #170 drops cells silently at the cap; wander phases repeat past ten dwarves (`lib.rs:3626` NOTE); `scale.patch` cycles identities and professions `i % 5` and is a starting sketch only.
+- **The next measurement at this scale:** A\*'s `BTreeMap` storage (13.2 proposal :121–124). Not yet measured anywhere: the gui frame rate with more than five dwarves, the cost of the new per-tick systems at 200, and wire delta size and encode time at 200 (the bench times `World::step` only).
+- **Movement debt, ruled to their own stories (13.2 Ruling 1, Wolf 2026-10-23):** #186 (wander stays on one z level; belongs with FR66), #187 (refused channel loops; 13.4 folded a fix in but the issue is open, so check it first), #203 (a dig seals a miner in), #204 (stones seal two miners). Each has a reproducer already, and each counts toward the cap. **Also open from 13.4:** #218 (a full pile seals pits), #220 (squeeze timer carries across a change of case).
+- **13.5 clamber (Ruling 2):** decided on #207's own sweep re-measured on top of 13.4 (13.4's probe read 18/24), then ruled by Wolf; landed or dropped. **RULED 2026-10-28: dropped** (Story 13.5).
+- **#187 (Wolf, 2026-10-28):** checked at 13.6's creation and closed with the evidence if it no longer reproduces on `main`; it becomes its own story only if it does.
+- **Seat and UI:** the seat keymap is out of physically pressable keys (#118), and M4 adds Bevy commands, so each new command's input goes through #118's rethink or the selection UI, decided in its story. FR54's scripted seat run may need #50's unfinished half.
+- **Hardcoded constants (TP):** every need rate and threshold, regrowth time, catch rate and arrival cadence is a hardcoded constant tuned in its story. No generic needs table or data-driven content system.
+- **Art plain first (Wolf, 2026-10-28):** animals, plants, fishing, sleep and misery get simple models and readable poses, driven by sim state, under the M2-24 hard stop. Look tuning waits for a concrete defect judged at the seat.
+- **Decisions owed inside stories** (the PRD leaves them open; each story's Task 0 rules them, never assumed):
+  - Do sleeping dwarves and animals occupy a tile under FR49, and does squeeze apply to them? (reconcile 2.3)
+  - How far does a fire's warmth reach, and can many dwarves warm at one fire at 200? (reconcile 1.4)
+  - Is a fishing hole a designation only, with no terrain change and no water? (reconcile 4.9; M1's no-fluids non-goal)
+  - Do the goal targets stay or rescale at 200 dwarves? (reconcile 4.3)
+- **Parked, unchanged:** #199, #169, FR40, and the look issues (#120, #126, #127, #128, #130, #137, #175–#177, #181).
+- **Process:**
+  - One M4 epic (Epic 13) growing by stories, renamed to the PRD's goal.
+  - Sim work is judged by red-first deterministic scenario tests and the tick bench; feel (misery, idle life, "not boring") reaches Wolf's seat early.
+  - Misery and the first idle behaviour reach the seat in the milestone's **first half**.
+  - The story-order sketch in `addendum.md` is input, not binding; its bundled items 6 and 7 split into one-session stories.
+- **Cap: 12–16 new stories, soft.** 13.1–13.4 do not count; defect stories do. The tooling items (#142, #144, #148, #211, #212) run alongside and do not count. Stretching is allowed when called out on the record. Cut order (Wolf): FR66's extra idle behaviours first (wandering and the fire stay), then hunting and cooking together (food comes raw from foraging and fishing), then regrowth (plants become a one-off harvest).
+- **Baseline:** today's worldgen grown to 256², today's three trades, today's movement layer (pile-memo and squeeze-past merged). No TUI regression ships, and no 128² five-dwarf scenario changes outcome without a reason on the record.
+
 ### UX Design Requirements
 
 No separate UX design contract exists (no `ux-designs/` run folders). The TUI's visual and interaction requirements are first-class PRD requirements (FR20–FR23) plus the concrete keymap in the PRD addendum:
@@ -300,6 +384,12 @@ UX-DR22: **The sign-off gate, both halves.** *Opening:* no visually subjective s
 No UX design contract exists for M3. The Bevy-side UI it needs — dwarf selection, profession assignment, cut designation, goal display, work animations — is specified by FR39, FR43, FR44, FR45 and FR48, and judged at Wolf's seat early (M2-26).
 
 **UX-DR22's opening half, narrowed for M3 (Wolf, 2026-09-28):** every look story except the work animations still starts from a cheap "here is what you will see" draft that Wolf approves before it is built. That covers identity, the selected dwarf, the profession UI, cut designation and goal display. The **work animations (FR45) skip the draft** and go straight to the seat, under the art hard stop. The closing half, Wolf viewing the built result live, binds every look story.
+
+#### Milestone 4
+
+No UX design contract exists for M4. The Bevy-side UI it needs is specified by FR57 (selection names a dwarf), FR58–FR60 and FR68 (forage area, hunt, fishing hole and place-fire commands), FR65 (misery shown) and FR66 (idle life), and judged at Wolf's seat early.
+
+**UX-DR22's opening half, narrowed for M4 (Wolf, 2026-10-28):** the plain-art models and poses (animals, plants, fishing, sleep, misery, idle behaviours) **skip the draft** and go straight to the seat under the hard stop, as M3's work animations did. A draft still comes first for genuinely new UI: placing a fire and the forage and fishing designation modes. The closing half, Wolf viewing the built result live, binds every look story.
 
 ### FR Coverage Map
 
@@ -367,6 +457,27 @@ FR51: Epic 12 - No dwarf stuck after digging; unreachable or unsupported jobs ar
 FR52: Epic 12 - Items fall to support, trees fall or are removed, no dwarf on air (#135)
 
 **NFR coverage (M3):** NFR9 (determinism), NFR10 (TUI display parity, including professions) and NFR11 (refuse loudly) are bars on every Epic 12 story, not one story's work.
+
+#### Milestone 4 (FR53–FR68)
+
+FR53: Epic 13 - Crew and map size as seeded, saved world settings; 256² default; spawn spill past the camp ring
+FR54: Epic 13 - 256² crew-200 scenario that does real work; bench delta on every story; seat frame-rate run
+FR55: Epic 13 - Reachable job never starved by the path budget on 256² (#159), red first
+FR56: Epic 13 - Arrivals in groups of 5–20 up to 200; embark holds all six trades
+FR57: Epic 13 - Names unique within the crew; colours repeat; selecting a dwarf names it
+FR58: Epic 13 - Seeded forageable plants; forage area; regrowth; raw food
+FR59: Epic 13 - Animals wander and enter at the edges; hunting; carcass to the pile
+FR60: Epic 13 - Ice fishing hole on lake ice; fishing off the ice refused loudly
+FR61: Epic 13 - Cooking at a lit fire; fires burn wood and go out; stoking is a hauler job
+FR62: Epic 13 - A hungry dwarf eats from the pile, meal before raw food
+FR63: Epic 13 - Cold on the surface, warmth at a fire and deep underground; torches give no warmth
+FR64: Epic 13 - Tiredness and sleep on the ground; a sleeper keeps losing warmth
+FR65: Epic 13 - Misery refuses trade work, never self-care; shown in both clients; no death
+FR66: Epic 13 - Idle life (wander, fire, follow an animal, nap), tuned at the seat
+FR67: Epic 13 - Runs itself with no orders once standing work is set; stock never hits zero on the bench
+FR68: Epic 13 - Place a fire; refused loudly on rock, ice or a pile
+
+**NFR coverage (M4):** NFR9–NFR11 (as extended) and NFR13 are bars on every M4 game story. NFR12 is reported as a delta by every story from the first on, and gates the milestone close.
 
 ## Epic List
 
@@ -480,11 +591,23 @@ Wolf starts a fresh world and can tell his five dwarves apart by name and colour
 
 **One epic, growing by stories** (M2-25; Wolf at the M3-close retro, 2026-10-21). The M4 goal is left to the M4 PRD, and it is to be **more ambitious** than M3's. The epic opens **before** the PRD, with the two stories any M4 goal needs, because the PRD can't be final until Wolf rules the spike (13.2), and the spike measures with the bench (13.1). The PRD then adds its game stories to this epic, and its title is renamed to the PRD's goal. FR40 (12.13, dropped from M3) is an M4 PRD input. The remaining tooling items (#142, #144, #148, #211, #212) run beside the epic as issues, outside any cap.
 
-### Epic 13: Milestone 4 *(working title — renamed when the M4 PRD sets the goal)*
-It opens with groundwork from the M3-close retro (`epic-12-retro-2026-10-21.md` §4, §8). The movement layer is ad-hoc: reachability is recomputed per question, and four local wall-in guards conflict. No instrument measures sim cost, so cost regressions shipped with every test green. 13.1 builds the instrument, and 13.2 uses it to decide the movement layer.
-**FRs covered:** none yet; the M4 PRD adds them. The action items M3-2 (#210) and M3-1 (#209) are covered.
-**Order constraints:** 13.1 before 13.2, because the spike measures with the bench. 13.2 runs in parallel with the M4 PRD draft and uses the draft's scale numbers (dwarf count, map size, terrain-change rate). The PRD is final only after Wolf rules on 13.2's proposal.
-**Movement stories (13.2 ruling, 2026-10-23):** 13.3 pile-memo, then 13.4 squeeze-past, then 13.5 clamber-over only if ruled after 13.4.
+### Epic 13: A Living Fortress
+**Renamed 2026-10-28** from *Milestone 4 (working title)* when the M4 PRD (`prd-frostvein-2026-10-28`, final) set the goal.
+
+Wolf starts a fresh 256² world, sets up the standing work once, and watches the crew grow by arrivals to two hundred. Dwarves forage, hunt, fish through the lake ice, cook at the fire, stoke it with wood, and bed down when spent. A cold, hungry or exhausted dwarf is visibly miserable and stops work until put right, but never dies. Idle dwarves do stupid things instead of standing still. He sits through a full day–night cycle without giving an order, and it isn't boring.
+
+It opened with groundwork from the M3-close retro (`epic-12-retro-2026-10-21.md` §4, §8). The movement layer was ad-hoc: reachability is recomputed per question, and four local wall-in guards conflict. No instrument measured sim cost, so cost regressions shipped with every test green. 13.1 built the instrument, 13.2 used it to decide the movement layer, and 13.3–13.4 landed pile-memo and squeeze-past.
+**FRs covered:** FR53–FR68. NFR9–NFR13 bind every story; NFR12 gates the milestone close. The action items M3-2 (#210) and M3-1 (#209) are covered (13.1, 13.2); #159, #186, #187, #203 and #204 are covered as their own stories, and #207 by the 13.5 ruling.
+**Why one epic:** needs, food, fires, arrivals and idle life all change the same places in `sim-core` (the job market, the dwarf entity, worldgen, the tick). The risk boundary that seat feedback could move, feel, is handled inside the epic by the first-half rule, as Epic 12 did for its look work.
+**Order constraints (groundwork):** 13.1 before 13.2, because the spike measures with the bench. 13.2 ran in parallel with the M4 PRD draft; the PRD was final only after Wolf ruled on 13.2's proposal.
+**Movement stories (13.2 ruling, 2026-10-23):** 13.3 pile-memo, then 13.4 squeeze-past, then 13.5 clamber-over only if ruled after 13.4, on #207's sweep re-measured on top of 13.4 (Ruling 2), before the movement-debt stories it could affect. **13.5 DROPPED 2026-10-28** (Wolf, on 13.4's 18/24 reading).
+**Order constraints (M4 PRD):**
+1. **Scale first:** FR53 and FR54 lead the M4 game stories. No later game story merges without its bench delta against `main` on the 256² crew-200 scenario.
+2. #159 (FR55) is fixed at 256² before work that depends on reaching across the map is judged at scale.
+3. A food source and a way to warm exist before a need can bite, so misery never locks the fortress up.
+4. **Misery and the first idle behaviour reach the seat in the first half.**
+5. Fires that burn wood come before cooking (a cook needs a lit fire); placing a fire (FR68) joins the fuel work.
+6. FR67 (the fortress runs itself) is checked by every food and fuel story, not built once.
 
 ---
 
@@ -2818,11 +2941,27 @@ So that later milestones can give each dwarf a look of their own without redoing
 
 # Milestone 4
 
-## Epic 13: Milestone 4 *(working title)*
+## Epic 13: A Living Fortress
+
+*(Renamed 2026-10-28 from "Milestone 4 (working title)" when the M4 PRD set the goal.)*
 
 The M4 epic opens with the instrument and the spike that the M3-close retro put first on M4's critical path (`epic-12-retro-2026-10-21.md` §8). The PRD's game stories join this epic as they are written.
 
 **Standing acceptance criteria:** the M3 standing ACs 1–8 (Epic 12) carry over, with one change. Under M3-4 (#212), the full gate runs **once per story, at PR**, and patch passes run the fast tier plus the pixel guards they touch. AC1's "green, run in full, before the story is done" still holds, because done follows the PR.
+
+**M4 standing acceptance criteria — every M4 game story from 13.6 on, in addition to the above, not restated below (2026-10-28):**
+
+10. **Bench delta at scale (NFR12).** The story runs `tick-bench.sh` against `main`, including the 256² crew-200 scenario from 13.6, and records the delta (mean, and p99 as the median across runs). A regression beyond the recorded noise floor needs Wolf's ruling. Optimization still waits for a profile.
+11. **Outcome changes carry a reason.** A committed scenario whose outcome moves (new worldgen content, needs, arrivals) is re-pinned with its reason on the record. No 128² five-dwarf scenario changes silently.
+12. **Determinism covers the new state** (NFR9 as extended): standing AC 3 applies to every M4 system. A new saved field moves every state hash, so the record reads the end lines, not the hash alone.
+13. **Needs come before trades** (from 13.10 on): a needy dwarf of any trade releases its job (retried, never dropped, M1 FR8) and relieves itself. Self-care is never refused, and no dwarf dies (FR65).
+14. **The fortress runs itself (FR67)** is checked by every food and fuel story: on the 256² bench scenario, with the standing work set up and no further orders, the stock the story touches never runs down to nothing over the window.
+15. **Each new trade joins the embark guarantee** (from 13.8 on): the first group holds at least one dwarf of every trade that exists (FR56).
+16. **Look stories, narrowed for M4** (replaces standing AC 7's draft rule): plain-art models and poses skip the draft and go straight to the seat under the hard stop. New UI (the forage area, the fishing hole, placing a fire) starts from a draft Wolf approves. Every look story closes with Wolf viewing it live.
+17. **NFR13** for any story that adds rendering: the frame-rate bars hold at 200 dwarves on 256² on the vehicle, or the miss is measured and ruled by Wolf.
+18. **Constants are hardcoded** and tuned in the story: need rates and thresholds, regrowth, catch rate, burn rate, arrival cadence.
+
+**M4 story order (approved 2026-10-28):** 13.6 scale → 13.7 #159 → 13.8 arrivals → 13.9 forage → 13.10 hunger and misery (seat) → 13.11 idle at the fire (seat) → 13.12 fuel → 13.13 cold → 13.14 sleep → 13.15 place a fire → 13.16 ice fishing → 13.17 #203 → 13.18 #204 → 13.19 animals and hunting → 13.20 cooking → 13.21 stupid things. **16 new stories, at the top of the 12–16 cap.** Cut order (Wolf): 13.21 first, then 13.19 and 13.20 together, then regrowth inside 13.9. 13.5 is dropped and #187 is closed on evidence (both below), so neither counts.
 
 ### Story 13.1: Scripted Runs and the Tick Bench
 
@@ -2912,7 +3051,9 @@ Wolf ruled the 13.2 proposal on 2026-10-23 (Ruling 1): the swap is allowed, with
 **Given** the reproducers,
 **Then** #206's save finishes (marks 3 → 0) and #189's pile fills (24/24), and #207 is re-measured on top of the swap for Story 13.5's ruling.
 
-### Story 13.5: Clamber Over — a Dwarf May Step onto a Stone *(only if ruled)*
+### Story 13.5: Clamber Over — a Dwarf May Step onto a Stone — DROPPED 2026-10-28
+
+**RULED (Wolf, 2026-10-28, at M4 epics creation): dropped.** Ruling 2's input is on the record: 13.4 re-measured #207's ring on top of squeeze at **18/24** (`main` before it: 14/24). Clamber reached 24/24 in 13.2, but it worsened #203 (11 → 14 marks), cost +6% to +35% tick in the worlds it changed, and needs the gui to draw a dwarf on a stone. #207 stays open, revisited if the 256² scenario reproduces it; the proposal's cheaper alternative (where haulers stand) is the first lead then. The original story text follows.
 
 As the boss,
 I want a dwarf to be able to step onto a loose stone at a planner cost,
@@ -2927,3 +3068,408 @@ Wolf ruled the 13.2 proposal on 2026-10-23 (Ruling 2): **decide after squeeze.**
 
 **Given** clamber-over lands,
 **Then** emitters stay blocking, no item-placing writer puts a stone on a dwarf (the cage sweep's `landed` stays empty), and the gui draws a dwarf standing on a stone.
+
+### Story 13.6: Two Hundred on 256²
+
+As the boss,
+I want the crew size and the map size to be world settings, a fresh game on a 256² valley, and a committed crew-200 scenario that does real work,
+So that every M4 story is measured at the target scale from the first one on, not checked at the end.
+
+**Task 0 check (Wolf, 2026-10-28):** at creation, re-check #187 on `main`. If it no longer reproduces, close it with the evidence. If it does, raise it as its own story.
+
+**Acceptance Criteria:**
+
+**Given** a scenario file naming a crew size and a map size,
+**When** `simd` loads it,
+**Then** the world has that many dwarves on that map. Both settings are seeded, deterministic and saved, and survive save → load (FR53).
+
+**Given** no scenario,
+**Then** a fresh game is 256×256×32, and worldgen produces a playable valley: the camp and campfire, trees, the frozen lake, and ground walkable from the camp (FR53). The default crew stays five until 13.8's arrivals.
+
+**Given** more dwarves than the camp ring holds (it panics past about 49 today, `CAMP_RADIUS` 3),
+**Then** a crew of 200 spawns on walkable ground near the camp, one dwarf per tile, with no panic (FR53).
+
+**Given** every committed scenario,
+**Then** it pins its world at 128² and five dwarves, and its state hash and end line equal `main`'s. The settings change no outcome (FR53).
+
+**Given** the new 256² crew-200 scenario (its commands set up a pile, dig marks and cut marks),
+**When** the bench runs it,
+**Then** within the bench window items are delivered to the pile and every job kind in it completes at least once. A test asserts that, and the bench end line shows it, with cells changed per window (FR54). It stays under `MAX_DESIGNATIONS` (4096), or the story raises the cap for Wolf's ruling (#170 drops cells silently at the cap).
+
+**Given** `tick-bench.sh`,
+**Then** the scenario joins the bench set, re-baselined on `main`. The story records its mean, p99 (median across runs) and noise floor as NFR12's first reading. The bar gates the milestone close, not this story.
+
+**Given** the scale traps (addendum),
+**Then** each is checked and either fixed or marked with a `// NOTE:` naming the story that fixes it. Names and colours may repeat at 200 until 13.8. Professions are no longer cycled `i % 5` blindly. Wander phases repeat past ten dwarves (`lib.rs:3626` NOTE).
+
+**Given** the same scenario at the seat with `--perf-log`,
+**Then** Wolf runs it, and the gui frame rate with 200 dwarves on 256² is recorded at working zoom and at full vista against NFR6's bars (NFR13's first reading, #179 first in line). A miss is measured and ruled, not fixed here. **Split line:** this AC becomes its own story if 13.6 overruns a session.
+
+**Given** the scenario cannot do real work because searches run out of budget (#159),
+**Then** Task 0 raises swapping 13.6 and 13.7 with Wolf before dev.
+
+### Story 13.7: The Long Way
+
+As the boss,
+I want a dwarf on a 256² valley to reach a reachable job however large the walkable ground grows,
+So that work far from the camp is never silently starved by the path-search budget (#159).
+
+**Acceptance Criteria:**
+
+**Given** a 256² world whose walkable component is larger than `MAX_ASTAR_NODES`, and a reachable job beyond the budget,
+**Then** a scenario test shows the job is never claimed on `main` (red first), and is claimed and done after the fix (FR55).
+
+**Given** ADR 5 as amended,
+**Then** the fix sizes the budget to the walkable component, tracking it as digging grows it, or improves the heuristic. There is no hierarchy.
+
+**Given** an unreachable job,
+**Then** it is still answered without blowing the tick, and it stays queued and retried (M1 FR8).
+
+**Given** the bench,
+**Then** the story profiles A\*'s `BTreeMap` storage at 256² crew 200 and records the reading (13.2 proposal :121–124). No change is made to it without a profile.
+
+### Story 13.8: They Keep Coming
+
+As the boss,
+I want new dwarves to arrive at the valley edge over time until there are two hundred, each with a name of its own,
+So that the fortress grows while I watch.
+
+**Acceptance Criteria:**
+
+**Given** a fresh game,
+**Then** the first group arrives at embark and holds at least one dwarf of every trade that exists: miner, hauler and woodcutter at this story. Later trade stories add theirs (FR56, standing AC 15).
+
+**Given** play,
+**Then** groups of about 5–20 enter at the valley edge, at a hardcoded cadence, on edge cells connected to the camp. Each walks to the camp and joins the work, and arrivals stop at 200. A scenario test counts the crew at fixed ticks and shows the cap holds (FR56).
+
+**Given** an arrival,
+**Then** it has an identity and a profession from purpose-named seed streams, with professions seeded towards a working mix (a hardcoded constant) (FR56, AD-7).
+
+**Given** 200 dwarves,
+**Then** every name is unique within the crew, built from combinations such as a first name plus an epithet. Colours repeat. Selecting a dwarf in the Bevy client names it, and the TUI shows names (FR57).
+
+**Given** a save made while a group is walking in,
+**Then** it reloads to an identical tick N (NFR9).
+
+**Given** any map size,
+**Then** arrivals run, 128² included. Committed scenarios that change outcome are re-pinned with the reason (standing AC 11).
+
+**Given** the seat,
+**Then** Wolf watches the crew grow and rules whether 200 dwarves need a crew list (FR57). The answer is recorded; a "yes" becomes a story or an issue, not part of this one.
+
+### Story 13.9: Forage
+
+As the boss,
+I want woodcutters to gather food from plants in an area I mark, again and again as the plants regrow,
+So that the fortress has its first food.
+
+**Acceptance Criteria:**
+
+**Given** worldgen,
+**Then** forageable plants grow on the surface, seeded. Committed scenarios that change outcome are re-pinned with the reason (FR58, FR53).
+
+**Given** the Bevy client,
+**When** the player marks a forage area as a rectangle, the way they mark a stockpile,
+**Then** it is stored, saved and shown in both clients. An area holding no plant is refused loudly (NFR11). Wolf approves a draft of the forage-area mode first (standing AC 16).
+
+**Given** a forage area,
+**Then** woodcutters forage its plants: walk, take, and leave raw food that haulers carry to the pile. Cuts and forages share the woodcutter's FIFO (FR58).
+
+**Given** a foraged plant,
+**Then** it regrows after a hardcoded time and is foraged again while the area stands. A scenario test forages the same plant twice (FR58). **Cut line:** regrowth is the third cut; if cut, plants are a one-off harvest.
+
+**Given** both clients,
+**Then** plants, regrowth state and food items show, plain (NFR10, standing AC 16).
+
+**Given** the 256² bench scenario with a forage area added,
+**Then** the food on the pile rises over the window with no further orders (FR67, standing AC 14).
+
+### Story 13.10: Hungry and Miserable
+
+As the boss,
+I want dwarves to grow hungry and leave their work to eat, and to turn visibly miserable if I let the food run out,
+So that the fortress has needs I can see, and neglect has a cost.
+
+**Acceptance Criteria:**
+
+**Given** a dwarf,
+**Then** its hunger rises at a hardcoded rate. Past an eat threshold, a dwarf of any trade releases its job (retried, never dropped) and eats from the pile. Eating consumes the item and relieves hunger (FR62, standing AC 13).
+
+**Given** hunger past the misery threshold,
+**Then** the dwarf is **miserable**. It refuses trade work until relieved, but never self-care: it eats from the pile, or straight from a plant if the pile has no food (FR65). The misery rule is general; cold (13.13) and tiredness (13.14) join it.
+
+**Given** a world with no food anywhere for a long run,
+**Then** no dwarf dies or leaves the world, the fortress does not lock up, and every dwarf keeps relieving itself. When food is put back, misery clears within a bounded number of ticks that a scenario test names (FR65, success criterion 3).
+
+**Given** both clients,
+**Then** hunger and misery are per-dwarf state on the wire and saved. The Bevy client shows a miserable dwarf by posture, driven by sim state, plain, straight to the seat (standing AC 16). The TUI shows it (NFR10).
+
+**Given** the committed scenarios,
+**Then** those that change outcome because of hunger are re-pinned with the reason. The rates are tuned so the bench scenarios still do real work.
+
+**Given** the 256² bench scenario with its forage area,
+**Then** the food stock never runs down to nothing over the window, and no dwarf ends the window miserable from hunger (FR67). The bench delta records what the need costs at 200.
+
+**Given** the seat,
+**Then** Wolf starves the pile and sees the dwarves turn miserable and stop work, then puts it right and sees them recover. This is the hunger half of success criterion 3, in the milestone's first half.
+
+### Story 13.11: Idle at the Fire
+
+As the boss,
+I want an idle dwarf to gather at the fire, nap and wander across levels, instead of standing still,
+So that the fortress is not lifeless when there is no work.
+
+**Acceptance Criteria:**
+
+**Given** an idle dwarf (no job in its trade and no need),
+**Then** it picks from wandering, gathering at a lit fire and napping, seeded and deterministic (FR66).
+
+**Given** #186 (wander steps on one level only),
+**Then** a red test first shows a dwarf frozen on a one-level island. Wander then crosses z levels by ramps, and the cage sweep's #186 `frozen` entries clear, or are re-pinned with the reason (the issue's probe went from 5/32 to 1/32).
+
+**Given** 200 idle dwarves,
+**Then** they do not move in lockstep: the wander phases no longer repeat past ten dwarves (`lib.rs:3626` NOTE).
+
+**Given** a crowd gathering at one fire,
+**Then** one dwarf per tile holds, and the gathering spreads round the fire without freezing anyone.
+
+**Given** both clients,
+**Then** the idle state (gathering, napping) is on the wire and saved, and is shown plain in the Bevy client and in the TUI (standing AC 16, NFR10).
+
+**Given** the seat,
+**Then** Wolf watches the idle crew, and his judgement against "not boring when not actively doing anything" is recorded in his words. The exact set is tuned there, under the hard stop (FR66).
+
+### Story 13.12: Fires Burn Wood
+
+As the boss,
+I want fires to burn wood and go out without it, and haulers to keep them stoked,
+So that wood becomes something the fortress uses, not only something it counts.
+
+**Acceptance Criteria:**
+
+**Given** a fresh world,
+**Then** the campfire starts lit with fuel and burns it down at a hardcoded rate. At zero fuel it goes out: its light is off in both clients, and its lit/out state is on the wire and saved. It relights when stoked (FR61).
+
+**Given** a fire below a stoke threshold,
+**Then** a hauler carries wood from the pile to it, haulers stoke whichever fire is lowest, and the wood is consumed on delivery. No item is ever left on the emitter, and a test asserts that (FR61, FR50, FR67).
+
+**Given** wood burnt from the pile,
+**Then** the wood goal's progress can fall, and a completed goal stays completed. A test covers both (FR47 as changed).
+
+**Given** no wood on the pile,
+**Then** the fire goes out. When wood arrives, it is stoked and relights.
+
+**Given** the 256² bench scenario with trees marked for cutting,
+**Then** the fire never goes out over the window and the wood stock never runs down to nothing (FR67).
+
+**Given** the seat,
+**Then** a fire that is out reads as out, plain (standing AC 16).
+
+### Story 13.13: The Cold
+
+As the boss,
+I want dwarves to grow cold on the surface away from a lit fire and to go and warm themselves,
+So that the fire is what keeps the fortress alive.
+
+**Task 0 question:** how far a fire's warmth reaches, and how many dwarves can warm at one fire at 200 (reconcile 1.4). Wolf rules before dev.
+
+**Acceptance Criteria:**
+
+**Given** a dwarf on the surface away from a lit fire,
+**Then** it grows cold at a hardcoded rate, and it warms within the fire's warmth reach. Underground is warmer the deeper it goes, so below a hardcoded depth a dwarf is never cold. Torches give light, not warmth (FR63).
+
+**Given** a cold dwarf of any trade,
+**Then** it releases its job and warms at a lit fire. If no fire is lit, it warms deep underground (FR63, FR65).
+
+**Given** cold past the misery threshold,
+**Then** the dwarf is miserable under 13.10's rule.
+
+**Given** a scenario where the fire goes out,
+**Then** surface dwarves grow cold and miserable. When it is stoked, they recover within a bounded number of ticks the test names.
+
+**Given** the 256² bench scenario,
+**Then** with the fire lit and stoked, no dwarf ends the window miserable from cold, which shows 200 dwarves can warm under Task 0's ruling (FR67). The bench delta is recorded.
+
+**Given** both clients,
+**Then** cold is per-dwarf state on the wire and saved, shown plain in both (NFR10). At the seat, Wolf lets the fire die and sees the cold half of success criterion 3.
+
+### Story 13.14: Sleep
+
+As the boss,
+I want dwarves to tire as they work and lie down to sleep,
+So that the fortress has a rhythm of work and rest.
+
+**Task 0 questions:**
+1. Does a sleeper block its tile under FR49, and does squeeze-past apply to it (reconcile 2.3)?
+2. Does growing cold wake a sleeper?
+
+Wolf rules both before dev.
+
+**Acceptance Criteria:**
+
+**Given** a working dwarf,
+**Then** its tiredness rises as it works. Past a threshold, a dwarf of any trade releases its job and lies down where it is, or near a fire if one is within a hardcoded distance (FR64).
+
+**Given** a sleeper,
+**Then** sleep relieves tiredness, and it keeps losing warmth like any other dwarf (FR64). One dwarf per tile holds as Task 0 rules.
+
+**Given** tiredness past the misery threshold,
+**Then** the dwarf is miserable under 13.10's rule, and it sleeps wherever it is (FR65).
+
+**Given** the day–night cycle,
+**Then** sleep never reads it. The cycle is client-side atmosphere (NFR5), and sleep is sim state only.
+
+**Given** both clients,
+**Then** sleeping is on the wire and saved, shown as a plain lying pose in the Bevy client and in the TUI (standing AC 16, NFR10).
+
+### Story 13.15: Place a Fire
+
+As the boss,
+I want to place a fire the way I place a stockpile,
+So that two hundred dwarves can warm themselves somewhere other than the camp.
+
+**Acceptance Criteria:**
+
+**Given** the Bevy client,
+**When** the player places a fire,
+**Then** it is a marked spot, saved and shown in both clients. Wolf approves a draft of the mode first (FR68, standing AC 16).
+
+**Given** a placement on rock, on lake ice or on a stockpile,
+**Then** it is refused loudly (NFR11).
+
+**Given** a placed fire,
+**Then** haulers bring it wood, and once fuelled it lights, burns, warms within the reach 13.13 set, and is stoked like the campfire, lowest fire first (FR68, FR61, FR67).
+
+**Given** a placed fire,
+**Then** it is a light emitter like the campfire: no item is left on it, and a stockpile placed onto it is refused (FR50).
+
+**Given** a scenario with a fire placed far from the camp,
+**Then** cold dwarves working near it warm there instead of walking to the camp.
+
+### Story 13.16: Ice Fishing
+
+As the boss,
+I want a fisher to work a hole I mark on the lake ice,
+So that the frozen lake feeds the fortress.
+
+**Task 0 question:** is a fishing hole a designation only, with no terrain change and no water (reconcile 4.9; M1's no-fluids non-goal)? Wolf rules before dev.
+
+**Acceptance Criteria:**
+
+**Given** the professions,
+**Then** fisher is a new trade, assignable in the Bevy client, and the embark group includes one (standing AC 15).
+
+**Given** the Bevy client,
+**When** the player marks a fishing hole on lake ice,
+**Then** it is stored, saved and shown in both clients, and stays until the player removes it. A hole off the ice is refused loudly. Wolf approves a draft of the mode first (FR60, NFR11, standing AC 16).
+
+**Given** a fishing hole,
+**Then** a fisher works it and catches fish at a slow, steady, hardcoded rate. Haulers carry the fish to the pile, and a hungry dwarf eats them raw (FR60, FR62).
+
+**Given** the 256² bench scenario with a forage area and a fishing hole,
+**Then** the food stock never runs down to nothing over the window (FR67).
+
+### Story 13.17: A Dig Seals the Miner
+
+As the boss,
+I want no dig to take away the floor of a miner's only way out,
+So that a miner is never sealed into a hole by his own work (#203).
+
+**Acceptance Criteria:**
+
+**Given** #203's reproducer (13.2's replay, marks=11),
+**Then** a scenario test shows the miner sealed in on `main` (red first).
+
+**Given** the fix,
+**Then** the miner is never left without a way out by a dig. The rule is the simplest that reads right; Task 0 presents the options for Wolf's ruling, and none is assumed.
+
+**Given** the cage sweeps and committed scenarios,
+**Then** they do not regress, or are re-pinned with the reason. One dwarf per tile and nothing floating (FR49, FR52) still hold.
+
+### Story 13.18: Stones Seal Two Miners
+
+As the boss,
+I want stones landing round a pit with a full pile never to seal miners into a pocket,
+So that a busy fortress does not freeze when its pile fills (#204).
+
+**Acceptance Criteria:**
+
+**Given** #204's reproducer (`12-12-seat-slow.save` and full-pile-crowd: four stones shut a two-cell pocket),
+**Then** a scenario test shows the freeze on `main` (red first).
+
+**Given** the fix,
+**Then** no miner stays sealed. Task 0 presents the options for Wolf's ruling (stones landing elsewhere, or 12.11's one-stone clearing extended to several stones), and says whether #218 (a full pile seals pits) folds in.
+
+**Given** the cage sweeps and committed scenarios,
+**Then** they do not regress, or are re-pinned with the reason, and the cage sweep's `landed` stays empty.
+
+### Story 13.19: Game in the Valley
+
+As the boss,
+I want animals to live in the valley and hunters to bring them down,
+So that the valley moves even where no dwarf works, and the fortress has meat.
+
+**Task 0 question:** does an animal block its tile under FR49 (reconcile 2.3)? Wolf rules before dev.
+
+**Acceptance Criteria:**
+
+**Given** worldgen and play,
+**Then** animals are placed seeded, wander, and enter at the valley edge over time up to a hardcoded population, so game is renewable. They are harmless (FR59).
+
+**Given** the professions,
+**Then** hunter is a new trade, assignable in the Bevy client, and the embark group includes one (standing AC 15).
+
+**Given** a hunter,
+**Then** it tracks a designated animal, or the nearest one if none is designated, re-routing as the animal moves. It kills it, and haulers carry the carcass to the pile (FR59, FR67).
+
+**Given** a save made mid-hunt,
+**Then** it reloads to an identical tick N (NFR9).
+
+**Given** both clients,
+**Then** animals and carcasses are on the wire and saved, shown plain in the Bevy client and in the TUI (standing AC 16, NFR10).
+
+**Given** the bench,
+**Then** the delta records what animals and tracking cost at 200. **Split line:** animals alone, then hunting, if the story overruns. **Cut line:** this is the second cut, together with 13.20.
+
+### Story 13.20: Cooking
+
+As the boss,
+I want a cook to turn raw food into meals at a lit fire,
+So that the fire feeds the fortress as well as warming it.
+
+**Acceptance Criteria:**
+
+**Given** the professions,
+**Then** cook is a new trade, assignable in the Bevy client, and the embark group includes one. All six trades now exist (FR56, standing AC 15).
+
+**Given** raw food on the pile (plants, carcasses, fish),
+**Then** a cook carries it to a lit fire and cooks it for a hardcoded time into a meal, which goes to the pile. Cooks cook whatever raw food the pile holds (FR61, FR67).
+
+**Given** a fire that is out,
+**Then** no cooking happens there.
+
+**Given** a hungry dwarf,
+**Then** it prefers a meal to raw food (FR62).
+
+**Given** both clients,
+**Then** meals and cooking are on the wire and saved, shown plain in both (NFR10).
+
+### Story 13.21: Stupid Things
+
+As the boss,
+I want idle dwarves to do small, stupid things, such as following an animal about,
+So that the fortress is worth watching when no one is giving orders.
+
+**Acceptance Criteria:**
+
+**Given** an idle dwarf near an animal,
+**Then** it may follow it about. The other small behaviours are tuned at the seat. All of them are deterministic and come from sim state (FR66).
+
+**Given** the art,
+**Then** it is plain, under the hard stop (standing AC 16).
+
+**Given** a fresh 256² world with the standing work set up,
+**Then** Wolf sits through one full day–night cycle without giving an order and rules whether it is boring, while the crew grows to 200 (success criteria 1 and 2).
+
+**Given** cap pressure,
+**Then** this story is the first cut. If it is cut, success criterion 2 is judged on 13.11's behaviours plus the needs.
