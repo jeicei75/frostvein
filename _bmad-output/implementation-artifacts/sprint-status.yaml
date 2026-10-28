@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-25
+# last_updated: 2026-10-27
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-25
+last_updated: 2026-10-27
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2761,7 +2761,7 @@ development_status:
   # b3a4bf74 (3902 s). Status -> review for round 2. Unpushed.
   # MERGED 2026-10-25: PR #216 (ca862749), closing #209. Its prose "fixes #206 and #189" also closed #189/#206
   # (13.4's targets; not intended). -> done.
-  13-3-the-pile-remembers-pile-memo: review
+  13-3-the-pile-remembers-pile-memo: done
   # 13.3 CREATED 2026-10-25 (Opus 5.5) on b245ba5f: pile-memo ported (no counters) + launch-gui full-SHA compare (Wolf:
   # folded in). Creation probe: memo on main is state-same 10/10, six pile/seat rows -55.6..-90.8%; key RED -> differ;
   # 128^2 crew 200 640 -> 31.7 ms mean, same state e0b2df85.
@@ -2772,8 +2772,29 @@ development_status:
   # 3 record-only patches left as action items (card Q1/Q2, full-pile-crowd cause, stale record text) -> in-progress.
   # 13.3 PATCH PASS 1 2026-10-26: 3/3 landed (865dd6b2..960d4a3a), record text only; full gate skipped (Wolf; GREEN on
   # 46f9afa1 stands). No round 2. -> review; PR on Wolf's yes.
-  13-4-squeeze-past-two-dwarves-trade-tiles: backlog
+  # MERGED 2026-10-26: PR #217 (c5164d93), closing no issue. -> done.
+  13-4-squeeze-past-two-dwarves-trade-tiles: in-progress
   # 13.4 Task 0 (13.2 review decision 1, Wolf 2026-10-24): the idle-blocker swap (its `home` moves) was not under Ruling 1.
+  # 13.4 CREATED 2026-10-26 (Opus 5.5) on 380fd789. Probe: 13.2's squeeze numbers reproduce on HEAD; the idle-blocker
+  # swap moves only #207 (13 -> 18 of 24); the 4 stuck 16k cage runs are #187's refused cut and a stone-walled mark
+  # with the pile full, landed by timing (waits 10/20/30 -> 4/2/1 different runs). Task 0 Q1-Q4 await Wolf.
+  # 13.4 Task 0 RULED 2026-10-26 (Wolf "1 ok 2 a 3 a 4 yes"): idle swap allowed; #187 fix folded in; timer = plain Option;
+  # seat sitting yes.
+  # 13.4: Wolf picked Sonnet 5.5 subagents to implement (2026-10-26); Opus orchestrates.
+  # 13.4 DEV started 2026-10-26 (session 5e2fdff8): Sonnet agents + Opus. -> in-progress.
+  # 13.4 DEV DONE 2026-10-26: swap + saved timer; AC 5 amended at the split point (16k cage runs pinned, #218);
+  # seat Q1 pass, Q2 -> #219. Full gate GREEN on 1aeb4bf8 (4278 s). Pushed (no PR). -> review.
+  # Then e9712e5f (#194 branch removed, Wolf "clean code also") postdates that gate: the full gate is owed again at PR.
+  # 13.4 REVIEW RUN 1 2026-10-26 on 8ac4deb8: 4 layers, 0 HIGH; decision 1 (a) keep the idle-with-an-exit swap; 5 patches
+  # LEFT AS ACTION ITEMS (save test blind to the blocker id; pin idle `||`; reach claim; AC 7/epics; stale text). -> in-progress.
+  # 13.4 REVIEW-PATCH RUN 1 2026-10-26: 5/5 landed (78bf1d41..a0ae8a23), rows 4c/5c KILLED; FULL GATE GREEN on a0ae8a23
+  # (4140 s). -> review, for a round-2 review.
+  # 13.4 REVIEW RUN 2 2026-10-27 on 7a1cd12e..2f050a07: 4 layers, 0 HIGH (2 MED, 8 LOW), 1 REWORK (row 5c kills only on a
+  # leftover timer); decision 1 (a) keep B's carried timer, amend wording, filed #220. 7 patches LEFT AS ACTION ITEMS.
+  # No HIGH: static audit ends; next spend is Q4's seat card. -> in-progress.
+  # 13.4 REVIEW-PATCH RUN 2 2026-10-27: 7/7 landed (e0a3b352, 7da43b46, c22450eb); rows 5c (blocker 1) and 5d KILLED, 5c
+  # still KILLED with the partner's Squeeze removed; FULL GATE GREEN on c22450eb (4268 s). Cost $7.53. Stays in-progress:
+  # next is Q4's seat card (Wolf), or a round-2 review of this diff on Wolf's call. Unpushed.
   13-5-clamber-over-a-dwarf-may-step-onto-a-stone: backlog
   # 13.5 only if ruled (13.2 Ruling 2): #207 is re-measured on top of 13.4 first; the story may be dropped.
   epic-13-retrospective: optional

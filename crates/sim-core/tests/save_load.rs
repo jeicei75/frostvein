@@ -558,6 +558,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             profession: Profession::Miner,
             path: Vec::new(),
             clearing: None,
+            squeeze: None,
         },
         SavedDwarf {
             id: 1,
@@ -575,6 +576,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             profession: Profession::Miner,
             path: Vec::new(),
             clearing: None,
+            squeeze: None,
         },
     ];
     save.designations = vec![
@@ -682,6 +684,7 @@ fn save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end() {
         profession: Profession::Miner,
         path: Vec::new(),
         clearing: None,
+        squeeze: None,
     };
     let mut save = World::generate(42, dims).to_save();
     save.tick = 100;
@@ -923,5 +926,148 @@ fn a_world_saved_at_every_tick_of_a_clear_loads_and_steps_identically() {
         diverged.is_empty(),
         "saves taken mid-clear diverged from the never-saved world (save tick, first diverged \
          tick): {diverged:?}"
+    );
+}
+
+// 13.4 AC4: a save taken at ANY tick of a stand-off (two head-on miners in a one-wide tunnel, held
+// until the wait has run and they trade tiles) steps exactly like the never-saved world. A load
+// that drops the stand-off timer restarts the wait, so the swap lands later and the worlds part.
+#[test]
+fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
+    let dims = Dims::DEFAULT;
+    let index = |pos: Pos| {
+        pos.x as usize
+            + pos.y as usize * dims.x as usize
+            + pos.z as usize * dims.x as usize * dims.y as usize
+    };
+    let (z, row) = (5, 20);
+    let at = |x: i32, y: i32| Pos { x, y, z };
+    let mut tiles = vec![Tile::Solid(Material::Stone); (dims.x * dims.y * dims.z) as usize];
+    for x in 6..=10 {
+        for y in row - 3..=row + 3 {
+            tiles[index(at(x, y))] = Tile::Empty;
+        }
+    }
+    for x in 11..=16 {
+        tiles[index(at(x, row))] = Tile::Empty;
+    }
+    // Dwarf 0 digs the tunnel's east end, dwarf 1 a wall of the room: each walks through the other.
+    let (east_end, room_wall) = (at(17, row), at(8, row + 4));
+    let dwarf = |id: u32, pos: Pos, name: DwarfName, colour: DwarfColour| SavedDwarf {
+        id,
+        pos,
+        state: JobState::Walk,
+        home: pos,
+        cooldown: 0,
+        current_job: None,
+        work_progress: 0,
+        carrying: None,
+        identity: Identity { name, colour },
+        profession: Profession::Miner,
+        path: Vec::new(),
+        clearing: None,
+        squeeze: None,
+    };
+    let fixture = || {
+        let mut save = World::generate(42, dims).to_save();
+        save.tick = 100;
+        save.tiles = tiles.clone();
+        save.next_id = 2;
+        save.dwarves = vec![
+            dwarf(0, at(12, row), DwarfName::Durin, DwarfColour::Red),
+            dwarf(1, at(14, row), DwarfName::Nori, DwarfColour::Blue),
+        ];
+        save.designations = vec![
+            (east_end, DesignationKind::Dig),
+            (room_wall, DesignationKind::Dig),
+        ];
+        save.zones.clear();
+        save.items.clear();
+        save.jobs = [east_end, room_wall]
+            .into_iter()
+            .enumerate()
+            .map(|(id, target)| Job {
+                id: JobId(id as u32),
+                kind: JobKind::Dig,
+                target,
+                created_tick: 0,
+                retry_after: 0,
+            })
+            .collect();
+        save.next_job_id = 2;
+        World::from_save(save)
+    };
+    let paths = |world: &World| -> Vec<Vec<Pos>> {
+        world
+            .to_save()
+            .dwarves
+            .into_iter()
+            .map(|d| d.path)
+            .collect()
+    };
+    let squeezing = |world: &World| world.to_save().dwarves.iter().any(|d| d.squeeze.is_some());
+
+    // The window: from tick 100 to the swap (the two traded tiles between consecutive ticks).
+    let mut control = fixture();
+    let mut stood_off = false;
+    let mut last = None;
+    while last.is_none() {
+        assert!(control.tick() < 400, "the two never swapped");
+        let before: Vec<Pos> = control.dwarves().iter().map(|d| d.1).collect();
+        control.step();
+        let now: Vec<Pos> = control.dwarves().iter().map(|d| d.1).collect();
+        stood_off |= squeezing(&control);
+        if now[0] == before[1] && now[1] == before[0] && before[0] != before[1] {
+            last = Some(control.tick());
+        }
+    }
+    let last = last.unwrap();
+    assert!(stood_off, "no stand-off timer ever ran, so none was saved");
+
+    let mut diverged = Vec::new();
+    let mut saved_a_timer = false;
+    for save_tick in 100..=last {
+        let mut control = fixture();
+        while control.tick() < save_tick {
+            control.step();
+        }
+        let saved = control.to_save();
+        saved_a_timer |= saved.dwarves.iter().any(|d| d.squeeze.is_some());
+        // A saved timer must name the other dwarf (the fixture has ids 0 and 1). Only dwarf 1 times
+        // this stand-off (ticks 101-111, blocker 0); dwarf 0's timer appears on the swap tick, from
+        // his own look earlier that tick, and is a leftover. So this assert must see a wrong id on
+        // dwarf 1's real timer, not only on dwarf 0's leftover.
+        for d in &saved.dwarves {
+            if let Some(squeeze) = &d.squeeze {
+                assert_eq!(
+                    squeeze.blocker,
+                    1 - d.id,
+                    "dwarf {} saved a stand-off timer naming the wrong blocker at tick {save_tick}",
+                    d.id
+                );
+            }
+        }
+        let mut loaded = World::from_save(control.to_save());
+        for _ in save_tick..last + 40 {
+            loaded.step();
+            control.step();
+            if loaded.dwarves() != control.dwarves()
+                || loaded.claims() != control.claims()
+                || loaded.jobs() != control.jobs()
+                || paths(&loaded) != paths(&control)
+            {
+                diverged.push((save_tick, control.tick()));
+                break;
+            }
+        }
+    }
+    assert!(
+        saved_a_timer,
+        "no save in the window carried a stand-off timer"
+    );
+    assert!(
+        diverged.is_empty(),
+        "saves taken mid-stand-off diverged from the never-saved world (save tick, first \
+         diverged tick): {diverged:?}"
     );
 }

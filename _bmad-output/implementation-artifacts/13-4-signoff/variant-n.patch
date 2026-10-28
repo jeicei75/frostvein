@@ -1,0 +1,61 @@
+--- a/crates/sim-core/src/lib.rs	2026-10-26 07:10:10.185567983 +0000
++++ b/crates/sim-core/src/lib.rs	2026-10-26 07:10:48.166816339 +0000
+@@ -1899,15 +1899,6 @@
+                 !occupied.contains(&tile) && !holder_tiles.contains(&tile)
+             })
+         }) else {
+-            // 13.2: no way out for the idle blocker: squeeze past after the wait.
+-            try_squeeze(
+-                ecs,
+-                (holder_id, pos),
+-                path,
+-                (blocker_id, blocker),
+-                true,
+-                &blocker_path,
+-            );
+             return false;
+         };
+         blocker_path = route.clone();
+@@ -1915,14 +1906,6 @@
+     }
+     if !head_on(&blocker_path) {
+         if idle {
+-            try_squeeze(
+-                ecs,
+-                (holder_id, pos),
+-                path,
+-                (blocker_id, blocker),
+-                true,
+-                &blocker_path,
+-            );
+             return false;
+         }
+         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
+@@ -1980,19 +1963,16 @@
+         // keeping it would hold the idle dwarf still forever. The next blocked step derives a
+         // fresh one.
+         (None, None) => {
+-            // 13.2: head-on, neither can step off: squeeze past after the wait, instead of the
+-            // holder backing out.
+-            if try_squeeze(
+-                ecs,
+-                (holder_id, pos),
+-                path,
+-                (blocker_id, blocker),
+-                idle,
+-                &blocker_path,
+-            ) {
++            // variant N: idle blocker keeps main's #194/#196 back-out (only movers swap above).
++            let mut closed = blocked.clone();
++            closed.insert(next);
++            let back_out = route_to_nearest(ecs.resource::<Terrain>(), &closed, pos, |tile| {
++                !occupied.contains(&tile) && !blocker_tiles.contains(&tile)
++            });
++            if let Some(back_out) = back_out {
++                *path = back_out;
+                 return false;
+             }
+-            // The wait stands in for the back-out. #183: an idle blocker's exit `Path` is dropped.
+             if idle {
+                 ecs.entity_mut(blocker).remove::<Path>();
+             }

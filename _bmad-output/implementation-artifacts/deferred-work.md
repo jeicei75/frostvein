@@ -2778,3 +2778,21 @@ story) and #194 (`route:undecided`); they are not repeated here.
 
 - **Test fixtures assign `Terrain.tiles` directly, bypassing `set_tile`** (`crates/sim-core/src/lib.rs:5290`, `:5369`, `:5446`, `:6862`, blind + feature + acceptance, read). Pre-existing for the `open` cache; the 13.3 memo widens it. A future test that rewrites `.tiles` after a `pile_targets` call gets a stale depth map. No current instance: each fixture writes before any tick. Production writes go through `set_tile` only.
 - **`launch-gui.ps1` accepts a non-hex stamp that git resolves** (`scripts/launch-gui.ps1:212`, edge, RAN git). `gui build HEAD` or `gui build main` resolves and verifies; a stamp starting with `-` (other than `-dirty`) reaches git as an option. Unreachable from `crates/gui/build.rs`, which emits only hex, `unknown` or a suffixed hex form. Guard if ever needed: `$stamp -notmatch '^[0-9a-f]{4,40}$'`.
+
+## Deferred from: code review of 13-4-squeeze-past-two-dwarves-trade-tiles (2026-10-26)
+
+- **A `Squeeze` whose `since`/`last` is ahead of the tick panics in debug** (`crates/sim-core/src/lib.rs:1694`, `:1700`, blind, RAN). `now - squeeze.last` overflows; release wraps and restarts the wait. Only a hand-edited save reaches it (`from_save` copies the fields unchecked). Fix if ever needed: `saturating_sub`.
+- **A leftover `Squeeze` is reused if the same pair meets again within 20 ticks** (`lib.rs:1689-1697`, blind read + feature RAN). Removed only by the holder's swap; the partner keeps his, and an unswapped stand-off keeps the holder's. Never observed: all 63 swaps over the 10 scenarios waited 11 ticks.
+- **The #185 chain shift and the squeeze race on long idle chains** (`lib.rs:1836-1850`, blind, read). The swap at the second look drops the idle blocker's `Path` even if `make_room` had just sent him. B's semantics, pre-dates e9712e5f; pinned only by `tile_trades <= 2`.
+- **`try_squeeze` finds the holder by an O(n) unfiltered `iter_entities()` scan** (`lib.rs:1679-1683`, blind, read). Correct while ids share one allocator; the caller could pass the entity.
+- **The saved `since` and `last` are not told apart by any test** (`crates/sim-core/tests/save_load.rs:931`, edge, RAN: four field-swap sabotages SURVIVED). Equivalent today: `since == last` until the swap.
+- **The wait length is pinned only by a test that reads the constant** (`lib.rs:7233`, `:7290`, edge, RAN). `SQUEEZE_WAIT_TICKS = STEP_REST_TICKS + 1` SURVIVED; comparison off-by-ones are KILLED. Ruling 1 fixes the value.
+- **The stale-timer window and the blocker-id check are killed only by the cage sweep** (`crates/sim-core/tests/scenario.rs:3171`, `:3180`, edge, RAN). No `13-4.sh` row for either.
+- **No mutation row pins AC 2's one-write sabotage against `step_and_watch`** (`mutations/13-4.sh` row 2, acceptance, RAN). The payload does fail `step_and_watch` (`scenario.rs:4813`), but the row selects only the lib `watch` test.
+- **The `UNFINISHED_LATE` comment cites traces holding only 2 of its 4 runs** (`scenario.rs` `UNFINISHED_LATE`; `13-4-signoff/diag-traces-waits-10-20-30.txt`, acceptance, RAN). Seeds 9 and 13 (shape B) are absent; `probe187-extended.rs CASES=9:6,13:6` on HEAD confirms the shape.
+
+## Deferred from: code review of 13-4-squeeze-past-two-dwarves-trade-tiles, run 2 (2026-10-27)
+
+- **The new idle-exit-ahead test jumps the clock by `SQUEEZE_WAIT_TICKS` in one hop** (`crates/sim-core/src/lib.rs:7344`, blind, read). It passes only while the wait is at most the 20-tick `last` window. Raising the wait would make it fail loudly.
+- **The new test does not assert the holder's `Squeeze` is gone after the swap** (`lib.rs:7344-7351`, blind, read). `occupied` is never read back either.
+- **The new test's fixture is not a live shape** (`lib.rs:7309-7354`, feature, RAN). Live, an idle blocker walks a free exit within 10 ticks (30 of 30 looks). The branch is reached only through a timer carried over from a head-on stand-off (a cancel mid-stand-off). A tick-driven cancel case would pin the real route; it waits on 13.4 run-2 decision 1.

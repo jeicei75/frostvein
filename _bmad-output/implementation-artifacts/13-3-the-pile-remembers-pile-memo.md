@@ -5,7 +5,7 @@ model: claude-opus-5-5  # session default (story authored on Opus 5.5)
 
 # Story 13.3: The Pile Remembers — pile-memo
 
-Status: review
+Status: done
 
 ## Story
 
@@ -290,6 +290,7 @@ No pin edited; every scenario test, the cage, ring and two-wide sweeps included,
 
 | Date | Change |
 |---|---|
+| 2026-10-26 | Merged as PR #217 (`c5164d93`), closing no issue (`closingIssuesReferences` empty). Status → done. |
 | 2026-10-26 | Patch pass 1 (fresh session): 3/3 record patches landed (`865dd6b2`, `6d2d3ffa`, `960d4a3a`), closure table under Review Findings. No code change; full gate skipped on Wolf's ruling (GREEN on `46f9afa1` stands). No round 2 (prose only). Status review, ready for PR on Wolf's yes. |
 | 2026-10-25 | Code review run 1 (fresh session, 4 layers, none timed out) on `ca862749..f284a0dd`: 0 HIGH. Memo hits 99.5-100% live, state `same` 10/10 re-verified, scale 128^2 crew200 ~290 -> ~19 ms mean same state. Decision (AC 6 seat itemised) resolved: Wolf, Q1/Q2 "yes it's ok". 3 record patches LEFT AS ACTION ITEMS; 2 deferred; 5 dismissed. Status in-progress. |
 | 2026-10-25 | AC 6 seat: Wolf, "so script fix works now"; Q3 (unfetched stamp) unseen. Task 6 checked. |

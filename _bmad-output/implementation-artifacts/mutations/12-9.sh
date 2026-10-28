@@ -38,7 +38,9 @@ for old in ('                |tile| !blocker_tiles.contains(&tile),\n',
 p.write_text(s)
 PY
 
-mutation "5 the higher id never yields" sim-core head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_dead_end <<'PY'
+# 13.4: head-on job-holders swap before the yield match, so the old test no longer reaches it; the
+# yield is reached only for an IDLE head-on blocker, which the id-flipped dead-end fixture pins.
+mutation "5 the higher id never yields" sim-core a_higher_id_miner_yields_to_an_idle_dwarf_at_the_dead_end_when_only_it_has_an_escape <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        (Some(_), None) => true,\n        (None, Some(_)) => false,\n'

@@ -1,0 +1,10 @@
+{
+ "name": "stuck-tunnel-seat",
+ "about": "13.4 seat card copy of scenarios/stuck-tunnel.json at Normal speed (10 ticks/s), so the first tunnel swaps (t18,143, t18,281) can be watched; same save, same (no) commands.",
+ "start": {
+  "save": "../../../scenarios/saves/12-12-seat-loop.save"
+ },
+ "ticks": 10000,
+ "speed": "normal",
+ "commands": []
+}

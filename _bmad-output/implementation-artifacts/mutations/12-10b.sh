@@ -72,14 +72,16 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == [at[0], at[1], -1]\n'))
 PY
 
+# 13.4: the squeeze finishes this dig too without the shift (one trade later), so the test pins the
+# shift by the number of tile trades.
 mutation "6 the Task 4 fix is reverted (no idle chain shift)" sim-core a_dead_end_miner_behind_idle_woodcutters_finishes_its_dig <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-14 (12.10b review patch, #194): the idle chain is now tried inside the exit's
-# `or_else`; reverting it means it never runs and its shift is never tried.
-old = '            if make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles) {\n'
+# Re-anchored 2026-10-26 (13.4, e9712e5f): the #194 exit and its `or_else` are gone; the idle chain
+# is a bare call before the squeeze. Reverting it means its shift is never tried.
+old = '            make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if false && make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles) {\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "7 a channel's block may land below its worker" sim-core a_channel_never_lands_its_stone_below_the_worker <<'PY'
@@ -119,25 +121,14 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                if walls_in_a_dwarf(terrain, &blocked, &dwarves, job.target) {\n'))
 PY
 
-# 12.10b review patch (#194), first half: the idle blocker's way out back up the line is never
-# found, so it has no exit and nothing backs out.
-mutation "11 no exit back up the line for an idle blocker" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| {\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '            route_to_nearest(ecs.resource::<Terrain>(), blocked, next, |tile| false && {\n'))
-PY
+# Row 11 (no exit back up the line for an idle blocker, #194's first half) was deleted in 13.4: the
+# exit is still found (4 times in its staircase test), but with the holder unable to escape the head-on
+# match lands in (None, None), which drops that exit `Path` and squeezes after the wait. With the row's
+# sabotage applied, all 101 swaps in the test matched HEAD tick for tick, so no test can see it.
+# Wolf ("clean code also"): the branch is removed too. With it gone, all 10 scenarios plus big-pile
+# at 10,000 ticks and at a shifted command tick read the same `--bench` state hash as before.
 
-# 12.10b review patch (#194), second half: the holder never backs out, so both wait as before.
-mutation "12 the holder never backs out of the line" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-14 (run 2 patch, #196): the back-out left the `if idle` block, one indent out.
-old = '            if let Some(back_out) = back_out {\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '            if let Some(back_out) = back_out.filter(|_| false) {\n'))
-PY
+# Row 12 (the holder never backs out of the line) was deleted in 13.4: the #194/#196 back-out it sabotaged is gone, replaced by the squeeze.
 
 # 12.10b review patch (AC 9's preview half): the surface branch skips `sim_will_keep` again. The
 # arm's own test (5c, 9) cannot see a dropped call; this one drags through `preview_cells`.
@@ -159,15 +150,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            if dwarves.remove(&job.target) && false {\n'))
 PY
 
-# 12.10b review run 2 patch (#196): the holder backs out only for an IDLE blocker again, so two job
-# holders head-on in a one-wide line both wait.
-mutation "15 the holder backs out only for an idle blocker" sim-core job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            if let Some(back_out) = back_out {\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '            if let Some(back_out) = back_out.filter(|_| idle) {\n'))
-PY
+# Row 15 (the holder backs out only for an idle blocker) was deleted in 13.4: the back-out it sabotaged is gone, replaced by the squeeze.
 
 # 12.10b review run 2 patch: the Stockpile arm drops its emitter rule again (the preview lights the
 # fire, which the sim's `is_walkable` drops).
@@ -188,25 +171,17 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
-# 12.10b review run 2 patch: `step_and_watch` is the only per-tick enforcement of No Swap (12.9 Task 0
-# Q1b) and had never been shown firing. Each row must die on ITS assert, read from the KILLED lines:
-# 18 on "swapped tiles" (a yielding blocker steps onto the holder's tile as the holder steps onto
-# its), 19 on "share a tile" (a dwarf told to step aside stays put and the holder steps onto it).
-# Row 18 SURVIVED against the #196 fixture (first run, 2026-10-14: no head-on yield there); the
-# one-wide sweep's back-out cascade yields, and dies with "dwarves 3 and 4 swapped tiles at tick 278".
+# 12.10b review run 2 patch: `step_and_watch` is the only per-tick enforcement of one dwarf per tile
+# and had never been shown firing. Row 19 must die on ITS assert, read from the KILLED line:
+# "share a tile" (a dwarf told to step aside stays put and the holder steps onto it).
+# Row 18 ("a head-on yield swaps the two dwarves") was deleted in 13.4: a swap is now legal, so an
+# instant swap no longer trips a test; 13-4.sh's wait row pins it. `step_and_watch`'s "swapped
+# tiles" assert is gone with it, and the row's shared-tile half lives on in 13-4.sh's one-write row.
 # Row 19 died in debug on `World::step`'s own debug_assert ("two dwarves share a tile after tick"),
 # which SHADOWS step_and_watch's shared-tile assert in every debug run. In release (no debug_assert)
 # the same mutant dies on step_and_watch's: "two dwarves share a tile at tick 402" (run by hand).
 # 12.10b review run 3 patch: row 19 now also compiles that debug_assert out, so the debug run must
 # die on step_and_watch's "share a tile at tick" line.
-mutation "18 a head-on yield swaps the two dwarves" sim-core a_one_wide_staircase_reaches_four_levels_down_and_a_dwarf_climbs_back_for_every_delay <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        .expect("every dwarf has a position") = *step;\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '        .expect("every dwarf has a position") = pos;\n'))
-PY
-
 mutation "19 a dwarf stepped aside stays on its tile" sim-core job_holders_head_on_in_a_one_wide_staircase_do_not_wait_forever <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()

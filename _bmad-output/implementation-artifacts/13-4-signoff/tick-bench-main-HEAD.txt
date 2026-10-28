@@ -1,0 +1,24 @@
+building c5164d93b4feb02bc3756d1fb46ef3f7c1287e30 ...
+building 9d6810d912ac18d140291479e920c6620d632460 ...
+building control (c5164d93b4feb02bc3756d1fb46ef3f7c1287e30) ...
+base c5164d93b4feb02bc3756d1fb46ef3f7c1287e30
+head 9d6810d912ac18d140291479e920c6620d632460
+control: base again, functions shuffled (--shuffle-sections=*=1)
+runs 3 per build, interleaved; load before: 7.25, 7.60, 7.55
+scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+big-pile                   0.0995     0.2193  +120.5%    +3.3%      10.1%      12.4%       9.9%  differ BEYOND FLOOR
+deep-pit                   0.0376     0.0417   +10.7%    +7.2%       2.1%       9.4%       7.2%  differ BEYOND FLOOR
+dig-loop                   0.0429     0.0302   -29.6%    -6.8%       9.8%      16.2%       9.5%  differ BEYOND FLOOR
+full-pile-crowd            0.0335     0.0327    -2.3%    +0.9%       4.2%       2.4%      10.4%  differ within floor
+plan-compact-piles         0.1665     0.1799    +8.0%    +9.7%      16.6%       8.4%       7.1%  differ within floor
+plan-far-piles             0.0897     0.0930    +3.6%    -1.9%       3.9%       4.8%       2.4%  differ within floor
+plan-spread-piles          0.1709     0.1812    +6.0%    +4.8%       7.1%       5.2%       2.2%  differ within floor
+plan                       0.0866     0.0920    +6.3%    +1.5%       3.2%       1.5%       2.4%  differ BEYOND FLOOR
+seat-slow                  0.1771     0.1812    +2.3%    +6.7%       5.6%       3.2%       1.1%  differ within floor
+stuck-tunnel               0.1028     0.0302   -70.6%    +0.6%       1.1%       5.0%       1.0%  differ BEYOND FLOOR
+load after: 3.12, 6.20, 7.06
+
+# Reading (13.4 code review run 1, 2026-10-26): `differ` on all 10 rows is behaviour, not only the new
+# `squeeze` save field. With `squeeze` skipped when None (encoding = main's), state still differs on all 10,
+# and the swap fires on every scenario (plan / full-pile-crowd / plan-compact / -far / -spread: 9/2/14/9/9).
+# So plan's +6.3% BEYOND FLOOR is partly a behaviour change. Story § Debug Log, Task 7.
