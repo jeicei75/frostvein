@@ -8,3 +8,7 @@ bevy_ecs.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+# The 13.6 save test compares `to_save` as the bytes simd writes (JSON), and prints their length.
+serde_json.workspace = true

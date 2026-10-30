@@ -1071,3 +1071,33 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
          diverged tick): {diverged:?}"
     );
 }
+
+/// 13.6 AC 2: a 256² crew-200 world is the same world however it got to its tick. Ticks stay few:
+/// debug steps this world at about 29 ms a tick.
+#[test]
+fn a_256_crew_200_world_saves_loads_and_steps_identically() {
+    let mut never_saved = World::generate_with_crew(42, Dims::FRESH, 200);
+    // AC 2: the same seed, dims and crew generate the same world.
+    let twin = World::generate_with_crew(42, Dims::FRESH, 200);
+    let encode = |world: &World| serde_json::to_vec(&world.to_save()).expect("a world encodes");
+    assert_eq!(encode(&never_saved), encode(&twin));
+    drop(twin);
+
+    for _ in 0..10 {
+        never_saved.step();
+    }
+    let saved = encode(&never_saved);
+    println!("256² crew-200 to_save bytes at tick 10: {}", saved.len());
+    let state = serde_json::from_slice(&saved).expect("a save decodes");
+    let mut loaded = World::from_save(state);
+    assert_eq!(loaded.dwarves().len(), 200);
+    assert_eq!(loaded.dims(), Dims::FRESH);
+    for _ in 0..20 {
+        never_saved.step();
+        loaded.step();
+    }
+    assert_eq!(loaded.tick(), 30);
+    assert_eq!(loaded.dwarves(), never_saved.dwarves());
+    assert_eq!(loaded.jobs(), never_saved.jobs());
+    assert_eq!(encode(&loaded), encode(&never_saved));
+}

@@ -138,9 +138,16 @@ pub struct Dims {
 }
 
 impl Dims {
+    /// The 128² world every pinned test and committed scenario runs on.
     pub const DEFAULT: Dims = Dims {
         x: 128,
         y: 128,
+        z: 32,
+    };
+    /// The fresh game's world (13.6): 256².
+    pub const FRESH: Dims = Dims {
+        x: 256,
+        y: 256,
         z: 32,
     };
 }
@@ -2857,13 +2864,22 @@ fn assemble(
 impl World {
     /// # Panics
     ///
-    /// Only `Dims::DEFAULT`-scale worlds are supported. Smaller worlds panic:
+    /// Only worlds from `Dims::DEFAULT` to `Dims::FRESH` scale are supported. Smaller worlds panic:
     /// `dims.z <= 4` inverts the height clamp, and a footprint yielding fewer than
     /// five flat columns exhausts the spawn candidate list.
     // NOTE: worldgen supports z >= 6 and a footprint with at least 5 flat columns.
     // z == 5 collapses the height range to a single level: no variation, no ramps.
     // Small-world support arrives when a scenario test actually needs one.
     pub fn generate(seed: u64, dims: Dims) -> World {
+        World::generate_with_crew(seed, dims, 5)
+    }
+
+    /// `generate` with `crew` dwarves (5 draws exactly as `generate` always has).
+    ///
+    /// # Panics
+    ///
+    /// When the camp has no walkable ground for `crew` dwarves, plus `generate`'s panics.
+    pub fn generate_with_crew(seed: u64, dims: Dims, crew: usize) -> World {
         debug_assert!(dims.z >= 6, "worldgen needs dims.z >= 6, got {}", dims.z);
         debug_assert!(
             dims.x >= 3 && dims.y >= 3,
@@ -2903,19 +2919,28 @@ impl World {
         let mut colours = DwarfColour::ALL;
         names.shuffle(&mut identity_rng);
         colours.shuffle(&mut identity_rng);
-        let identities = std::array::from_fn(|i| Identity {
-            name: names[i],
-            colour: colours[i],
-        });
+        // NOTE: past 16 names and 5 colours they repeat; 13.8 makes names unique.
+        let names: Vec<DwarfName> = names.into_iter().cycle().take(crew).collect();
+        let colours: Vec<DwarfColour> = colours.into_iter().cycle().take(crew).collect();
+        let identities: Vec<Identity> = (0..crew)
+            .map(|i| Identity {
+                name: names[i],
+                colour: colours[i],
+            })
+            .collect();
         // Professions have their own stream too, so they never shift a spawn or an identity.
         let mut profession_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_PROFESSION);
-        let mut professions = [
+        let mut professions: Vec<Profession> = [
             Profession::Miner,
             Profession::Miner,
             Profession::Hauler,
             Profession::Hauler,
             Profession::Woodcutter,
-        ];
+        ]
+        .into_iter()
+        .cycle()
+        .take(crew)
+        .collect();
         professions.shuffle(&mut profession_rng);
         world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions);
         world.spawn_emitters(camp_origin);
@@ -3599,9 +3624,10 @@ impl World {
         &mut self,
         camp: Pos,
         rng: &mut ChaCha8Rng,
-        identities: [Identity; 5],
-        professions: [Profession; 5],
+        identities: Vec<Identity>,
+        professions: Vec<Profession>,
     ) {
+        let crew = identities.len();
         let emitter_positions: BTreeSet<_> = camp_emitters(camp)
             .into_iter()
             .map(|(pos, _)| pos)
@@ -3618,6 +3644,28 @@ impl World {
                     }
                 }
             }
+            // A crew the ring cannot hold takes the first `crew` cells of a breadth-first walk
+            // from the camp, so the ring widens over the camp's own ground, ramps included.
+            if candidates.len() < crew {
+                candidates.clear();
+                let mut seen = BTreeSet::from([camp]);
+                let mut queue = VecDeque::from([camp]);
+                'walk: while let Some(cell) = queue.pop_front() {
+                    for next in astar_neighbours(terrain, &emitter_positions, cell) {
+                        if seen.insert(next) {
+                            candidates.push(next);
+                            queue.push_back(next);
+                            if candidates.len() == crew {
+                                break 'walk;
+                            }
+                        }
+                    }
+                }
+                assert!(
+                    candidates.len() >= crew,
+                    "no walkable ground near the camp for {crew} dwarves"
+                );
+            }
             candidates
         };
 
@@ -3633,8 +3681,9 @@ impl World {
                 Wander {
                     home: camp,
                     // NOTE: staggers the spawn phases so the dwarves do not step in lockstep,
-                    // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so an
-                    // eleventh dwarf would share dwarf 0's phase — harmless at five.
+                    // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so 200
+                    // dwarves give about 20 per phase. Any assignment into a 10-tick period gives
+                    // that; whether 20 at a time reads as lockstep is the seat's call (13.6 Task 8).
                     cooldown: id.0 % WANDER_REST_TICKS,
                 },
                 CurrentJob(None),
