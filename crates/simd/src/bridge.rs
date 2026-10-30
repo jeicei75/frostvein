@@ -354,6 +354,18 @@ fn pos_out(pos: sim_core::Pos) -> [i32; 3] {
 mod tests {
     use super::{delta, designation_kind_in, join_items, snapshot};
 
+    /// 13.6: the fresh game's connect snapshot must fit the 64 MiB client cap (`MAX_SNAPSHOT_BYTES`).
+    #[test]
+    fn the_fresh_256_snapshot_fits_the_client_cap() {
+        let world =
+            sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::FRESH, 5);
+        let bytes = serde_json::to_vec(&snapshot(&world, protocol::Speed::Normal))
+            .unwrap()
+            .len();
+        println!("256x256x32 snapshot: {bytes} bytes");
+        assert!(bytes < 64 * 1024 * 1024, "{bytes} bytes");
+    }
+
     /// The wire mapping, restated independently of the code under test.
     ///
     /// Deliberately NOT `super::tile`: asserting `snap.tiles[i] == tile(world.tile(p))`

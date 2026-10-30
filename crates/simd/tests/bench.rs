@@ -143,10 +143,34 @@ fn a_scenario_without_its_command_reaches_a_different_world() {
     assert_eq!(run_states(&text), vec![expected(false)], "{text}");
     assert_ne!(expected(false), expected(true), "the dig must matter");
     assert_eq!(field(&end_line(&text), "marks"), "0");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "done"), "dig:0,cut:0", "{end}");
+    assert_eq!(field(&end, "stored"), "0", "{end}");
+    assert_eq!(
+        field(&end, "cells"),
+        "0",
+        "no command, no changed cell: {end}"
+    );
     assert!(
         text.contains("commands=0/0") && text.contains("1 run: no floor"),
         "{text}"
     );
+}
+
+/// 13.6 AC 7: the end line counts the work done. 400 ticks: creation read the dig still marked at
+/// t100 and finished by t200.
+#[test]
+fn a_finished_dig_is_counted_as_done_and_as_a_changed_cell() {
+    let path = variant("long-dig", |json| json["ticks"] = 400.into());
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "done"), "dig:1,cut:0", "{end}");
+    assert_eq!(field(&end, "marks"), "0", "the mark is gone: {end}");
+    let cells: usize = field(&end, "cells").parse().unwrap();
+    assert!(cells >= 1, "a dug cell differs from the start world: {end}");
 }
 
 #[test]

@@ -5,6 +5,7 @@
 //! `set_speed`, `save`, `load` and `quit` are refused when the file loads.
 
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
     time::Instant,
@@ -331,6 +332,8 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
         let mut world = scenario.world()?;
         let mut schedule = scenario.schedule(world.tick());
         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+        let start_tiles = world.tiles().to_vec();
+        let (mut dug, mut cut) = (0, 0);
         for _ in 0..scenario.ticks {
             for command in schedule.due(world.tick()) {
                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
@@ -340,9 +343,25 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                     );
                 }
             }
+            // Outside the timed window: the Dig and Cut marks that landed and that this step takes.
+            let before = world.designations();
             let started = Instant::now();
             world.step();
             ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            let after: BTreeSet<_> = world
+                .designations()
+                .into_iter()
+                .map(|(pos, _)| pos)
+                .collect();
+            for (pos, kind) in before {
+                if !after.contains(&pos) {
+                    match kind {
+                        sim_core::DesignationKind::Dig => dug += 1,
+                        sim_core::DesignationKind::Cut => cut += 1,
+                        sim_core::DesignationKind::Channel => {}
+                    }
+                }
+            }
             serde_json::to_string(&crate::bridge::delta(
                 &mut world,
                 scenario.speed,
@@ -370,12 +389,25 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             .iter()
             .map(|goal| goal.progress.to_string())
             .collect();
+        let zones: BTreeSet<_> = world.zones().into_iter().collect();
+        let stored = world
+            .items()
+            .iter()
+            .filter(|(_, pos)| zones.contains(pos))
+            .count();
+        let cells = world
+            .tiles()
+            .iter()
+            .zip(&start_tiles)
+            .filter(|(now, then)| now != then)
+            .count();
         end = format!(
-            "bench {name} end tick={} marks={} items={} zones={} goals={}",
+            "bench {name} end tick={} marks={} items={} zones={} goals={} \
+             done=dig:{dug},cut:{cut} stored={stored} cells={cells}",
             world.tick(),
             world.designations().len(),
             world.items().len(),
-            world.zones().len(),
+            zones.len(),
             goals.join("/")
         );
     }
