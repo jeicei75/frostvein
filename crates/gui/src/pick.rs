@@ -723,6 +723,7 @@ mod tests {
             yaw,
             pitch,
             distance,
+            focus_max: Vec3::new(127.0, 127.0, 31.0),
         };
         let origin = rig.transform().translation;
         (origin, (world_to_render(target) - origin).normalize())

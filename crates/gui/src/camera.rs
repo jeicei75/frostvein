@@ -6,10 +6,10 @@ const MIN_PITCH: f32 = 0.15;
 const MAX_PITCH: f32 = std::f32::consts::FRAC_PI_2 - 0.15;
 const MIN_DISTANCE: f32 = 4.0;
 const MAX_DISTANCE: f32 = 500.0;
-// NOTE: the focus ceiling is the shipped 128x128x32 world, hardcoded rather than read from the
-// snapshot's `Dims`. A smaller world simply never reaches it, so the clamp is a bound and not a
-// lie; a LARGER world would need this to follow `Dims`.
-const FOCUS_MAX: Vec3 = Vec3::new(127.0, 127.0, 31.0);
+// NOTE: a rig starts with the old 128x128x32 ceiling so every boot frame before the first
+// snapshot is unchanged; each snapshot the gui applies then sets the rig's own `focus_max` from
+// that snapshot's `Dims` (see `CameraRig::fit_world`).
+const BOOT_FOCUS_MAX: Vec3 = Vec3::new(127.0, 127.0, 31.0);
 const BOOT_YAW: f32 = 0.7;
 const BOOT_PITCH: f32 = 0.45;
 const BOOT_DISTANCE: f32 = 90.0;
@@ -41,6 +41,8 @@ pub struct CameraRig {
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
+    /// The highest cell the focus may reach: the world's `Dims` minus one on each axis.
+    pub focus_max: Vec3,
 }
 
 impl CameraRig {
@@ -50,7 +52,19 @@ impl CameraRig {
             yaw: BOOT_YAW,
             pitch: BOOT_PITCH,
             distance: BOOT_DISTANCE,
+            focus_max: BOOT_FOCUS_MAX,
         }
+    }
+
+    /// Follows the world a snapshot describes: sets the focus ceiling to `dims - 1`. The current
+    /// focus is left alone (a smaller test world must not drag the boot focus); the next `pan`
+    /// or `place` clamps it.
+    pub fn fit_world(&mut self, dims: protocol::Dims) {
+        self.focus_max = Vec3::new(
+            dims.x as f32 - 1.0,
+            dims.y as f32 - 1.0,
+            dims.z as f32 - 1.0,
+        );
     }
 
     pub fn orbit(&mut self, yaw_delta: f32, pitch_delta: f32) {
@@ -69,7 +83,7 @@ impl CameraRig {
         self.yaw = yaw;
         self.pitch = pitch.clamp(MIN_PITCH, MAX_PITCH);
         self.distance = distance.clamp(MIN_DISTANCE, MAX_DISTANCE);
-        self.focus = focus.clamp(Vec3::ZERO, FOCUS_MAX);
+        self.focus = focus.clamp(Vec3::ZERO, self.focus_max);
     }
 
     /// This rig as `place()` would restore it: the same framing with every clamp `place` applies
@@ -102,7 +116,7 @@ impl CameraRig {
             right * self.yaw.cos() + forward * self.yaw.sin(),
             0.0,
         );
-        self.focus = (self.focus + movement).clamp(Vec3::ZERO, FOCUS_MAX);
+        self.focus = (self.focus + movement).clamp(Vec3::ZERO, self.focus_max);
     }
 
     pub fn transform(&self) -> Transform {
@@ -390,6 +404,22 @@ mod tests {
         assert_eq!(rig.focus, Vec3::new(0.0, 0.0, 9.0));
         rig.pan(10_000.0, 0.0);
         assert_eq!(rig.focus, Vec3::new(127.0, 127.0, 9.0));
+    }
+
+    #[test]
+    fn a_256_world_lifts_the_focus_ceiling_past_the_old_128_clamp() {
+        let mut rig = CameraRig::new([64, 64, 7]);
+        rig.fit_world(protocol::Dims {
+            x: 256,
+            y: 256,
+            z: 32,
+        });
+        rig.place(0.7, 0.45, 90.0, Vec3::new(200.0, 200.0, 7.0));
+        assert_eq!(rig.focus, Vec3::new(200.0, 200.0, 7.0));
+        rig.pan(10_000.0, 0.0);
+        assert_eq!(rig.focus, Vec3::new(255.0, 255.0, 7.0));
+        rig.pan(-10_000.0, 0.0);
+        assert_eq!(rig.focus, Vec3::new(0.0, 0.0, 7.0));
     }
 
     #[test]

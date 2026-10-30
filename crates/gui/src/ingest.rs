@@ -1591,6 +1591,7 @@ fn setup_camera(
     mut commands: Commands,
     distance: Option<Res<CaptureDistance>>,
     start: Option<Res<CameraStart>>,
+    mirror: Option<Res<MirrorResource>>,
     headless: Option<Res<HeadlessRequested>>,
     effects_off: Option<Res<EffectsOff>>,
     images: Option<ResMut<Assets<Image>>>,
@@ -1613,8 +1614,12 @@ fn setup_camera(
         _ => None,
     };
     let mut rig = CameraRig::new([64, 64, 9]);
+    let start = start.as_deref();
     if let Some(start) = start {
         rig.place(start.yaw, start.pitch, start.distance, start.focus);
+    }
+    if let Some(mirror) = mirror {
+        follow_snapshot(&mut rig, &mirror.0, true, start);
     }
     if let Some(distance) = distance {
         rig.distance = distance.0.clamp(4.0, 500.0);
@@ -2881,8 +2886,30 @@ pub fn apply_wire_snapshot(
     Ok(())
 }
 
+/// What a snapshot does to the camera rig: always the new world's focus ceiling; for the boot
+/// snapshot (`first`, the one `connect_to_daemon` reads before the app exists) also the boot
+/// focus. `--camera` was placed against the old 128 ceiling, so its focus is re-applied against
+/// the real one; without it the focus moves to the campfire (none: it stays). Yaw, pitch and
+/// distance are never touched.
+fn follow_snapshot(rig: &mut CameraRig, mirror: &Mirror, first: bool, start: Option<&CameraStart>) {
+    rig.fit_world(mirror.dims());
+    if first {
+        let campfire = mirror
+            .entities()
+            .find(|entity| entity.kind == protocol::EntityKind::Campfire)
+            .map(|entity| entity.pos);
+        if let Some(start) = start {
+            rig.focus = start.focus.clamp(Vec3::ZERO, rig.focus_max);
+        } else if let Some([x, y, z]) = campfire {
+            rig.focus = Vec3::new(x as f32, y as f32, z as f32);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)] // each parameter is a distinct ECS partition
 fn ingest_messages(
     receiver: Option<Res<IngestReceiver>>,
+    mut cameras: Query<&mut CameraRig>,
     mut mirror: ResMut<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
     mut clock: ResMut<TickClock>,
@@ -2907,7 +2934,11 @@ fn ingest_messages(
                 &mut headings,
                 *snapshot,
             ) {
-                Ok(()) => {}
+                Ok(()) => {
+                    for mut rig in &mut cameras {
+                        follow_snapshot(&mut rig, &mirror.0, false, None);
+                    }
+                }
                 Err(error) => {
                     // A frozen window with no diagnostic is worse than a loud exit; the
                     // sibling client bails on this same condition.
@@ -7295,6 +7326,101 @@ mod tests {
         assert_eq!(clamped.pitch, std::f32::consts::FRAC_PI_2 - 0.15);
         assert_eq!(clamped.distance, 500.0);
         assert_eq!(clamped.focus, Vec3::new(0.0, 127.0, 31.0));
+    }
+
+    /// The world's own size and campfire decide where the camera may go and where it opens.
+    /// Hand-built snapshot: gui must not depend on sim-core, so the 128x128 DEFAULT_SEED
+    /// campfire at (64, 64, 9) is carried here as data (the live check is the daemon's own).
+    #[test]
+    fn the_boot_snapshot_sets_the_focus_ceiling_and_moves_the_focus_to_the_campfire() {
+        fn booted(
+            requested: Option<super::CameraStart>,
+            side: u32,
+            campfire: Option<[i32; 3]>,
+        ) -> CameraRig {
+            let n = side as usize;
+            let snapshot = Snapshot {
+                msg_type: MessageType::Snapshot,
+                dims: Dims {
+                    x: side,
+                    y: side,
+                    z: 32,
+                },
+                tiles: vec![Tile::Empty; n * n * 32],
+                entities: campfire
+                    .into_iter()
+                    .map(|pos| protocol::Entity {
+                        id: 1,
+                        kind: protocol::EntityKind::Campfire,
+                        pos,
+                        state: protocol::JobState::Idle,
+                        light: Some(protocol::LightKind::Campfire),
+                        identity: None,
+                        profession: None,
+                        job: None,
+                        carrying: None,
+                    })
+                    .collect(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Normal,
+                tick: 0,
+                goals: Vec::new(),
+            };
+            let mut app = App::new();
+            if let Some(start) = requested {
+                app.insert_resource(start);
+            }
+            app.insert_resource(MirrorResource(Mirror::from_snapshot(snapshot).unwrap()));
+            app.world_mut()
+                .run_system_once(super::setup_camera)
+                .expect("the camera setup must run");
+            *app.world_mut()
+                .query::<&CameraRig>()
+                .iter(app.world())
+                .next()
+                .expect("the camera setup must spawn a rig")
+        }
+
+        // 128x128, no flag: the campfire IS the old hardcoded boot focus, so the frame is unchanged.
+        let old = booted(None, 128, Some([64, 64, 9]));
+        assert_eq!(old.focus, Vec3::new(64.0, 64.0, 9.0));
+        assert_eq!(old.focus_max, Vec3::new(127.0, 127.0, 31.0));
+        // 256x256, no flag: the focus follows the campfire, past the old 127 ceiling.
+        let wide = booted(None, 256, Some([127, 128, 7]));
+        assert_eq!(wide.focus, Vec3::new(127.0, 128.0, 7.0));
+        assert_eq!(wide.focus_max, Vec3::new(255.0, 255.0, 31.0));
+        assert_eq!(wide.yaw, 0.7);
+        assert_eq!(wide.distance, 90.0);
+        // No campfire: the focus stays where it was.
+        let none = booted(None, 256, None);
+        assert_eq!(none.focus, Vec3::new(64.0, 64.0, 9.0));
+        // `--camera` wins over the campfire, and its y=128 survives the real ceiling.
+        let flagged = booted(
+            Some(super::CameraStart {
+                yaw: 0.7,
+                pitch: 0.45,
+                distance: 45.0,
+                focus: Vec3::new(127.0, 128.0, 7.0),
+            }),
+            256,
+            Some([100, 100, 5]),
+        );
+        assert_eq!(flagged.focus, Vec3::new(127.0, 128.0, 7.0));
+        assert_eq!(flagged.distance, 45.0);
+        // On a 128 world the same flag is still clamped, as before.
+        let clamped = booted(
+            Some(super::CameraStart {
+                yaw: 0.7,
+                pitch: 0.45,
+                distance: 45.0,
+                focus: Vec3::new(127.0, 128.0, 7.0),
+            }),
+            128,
+            Some([64, 64, 9]),
+        );
+        assert_eq!(clamped.focus, Vec3::new(127.0, 127.0, 7.0));
     }
 
     /// `--camera` is an interactive flag as well as a capture one, so it must NOT inherit

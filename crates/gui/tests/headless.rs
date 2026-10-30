@@ -2784,6 +2784,7 @@ fn camera_picking_covers_orbits_zoom_limits_and_sliced_levels() {
                         yaw,
                         pitch,
                         distance,
+                        focus_max: Vec3::new(127.0, 127.0, 31.0),
                     };
                     let cursor = rig.project_world_point(target).expect(
                         "every test target must project through the independent camera rig",
@@ -2827,6 +2828,7 @@ fn the_nearer_of_two_tiles_on_one_ray_is_the_one_picked() {
         yaw: 0.7,
         pitch: std::f32::consts::FRAC_PI_2 - 0.15,
         distance: 30.0,
+        focus_max: Vec3::new(127.0, 127.0, 31.0),
     };
     let cursor = rig
         .project_world_point([4, 4, 3])
@@ -3379,6 +3381,9 @@ fn shift_middle_drag_pans_the_focus_and_control_multiplies_the_rate() {
             .iter_mut(app.world_mut())
         {
             rig.distance = distance;
+            // The 2x1x1 fixture world would now clamp the pan to itself; this test pins pan rates
+            // on the shipped 128 world, so give the rig that world's ceiling.
+            rig.focus_max = Vec3::new(127.0, 127.0, 31.0);
         }
         {
             let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();

@@ -34,7 +34,7 @@ PY
 mutation "the pan clamp lets the focus leave the world" gui pan_moves_focus_on_the_camera_ground_plane_and_stays_inside_the_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/camera.rs'); s = p.read_text()
-old = '        self.focus = (self.focus + movement).clamp(Vec3::ZERO, FOCUS_MAX);\n'
+old = '        self.focus = (self.focus + movement).clamp(Vec3::ZERO, self.focus_max);\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        self.focus += movement;\n'))
 PY
