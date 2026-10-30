@@ -173,6 +173,45 @@ fn a_finished_dig_is_counted_as_done_and_as_a_changed_cell() {
     assert!(cells >= 1, "a dug cell differs from the start world: {end}");
 }
 
+/// 13.6 AC 6: the committed 256² crew-200 scenario does real work. Release only (Q4 a): debug
+/// steps this world about 22x slower. `scripts/gate.sh`'s full tier runs it. The first release
+/// run (2026-10-30, `f1c83b7a`) read `marks=1478 items=602 zones=1800 done=dig:231,cut:91
+/// stored=59 cells=2165` in 91 s, and the same file with `"commands":[]` read
+/// `done=dig:0,cut:0 stored=0 cells=0`.
+#[test]
+#[ignore = "release: steps 256² crew 200 for 2500 ticks"]
+fn the_two_hundred_on_256_scenario_does_real_work() {
+    if cfg!(debug_assertions) {
+        panic!(
+            "run with --release: cargo test --release -p simd --test bench -- --ignored two_hundred"
+        );
+    }
+    let path = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scenarios/two-hundred-on-256.json"
+    ));
+    let output = bench(path, 1);
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    let done = field(&end, "done");
+    let (dig, cut) = done
+        .strip_prefix("dig:")
+        .and_then(|rest| rest.split_once(",cut:"))
+        .unwrap_or_else(|| panic!("done=dig:N,cut:M in {end}"));
+    let count = |text: &str| -> usize { text.parse().unwrap() };
+    assert!(count(dig) >= 1, "a dig mark was finished: {end}");
+    assert!(count(cut) >= 1, "a cut mark was finished: {end}");
+    assert!(
+        count(&field(&end, "stored")) >= 1,
+        "an item lies on the pile: {end}"
+    );
+    assert!(
+        count(&field(&end, "cells")) >= 1,
+        "the world changed: {end}"
+    );
+}
+
 #[test]
 fn every_unusable_scenario_fails_loudly_naming_the_cause() {
     let cases: Vec<(&str, PathBuf, &str)> = vec![

@@ -46,7 +46,11 @@ const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
 /// swap. One step period: the holder's second look at the same blocker (a blocked dwarf looks
 /// once per `STEP_REST_TICKS`).
 const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
+// NOTE: 13.6's 256² crew-200 scenario holds 1,800 marks, under this cap. Past it a designate
+// drops cells silently (#170), and M4's forage and fishing marks add to the same count.
 pub const MAX_DESIGNATIONS: usize = 4096;
+// NOTE: the 256² fresh game's camp component is 64,301 cells (13.6), over this budget, so a
+// search across the whole valley can give up on a reachable goal (#159). 13.7 sizes the budget.
 const MAX_ASTAR_NODES: usize = 50_000;
 /// Ticks of work a hauler spends picking a stone up, and again putting it down.
 pub const WORK_TICKS: u32 = 5;
