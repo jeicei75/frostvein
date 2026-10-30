@@ -1,10 +1,11 @@
 ---
 model: claude-opus-5-5  # session default (story authored on Opus 5.5)
+baseline_commit: ce69409a2d33f5734d2d35c946bfa2bb30407e56
 ---
 
 # Story 13.6: Two Hundred on 256²
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -74,7 +75,7 @@ Throwaway scratch worktrees, release builds. The patches and raw lines are in `1
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings (Q1–Q5).** Record the answers in the Change Log and amend the ACs they name. Post `13-6-signoff/issue-187-comment.md` on #187 if Wolf says yes. Then ASK which implementer to use before dev (memory: `dev-implementer-is-sonnet-not-codex`).
+- [x] **Task 0: Wolf's rulings (Q1–Q5).** Record the answers in the Change Log and amend the ACs they name. Post `13-6-signoff/issue-187-comment.md` on #187 if Wolf says yes. Then ASK which implementer to use before dev (memory: `dev-implementer-is-sonnet-not-codex`).
 - [ ] **Task 1: crew and dims in `sim-core` (AC 2, 4, 9).** UPDATE `crates/sim-core/src/lib.rs`. Port `13-2-signoff/prototypes/scale.patch`'s two `lib.rs` hunks by hand (its `scale_gen` module is NOT shipped).
   - [ ] `pub fn generate_with_crew(seed: u64, dims: Dims, crew: usize) -> World`. `generate(seed, dims)` calls it with 5. Doc the panic: no walkable ground for `crew`.
   - [ ] `spawn_dwarves(camp, rng, identities: Vec<Identity>, professions: Vec<Profession>)` (`:3598`). The ring candidates are drawn exactly as today. Only when the ring holds fewer than `crew`, the candidates become the first `crew` cells of a breadth-first walk from the camp over `astar_neighbours` (`:1130`), with the camp emitters blocked (scale.patch's shape). Then the same `rng.random_range` draw.
@@ -209,6 +210,8 @@ python3 scripts/audit-mutations.py
 ## Dev Agent Record
 
 ### Agent Model Used
+
+Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating (Wolf, 2026-10-30).
 
 ### Debug Log References
 
