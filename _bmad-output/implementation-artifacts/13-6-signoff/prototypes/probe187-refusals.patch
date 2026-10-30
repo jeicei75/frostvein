@@ -1,0 +1,58 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index e191ca52..112c82f4 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -46,6 +46,7 @@ const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
+ /// swap. One step period: the holder's second look at the same blocker (a blocked dwarf looks
+ /// once per `STEP_REST_TICKS`).
+ const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
++pub static PROBE_REFUSALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+ pub const MAX_DESIGNATIONS: usize = 4096;
+ const MAX_ASTAR_NODES: usize = 50_000;
+ /// Ticks of work a hauler spends picking a stone up, and again putting it down.
+@@ -2539,6 +2540,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                     let old = old.expect("a changed cell was in bounds");
+                     ecs.resource_mut::<Terrain>().set_tile(cell, old);
+                 }
++                PROBE_REFUSALS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                 retry_claim(ecs, entity, job.id);
+                 continue;
+             };
+diff --git a/crates/sim-core/tests/probe187.rs b/crates/sim-core/tests/probe187.rs
+new file mode 100644
+index 00000000..41e78a38
+--- /dev/null
++++ b/crates/sim-core/tests/probe187.rs
+@@ -0,0 +1,32 @@
++use sim_core::{DesignationKind, Dims, Pos, Rect, SimCommand, World, PROBE_REFUSALS};
++use std::sync::atomic::Ordering;
++fn standable(world: &World, pos: Pos) -> bool {
++    world.tile(pos) == Some(sim_core::Tile::Empty)
++        && matches!(world.tile(Pos { z: pos.z - 1, ..pos }), Some(sim_core::Tile::Solid(_) | sim_core::Tile::Ramp(_)))
++}
++#[test]
++fn probe187() {
++    for (seed, want) in [(0u64, 4i32), (6, 6), (9, 6), (13, 6)] {
++        for (west, south, east, north) in [(1, -3, 4, 3), (-1, -5, 4, 4)] {
++            let mut world = World::generate(seed, Dims::DEFAULT);
++            let camp = world.camp_origin();
++            let at = |dx: i32, dy: i32| Pos { x: camp.x + dx, y: camp.y + dy, z: camp.z };
++            let channel = Rect { min: at(west, south), max: at(east, north) };
++            if channel.max.x - channel.min.x + 1 != want { continue; }
++            let pile = (3..12).find_map(|r| {
++                [(-r - 2, 0), (0, r), (0, -r - 2)].into_iter()
++                    .map(|(dx, dy)| Rect { min: at(dx, dy), max: at(dx + 2, dy + 2) })
++                    .find(|pile| (pile.min.x..=pile.max.x).all(|x| (pile.min.y..=pile.max.y).all(|y| standable(&world, Pos { x, y, z: camp.z }))))
++            }).unwrap();
++            world.apply_command(SimCommand::Designate { kind: DesignationKind::Channel, rect: channel });
++            world.apply_command(SimCommand::PlaceStockpile { rect: pile });
++            let mut at12k = 0;
++            for _ in 0..16_000 {
++                world.step();
++                if world.tick() == 12_000 { at12k = PROBE_REFUSALS.load(Ordering::Relaxed); }
++            }
++            let total = PROBE_REFUSALS.swap(0, Ordering::Relaxed);
++            println!("PROBE seed={seed} width={want} marks_left={} refusals_total={total} refusals_t12k_16k={}", world.designations().len(), total - at12k);
++        }
++    }
++}

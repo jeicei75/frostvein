@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-28
+# last_updated: 2026-10-29
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-28
+last_updated: 2026-10-29
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2801,6 +2801,32 @@ development_status:
   # 13.5 only if ruled (13.2 Ruling 2): #207 is re-measured on top of 13.4 first; the story may be dropped.
   # DROPPED 2026-10-28 (Wolf, at M4 epics creation): #207 ring 18/24 on top of squeeze (13.4) vs main 14/24; clamber
   # worsened #203 and costs tick + gui work. #207 stays open.
+  # M4 STORIES 13.6-13.21 added 2026-10-28 (sprint planning, from epics `e8f4a1f9`). Order approved: numeric.
+  # Cut order (Wolf): 13.21 first, then 13.19 + 13.20 together, then regrowth inside 13.9.
+  13-6-two-hundred-on-256: ready-for-dev
+  # 13.6 CREATED 2026-10-29 (Opus 5.5) on branch story-13-6-two-hundred-on-256 (off local main e8f4a1f9). Probes on main:
+  # #187 REPRODUCES (cage runs (0,4)/(6,6) refuse the same cut 56/55 times in t12k-16k) -> its own story (Q1 placement);
+  # #159 does NOT block real work near the camp (stored 5 @t1750, 50 @t2500; 13.2's quadrant layout stores 0 @t3000:
+  # distance, not budget) -> no 13.6/13.7 swap. Tick climbs to ~100 ms mean by t3000 (NFR12 bar 25). Bare `simd` feeds
+  # 55 serve tests + pixel guards pinned to 128^2 (Q3). Task 0 Q1-Q5 await Wolf.
+  # 13.6 Task 0 RULED 2026-10-30 (Wolf): Q1 (c) #187 FOLDS INTO 13.18 (epic stays 16); Q2 (a) start without dims/crew
+  # = 128^2 crew 5; Q3 (a) --dims/--crew; Q4 (a) release #[ignore] test, full tier; Q5 (a) clamp follows Dims.
+  13-7-the-long-way: backlog
+  13-8-they-keep-coming: backlog
+  13-9-forage: backlog
+  13-10-hungry-and-miserable: backlog
+  13-11-idle-at-the-fire: backlog
+  13-12-fires-burn-wood: backlog
+  13-13-the-cold: backlog
+  13-14-sleep: backlog
+  13-15-place-a-fire: backlog
+  13-16-ice-fishing: backlog
+  13-17-a-dig-seals-the-miner: backlog
+  13-18-stones-seal-two-miners: backlog
+  # 13.18 carries #187 too (13.6 Q1 (c), Wolf 2026-10-30): the refused channel cut loops on cage runs (0,4)/(6,6).
+  13-19-game-in-the-valley: backlog
+  13-20-cooking: backlog
+  13-21-stupid-things: backlog
   epic-13-retrospective: optional
 
 # ACTION ITEMS HAVE MOVED (2026-08-31, forge-process 1.3.2 — Wolf's ruling).

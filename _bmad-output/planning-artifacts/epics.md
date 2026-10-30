@@ -2961,7 +2961,7 @@ The M4 epic opens with the instrument and the spike that the M3-close retro put 
 17. **NFR13** for any story that adds rendering: the frame-rate bars hold at 200 dwarves on 256² on the vehicle, or the miss is measured and ruled by Wolf.
 18. **Constants are hardcoded** and tuned in the story: need rates and thresholds, regrowth, catch rate, burn rate, arrival cadence.
 
-**M4 story order (approved 2026-10-28):** 13.6 scale → 13.7 #159 → 13.8 arrivals → 13.9 forage → 13.10 hunger and misery (seat) → 13.11 idle at the fire (seat) → 13.12 fuel → 13.13 cold → 13.14 sleep → 13.15 place a fire → 13.16 ice fishing → 13.17 #203 → 13.18 #204 → 13.19 animals and hunting → 13.20 cooking → 13.21 stupid things. **16 new stories, at the top of the 12–16 cap.** Cut order (Wolf): 13.21 first, then 13.19 and 13.20 together, then regrowth inside 13.9. 13.5 is dropped and #187 is closed on evidence (both below), so neither counts.
+**M4 story order (approved 2026-10-28):** 13.6 scale → 13.7 #159 → 13.8 arrivals → 13.9 forage → 13.10 hunger and misery (seat) → 13.11 idle at the fire (seat) → 13.12 fuel → 13.13 cold → 13.14 sleep → 13.15 place a fire → 13.16 ice fishing → 13.17 #203 → 13.18 #204 → 13.19 animals and hunting → 13.20 cooking → 13.21 stupid things. **16 new stories, at the top of the 12–16 cap.** Cut order (Wolf): 13.21 first, then 13.19 and 13.20 together, then regrowth inside 13.9. 13.5 is dropped and #187 is closed on evidence (both below), so neither counts. **AMENDED 2026-10-30 (Wolf, 13.6 Q1 (c)):** #187 still reproduces on `main`, so it was not closed. It folds into 13.18, and the count stays 16.
 
 ### Story 13.1: Scripted Runs and the Tick Bench
 
@@ -3391,6 +3391,8 @@ So that a miner is never sealed into a hole by his own work (#203).
 As the boss,
 I want stones landing round a pit with a full pile never to seal miners into a pocket,
 So that a busy fortress does not freeze when its pile fills (#204).
+
+**Folded in (Wolf, 2026-10-30, 13.6 Q1 (c)): #187.** The refused channel cut still loops on `main`: cage runs (0,4) and (6,6) refuse the same cut 56 and 55 times in t12k–16k (`13-6-signoff/creation-probes.txt`, `issue-187-comment.md`). The committed pin `no_dwarf_is_caged_by_stones_over_the_probe_seeds` still holds all four `UNFINISHED_LATE` runs; done means that pin empties, or each run is re-pinned with the reason.
 
 **Acceptance Criteria:**
 

@@ -1,0 +1,57 @@
+# 13.6 creation probes, 2026-10-29 (main 0a8b4462 code; release; NOT timing-grade: up to 4 runs shared the devpod)
+
+## #187 refusal counter (probe187-refusals.patch)
+PROBE seed=0 width=4 marks_left=1 refusals_total=205 refusals_t12k_16k=56
+PROBE seed=6 width=6 marks_left=1 refusals_total=161 refusals_t12k_16k=55
+PROBE seed=9 width=6 marks_left=1 refusals_total=0 refusals_t12k_16k=0
+PROBE seed=13 width=6 marks_left=1 refusals_total=0 refusals_t12k_16k=0
+
+## 13.2 quadrant layout (13-2-signoff/scale/scale-256-crew200.json, ticks 8000; killed at t3000)
+TL scale-256-crew200-8k t=250 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.40
+TL scale-256-crew200-8k t=500 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.31
+TL scale-256-crew200-8k t=750 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.28
+TL scale-256-crew200-8k t=1000 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.32
+TL scale-256-crew200-8k t=1250 stored=0 items=8 digs_left=1600 cuts_left=198 mean250=1.64
+TL scale-256-crew200-8k t=1500 stored=0 items=33 digs_left=1580 cuts_left=197 mean250=6.40
+TL scale-256-crew200-8k t=1750 stored=0 items=94 digs_left=1540 cuts_left=193 mean250=17.76
+TL scale-256-crew200-8k t=2000 stored=0 items=183 digs_left=1503 cuts_left=180 mean250=23.52
+TL scale-256-crew200-8k t=2250 stored=0 items=278 digs_left=1465 cuts_left=166 mean250=34.37
+TL scale-256-crew200-8k t=2500 stored=0 items=370 digs_left=1438 cuts_left=151 mean250=59.59
+TL scale-256-crew200-8k t=2750 stored=0 items=455 digs_left=1411 cuts_left=135 mean250=102.05
+TL scale-256-crew200-8k t=3000 stored=0 items=501 digs_left=1396 cuts_left=126 mean250=173.70
+
+## 13.2 crew-5 256 layout, 8000 ticks
+PROBE scale-256-crew005-8k stored=2 digs_left=0 cuts_left=0
+bench scale-256-crew005-8k end tick=8000 marks=0 items=61 zones=45 goals=2/0/0
+
+## near-camp layouts (scale-near.patch, SCALE_OFF=16 / 32), 3000 ticks
+near32.out:TL near32-256-crew200 t=250 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.41
+near32.out:TL near32-256-crew200 t=500 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.41
+near32.out:TL near32-256-crew200 t=750 stored=0 items=4 digs_left=1599 cuts_left=199 mean250=1.60
+near32.out:TL near32-256-crew200 t=1000 stored=0 items=37 digs_left=1581 cuts_left=195 mean250=6.95
+near32.out:TL near32-256-crew200 t=1250 stored=0 items=121 digs_left=1527 cuts_left=187 mean250=21.39
+near32.out:TL near32-256-crew200 t=1500 stored=0 items=207 digs_left=1494 cuts_left=174 mean250=37.60
+near32.out:TL near32-256-crew200 t=1750 stored=2 items=299 digs_left=1466 cuts_left=158 mean250=51.17
+near32.out:TL near32-256-crew200 t=2000 stored=3 items=382 digs_left=1441 cuts_left=144 mean250=67.15
+near32.out:TL near32-256-crew200 t=2250 stored=3 items=447 digs_left=1414 cuts_left=136 mean250=65.10
+near32.out:TL near32-256-crew200 t=2500 stored=7 items=495 digs_left=1394 cuts_left=128 mean250=78.39
+near32.out:TL near32-256-crew200 t=2750 stored=8 items=568 digs_left=1367 cuts_left=116 mean250=71.50
+near32.out:TL near32-256-crew200 t=3000 stored=13 items=658 digs_left=1341 cuts_left=101 mean250=75.09
+0
+near16.out:TL near16-256-crew200 t=250 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.42
+near16.out:TL near16-256-crew200 t=500 stored=0 items=0 digs_left=1600 cuts_left=200 mean250=1.57
+near16.out:TL near16-256-crew200 t=750 stored=0 items=38 digs_left=1593 cuts_left=193 mean250=3.59
+near16.out:TL near16-256-crew200 t=1000 stored=0 items=107 digs_left=1561 cuts_left=185 mean250=15.01
+near16.out:TL near16-256-crew200 t=1250 stored=0 items=227 digs_left=1513 cuts_left=167 mean250=31.74
+near16.out:TL near16-256-crew200 t=1500 stored=0 items=329 digs_left=1479 cuts_left=148 mean250=47.00
+near16.out:TL near16-256-crew200 t=1750 stored=5 items=377 digs_left=1454 cuts_left=142 mean250=55.45
+near16.out:TL near16-256-crew200 t=2000 stored=17 items=425 digs_left=1433 cuts_left=135 mean250=68.10
+near16.out:TL near16-256-crew200 t=2250 stored=34 items=504 digs_left=1405 cuts_left=123 mean250=87.12
+near16.out:TL near16-256-crew200 t=2500 stored=50 items=575 digs_left=1373 cuts_left=114 mean250=88.74
+near16.out:TL near16-256-crew200 t=2750 stored=63 items=664 digs_left=1349 cuts_left=98 mean250=96.97
+near16.out:TL near16-256-crew200 t=3000 stored=74 items=737 digs_left=1326 cuts_left=86 mean250=108.49
+0
+
+## debug build, 13.2 quadrant layout, 1000 ticks
+bench dbg1000 run 1/1: ticks=1000 commands=1801/1801 mean=29.1106 p99=35.0011 max=117.638 over10=994 state=da23b455e6e1b756
+debug wall=36s
