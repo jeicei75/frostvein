@@ -94,11 +94,11 @@ Throwaway scratch worktrees, release builds. The patches and raw lines are in `1
   - [x] Keep a copy of the start tiles. Each tick, outside the timed window, record which Dig/Cut marks existed before `world.step()` and are gone after it: that is `done`. Commands land before the step, so a cancel never counts. At the end, append `done=dig:N,cut:M stored=S cells=C` to the end line, after the existing fields; `field()` (`bench.rs:91`) parses by key.
   - [x] Tests (AC 7) in `crates/simd/tests/bench.rs`: the fixture's no-command variant reads `done=dig:0,cut:0`, `stored=0`, `cells=0`. A `ticks: 400` variant of `one-dig.json` reads `done=dig:1` and `cells≥1`. Creation read the dig still marked at t100 and finished by t200 (`marks=0 items=1`), so 400 leaves margin.
   - [x] Print the snapshot byte length once for 256² (a throwaway, or a `bridge.rs` test that prints `serde_json::to_vec(&snapshot(..)).len()`) and record it with Task 2's save size. Both must be under 64 MB.
-- [ ] **Task 5: the scenario and its real-work test (AC 6, 8; Q4).**
+- [x] **Task 5: the scenario and its real-work test (AC 6, 8; Q4).**
   - [x] NEW `scenarios/two-hundred-on-256.json`: copy `13-6-signoff/near16-256-crew200.json` (generated at creation by `scale-near.patch` with `SCALE_OFF=16`), set `"name":"two-hundred-on-256"`, `"ticks":2500` and `"speed":"normal"` (the bench ignores speed; at the seat, fast4x's 5 ms period is far below a 40–100 ms tick), and rewrite `about` to say what it is and how it was made (patch + command). Creation reading at t2,500: stored 50, dig 227, cut 86. Do not hand-edit the commands.
   - [x] RED: run the release binary on a copy with `"commands":[]` and paste the end line (`done=dig:0,cut:0 stored=0 cells=0`). Then GREEN on the real file.
   - [x] Under Q4 (a): `#[ignore = "release: steps 256² crew 200 for 2500 ticks"]` test `the_two_hundred_on_256_scenario_does_real_work` in `bench.rs`, running `env!("CARGO_BIN_EXE_simd") --bench scenarios/two-hundred-on-256.json --runs 1` and asserting AC 6 on the end line, with positive values pasted from the run in a comment. UPDATE `scripts/gate.sh`: the full tier (not `--fast`; check the `--range` scope block, `gate.sh:133-145`) runs `cargo test --release -p simd --test bench -- --ignored two_hundred`.
-  - [ ] AC 8: `target/release/simd --bench scenarios/two-hundred-on-256.json --runs 5` on an idle devpod. Paste every run line, the median p99 and the spread.
+  - [x] AC 8: `target/release/simd --bench scenarios/two-hundred-on-256.json --runs 5` on an idle devpod. Paste every run line, the median p99 and the spread.
 - [x] **Task 6: the scale traps (AC 9).** One line each in the Debug Log, naming fixed or NOTE and where:
   - [x] `Dims::DEFAULT` → Task 1. `[Identity; 5]`/`[Profession; 5]` → Task 1. `CAMP_RADIUS` spawn panic → Task 1.
   - [x] `MAX_ASTAR_NODES` (`lib.rs:50`): `// NOTE:` that the 256² camp component is 64,300 cells and 13.7 (#159) sizes the budget.
@@ -109,7 +109,7 @@ Throwaway scratch worktrees, release builds. The patches and raw lines are in `1
   - [x] Without `--camera`, the first snapshot moves the focus to the campfire. The rig is built before the snapshot (`ingest.rs:1615`), so this is a one-shot on ingest. Test: on 128² DEFAULT_SEED the focus stays `(64,64,9)` (the boot pin at `ingest.rs:7285` stands), and on 256² it lands at the campfire.
   - [x] Atmosphere centring (`atmosphere.rs:52`, `:66`; fog volume `ingest.rs:1705`) is not touched. File an issue only if the seat shows a defect (Task 8). Look work waits for a concrete defect (memory: `art-gates-visual-judgement`).
 - [ ] **Task 8: the seat card (AC 10).** NEW `_bmad-output/implementation-artifacts/13-6-signoff/vehicle-card.md`. Push first (`scripts/push.sh --fast`, standing authorisation: memory `push-branch-for-vehicle-testing`). In WSL, run a release `simd 7451 --scenario scenarios/two-hundred-on-256.json`. In PowerShell from the Windows checkout, run `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-6-perf-working.log','--camera','0.7,0.45,45,127,128,7')` for working zoom. Restart the daemon, then do the same with `13-6-perf-vista.log` and `'0.7,0.45,500,127,128,7'` for full vista. Check both `--camera` lines headless first (lavapipe; memory: `headless-gui-instruments`). Then a bare `simd 7451` (the fresh game) with no `--camera`. Questions for Wolf: (1) fps at each framing against NFR6, read from the perf log; (2) do the camp and the work read on 256² (camera reach, atmosphere)? (3) does the fresh game boot onto the camp of a 256² valley? Record the answers. A defect gets an issue.
-- [ ] **Task 9: mutation table.** NEW `_bmad-output/implementation-artifacts/mutations/13-6.sh` in `13-4.sh`'s shape. Commit first, then run it alone (`env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh …`). Every row must be KILLED at its own assert:
+- [x] **Task 9: mutation table.** NEW `_bmad-output/implementation-artifacts/mutations/13-6.sh` in `13-4.sh`'s shape. Commit first, then run it alone (`env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh …`). Every row must be KILLED at its own assert:
   1. the spill never runs (ring only) → the crew-200 spawn test (panic);
   2. the spill takes any standable cell in a box instead of the camp component → the component assert;
   3. the spill always runs, even for crew 5 → `spawn_positions_for_seed_42_are_pinned`;
@@ -224,6 +224,51 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 - **Task 5 (Opus):** `scenarios/two-hundred-on-256.json` is `13-6-signoff/near16-256-crew200.json` with the name, `ticks` 2500, `speed` normal and a new `about` (the patch plus the exact generator command). The 1,801 commands are byte-identical (1,800 marks, ≤ 4096). Release, scratch worktree at `f1c83b7a`. **RED** (`"commands":[]`): `bench two-hundred-on-256-nocmd end tick=2500 marks=0 items=0 zones=0 goals=0/0/0 done=dig:0,cut:0 stored=0 cells=0`. **GREEN** (the real file, 91 s): `run 1/1: ticks=2500 commands=1801/1801 mean=36.1294 p99=169.1693 max=265.037 over10=1563 state=3fc1461d491ee5d9` / `end tick=2500 marks=1478 items=602 zones=1800 goals=28/0/0 done=dig:231,cut:91 stored=59 cells=2165`. Creation read 227/86/50. The difference is the shipped spill against the prototype's, which is expected. `the_two_hundred_on_256_scenario_does_real_work` (`#[ignore]`, panics in a debug build) passed in release twice (95.9 s, 92.5 s). `gate.sh`: the full tier's code arm runs `cargo test --release -p simd --test bench -- --ignored two_hundred`, and the fast and scoped banners name it as SKIPPED.
 - **Task 6, scale traps (AC 9):** `Dims::DEFAULT`: kept 128² with a doc line, `Dims::FRESH` added (Task 1). `[Identity; 5]`/`[Profession; 5]`: FIXED, Vecs sized to the crew (Task 1). `CAMP_RADIUS` spawn panic: FIXED, BFS spill (Task 1). Names repeat past 16 and colours past 5: `// NOTE:` naming 13.8 (`generate_with_crew`). Professions: one seeded shuffle of the cycled 2:2:1 mix (80/80/40 at 200). Wander phases: NOTE rewritten (about 20 per phase at 200; the seat judges). `MAX_ASTAR_NODES` (`lib.rs:55`): `// NOTE:` 64,301-cell camp component, #159, 13.7 sizes it. `MAX_DESIGNATIONS` (`lib.rs:52`): `// NOTE:` 1,800 marks, #170 silent drop, M4 forage/fishing add. gui camera: Task 7.
 - **Task 7 (Sonnet 5.5, committed by Opus):** `CameraRig.focus_max` (boot 127,127,31), `fit_world(dims)` on every snapshot. `follow_snapshot(.., first, start)` on the BOOT snapshot (read by `connect_to_daemon` before the app exists, so it is applied in `setup_camera`) moves the focus to the campfire, or re-applies `--camera` against the real ceiling. **That second half was a trap the story missed:** `--camera ...,127,128,7` was placed before any snapshot and clamped y to 127. Tests: `a_256_world_lifts_the_focus_ceiling_past_the_old_128_clamp` (200,200,7 holds; pans to 255,255,7 and 0,0,7), `the_boot_snapshot_sets_the_focus_ceiling_and_moves_the_focus_to_the_campfire` (128: 64,64,9 unchanged; 256: 127,128,7; no campfire stays; `--camera` wins; 128 still clamps). RED by hand: `fit_world` leaving the ceiling unset failed both. **(64,64,9) verified live:** the first snapshot of `simd 7777 --dims 128,128,32` carries the Campfire at [64,64,9]. The agent kept the old pan-clamp line with an `#[allow(non_snake_case)] let FOCUS_MAX` shim so 10.10's mutation row applied. Opus removed the shim and re-pointed that row's literal to `self.focus_max` instead (audit: 962 rows match). The existing `shift_middle_drag_pans...` fixture now sets `focus_max` (2x1x1 world), with its expected values unchanged.
+- **AC 8, NFR12's first reading (release, idle devpod, HEAD `55202de2`, 2026-10-30 10:41):**
+  ```
+  bench two-hundred-on-256 run 1/5: ticks=2500 commands=1801/1801 mean=33.6414 p99=155.9075 max=257.821 over10=1559 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 2/5: ticks=2500 commands=1801/1801 mean=33.7472 p99=157.4390 max=265.038 over10=1557 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 3/5: ticks=2500 commands=1801/1801 mean=33.9870 p99=158.5101 max=261.579 over10=1557 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 4/5: ticks=2500 commands=1801/1801 mean=33.6294 p99=155.4362 max=256.426 over10=1560 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 5/5: ticks=2500 commands=1801/1801 mean=33.5916 p99=155.5446 max=267.331 over10=1558 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 end tick=2500 marks=1478 items=602 zones=1800 goals=28/0/0 done=dig:231,cut:91 stored=59 cells=2165
+  bench two-hundred-on-256: 5 runs, mean 33.5916..33.9870 ms (spread 1.2%), state identical across 5 runs
+  ```
+  **Median p99 155.91 ms** (p99 spread 155.44..158.51, 2.0%). **Mean 33.59..33.99 ms, spread 1.2%: the noise floor.** NFR12's bar is 25 ms mean, so this sits about 1.35× over it, and 1,558 of 2,500 ticks run over 10 ms. Recorded, not gated (AC 8). The state equals the GREEN run at `f1c83b7a`, so Tasks 5–7 moved no sim outcome. `main` cannot read this file, so later stories take their delta against this reading.
+- **AC 5** (`RUNS=3 scripts/tick-bench.sh main HEAD` over the committed scenario files; there are **10**, not the 11 the story says, and `ls scenarios/` at creation shows the same 10):
+  ```
+  base e8f4a1f93e04d6505fbd10f302d87b956decd6fd
+  head 55202de279f429d9a73ec635957554b070e3bf6f
+  control: base again, functions shuffled (--shuffle-sections=*=1)
+  runs 3 per build, interleaved; load before: 3.97, 4.01, 3.90
+  scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+  big-pile                   0.1983     0.2019    +1.8%    +1.6%       1.6%       2.7%       1.5%  same   within floor
+  deep-pit                   0.0384     0.0373    -2.9%    -3.8%       2.3%       3.8%       2.2%  same   within floor
+  dig-loop                   0.0282     0.0275    -2.5%    -2.5%       3.9%       0.0%       0.0%  same   within floor
+  full-pile-crowd            0.0319     0.0322    +0.9%    +2.9%       2.8%       2.8%       3.0%  same   within floor
+  plan-compact-piles         0.1584     0.1576    -0.5%    -0.7%       1.1%       1.7%       1.8%  same   within floor
+  plan-far-piles             0.0932     0.0892    -4.3%    -3.5%       3.6%       0.6%       2.1%  same   BEYOND FLOOR
+  plan-spread-piles          0.1782     0.1750    -1.8%    -1.7%       0.8%       0.2%       1.8%  same   BEYOND FLOOR
+  plan                       0.0867     0.0849    -2.2%    -2.0%       2.0%       2.2%       1.4%  same   within floor
+  seat-slow                  0.1703     0.1662    -2.4%    -1.3%       1.2%       0.4%       1.0%  same   BEYOND FLOOR
+  stuck-tunnel               0.0280     0.0275    -2.0%    -2.0%       4.3%       2.5%       4.4%  same   within floor
+  ```
+  **`state` reads `same` on all 10 rows**, so no committed outcome moved. All three "BEYOND FLOOR" rows are head *faster*, and the shuffled control moves the same way (−3.5%, −1.7%, −1.3%): cross-build layout noise (memory: cross-build-layout-noise), not a code effect.
+- **Task 8 headless check (lavapipe, `55202de2`):** working zoom frames the camp, digs, pile and crew, with `focus=127,128,7` live. The full vista shows the whole valley. The fresh game boots onto the campfire. **Defect found: the fog volume is the 128² box** (`ingest.rs:1710`, 160×48×160 at (64,64)), which shows as a hard translucent wall on 256². Filed as **#222** (bug, route:story). Not fixed here (Q5 a, no look work). The capture range checks trip on the `--camera` views, which is expected: their bands are calibrated on the boot framing only.
+- **Task 9 mutation run** (`55202de2`, alone, `RUST_TEST_THREADS=1`): **11/11 KILLED**, each at its own assert (read from the panic line):
+  1. `lib.rs:3677`, the per-dwarf `random_range` on the exhausted ring (empty range).
+  2. `worldgen.rs:1020`, the component assert.
+  3. `spawn_positions_for_seed_42_are_pinned:423`.
+  4. `worldgen.rs:1064`, the period-5 order assert.
+  5. `bench.rs:341`, state ≠ the 256²/7 oracle.
+  6. `bench.rs:113`, `bench failed`. The fixture's dig is refused on a 256² world, so this dies before the oracle compare. Still the named test.
+  7. `serve.rs:3319`, the dims assert.
+  8. `bench.rs:170`, `done=dig:0,cut:0`.
+  9. `bench.rs:173`, `cells≥1`.
+  10. `bench.rs:205`, `stored≥1` (release, 66 s).
+  11. `camera.rs:418`.
+
+  `audit-mutations.py`: 973 rows, every literal matches. **Trap:** the release test panics in a debug build on purpose, so the plain `ignored` mode would read row 10 KILLED without running the sabotage. `mutate.sh` gained a `release-ignored` mode. After the run, `target/release/simd` was row 10's mutant (memory: mutant-binary-outlives-restore); it was rebuilt at HEAD before AC 8.
 
 ### Completion Notes List
 
