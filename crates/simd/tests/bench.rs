@@ -38,7 +38,11 @@ fn fnv(world: &sim_core::World) -> String {
 
 /// What the fixture must reach: DEFAULT_SEED, the dig applied before the step of tick `at`.
 fn expected(with_dig: bool) -> String {
-    let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
+    expected_world(sim_core::Dims::DEFAULT, 5, with_dig)
+}
+
+fn expected_world(dims: sim_core::Dims, crew: usize, with_dig: bool) -> String {
+    let mut world = sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, dims, crew);
     for _ in 0..TICKS {
         if with_dig && world.tick() == DIG_AT {
             let refused = world.apply_command(sim_core::SimCommand::Designate {
@@ -196,6 +200,50 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "refused",
         ),
         (
+            "crew-zero",
+            variant("crew-zero", |json| json["start"]["crew"] = 0.into()),
+            "start crew",
+        ),
+        (
+            "dims-out-of-range",
+            variant("dims-out-of-range", |json| {
+                json["start"]["dims"] = serde_json::json!([64, 64, 32])
+            }),
+            "start dims 64,64,32",
+        ),
+        (
+            "dims-with-save",
+            variant(
+                "dims-with-save",
+                |json| {
+                    json["start"] =
+                        serde_json::json!({"save": "nowhere.save", "dims": [128, 128, 32]})
+                },
+            ),
+            "start dims and crew",
+        ),
+        (
+            "seed-and-save",
+            variant("seed-and-save", |json| {
+                json["start"]["save"] = "nowhere.save".into()
+            }),
+            "seed or a save",
+        ),
+        (
+            "neither-seed-nor-save",
+            variant("neither-seed-nor-save", |json| {
+                json["start"] = serde_json::json!({})
+            }),
+            "seed or a save",
+        ),
+        (
+            "crew-too-big",
+            variant("crew-too-big", |json| {
+                json["start"]["crew"] = 1_000_000.into()
+            }),
+            "crew 1000000 does not fit",
+        ),
+        (
             "unknown-field",
             variant("unknown-field", |json| json["seed"] = 1.into()),
             "could not parse",
@@ -211,6 +259,34 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "{name}: stderr must name {cause:?}: {stderr}"
         );
     }
+}
+
+/// 13.6 AC 3: `dims` and `crew` in a seed start are honoured. No command here: the fixture's dig
+/// cell is a 128² coordinate, and a world built at the wrong size or crew cannot reach this hash.
+#[test]
+fn a_seed_start_with_dims_and_crew_builds_that_world() {
+    let path = variant("dims-crew", |json| {
+        json["commands"] = serde_json::json!([]);
+        json["start"]["dims"] = serde_json::json!([256, 256, 32]);
+        json["start"]["crew"] = 7.into();
+    });
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let want = expected_world(sim_core::Dims::FRESH, 7, false);
+    assert_eq!(run_states(&text), vec![want.clone()], "{text}");
+    assert_ne!(want, expected(false), "256 and seven must matter");
+    assert_ne!(
+        want,
+        expected_world(sim_core::Dims::DEFAULT, 7, false),
+        "the size must matter"
+    );
+    assert_ne!(
+        want,
+        expected_world(sim_core::Dims::FRESH, 5, false),
+        "the crew must matter"
+    );
 }
 
 fn lines(reader: impl Read + Send + 'static) -> Receiver<String> {

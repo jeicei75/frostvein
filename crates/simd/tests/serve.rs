@@ -46,7 +46,13 @@ fn line_channel<R: Read + Send + 'static>(reader: R) -> Receiver<String> {
 }
 
 impl Daemon {
+    /// On the 128² world every pinned test was written against (13.6 Q3 (a)): a bare `simd` is
+    /// now the 256² fresh game.
     fn spawn() -> Self {
+        Self::spawn_with(&["--dims", "128,128,32"])
+    }
+
+    fn spawn_with(extra: &[&str]) -> Self {
         // These tests assert wall-clock cadence and command visibility within a small number of
         // ticks. Running dozens of daemon processes concurrently lets queued startup deltas make
         // those assertions measure scheduler contention instead of the daemon under test.
@@ -66,6 +72,7 @@ impl Daemon {
 
         let mut child = Command::new(env!("CARGO_BIN_EXE_simd"))
             .arg("0")
+            .args(extra)
             .current_dir(&dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -3292,4 +3299,62 @@ fn a_loaded_pile_reports_its_stored_count_as_goal_progress_in_the_snapshot_and_t
         tetrahedrite,
         stored_count(&delta.items, &delta.zones, &delta.entities, Tetrahedrite)
     );
+}
+
+fn dwarf_count(snapshot: &protocol::Snapshot) -> usize {
+    snapshot
+        .entities
+        .iter()
+        .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        .count()
+}
+
+/// 13.6 AC 1: a bare `simd` is the fresh game, 256x256x32 with five dwarves; `--dims` and `--crew`
+/// change both. (The ~28 MB debug snapshot is read once, so this is one slow test.)
+#[test]
+fn a_fresh_game_serves_a_256_valley_with_five_dwarves() {
+    let fresh = Daemon::spawn_with(&[]);
+    let snapshot = read_snapshot(&mut BufReader::new(fresh.connect()));
+    drop(fresh);
+    assert_eq!(
+        (snapshot.dims.x, snapshot.dims.y, snapshot.dims.z),
+        (256, 256, 32)
+    );
+    assert_eq!(snapshot.tiles.len(), 256 * 256 * 32);
+    assert_eq!(dwarf_count(&snapshot), 5);
+
+    let custom = Daemon::spawn_with(&["--dims", "160,160,32", "--crew", "7"]);
+    let snapshot = read_snapshot(&mut BufReader::new(custom.connect()));
+    assert_eq!(
+        (snapshot.dims.x, snapshot.dims.y, snapshot.dims.z),
+        (160, 160, 32)
+    );
+    assert_eq!(dwarf_count(&snapshot), 7);
+}
+
+/// 13.6 NFR11: a bad flag is refused before the daemon binds, naming the flag.
+#[test]
+fn a_bad_dims_or_crew_flag_is_refused_naming_the_flag() {
+    for (args, flag) in [
+        (["--dims", "64,64,32"], "--dims"),
+        (["--dims", "128,128,31"], "--dims"),
+        (["--crew", "0"], "--crew"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_simd"))
+            .arg("0")
+            .args(args)
+            .output()
+            .expect("simd must run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{args:?} exited 0");
+        assert!(
+            stderr.contains(flag),
+            "{args:?}: stderr must name {flag}: {stderr}"
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "{args:?} printed {:?}",
+            output.stdout
+        );
+    }
 }

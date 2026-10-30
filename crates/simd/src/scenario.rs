@@ -25,17 +25,30 @@ struct File {
     /// Required, never read: every file says what cost case it exercises and where its cells came from.
     #[serde(rename = "about")]
     _about: String,
-    start: Start,
+    start: StartFile,
     ticks: u64,
     speed: protocol::Speed,
     commands: Vec<Scheduled>,
 }
 
+/// `{"seed":S}` or `{"save":F}`, where a seed may add `"dims":[X,Y,Z]` and `"crew":N` (13.6).
+/// Absent, a seed start is the 128x128x32 world with five dwarves it always was.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-enum Start {
-    Seed(u64),
+#[serde(deny_unknown_fields)]
+struct StartFile {
+    seed: Option<u64>,
     /// Relative to the scenario file's own directory.
+    save: Option<PathBuf>,
+    dims: Option<[u32; 3]>,
+    crew: Option<usize>,
+}
+
+enum Start {
+    Seed {
+        seed: u64,
+        dims: sim_core::Dims,
+        crew: usize,
+    },
     Save(PathBuf),
 }
 
@@ -101,8 +114,34 @@ impl Scenario {
             }
         }
         let start = match start {
-            Start::Seed(seed) => Start::Seed(seed),
-            Start::Save(save) => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
+            StartFile {
+                seed: Some(seed),
+                save: None,
+                dims,
+                crew,
+            } => {
+                let dims = dims.map_or(sim_core::Dims::DEFAULT, |[x, y, z]| sim_core::Dims {
+                    x,
+                    y,
+                    z,
+                });
+                let crew = crew.unwrap_or(5);
+                crate::check_dims("start dims", dims)?;
+                crate::check_crew("start crew", crew)?;
+                Start::Seed { seed, dims, crew }
+            }
+            StartFile {
+                seed: None,
+                save: Some(save),
+                dims: None,
+                crew: None,
+            } => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
+            StartFile {
+                save: Some(_),
+                seed: None,
+                ..
+            } => bail!("start dims and crew are for a seed start: a save has its own"),
+            _ => bail!("start must name a seed or a save, and not both"),
         };
         Ok(Self {
             name,
@@ -119,7 +158,8 @@ impl Scenario {
     /// A fresh world on the start tick, every time it is called.
     pub fn world(&self) -> anyhow::Result<sim_core::World> {
         match &self.start {
-            Start::Seed(seed) => Ok(sim_core::World::generate(*seed, sim_core::Dims::DEFAULT)),
+            Start::Seed { seed, dims, crew } => crate::generate_world(*seed, *dims, *crew)
+                .with_context(|| format!("scenario {}", self.name)),
             Start::Save(save) => {
                 let path = save.to_str().context("the save path is not UTF-8")?;
                 crate::try_load_world_from(path).with_context(|| {

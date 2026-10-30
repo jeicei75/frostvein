@@ -30,7 +30,7 @@ def main() -> None:
     out_path = Path(sys.argv[1])
     repo_root = Path(__file__).resolve().parents[2]
     simd = simd_binary(repo_root)
-    proc = subprocess.Popen([simd, "0"], stdout=subprocess.PIPE, text=True)
+    proc = subprocess.Popen([simd, "0", "--dims", "128,128,32"], stdout=subprocess.PIPE, text=True)
     try:
         assert proc.stdout is not None
         line = proc.stdout.readline()

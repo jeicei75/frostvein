@@ -73,9 +73,52 @@ struct Args {
     bench: Option<PathBuf>,
     /// `--runs N`, for `--bench` only.
     runs: usize,
+    /// `--dims X,Y,Z`: the fresh game's world (13.6). 256x256x32 unless given.
+    dims: sim_core::Dims,
+    /// `--crew N`: the fresh game's dwarves (13.6). 5 unless given.
+    crew: usize,
 }
 
-/// `simd [port] [--pause-at TICK | --scenario FILE]`, or `simd --bench FILE [--runs N]`.
+/// Dims a world can be generated at (13.6): worldgen is proven from 128² (`Dims::DEFAULT`) to
+/// 256² (`Dims::FRESH`), at the one height both use. `label` names the field in the refusal.
+fn check_dims(label: &str, dims: sim_core::Dims) -> anyhow::Result<()> {
+    let wide = 128..=256;
+    if !wide.contains(&dims.x) || !wide.contains(&dims.y) || dims.z != 32 {
+        bail!(
+            "{label} {},{},{}: x and y must be 128..=256 and z must be 32",
+            dims.x,
+            dims.y,
+            dims.z
+        );
+    }
+    Ok(())
+}
+
+fn check_crew(label: &str, crew: usize) -> anyhow::Result<()> {
+    if crew == 0 {
+        bail!("{label} must be at least 1");
+    }
+    Ok(())
+}
+
+/// `World::generate_with_crew`, with a crew the camp's ground cannot hold refused by name instead
+/// of as a backtrace. NOTE: caught where it is built, not counted beforehand, because sim-core has
+/// no public way to count the camp's ground; the panic hook still prints the sim's own message.
+fn generate_world(seed: u64, dims: sim_core::Dims, crew: usize) -> anyhow::Result<sim_core::World> {
+    std::panic::catch_unwind(|| sim_core::World::generate_with_crew(seed, dims, crew)).map_err(
+        |_| {
+            anyhow::anyhow!(
+                "crew {crew} does not fit the camp's ground at {}x{}x{}",
+                dims.x,
+                dims.y,
+                dims.z
+            )
+        },
+    )
+}
+
+/// `simd [port] [--pause-at TICK | --scenario FILE] [--dims X,Y,Z] [--crew N]`, or
+/// `simd --bench FILE [--runs N]`.
 ///
 /// `--pause-at` lets the DAEMON freeze its own world on a chosen tick. A `gui --static-world`
 /// client schedules the same pause (tick 120), but only if it connects before that tick -- 12 s
@@ -88,6 +131,8 @@ fn parse_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> anyhow::Res
     let mut scenario = None;
     let mut bench = None;
     let mut runs = None;
+    let mut dims = None;
+    let mut crew = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         // NOTE: OsString, not String — std::env::args panics on non-UTF-8 argv during
@@ -124,6 +169,31 @@ fn parse_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> anyhow::Res
                 bail!("--runs must be at least 1");
             }
             runs = Some(count);
+        } else if text == "--dims" {
+            let value = args.next().context("--dims requires X,Y,Z")?;
+            let value = value.to_string_lossy();
+            let parts: Vec<u32> = value
+                .split(',')
+                .map(str::parse)
+                .collect::<Result<_, _>>()
+                .ok()
+                .filter(|parts: &Vec<u32>| parts.len() == 3)
+                .with_context(|| format!("invalid --dims {value:?}: expected X,Y,Z"))?;
+            let parsed = sim_core::Dims {
+                x: parts[0],
+                y: parts[1],
+                z: parts[2],
+            };
+            check_dims("--dims", parsed)?;
+            dims = Some(parsed);
+        } else if text == "--crew" {
+            let value = args.next().context("--crew requires a count")?;
+            let value = value.to_string_lossy();
+            let count: usize = value
+                .parse()
+                .with_context(|| format!("invalid --crew count {value:?}"))?;
+            check_crew("--crew", count)?;
+            crew = Some(count);
         } else {
             port = Some(text.parse().with_context(|| {
                 format!("invalid port argument {text:?}: expected 0-65535 (0 = OS-assigned)")
@@ -141,12 +211,17 @@ fn parse_args(args: impl IntoIterator<Item = std::ffi::OsString>) -> anyhow::Res
     if bench.is_none() && runs.is_some() {
         bail!("--runs is for --bench only");
     }
+    if (dims.is_some() || crew.is_some()) && (scenario.is_some() || bench.is_some()) {
+        bail!("--dims and --crew are for the fresh game: a scenario names its own in its start");
+    }
     Ok(Args {
         port: port.unwrap_or(protocol::DEFAULT_PORT),
         pause_at,
         scenario,
         bench,
         runs: runs.unwrap_or(scenario::DEFAULT_RUNS),
+        dims: dims.unwrap_or(sim_core::Dims::FRESH),
+        crew: crew.unwrap_or(5),
     })
 }
 
@@ -157,6 +232,8 @@ fn main() -> anyhow::Result<()> {
         scenario,
         bench,
         runs,
+        dims,
+        crew,
     } = parse_args(std::env::args_os().skip(1))?;
     if let Some(path) = bench {
         return scenario::bench(&path, runs);
@@ -171,10 +248,7 @@ fn main() -> anyhow::Result<()> {
             let live = scenario::Live::new(scenario, world.tick());
             (world, Some(live))
         }
-        None => (
-            sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT),
-            None,
-        ),
+        None => (generate_world(sim_core::DEFAULT_SEED, dims, crew)?, None),
     };
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
@@ -1090,6 +1164,59 @@ mod tests {
             parse(&["7451", "--runs", "3"]).is_err(),
             "--runs without --bench"
         );
+    }
+
+    #[test]
+    fn dims_and_crew_default_to_the_fresh_game_and_refuse_what_worldgen_cannot_build() {
+        let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
+        let fresh = parse(&[]).unwrap();
+        assert_eq!((fresh.dims, fresh.crew), (sim_core::Dims::FRESH, 5));
+        let custom = parse(&["--dims", "160,128,32", "--crew", "7"]).unwrap();
+        assert_eq!(
+            (custom.dims, custom.crew),
+            (
+                sim_core::Dims {
+                    x: 160,
+                    y: 128,
+                    z: 32
+                },
+                7
+            )
+        );
+        for bad in [
+            &["--dims", "127,128,32"][..],
+            &["--dims", "128,257,32"],
+            &["--dims", "128,128,31"],
+            &["--dims", "128,128"],
+            &["--dims", "a,b,c"],
+            &["--dims"],
+            &["--crew", "0"],
+            &["--crew", "many"],
+            &["--crew"],
+        ] {
+            let error = parse(bad).unwrap_err().to_string();
+            assert!(
+                error.contains(bad[0]),
+                "{bad:?} must name its flag: {error}"
+            );
+        }
+        for refused in [
+            &["--scenario", "plan.json", "--dims", "128,128,32"][..],
+            &["--scenario", "plan.json", "--crew", "5"],
+            &["--bench", "plan.json", "--dims", "128,128,32"],
+            &["--bench", "plan.json", "--crew", "5"],
+        ] {
+            assert!(parse(refused).is_err(), "{refused:?}");
+        }
+    }
+
+    #[test]
+    fn a_crew_too_big_for_the_camp_is_an_error_naming_the_crew() {
+        let error = generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 1_000_000)
+            .err()
+            .expect("a million dwarves cannot stand at the camp");
+        assert!(error.to_string().contains("crew 1000000"), "{error}");
+        assert!(generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5).is_ok());
     }
 
     use super::*;
