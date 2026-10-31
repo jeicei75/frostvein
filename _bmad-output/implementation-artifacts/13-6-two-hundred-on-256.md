@@ -5,7 +5,7 @@ baseline_commit: ce69409a2d33f5734d2d35c946bfa2bb30407e56
 
 # Story 13.6: Two Hundred on 256²
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -123,7 +123,7 @@ Throwaway scratch worktrees, release builds. The patches and raw lines are in `1
   11. (Q5 a) `FOCUS_MAX` stays 127 → the 256² pan test.
 
   `python3 scripts/audit-mutations.py` must read every row applying.
-- [ ] **Task 10: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~70 min, memory: `gate-ooms-at-default-parallelism`). Paste the block. Paste AC 5's `tick-bench` table. Cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-6-two-hundred-on-256`), then `phase_state.py clear`, then Status → review on the story and the board.
+- [x] **Task 10: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~70 min, memory: `gate-ooms-at-default-parallelism`). Paste the block. Paste AC 5's `tick-bench` table. Cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-6-two-hundred-on-256`), then `phase_state.py clear`, then Status → review on the story and the board.
 
 ## Verification
 
@@ -273,9 +273,45 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 
   `audit-mutations.py`: 973 rows, every literal matches. **Trap:** the release test panics in a debug build on purpose, so the plain `ignored` mode would read row 10 KILLED without running the sabotage. `mutate.sh` gained a `release-ignored` mode. After the run, `target/release/simd` was row 10's mutant (memory: mutant-binary-outlives-restore); it was rebuilt at HEAD before AC 8.
 
+- **Task 10 full gate** (`RUST_TEST_THREADS=1 scripts/gate.sh`, HEAD `527304a1`, devpod, alone):
+  ```
+  frostvein gate
+    cargo fmt --check           ok  0s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  1684s
+    cargo test (release real-work scenario)ok  169s
+    cargo test (pixel guards)   ok  3270s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  21s
+    mutation tables still apply ok  11s
+  reaped 31 stale build artifacts from target (0.2 GB)
+  GATE GREEN  5164s
+  ```
+  AC 5's `tick-bench` table is above. 5,164 s is about 15 min over 13.4's 4,140–4,278 s; the pixel-guard tier alone took 3,270 s.
+
 ### Completion Notes List
 
+- The daemon builds a 256×256×32 valley with a crew of 200 (`start` `dims`/`crew`, `--dims`/`--crew` on the fresh game); every old scenario still builds 128²/5 and reads `same` on `tick-bench` (AC 5).
+- `scenarios/two-hundred-on-256.json` does real work (dig 231, cut 91, stored 59, cells 2,165), proven in release by the full gate's `the_two_hundred_on_256_scenario_does_real_work`.
+- NFR12's first reading: mean 33.6 ms, median p99 155.9 ms, 1.35× over the 25 ms bar. Recorded, not gated.
+- The gui fits its camera clamp and, after the in-story #222 fix, its fog volume to the snapshot's `Dims`, and boots onto the campfire.
+- Seat (NFR6): full vista meets ≥ 30 fps (p50 ≈ 82 fps); working zoom misses 60 (p50 ≈ 38 fps), filed as **#224**. The late-run pulse is NFR12 at the seat, **#225**. HUD scenario state is **#223**. **#222 stays open** for the box outline seen from outside at vista distance; the PR must not close it.
+- Mutation: 11/11 KILLED.
+
 ### File List
+
+- `crates/sim-core/src/lib.rs`, `crates/sim-core/Cargo.toml`, `crates/sim-core/tests/worldgen.rs`, `crates/sim-core/tests/save_load.rs`
+- `crates/simd/src/main.rs`, `crates/simd/src/scenario.rs`, `crates/simd/src/bridge.rs`, `crates/simd/tests/bench.rs`, `crates/simd/tests/serve.rs`
+- `crates/gui/src/camera.rs`, `crates/gui/src/ingest.rs`, `crates/gui/src/pick.rs`, `crates/gui/tests/headless.rs`, `crates/gui/tests/pixel_guard.rs`
+- `Cargo.lock`
+- `scenarios/two-hundred-on-256.json` (new)
+- `scripts/gate.sh`, `scripts/mutate.sh`, `scripts/bench/export_world.py`
+- `_bmad-output/implementation-artifacts/mutations/13-6.sh` (new), `mutations/10-10-take-the-camera-where-you-want-it.sh`
+- `_bmad-output/implementation-artifacts/13-6-signoff/` (new: card, probes, patches, seat CSVs, screenshot)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, `_bmad-output/planning-artifacts/epics.md`, `metrics/13-6-two-hundred-on-256.md`
 
 ## Change Log
 
@@ -283,3 +319,4 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 |---|---|
 | 2026-10-29 | Story created (Opus 5.5). Creation probes: #187 reproduces on `main`; #159 does not block real work near the camp; layout, readings and patches in `13-6-signoff/`. Task 0 Q1–Q5 await Wolf. |
 | 2026-10-30 | Task 0 ruled (Wolf): **Q1 (c)** fold #187 into 13.18 (epic stays at 16; 13.18's AC amended in `epics.md`); **Q2 (a)** a `start` with no `dims`/`crew` is 128×128×32, crew 5; **Q3 (a)** `--dims`/`--crew` on the fresh game, tests pass `--dims 128,128,32`; **Q4 (a)** release `#[ignore]` test on the full gate tier; **Q5 (a)** clamp follows `Dims`, boot focus is the campfire. Only Q1 differs from the recommendations, and no 13.6 AC names it (Scope: no #187/#218 fix). #187 evidence comment posted, amended to name 13.18. Board, story and `13-6-signoff/` committed on the 13.6 branch. |
+| 2026-10-31 | Seat sitting (Task 8): vista met, working zoom missed (#224), pulse (#225), HUD state (#223). #222's fog volume fixed in-story (`27fc5c0b`) on Wolf's ruling, both framings re-read. Full gate green (5,164 s). Status → review. |
