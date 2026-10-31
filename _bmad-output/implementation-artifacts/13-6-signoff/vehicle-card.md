@@ -127,3 +127,15 @@ These are lavapipe frames, so they say nothing about fps. The seat does.
   (3840×1529, 5-dwarf crew, `elapsed 0d 00:26`, the overlay reads 63.84 fps): the fog volume's
   hard translucent wall cuts the right of the frame. That is **#222** on the vehicle GPU, and the
   one defect Wolf named at the sitting. No other sky, aurora or snow defect was reported.
+- **Re-read after the #222 fix** (Wolf, 2026-10-31, gui `27fc5c0b`, release daemon; the fog box now
+  covers the whole 256² valley). Steady frames while the sim runs, cut at the last edit:
+
+  | framing | log | p50 | p95 | p99 | before (128² box) p50 / p99 | NFR6 |
+  |---|---|---|---|---|---|---|
+  | working zoom | `13-6-perf-working-fog.csv` (to 320.0 s) | 26.19 ms (≈ 38 fps) | 33.76 | 38.13 | 25.23 / 37.70 | 60 sustained: **miss** (#224) |
+  | full vista | `13-6-perf-working-fog-vista.csv` (to 267.7 s) | 12.22 ms (≈ 82 fps) | 13.92 | 15.14 | 11.29 / 13.69 | ≥ 30: **met** |
+
+  Edit frames: working p50 38.61 / p99 68.29 ms; vista p50 21.51 / p99 37.72 ms. The full-size
+  fog adds about 1 ms p50 at both framings (+4% working, +8% vista). So **the fog is not why
+  working zoom costs 2.1× full vista**; that stays open in #224. The vista log's name says
+  "working-fog-vista", but its frame times are the vista's.
