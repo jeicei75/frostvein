@@ -1698,7 +1698,11 @@ fn setup_night_lighting(mut commands: Commands) {
     ));
 }
 
-fn setup_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+fn setup_fog_volume(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mirror: Res<MirrorResource>,
+) {
     let density_texture = images.add(fog_density_ramp_image());
     commands.spawn((
         FogVolume {
@@ -1707,9 +1711,22 @@ fn setup_fog_volume(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             light_intensity: night_lighting().haze_light_intensity,
             ..Default::default()
         },
-        Transform::from_xyz(64.0, 18.0, -64.0).with_scale(Vec3::new(160.0, 48.0, 160.0)),
+        fog_volume_transform(mirror.0.dims()),
         ClientLocal,
     ));
+}
+
+/// The haze box over a world of `dims`: the whole map plus a 16-cell skirt on every side, so no
+/// volume edge shows inside the valley (#222). On 128² this is 11.2's tuned box exactly.
+/// Bevy marches a fixed step count per covered pixel, so the box's cost follows its screen
+/// coverage, not its world size.
+// NOTE: the vertical extent (render y -6..42) stays hardcoded; both shipped worlds are 32 deep.
+fn fog_volume_transform(dims: protocol::Dims) -> Transform {
+    Transform::from_xyz(dims.x as f32 / 2.0, 18.0, -(dims.y as f32) / 2.0).with_scale(Vec3::new(
+        dims.x as f32 + 32.0,
+        48.0,
+        dims.y as f32 + 32.0,
+    ))
 }
 
 #[derive(Component)]
@@ -2910,6 +2927,7 @@ fn follow_snapshot(rig: &mut CameraRig, mirror: &Mirror, first: bool, start: Opt
 fn ingest_messages(
     receiver: Option<Res<IngestReceiver>>,
     mut cameras: Query<&mut CameraRig>,
+    mut fog: Query<&mut Transform, With<FogVolume>>,
     mut mirror: ResMut<MirrorResource>,
     mut work: ResMut<ProjectionWork>,
     mut clock: ResMut<TickClock>,
@@ -2937,6 +2955,9 @@ fn ingest_messages(
                 Ok(()) => {
                     for mut rig in &mut cameras {
                         follow_snapshot(&mut rig, &mirror.0, false, None);
+                    }
+                    for mut transform in &mut fog {
+                        *transform = fog_volume_transform(mirror.0.dims());
                     }
                 }
                 Err(error) => {
@@ -7326,6 +7347,67 @@ mod tests {
         assert_eq!(clamped.pitch, std::f32::consts::FRAC_PI_2 - 0.15);
         assert_eq!(clamped.distance, 500.0);
         assert_eq!(clamped.focus, Vec3::new(0.0, 127.0, 31.0));
+    }
+
+    /// The haze box covers the world the snapshot describes (#222). On 128² it is 11.2's tuned
+    /// box exactly. On 256² the old box covered a quarter of the valley, showed a hard wall, and
+    /// left three quarters of the vista unfogged (and unpaid for) in 13.6's fps reading.
+    #[test]
+    fn the_fog_volume_covers_the_world_the_snapshot_describes() {
+        fn square(side: u32) -> Snapshot {
+            let n = side as usize;
+            Snapshot {
+                msg_type: MessageType::Snapshot,
+                dims: Dims {
+                    x: side,
+                    y: side,
+                    z: 32,
+                },
+                tiles: vec![Tile::Empty; n * n * 32],
+                entities: Vec::new(),
+                designations: Vec::new(),
+                zones: Vec::new(),
+                items: Vec::new(),
+                speed: Speed::Normal,
+                tick: 0,
+                goals: Vec::new(),
+            }
+        }
+        fn fog_box(app: &mut App) -> (Vec3, Vec3) {
+            let transform = *app
+                .world_mut()
+                .query_filtered::<&bevy::prelude::Transform, With<super::FogVolume>>()
+                .single(app.world())
+                .expect("exactly one fog volume");
+            (transform.translation, transform.scale)
+        }
+        let old_box = (Vec3::new(64.0, 18.0, -64.0), Vec3::new(160.0, 48.0, 160.0));
+        let wide_box = (
+            Vec3::new(128.0, 18.0, -128.0),
+            Vec3::new(288.0, 48.0, 288.0),
+        );
+
+        let (mut app, sender, _server) = configured_app_with_snapshot(&[], square(128));
+        app.update();
+        assert_eq!(fog_box(&mut app), old_box, "128² must keep 11.2's box");
+        // A later snapshot of another size (a Load) moves the box with the camera clamp.
+        sender
+            .send(Ok(WireMessage::Snapshot(Box::new(square(256)))))
+            .unwrap();
+        app.update();
+        assert_eq!(
+            fog_box(&mut app),
+            wide_box,
+            "a 256² snapshot must widen the box"
+        );
+
+        let (mut app, _sender, _server) = configured_app_with_snapshot(&[], square(256));
+        app.update();
+        assert_eq!(
+            fog_box(&mut app),
+            wide_box,
+            "a 256² boot must open on the wide box"
+        );
     }
 
     /// The world's own size and campfire decide where the camera may go and where it opens.
