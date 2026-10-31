@@ -81,4 +81,49 @@ These are lavapipe frames, so they say nothing about fps. The seat does.
 
 ## Sitting
 
-(filled in at the sitting)
+2026-10-31, Wolf, in progress.
+
+- **Fullscreen hides the `done` line.** Changing focus to WSL would disturb the fps being read, so
+  the run's end is read from the HUD clock line instead: `speed paused` is the daemon's end-of-run
+  pause. A HUD readout of the scenario state is #223.
+- **Run 1, Wolf: "it started pretty ok with 30 FPS and FPS is not an issue but longer the sim run
+  the dwarfs started to act - stop - act - stop -- so in the end all is slow but it's not GUI
+  performance issue."** The daemon was a **debug** build (`./target/debug/simd …`, which printed
+  `DEBUG BUILD: figures are not a measurement`). The run took 47 min (gui 06:16:07–07:03:12), about
+  1.1 s per tick, and ended `done at tick 2500 state=3fc1461d491ee5d9 commands=1801/1801`, the
+  bench's hash. So the act–stop is the debug daemon missing its 100 ms period, **not a reading of
+  the sim at scale**. A release daemon plus a socket-draining client on the devpod ran the same
+  scenario in 255 s, same hash. The gui was release (`b224da85`), so its fps reading stands.
+- **Run 1 fps** (`perf_summary.py 13-6-perf-working.csv`, vsync on, RTX 4080 Laptop, 104,526
+  frames over 2,824 s): steady state p50 25.79 ms (≈ 39 fps), p95 35.69, p99 47.98, p99.9 67.01,
+  worst 313.03 ms. Edit frames (n=305) p50 43.41, p99 75.72 ms. Flat across the run (5-minute
+  buckets p50 23.8–29.7 ms). **Misses NFR6's 60 fps sustained at working zoom.** Recorded, not
+  fixed here.
+- **Run 1 again, release daemon** (`13-6-perf-release.csv`, 36,414 frames over 884.5 s, F3 at
+  856.3 s). The work ran 0–321.5 s, the last edit before a 542 s gap. From 863 s the world ran
+  again (trees 927 → 921 by 870 s, after the F3), so the pooled `perf_summary.py` line is not the
+  reading. **Running window only**, steady n=12,263: p50 25.23 ms (≈ 40 fps), p95 31.15, p99
+  37.70 (≈ 27 fps), worst 300.46 ms. Edit frames (n=305) p50 38.85, p99 65.92 ms. That is the
+  debug-daemon run's figure to within 0.6 ms at p50, so the debug daemon did not cost the gui its
+  frames. **Working zoom misses NFR6's 60 fps sustained**, and costs about 2.2× full vista's
+  frame (25.2 vs 11.3 ms p50).
+- **Wolf: "faster now but still the same issue that dwarves act in pulses in the end."** With a
+  release daemon this is the real thing: 2,500 ticks took about 321 s on the vehicle, ≈ 128 ms per
+  tick against the 100 ms period. The devpod daemon-only run averaged 102 ms per tick. A tick past
+  its period delivers its delta late, and the dwarves stall on their last cell until it arrives.
+  AC 8's bench on this scenario: mean 33.6 ms, median p99 155.9 ms, max 267 ms, with the mean
+  climbing late in the run. This is **NFR12's miss, seen at the seat for the first time**. NFR12
+  gates the M4 close, not 13.6.
+- **Run 2 fps, full vista** (release daemon, `13-6-perf-vista.csv`, 59,939 frames over 669.8 s,
+  F3 at 665.4 s): the work ran 0–266 s, the last edit frame. The rest is the world paused at
+  `done`, so the pooled `perf_summary.py` line (steady p50 10.96, p99 15.51, worst 297.89 ms) is
+  over half paused. **Running window only**, steady frames n=22,938: p50 11.29 ms (≈ 89 fps),
+  p95 12.78, p99 13.69 (≈ 73 fps), worst 297.89 ms. Edit frames (n=305) p50 20.12, p99 34.24 ms.
+  **Meets NFR6's ≥ 30 fps at full vista.**
+- **Ruled (Wolf): record both and file them.** Working-zoom fps miss: **#224**. Late-run pulse
+  (NFR12 at the seat): **#225**.
+- **Run 3, fresh game** (release daemon, no `--camera`): **boots onto the campfire of the 256²
+  valley, and all four edges are reachable** (Wolf: "yes"). `13-6-fresh-game-fog-wall.png`
+  (3840×1529, 5-dwarf crew, `elapsed 0d 00:26`, the overlay reads 63.84 fps): the fog volume's
+  hard translucent wall cuts the right of the frame. That is **#222** on the vehicle GPU, and the
+  one defect Wolf named at the sitting. No other sky, aurora or snow defect was reported.
