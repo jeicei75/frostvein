@@ -5,7 +5,7 @@ baseline_commit: ce69409a2d33f5734d2d35c946bfa2bb30407e56
 
 # Story 13.6: Two Hundred on 256²
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -174,6 +174,61 @@ Dismissed (7):
 - "11 vs 10 committed scenarios": the record already corrects it.
 
 Cost: review row $14.12 (258 turns; 4 subagents 69.1% of tokens). Reap after triage: 10 /tmp directories, 33.9 GB (17.0 GB free space reclaimed). Wolf chose "leave as action items", so Status is in-progress. Next is `bmad-review-patch` in a fresh session. Patch 1 adds a load path test and patch 2 re-reads the scenario's end line, so the full gate re-runs after the patch pass.
+
+#### Code review run 2 (2026-11-01, a fresh session), on `747774a1..b3f8960e`
+
+**Delta vs run 1:** 4 NEW (0 HIGH, 1 MED, 3 LOW), 1 REWORK (closure-table row 2 half-closed). This is the first review of this diff, but the stopping rule reads on severity: no NEW HIGH, so **the audit ends here**. No round 3. The next spend goes to the full gate and the PR.
+
+How it ran: four layers, each running `cargo 1.97.1` in its own `/tmp/review-<layer>` target. None timed out or failed, and nothing in the repo was modified.
+- Blind Hunter (Sonnet) took `sim-core` (`stored_count`).
+- Edge Case Hunter (Sonnet) took `simd` src and tests, plus mutation rows 12-15.
+- The Acceptance and Feature Auditors (Opus) took the whole diff and the closure table.
+
+What the layers re-ran:
+- **Tests:** `cargo test -p sim-core`: all green (blind). `simd --test bench`: 9 passed, 1 ignored (edge, acceptance). Serve `live_load` and `duplicate_dwarf_id`: passed (edge).
+- **Release bench:** `two-hundred-on-256.json` reads `state=3fc1461d491ee5d9 … done=dig:231,cut:91 stored=33 cells=2165` (acceptance, feature).
+- **`stored=33` is the game's number:** an independent Python replay of the t2500 save gives Wood 28 (the HUD's goal-1 progress) + Stone 5. It counts 59 on a zone, 26 of them carried, 0 stacked.
+- **`done` oracle:** all 322 removed marks changed their tile (231 dig, 91 cut, 0 dropped). The `done=` patch is inert on this file (feature).
+- **#226 live at scale (feature, release):** a fresh `--crew 200` saves and loads in the same process and in a fresh one, about 0.5 s to the snapshot. A mid-work save of the scenario at t1201 does the same. Resuming from the t2500 save for 100 ticks gives the same hash as running straight to t2600 (`0c68c1b452f40e71`). A tui `--key S`/`--key L` round trip renders `dwarves 200`. The edge hunter ran the same at crew 20 in debug.
+- **No second validator:** the scenario `start.save` and the live Load both go through `try_load_world_from`. Nothing in simd, tui, gui or client-core keys a map by name or colour.
+- **Mutation:** `audit-mutations.py` reads 977 rows applying. Rows 14 and 15 were reproduced by hand in copies and KILLED by their named tests (`bench.rs:257`, `:198`). Rows 12-15's selectors are not prefixes of other test names.
+
+Closure-table audit (patch pass 1):
+
+| Row | Verdict | Evidence |
+|---|---|---|
+| 1 #226 | CLOSED | Acceptance restored both old checks in a copy. The bench test dies at `bench.rs:471` (`save reuses dwarf colour Purple`), the serve test at `serve.rs:225`. Both fixtures are crew 17 with a repeated name and a repeated colour. NOTE at `main.rs:757` names 13.8 |
+| 2 `stored=` | **HALF-CLOSED (REWORK)** | patch 1 below |
+| 3 `done=` | CLOSED | the old rule dies at `bench.rs:198` (`dig:1`); the limitation has no code NOTE (patch 3) |
+| 4 fog AMENDED | CLOSED | both AMENDED lines are present and match the 2026-10-31 Change Log ruling |
+| 5 headline | CLOSED | the headline and the Completion Note match the panic list in `mutations/13-6.sh` |
+
+Decision:
+- [x] [Review][Decision] From about crew 50 up, idle dwarves never move (feature, RAN; MED; issue #227) — **RULED (b) by Wolf, 2026-11-01: route to 13.11.** It became patch 4 below. — Every dwarf's `Wander.home` is the camp (`lib.rs:3691`), and a wander step must stay within `WANDER_RADIUS` 3 of it (`lib.rs:2781-2783`). Spill dwarves spawn outside that box and the box fills, so no jobless dwarf can step. Measured, release (moved in 60-600 ticks): crew 5 5/5, 17 17/17, 50 39/50, **100 0/100, 200 0/200** (fresh, and after a load). Dwarves with work are unaffected: all 200 moved after a mid-work load of the scenario. The gui capture guard trips on a fresh `--crew 200` (`capture.rs:576`, "no dwarf's lit terrain region ever moved"). This contradicts Dev Notes' "Crowding at the camp is game feel for 13.11": it is a freeze, not crowding. It is pre-existing 13.6 code and outside the round-2 diff. A side effect: any bench phase where dwarves idle does no wander work, so AC 8's NFR12 reading may be optimistic there. Options: (a) fix in 13.6, e.g. spill dwarves get `home` = their spawn tile (crew 5 unchanged), plus a test; this moves the 256² scenario's state, so AC 6 and AC 8 are re-read; (b) route to 13.11 (idle behaviour), with an AMENDED line on the Dev Notes ruling citing #227 and the AC 8 caveat.
+
+Patches:
+- [ ] [Review][Patch] REWORK of run 1 patch 2: the carried half of `stored=` has no test (acceptance + blind, RAN; MED, latent silent failure) [crates/simd/tests/bench.rs:208 `stored_counts_one_item_per_zone_tile_as_the_sim_does`] — In a copy, both layers changed `World::stored_count` to count carried items one per zone tile. Every bench test passed (9/9), and the sabotaged release bench printed `stored=59`, run 1's wrong value. On the real file the whole 59 → 33 error was carried stones (26 carried, 0 stacked), so the fixture pins the half that never happened. Fix: give `stacked.save` a dwarf carrying a stone while he stands on the zone tile (expected `stored` stays 1), or add a sim-core unit test of `stored_count` with a carried item on a zone tile. Both sides: re-run the carried-counting sabotage and it must KILL. Add it as a `mutations/13-6.sh` row, with a selector that is not a prefix of another test name.
+- [ ] [Review][Patch] AC 6 still defines `stored=S` as "items lying on zone cells at the end" (acceptance, read; LOW, in patch 1's scope) [story § Acceptance Criteria 6] — the code counts the sim's rule (uncarried, one per stockpile tile, `split_stored`), and the new test asserts that. Add an AMENDED line under AC 6 naming the rule and the run-1 finding.
+- [ ] [Review][Patch] `done=`'s same-step limitation has no `// NOTE:` in the code (acceptance + edge, read; LOW, CLAUDE.md rule 1) [crates/simd/src/scenario.rs bench loop, the `&& world.tile(pos) != tile` comment] — A Dig dropped in the same step that a channel above opens its tile still counts. The channel's change is at `target.z-1`, the dig's own tile (`lib.rs` ~2465-2475). This is written only in the closure table. Add the NOTE.
+- [ ] [Review][Patch] From decision (b): the Dev Notes ruling calls the idle freeze "crowding" (record; MED) [story § Dev Notes "`wander` homes all 200 on the camp"] — Add an AMENDED line: from about crew 50 up, no idle dwarf moves (#227: 100 of 100 and 200 of 200 still), and Wolf routed it to 13.11 on 2026-11-01. Add the caveat that AC 8's NFR12 reading carries no wander cost for idle dwarves, so 13.11 re-takes that baseline.
+
+Deferred: none.
+
+Dismissed (10):
+- Edge: rows 12 and 13 share the validator anchor (informational; both paths call `try_load_world_from`).
+- Edge: the remaining id check at crew 200 (checked, valid).
+- Acceptance: the old validator trips the colour check first, so a name check is pinned on the bench path only (one function serves both paths).
+- Acceptance: the serve RED is a timeout, not the refusal text (it still kills; the bench test reads the text).
+- Blind: `stored_count` agrees with the goals only by construction (that is the one-rule point).
+- Blind: `uncarried_stones` counts every item kind (pre-existing name; correct rule).
+- Blind: `stored_count` allocates a set (cold, bench end only).
+- Blind: the fixture's tile (66,64,9) depends on worldgen (its preconditions are asserted).
+- Blind: the `split_stored` doc does not list the bench caller.
+- Feature: the gui near-white look band (`capture.rs:1656`) trips after a crew-200 load. It is a 128²-calibrated look guard; the across-load run passed it.
+
+Cost: review row $17.82 (347 turns; 4 subagents 71.7% of tokens). Reap after triage: 9 /tmp directories, 17.3 GB (9.8 GB free space reclaimed). Wolf chose "leave as action items", so Status is in-progress. Next is `bmad-review-patch` in a fresh session, with patch 1 checked both sides (the carried sabotage must KILL). Patch 1 is test code, so the full gate re-runs before the PR (it is green at `5f5a3856`). There is no round 3.
+
+Not provable without the seat (feature): Ctrl+S/Ctrl+L in the Windows gui at crew 200, the save and load pause the player feels on the vehicle, the gui HUD drawing post-load goal progress, and a Windows client loading crew 200 from the WSL daemon.
 
 ## Verification
 
