@@ -2803,7 +2803,7 @@ development_status:
   # worsened #203 and costs tick + gui work. #207 stays open.
   # M4 STORIES 13.6-13.21 added 2026-10-28 (sprint planning, from epics `e8f4a1f9`). Order approved: numeric.
   # Cut order (Wolf): 13.21 first, then 13.19 + 13.20 together, then regrowth inside 13.9.
-  13-6-two-hundred-on-256: in-progress
+  13-6-two-hundred-on-256: review
   # 13.6 CREATED 2026-10-29 (Opus 5.5) on branch story-13-6-two-hundred-on-256 (off local main e8f4a1f9). Probes on main:
   # #187 REPRODUCES (cage runs (0,4)/(6,6) refuse the same cut 56/55 times in t12k-16k) -> its own story (Q1 placement);
   # #159 does NOT block real work near the camp (stored 5 @t1750, 50 @t2500; 13.2's quadrant layout stores 0 @t3000:
@@ -2819,6 +2819,9 @@ development_status:
   # 13.6 REVIEW RUN 2 2026-11-01 (diff 747774a1..b3f8960e, 4 layers, none failed): NEW 4 (0 HIGH/1 MED/3 LOW), REWORK 1
   # (stored= carried half untested: sabotage -> 59 passes every test). Decision #227 (idle dwarves freeze from crew ~50)
   # -> Wolf (b) route to 13.11. 4 patches LEFT AS ACTION ITEMS -> in-progress. Stopping rule: no round 3.
+  # 13.6 PATCH PASS 2 2026-11-01: 4/4 landed (e494ab57 carried-stone stored_count test + row 16 KILLED; 38210b07 done=
+  # NOTE; AC 6 + #227 AMENDED). Mutation 16/16 KILLED. Full gate GREEN on 38210b07 (4,399 s). -> review; next = PR on
+  # Wolf's yes (no round 3); the PR must NOT close #222 or #227, may close #226.
   13-7-the-long-way: backlog
   13-8-they-keep-coming: backlog
   13-9-forage: backlog
