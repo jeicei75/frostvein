@@ -1050,7 +1050,7 @@ fn duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking() {
 /// 13.6 #226: a crew past five repeats colours (from dwarf 6) and names (from dwarf 17), and the
 /// live Load takes such a save. Until 13.6 the validator refused both (`6a56a894`).
 #[test]
-fn a_save_whose_crew_repeats_names_and_colours_loads() {
+fn the_live_load_takes_a_save_whose_crew_repeats_names_and_colours() {
     let daemon = Daemon::spawn();
     let state = sim_core::World::generate_with_crew(42, sim_core::Dims::DEFAULT, 17).to_save();
     let names: std::collections::BTreeSet<_> =

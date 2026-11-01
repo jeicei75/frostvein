@@ -118,7 +118,7 @@ p.write_text(s.replace(old, old + '''            if save.dwarves.iter().filter(|
 '''))
 PY
 
-mutation "13 load refuses a repeated dwarf colour again (#226, live Load)" simd a_save_whose_crew_repeats_names_and_colours_loads <<'PY'
+mutation "13 load refuses a repeated dwarf colour again (#226, live Load)" simd the_live_load_takes_a_save_whose_crew_repeats_names_and_colours <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '                bail!("save reuses dwarf id {}", dwarf.id);\n            }\n'
