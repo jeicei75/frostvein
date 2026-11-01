@@ -3486,6 +3486,12 @@ impl World {
             .collect()
     }
 
+    /// How many items are STORED by 3.3's rule (`split_stored`, the goals' rule): uncarried, on a
+    /// stockpile tile, one per tile.
+    pub fn stored_count(&self) -> usize {
+        split_stored(&self.ecs).0.len()
+    }
+
     /// Sorted ascending by `Pos`.
     pub fn zones(&self) -> Vec<Pos> {
         self.ecs.resource::<Zones>().0.iter().copied().collect()

@@ -104,3 +104,43 @@ old = '            dims.x as f32 - 1.0,\n            dims.y as f32 - 1.0,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            127.0,\n            127.0,\n'))
 PY
+
+# Review run 1 (2026-11-01) patch pass. Rows 12-13: #226, one row per restored check, each on a
+# different load path (the scenario's start.save and the live Load). Rows 14-15: the end line.
+mutation "12 load refuses a repeated dwarf name again (#226, start.save path)" simd a_save_whose_crew_repeats_names_and_colours_loads_and_steps <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                bail!("save reuses dwarf id {}", dwarf.id);\n            }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, old + '''            if save.dwarves.iter().filter(|d| d.identity.name == dwarf.identity.name).count() > 1 {
+                bail!("save reuses dwarf name {:?}", dwarf.identity.name);
+            }
+'''))
+PY
+
+mutation "13 load refuses a repeated dwarf colour again (#226, live Load)" simd a_save_whose_crew_repeats_names_and_colours_loads <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                bail!("save reuses dwarf id {}", dwarf.id);\n            }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, old + '''            if save.dwarves.iter().filter(|d| d.identity.colour == dwarf.identity.colour).count() > 1 {
+                bail!("save reuses dwarf colour {:?}", dwarf.identity.colour);
+            }
+'''))
+PY
+
+mutation "14 stored= counts every item on a zone cell, not the sim's rule" simd stored_counts_one_item_per_zone_tile_as_the_sim_does <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/scenario.rs'); s = p.read_text()
+old = '        let stored = world.stored_count();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let stored = world.items().iter().filter(|(_, pos)| zones.contains(pos)).count();\n'))
+PY
+
+mutation "15 done= counts a mark the sim drops without its work" simd a_dig_the_sim_drops_without_work_is_not_counted_as_done <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/scenario.rs'); s = p.read_text()
+old = ' && world.tile(pos) != tile {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ' {\n'))
+PY

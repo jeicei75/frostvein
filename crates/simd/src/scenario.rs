@@ -343,8 +343,13 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                     );
                 }
             }
-            // Outside the timed window: the Dig and Cut marks that landed and that this step takes.
-            let before = world.designations();
+            // Outside the timed window: the Dig and Cut marks that landed and that this step takes,
+            // each with its target's tile.
+            let before: Vec<_> = world
+                .designations()
+                .into_iter()
+                .map(|(pos, kind)| (pos, kind, world.tile(pos)))
+                .collect();
             let started = Instant::now();
             world.step();
             ms.push(started.elapsed().as_secs_f64() * 1000.0);
@@ -353,8 +358,10 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                 .into_iter()
                 .map(|(pos, _)| pos)
                 .collect();
-            for (pos, kind) in before {
-                if !after.contains(&pos) {
+            for (pos, kind, tile) in before {
+                // A mark the sim drops without its work (a dig whose target is no longer solid)
+                // leaves its tile as it was: not done.
+                if !after.contains(&pos) && world.tile(pos) != tile {
                     match kind {
                         sim_core::DesignationKind::Dig => dug += 1,
                         sim_core::DesignationKind::Cut => cut += 1,
@@ -390,11 +397,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             .map(|goal| goal.progress.to_string())
             .collect();
         let zones: BTreeSet<_> = world.zones().into_iter().collect();
-        let stored = world
-            .items()
-            .iter()
-            .filter(|(_, pos)| zones.contains(pos))
-            .count();
+        let stored = world.stored_count();
         let cells = world
             .tiles()
             .iter()

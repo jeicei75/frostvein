@@ -173,11 +173,100 @@ fn a_finished_dig_is_counted_as_done_and_as_a_changed_cell() {
     assert!(cells >= 1, "a dug cell differs from the start world: {end}");
 }
 
+/// 13.6 review: a Dig whose target a channel above has already opened is dropped by the sim with no
+/// work done. Channel (73,64,12) and dig (73,64,11) land together; the channel's miner opens the
+/// cell, the dig's miner finds air. Both marks go, but only the channel yields (one item, the two
+/// cells it changed), so `done` counts no dig.
+#[test]
+fn a_dig_the_sim_drops_without_work_is_not_counted_as_done() {
+    let path = variant("dropped-dig", |json| {
+        json["ticks"] = 400.into();
+        let mark = |kind: &str, z: i32| {
+            serde_json::json!({"at": DIG_AT, "command": {"type": "designate", "kind": kind,
+                "rect": {"min": [DIG.x, DIG.y, z], "max": [DIG.x, DIG.y, z]}}})
+        };
+        json["commands"] = serde_json::json!([mark("channel", DIG.z + 1), mark("dig", DIG.z)]);
+    });
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "marks"), "0", "both marks are gone: {end}");
+    assert_eq!(field(&end, "items"), "1", "only the channel yielded: {end}");
+    assert_eq!(field(&end, "cells"), "2", "the channel's two cells: {end}");
+    assert_eq!(
+        field(&end, "done"),
+        "dig:0,cut:0",
+        "the dropped dig is not done: {end}"
+    );
+}
+
+/// 13.6 review: `stored=` is the sim's stored rule (`split_stored`, which the goals count by), not
+/// "items on a zone cell". The save stacks two stones on the one zone tile, so the rule counts one.
+#[test]
+fn stored_counts_one_item_per_zone_tile_as_the_sim_does() {
+    let mut saved =
+        sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT).to_save();
+    let world = sim_core::World::from_save(saved.clone());
+    let tile = sim_core::Pos { x: 66, y: 64, z: 9 };
+    let below = sim_core::Pos {
+        z: tile.z - 1,
+        ..tile
+    };
+    assert_eq!(
+        world.tile(tile),
+        Some(sim_core::Tile::Empty),
+        "the zone tile is open"
+    );
+    assert!(
+        matches!(world.tile(below), Some(sim_core::Tile::Solid(_))),
+        "the zone tile stands on ground"
+    );
+    assert!(
+        saved.dwarves.iter().all(|d| d.pos != tile),
+        "no dwarf stands there"
+    );
+    saved.zones = vec![tile];
+    for _ in 0..2 {
+        saved
+            .items
+            .push((saved.next_id, tile, sim_core::ItemKind::Stone));
+        saved.next_id += 1;
+    }
+    let path = variant("stacked-zone", |json| {
+        json["commands"] = serde_json::json!([]);
+        json["start"] = serde_json::json!({"save": "stacked.save"});
+    });
+    fs::write(
+        path.with_file_name("stacked.save"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "zones"), "1", "{end}");
+    assert_eq!(
+        field(&end, "items"),
+        "2",
+        "both stones are still there: {end}"
+    );
+    assert_eq!(
+        field(&end, "stored"),
+        "1",
+        "one stored per pile tile: {end}"
+    );
+}
+
 /// 13.6 AC 6: the committed 256² crew-200 scenario does real work. Release only (Q4 a): debug
 /// steps this world about 22x slower. `scripts/gate.sh`'s full tier runs it. The first release
 /// run (2026-10-30, `f1c83b7a`) read `marks=1478 items=602 zones=1800 done=dig:231,cut:91
 /// stored=59 cells=2165` in 91 s, and the same file with `"commands":[]` read
-/// `done=dig:0,cut:0 stored=0 cells=0`.
+/// `done=dig:0,cut:0 stored=0 cells=0`. That 59 counted carried and stacked items. Under the sim's
+/// stored rule (review run 1) the same state reads `stored=33`, with `done` and `cells` unchanged.
 #[test]
 #[ignore = "release: steps 256² crew 200 for 2500 ticks"]
 fn the_two_hundred_on_256_scenario_does_real_work() {
