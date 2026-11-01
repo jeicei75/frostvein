@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-10-29
+# last_updated: 2026-11-01
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-10-30
+last_updated: 2026-11-01
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2803,7 +2803,7 @@ development_status:
   # worsened #203 and costs tick + gui work. #207 stays open.
   # M4 STORIES 13.6-13.21 added 2026-10-28 (sprint planning, from epics `e8f4a1f9`). Order approved: numeric.
   # Cut order (Wolf): 13.21 first, then 13.19 + 13.20 together, then regrowth inside 13.9.
-  13-6-two-hundred-on-256: review
+  13-6-two-hundred-on-256: in-progress
   # 13.6 CREATED 2026-10-29 (Opus 5.5) on branch story-13-6-two-hundred-on-256 (off local main e8f4a1f9). Probes on main:
   # #187 REPRODUCES (cage runs (0,4)/(6,6) refuse the same cut 56/55 times in t12k-16k) -> its own story (Q1 placement);
   # #159 does NOT block real work near the camp (stored 5 @t1750, 50 @t2500; 13.2's quadrant layout stores 0 @t3000:
@@ -2811,6 +2811,9 @@ development_status:
   # 55 serve tests + pixel guards pinned to 128^2 (Q3). Task 0 Q1-Q5 await Wolf.
   # 13.6 Task 0 RULED 2026-10-30 (Wolf): Q1 (c) #187 FOLDS INTO 13.18 (epic stays 16); Q2 (a) start without dims/crew
   # = 128^2 crew 5; Q3 (a) --dims/--crew; Q4 (a) release #[ignore] test, full tier; Q5 (a) clamp follows Dims.
+  # 13.6 REVIEW RUN 1 2026-11-01 (4 layers, none failed): 5 patch (1 HIGH #226 crew>5 save refused on load; 1 MED
+  # bench stored= counts carried/stacked: 59 is 33 by the sim rule; done=, 2 record), 3 defer, 7 dismissed. Wolf: leave as
+  # action items -> in-progress; next bmad-review-patch in a fresh session, then full gate, then PR (must not close #222).
   13-7-the-long-way: backlog
   13-8-they-keep-coming: backlog
   13-9-forage: backlog

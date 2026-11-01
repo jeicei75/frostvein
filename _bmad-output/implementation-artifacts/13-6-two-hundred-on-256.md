@@ -5,7 +5,7 @@ baseline_commit: ce69409a2d33f5734d2d35c946bfa2bb30407e56
 
 # Story 13.6: Two Hundred on 256²
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -124,6 +124,45 @@ Throwaway scratch worktrees, release builds. The patches and raw lines are in `1
 
   `python3 scripts/audit-mutations.py` must read every row applying.
 - [x] **Task 10: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~70 min, memory: `gate-ooms-at-default-parallelism`). Paste the block. Paste AC 5's `tick-bench` table. Cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-6-two-hundred-on-256`), then `phase_state.py clear`, then Status → review on the story and the board.
+
+### Review Findings
+
+Code review run 1 (2026-11-01, a fresh session), on `main...747774a1` (code diff 18 files, +917/−38). Four layers, each running `cargo 1.97.1` in its own `CARGO_TARGET_DIR` under `/tmp/review-<layer>`. None timed out or failed. Territories: Blind Hunter (Sonnet) took `crates/sim-core/src` + `Cargo.toml`. Edge Case Hunter (Sonnet) took `simd`, `gui` (camera, ingest, pick), every `tests/`, the scripts and `mutations/13-6.sh`. The Acceptance and Feature Auditors (Opus) took the whole diff. Nothing in the repo was modified.
+
+What the layers re-ran:
+- **Tests:** worldgen 25 passed (blind, acceptance). `save_load a_256_crew_200` passed: `to_save` is 28,351,241 bytes (blind, acceptance). simd bench 6 passed, 1 ignored (edge, acceptance). serve `fresh_game` and `bad_dims` passed (edge, acceptance). gui `--lib camera` 24 passed (edge).
+- **Release bench:** `--bench scenarios/two-hundred-on-256.json --runs 1`, run independently by acceptance and feature, reads `state=3fc1461d491ee5d9 … done=dig:231,cut:91 stored=59 cells=2165`, the record exactly. mean 36.3–37.0 ms on a loaded devpod.
+- **Mutation audit:** `audit-mutations.py` reads 973 rows applying (acceptance).
+- **Live daemon (feature):**
+  - A bare `simd`: 256×256×32, 5 dwarves, campfire (127,128,7), snapshot 28,053,921 bytes.
+  - `--dims 160,160,32 --crew 7`: those dims and 7 dwarves. `--scenario` with dims and crew 7 serves the same.
+  - Every refusal names its cause.
+  - A headless gui capture against a release bare `simd`, with no `--camera`, boots onto the camp.
+  - The gate's full tier selects exactly `the_two_hundred_on_256_scenario_does_real_work`.
+- **Live flags (edge):** repeated flags, missing values, odd dims (128×256, 131×197, 255×255 crew 200) all behave.
+
+Patches:
+- [ ] [Review][Patch] The daemon refuses to load any save with crew ≥ 6, so a 256² crew-200 world cannot be reloaded (feature, RAN; HIGH; issue #226) [crates/simd/src/main.rs:763-768] — `try_load_world_from` refuses a repeated dwarf name or colour (`6a56a894`). 13.6 repeats colours from dwarf 6 on and names from dwarf 17 on. Live: `simd --dims 160,160,32 --crew 7`, then `save`, then `load` gives `could not load frostvein.save: save reuses dwarf colour Purple`. A scenario `start.save` of that file fails `--bench` the same way. AC 2's test calls `World::from_save` directly and never reaches the validator. Fix: drop both checks, with a `// NOTE:` that 13.8 restores name uniqueness. Add a test that loads a crew ≥ 17 save through the daemon's real path (`try_load_world_from`, or a serve save→load round trip), so a repeated name and a repeated colour are both in the fixture. Both sides: the fixture is a save the OLD validator refuses.
+- [ ] [Review][Patch] `stored=` counts carried items and stacked items, not the sim's stored rule (acceptance, RAN; the edge hunter suspected it but did not verify; MED, latent silent failure) [crates/simd/src/scenario.rs bench end, `stored`] — the bench counts every `world.items()` entry whose position is a zone cell. `items()` includes carried stones, whose `Pos` is the carrier's tile. The sim's one rule (`split_stored`, `lib.rs:428-448`, which the goals count by) excludes carried stones and counts one per pile tile. Acceptance's replay of the end state: bench rule 59, carried on a zone 26, sim rule 33. The recorded 59 is the baseline later stories take their delta against. AC 7's fixture has no zone, so no test sees this. Fix: expose the sim's count (a `pub fn` over `split_stored`, keeping the rule in ONE place), have the bench use it, and re-read the end line. Correct the 59 in the Completion Notes, the Debug Log and the `bench.rs` comment. Add a fixture with a stone carried over a zone cell (or two on one tile), so a bench-local filter would fail.
+- [ ] [Review][Patch] `done=` counts a mark the sim drops without doing its work (acceptance + edge, read; LOW, in the function patch 2 edits; latent silent failure) [crates/simd/src/scenario.rs bench loop; crates/sim-core/src/lib.rs:2478-2481] — a Dig whose target is no longer solid has its job and mark removed with no tile change. The bench still counts it as dig done. Fix: count a removed mark as done only when its target's tile changed during the step. Cancels are already excluded, because commands land before `before` is taken. A test shows a dropped mark is not counted.
+- [ ] [Review][Patch] Task 7 and the scope guardrail still say the fog is not touched (acceptance; LOW, record) [story § Task 7 "Atmosphere centring … fog volume … is not touched"; § Scope guardrails "atmosphere, fog and snow centring stay as they are"] — `27fc5c0b` sizes the fog volume from `Dims` on Wolf's 2026-10-31 #222 ruling (Change Log), but neither line was amended. Add an AMENDED line naming the ruling to each.
+- [ ] [Review][Patch] "11/11 KILLED, each at its own assert" overstates rows 1 and 6 (acceptance, read; LOW, record) [story § Debug Log Task 9 headline] — row 6 dies at `bench.rs:113 bench failed`: the fixture's dig is refused on a 256² world, so the oracle compare it targets is never reached (the row text says so, the headline does not). Row 1 dies at the sim's empty `random_range` panic (`lib.rs:3677`), which the spec expected. Restate the headline. Row 6 should either get an assert that reaches the oracle, or be named honestly as killed by the refusal.
+
+Deferred:
+- [x] [Review][Defer] `generate_world` reports any worldgen panic as "crew N does not fit the camp's ground" [crates/simd/src/main.rs:107-118] — deferred, the true cause is printed on the line above (edge + feature, RAN). `--crew 18446744073709551615` panics with `capacity overflow` and is mislabelled. The NOTE already acknowledges the raw panic output. Fix if ever needed: carry the panic payload's message, or bound `--crew`.
+- [x] [Review][Defer] After a later snapshot shrinks the world, the gui focus stays outside the new ceiling until the next pan or place [crates/gui/src/camera.rs `fit_world`; crates/gui/src/ingest.rs `follow_snapshot(first=false)`] — deferred, by design per the doc comment (edge, read). Only a Load or reconnect onto a smaller world reaches it.
+- [x] [Review][Defer] The fog-volume fix (`27fc5c0b`, `fog_volume_transform`) has no row in `mutations/13-6.sh` [crates/gui/src/ingest.rs fog_volume_transform] — deferred (acceptance, read). Only a hand sabotage is recorded. The 128² box is pinned exactly by its test.
+
+Dismissed (7):
+- The spill's compact BFS blob and its threshold jump: specified in Task 1.
+- An emitter-partitioned walk ending early: the assert names it.
+- Repeated identities: NOTE plus 13.8.
+- Only the 128/256 endpoints worldgen-tested: the edge hunter ran 128×256, 131×197 and 255×255 live.
+- `--dims +128,…` accepted: Rust's `u32::parse` behaviour.
+- **For Wolf to see:** sim-core's new `serde_json` dev-dependency. It is a workspace crate, dev-only, justified in the Debug Log, but it breaches "no new dependency" literally.
+- "11 vs 10 committed scenarios": the record already corrects it.
+
+Cost: review row $14.12 (258 turns; 4 subagents 69.1% of tokens). Reap after triage: 10 /tmp directories, 33.9 GB (17.0 GB free space reclaimed). Wolf chose "leave as action items", so Status is in-progress. Next is `bmad-review-patch` in a fresh session. Patch 1 adds a load path test and patch 2 re-reads the scenario's end line, so the full gate re-runs after the patch pass.
 
 ## Verification
 
