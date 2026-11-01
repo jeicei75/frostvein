@@ -352,6 +352,41 @@ fn a_seed_start_with_dims_and_crew_builds_that_world() {
     );
 }
 
+/// 13.6 #226: a crew past five repeats colours (from dwarf 6) and names (from dwarf 17), and such a
+/// save loads through the daemon's real validator (`try_load_world_from`, via `start.save`). The
+/// oracle loads the same save straight through `sim_core` and steps it.
+#[test]
+fn a_save_whose_crew_repeats_names_and_colours_loads_and_steps() {
+    let saved =
+        sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 17)
+            .to_save();
+    let names: std::collections::BTreeSet<_> =
+        saved.dwarves.iter().map(|d| d.identity.name).collect();
+    let colours: std::collections::BTreeSet<_> =
+        saved.dwarves.iter().map(|d| d.identity.colour).collect();
+    assert_eq!(saved.dwarves.len(), 17, "the fixture holds 17 dwarves");
+    assert!(names.len() < 17, "the fixture repeats a name");
+    assert!(colours.len() < 17, "the fixture repeats a colour");
+    let path = variant("crew-17-save", |json| {
+        json["commands"] = serde_json::json!([]);
+        json["start"] = serde_json::json!({"save": "crew-17.save"});
+    });
+    fs::write(
+        path.with_file_name("crew-17.save"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let mut world = sim_core::World::from_save(saved);
+    for _ in 0..TICKS {
+        world.step();
+    }
+    assert_eq!(run_states(&text), vec![fnv(&world)], "{text}");
+}
+
 fn lines(reader: impl Read + Send + 'static) -> Receiver<String> {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {

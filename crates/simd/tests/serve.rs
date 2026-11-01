@@ -1047,41 +1047,36 @@ fn duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking() {
     assert!(snapshot.tick < first && first < second);
 }
 
+/// 13.6 #226: a crew past five repeats colours (from dwarf 6) and names (from dwarf 17), and the
+/// live Load takes such a save. Until 13.6 the validator refused both (`6a56a894`).
 #[test]
-fn repeated_dwarf_name_or_colour_save_is_logged_and_the_daemon_keeps_ticking() {
+fn a_save_whose_crew_repeats_names_and_colours_loads() {
     let daemon = Daemon::spawn();
+    let state = sim_core::World::generate_with_crew(42, sim_core::Dims::DEFAULT, 17).to_save();
+    let names: std::collections::BTreeSet<_> =
+        state.dwarves.iter().map(|d| d.identity.name).collect();
+    let colours: std::collections::BTreeSet<_> =
+        state.dwarves.iter().map(|d| d.identity.colour).collect();
+    assert!(names.len() < 17, "the fixture repeats a name");
+    assert!(colours.len() < 17, "the fixture repeats a colour");
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode repeated-identity save fixture"),
+    )
+    .expect("write repeated-identity save fixture");
     let stream = daemon.connect();
     let mut writer = stream.try_clone().expect("client write half must clone");
     let mut reader = BufReader::new(stream);
-    let snapshot = read_snapshot(&mut reader);
+    let _ = read_snapshot(&mut reader);
 
-    for (repeat_name, expected) in [
-        (true, "save reuses dwarf name"),
-        (false, "save reuses dwarf colour"),
-    ] {
-        let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
-        if repeat_name {
-            state.dwarves[1].identity.name = state.dwarves[0].identity.name;
-        } else {
-            state.dwarves[1].identity.colour = state.dwarves[0].identity.colour;
-        }
-        fs::write(
-            daemon.save_path(),
-            serde_json::to_vec(&state).expect("encode repeated-identity save fixture"),
-        )
-        .expect("write repeated-identity save fixture");
-
-        send_literal(&mut writer, b"{\"type\":\"load\"}\n");
-        let log = daemon.next_log();
-        assert!(
-            log.contains(expected),
-            "unexpected repeated-identity log: {log}"
-        );
-    }
-
-    let first = read_delta(&mut reader).tick;
-    let second = read_delta(&mut reader).tick;
-    assert!(snapshot.tick < first && first < second);
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+    assert_eq!(loaded.tick, state.tick);
+    assert_eq!(
+        dwarf_identities(&loaded).len(),
+        17,
+        "every saved dwarf loads"
+    );
 }
 
 #[test]
