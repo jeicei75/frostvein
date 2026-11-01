@@ -361,6 +361,9 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             for (pos, kind, tile) in before {
                 // A mark the sim drops without its work (a dig whose target is no longer solid)
                 // leaves its tile as it was: not done.
+                // NOTE: a mark dropped in the SAME step another job changes its tile still counts:
+                // a Dig dropped as the channel above opens it (the channel changes `target.z - 1`,
+                // the dig's own tile). Not pinned; the 256² file has 0 dropped marks (review run 2).
                 if !after.contains(&pos) && world.tile(pos) != tile {
                     match kind {
                         sim_core::DesignationKind::Dig => dug += 1,
