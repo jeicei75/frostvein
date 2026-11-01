@@ -38,7 +38,11 @@ fn fnv(world: &sim_core::World) -> String {
 
 /// What the fixture must reach: DEFAULT_SEED, the dig applied before the step of tick `at`.
 fn expected(with_dig: bool) -> String {
-    let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
+    expected_world(sim_core::Dims::DEFAULT, 5, with_dig)
+}
+
+fn expected_world(dims: sim_core::Dims, crew: usize, with_dig: bool) -> String {
+    let mut world = sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, dims, crew);
     for _ in 0..TICKS {
         if with_dig && world.tick() == DIG_AT {
             let refused = world.apply_command(sim_core::SimCommand::Designate {
@@ -139,9 +143,161 @@ fn a_scenario_without_its_command_reaches_a_different_world() {
     assert_eq!(run_states(&text), vec![expected(false)], "{text}");
     assert_ne!(expected(false), expected(true), "the dig must matter");
     assert_eq!(field(&end_line(&text), "marks"), "0");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "done"), "dig:0,cut:0", "{end}");
+    assert_eq!(field(&end, "stored"), "0", "{end}");
+    assert_eq!(
+        field(&end, "cells"),
+        "0",
+        "no command, no changed cell: {end}"
+    );
     assert!(
         text.contains("commands=0/0") && text.contains("1 run: no floor"),
         "{text}"
+    );
+}
+
+/// 13.6 AC 7: the end line counts the work done. 400 ticks: creation read the dig still marked at
+/// t100 and finished by t200.
+#[test]
+fn a_finished_dig_is_counted_as_done_and_as_a_changed_cell() {
+    let path = variant("long-dig", |json| json["ticks"] = 400.into());
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "done"), "dig:1,cut:0", "{end}");
+    assert_eq!(field(&end, "marks"), "0", "the mark is gone: {end}");
+    let cells: usize = field(&end, "cells").parse().unwrap();
+    assert!(cells >= 1, "a dug cell differs from the start world: {end}");
+}
+
+/// 13.6 review: a Dig whose target a channel above has already opened is dropped by the sim with no
+/// work done. Channel (73,64,12) and dig (73,64,11) land together; the channel's miner opens the
+/// cell, the dig's miner finds air. Both marks go, but only the channel yields (one item, the two
+/// cells it changed), so `done` counts no dig.
+#[test]
+fn a_dig_the_sim_drops_without_work_is_not_counted_as_done() {
+    let path = variant("dropped-dig", |json| {
+        json["ticks"] = 400.into();
+        let mark = |kind: &str, z: i32| {
+            serde_json::json!({"at": DIG_AT, "command": {"type": "designate", "kind": kind,
+                "rect": {"min": [DIG.x, DIG.y, z], "max": [DIG.x, DIG.y, z]}}})
+        };
+        json["commands"] = serde_json::json!([mark("channel", DIG.z + 1), mark("dig", DIG.z)]);
+    });
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "marks"), "0", "both marks are gone: {end}");
+    assert_eq!(field(&end, "items"), "1", "only the channel yielded: {end}");
+    assert_eq!(field(&end, "cells"), "2", "the channel's two cells: {end}");
+    assert_eq!(
+        field(&end, "done"),
+        "dig:0,cut:0",
+        "the dropped dig is not done: {end}"
+    );
+}
+
+/// 13.6 review: `stored=` is the sim's stored rule (`split_stored`, which the goals count by), not
+/// "items on a zone cell". The save stacks two stones on the one zone tile, so the rule counts one.
+#[test]
+fn stored_counts_one_item_per_zone_tile_as_the_sim_does() {
+    let mut saved =
+        sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT).to_save();
+    let world = sim_core::World::from_save(saved.clone());
+    let tile = sim_core::Pos { x: 66, y: 64, z: 9 };
+    let below = sim_core::Pos {
+        z: tile.z - 1,
+        ..tile
+    };
+    assert_eq!(
+        world.tile(tile),
+        Some(sim_core::Tile::Empty),
+        "the zone tile is open"
+    );
+    assert!(
+        matches!(world.tile(below), Some(sim_core::Tile::Solid(_))),
+        "the zone tile stands on ground"
+    );
+    assert!(
+        saved.dwarves.iter().all(|d| d.pos != tile),
+        "no dwarf stands there"
+    );
+    saved.zones = vec![tile];
+    for _ in 0..2 {
+        saved
+            .items
+            .push((saved.next_id, tile, sim_core::ItemKind::Stone));
+        saved.next_id += 1;
+    }
+    let path = variant("stacked-zone", |json| {
+        json["commands"] = serde_json::json!([]);
+        json["start"] = serde_json::json!({"save": "stacked.save"});
+    });
+    fs::write(
+        path.with_file_name("stacked.save"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    assert_eq!(field(&end, "zones"), "1", "{end}");
+    assert_eq!(
+        field(&end, "items"),
+        "2",
+        "both stones are still there: {end}"
+    );
+    assert_eq!(
+        field(&end, "stored"),
+        "1",
+        "one stored per pile tile: {end}"
+    );
+}
+
+/// 13.6 AC 6: the committed 256² crew-200 scenario does real work. Release only (Q4 a): debug
+/// steps this world about 22x slower. `scripts/gate.sh`'s full tier runs it. The first release
+/// run (2026-10-30, `f1c83b7a`) read `marks=1478 items=602 zones=1800 done=dig:231,cut:91
+/// stored=59 cells=2165` in 91 s, and the same file with `"commands":[]` read
+/// `done=dig:0,cut:0 stored=0 cells=0`. That 59 counted carried and stacked items. Under the sim's
+/// stored rule (review run 1) the same state reads `stored=33`, with `done` and `cells` unchanged.
+#[test]
+#[ignore = "release: steps 256² crew 200 for 2500 ticks"]
+fn the_two_hundred_on_256_scenario_does_real_work() {
+    if cfg!(debug_assertions) {
+        panic!(
+            "run with --release: cargo test --release -p simd --test bench -- --ignored two_hundred"
+        );
+    }
+    let path = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../scenarios/two-hundred-on-256.json"
+    ));
+    let output = bench(path, 1);
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let end = end_line(&text);
+    let done = field(&end, "done");
+    let (dig, cut) = done
+        .strip_prefix("dig:")
+        .and_then(|rest| rest.split_once(",cut:"))
+        .unwrap_or_else(|| panic!("done=dig:N,cut:M in {end}"));
+    let count = |text: &str| -> usize { text.parse().unwrap() };
+    assert!(count(dig) >= 1, "a dig mark was finished: {end}");
+    assert!(count(cut) >= 1, "a cut mark was finished: {end}");
+    assert!(
+        count(&field(&end, "stored")) >= 1,
+        "an item lies on the pile: {end}"
+    );
+    assert!(
+        count(&field(&end, "cells")) >= 1,
+        "the world changed: {end}"
     );
 }
 
@@ -196,6 +352,50 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "refused",
         ),
         (
+            "crew-zero",
+            variant("crew-zero", |json| json["start"]["crew"] = 0.into()),
+            "start crew",
+        ),
+        (
+            "dims-out-of-range",
+            variant("dims-out-of-range", |json| {
+                json["start"]["dims"] = serde_json::json!([64, 64, 32])
+            }),
+            "start dims 64,64,32",
+        ),
+        (
+            "dims-with-save",
+            variant(
+                "dims-with-save",
+                |json| {
+                    json["start"] =
+                        serde_json::json!({"save": "nowhere.save", "dims": [128, 128, 32]})
+                },
+            ),
+            "start dims and crew",
+        ),
+        (
+            "seed-and-save",
+            variant("seed-and-save", |json| {
+                json["start"]["save"] = "nowhere.save".into()
+            }),
+            "seed or a save",
+        ),
+        (
+            "neither-seed-nor-save",
+            variant("neither-seed-nor-save", |json| {
+                json["start"] = serde_json::json!({})
+            }),
+            "seed or a save",
+        ),
+        (
+            "crew-too-big",
+            variant("crew-too-big", |json| {
+                json["start"]["crew"] = 1_000_000.into()
+            }),
+            "crew 1000000 does not fit",
+        ),
+        (
             "unknown-field",
             variant("unknown-field", |json| json["seed"] = 1.into()),
             "could not parse",
@@ -211,6 +411,69 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "{name}: stderr must name {cause:?}: {stderr}"
         );
     }
+}
+
+/// 13.6 AC 3: `dims` and `crew` in a seed start are honoured. No command here: the fixture's dig
+/// cell is a 128² coordinate, and a world built at the wrong size or crew cannot reach this hash.
+#[test]
+fn a_seed_start_with_dims_and_crew_builds_that_world() {
+    let path = variant("dims-crew", |json| {
+        json["commands"] = serde_json::json!([]);
+        json["start"]["dims"] = serde_json::json!([256, 256, 32]);
+        json["start"]["crew"] = 7.into();
+    });
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let want = expected_world(sim_core::Dims::FRESH, 7, false);
+    assert_eq!(run_states(&text), vec![want.clone()], "{text}");
+    assert_ne!(want, expected(false), "256 and seven must matter");
+    assert_ne!(
+        want,
+        expected_world(sim_core::Dims::DEFAULT, 7, false),
+        "the size must matter"
+    );
+    assert_ne!(
+        want,
+        expected_world(sim_core::Dims::FRESH, 5, false),
+        "the crew must matter"
+    );
+}
+
+/// 13.6 #226: a crew past five repeats colours (from dwarf 6) and names (from dwarf 17), and such a
+/// save loads through the daemon's real validator (`try_load_world_from`, via `start.save`). The
+/// oracle loads the same save straight through `sim_core` and steps it.
+#[test]
+fn a_save_whose_crew_repeats_names_and_colours_loads_and_steps() {
+    let saved =
+        sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 17)
+            .to_save();
+    let names: std::collections::BTreeSet<_> =
+        saved.dwarves.iter().map(|d| d.identity.name).collect();
+    let colours: std::collections::BTreeSet<_> =
+        saved.dwarves.iter().map(|d| d.identity.colour).collect();
+    assert_eq!(saved.dwarves.len(), 17, "the fixture holds 17 dwarves");
+    assert!(names.len() < 17, "the fixture repeats a name");
+    assert!(colours.len() < 17, "the fixture repeats a colour");
+    let path = variant("crew-17-save", |json| {
+        json["commands"] = serde_json::json!([]);
+        json["start"] = serde_json::json!({"save": "crew-17.save"});
+    });
+    fs::write(
+        path.with_file_name("crew-17.save"),
+        serde_json::to_vec(&saved).unwrap(),
+    )
+    .unwrap();
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+    let mut world = sim_core::World::from_save(saved);
+    for _ in 0..TICKS {
+        world.step();
+    }
+    assert_eq!(run_states(&text), vec![fnv(&world)], "{text}");
 }
 
 fn lines(reader: impl Read + Send + 'static) -> Receiver<String> {

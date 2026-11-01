@@ -5,6 +5,7 @@
 //! `set_speed`, `save`, `load` and `quit` are refused when the file loads.
 
 use std::{
+    collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
     time::Instant,
@@ -25,17 +26,30 @@ struct File {
     /// Required, never read: every file says what cost case it exercises and where its cells came from.
     #[serde(rename = "about")]
     _about: String,
-    start: Start,
+    start: StartFile,
     ticks: u64,
     speed: protocol::Speed,
     commands: Vec<Scheduled>,
 }
 
+/// `{"seed":S}` or `{"save":F}`, where a seed may add `"dims":[X,Y,Z]` and `"crew":N` (13.6).
+/// Absent, a seed start is the 128x128x32 world with five dwarves it always was.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "snake_case")]
-enum Start {
-    Seed(u64),
+#[serde(deny_unknown_fields)]
+struct StartFile {
+    seed: Option<u64>,
     /// Relative to the scenario file's own directory.
+    save: Option<PathBuf>,
+    dims: Option<[u32; 3]>,
+    crew: Option<usize>,
+}
+
+enum Start {
+    Seed {
+        seed: u64,
+        dims: sim_core::Dims,
+        crew: usize,
+    },
     Save(PathBuf),
 }
 
@@ -101,8 +115,34 @@ impl Scenario {
             }
         }
         let start = match start {
-            Start::Seed(seed) => Start::Seed(seed),
-            Start::Save(save) => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
+            StartFile {
+                seed: Some(seed),
+                save: None,
+                dims,
+                crew,
+            } => {
+                let dims = dims.map_or(sim_core::Dims::DEFAULT, |[x, y, z]| sim_core::Dims {
+                    x,
+                    y,
+                    z,
+                });
+                let crew = crew.unwrap_or(5);
+                crate::check_dims("start dims", dims)?;
+                crate::check_crew("start crew", crew)?;
+                Start::Seed { seed, dims, crew }
+            }
+            StartFile {
+                seed: None,
+                save: Some(save),
+                dims: None,
+                crew: None,
+            } => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
+            StartFile {
+                save: Some(_),
+                seed: None,
+                ..
+            } => bail!("start dims and crew are for a seed start: a save has its own"),
+            _ => bail!("start must name a seed or a save, and not both"),
         };
         Ok(Self {
             name,
@@ -119,7 +159,8 @@ impl Scenario {
     /// A fresh world on the start tick, every time it is called.
     pub fn world(&self) -> anyhow::Result<sim_core::World> {
         match &self.start {
-            Start::Seed(seed) => Ok(sim_core::World::generate(*seed, sim_core::Dims::DEFAULT)),
+            Start::Seed { seed, dims, crew } => crate::generate_world(*seed, *dims, *crew)
+                .with_context(|| format!("scenario {}", self.name)),
             Start::Save(save) => {
                 let path = save.to_str().context("the save path is not UTF-8")?;
                 crate::try_load_world_from(path).with_context(|| {
@@ -291,6 +332,8 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
         let mut world = scenario.world()?;
         let mut schedule = scenario.schedule(world.tick());
         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+        let start_tiles = world.tiles().to_vec();
+        let (mut dug, mut cut) = (0, 0);
         for _ in 0..scenario.ticks {
             for command in schedule.due(world.tick()) {
                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
@@ -300,9 +343,35 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                     );
                 }
             }
+            // Outside the timed window: the Dig and Cut marks that landed and that this step takes,
+            // each with its target's tile.
+            let before: Vec<_> = world
+                .designations()
+                .into_iter()
+                .map(|(pos, kind)| (pos, kind, world.tile(pos)))
+                .collect();
             let started = Instant::now();
             world.step();
             ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            let after: BTreeSet<_> = world
+                .designations()
+                .into_iter()
+                .map(|(pos, _)| pos)
+                .collect();
+            for (pos, kind, tile) in before {
+                // A mark the sim drops without its work (a dig whose target is no longer solid)
+                // leaves its tile as it was: not done.
+                // NOTE: a mark dropped in the SAME step another job changes its tile still counts:
+                // a Dig dropped as the channel above opens it (the channel changes `target.z - 1`,
+                // the dig's own tile). Not pinned; the 256² file has 0 dropped marks (review run 2).
+                if !after.contains(&pos) && world.tile(pos) != tile {
+                    match kind {
+                        sim_core::DesignationKind::Dig => dug += 1,
+                        sim_core::DesignationKind::Cut => cut += 1,
+                        sim_core::DesignationKind::Channel => {}
+                    }
+                }
+            }
             serde_json::to_string(&crate::bridge::delta(
                 &mut world,
                 scenario.speed,
@@ -330,12 +399,21 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             .iter()
             .map(|goal| goal.progress.to_string())
             .collect();
+        let zones: BTreeSet<_> = world.zones().into_iter().collect();
+        let stored = world.stored_count();
+        let cells = world
+            .tiles()
+            .iter()
+            .zip(&start_tiles)
+            .filter(|(now, then)| now != then)
+            .count();
         end = format!(
-            "bench {name} end tick={} marks={} items={} zones={} goals={}",
+            "bench {name} end tick={} marks={} items={} zones={} goals={} \
+             done=dig:{dug},cut:{cut} stored={stored} cells={cells}",
             world.tick(),
             world.designations().len(),
             world.items().len(),
-            world.zones().len(),
+            zones.len(),
             goals.join("/")
         );
     }

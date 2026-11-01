@@ -2796,3 +2796,9 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **The new idle-exit-ahead test jumps the clock by `SQUEEZE_WAIT_TICKS` in one hop** (`crates/sim-core/src/lib.rs:7344`, blind, read). It passes only while the wait is at most the 20-tick `last` window. Raising the wait would make it fail loudly.
 - **The new test does not assert the holder's `Squeeze` is gone after the swap** (`lib.rs:7344-7351`, blind, read). `occupied` is never read back either.
 - **The new test's fixture is not a live shape** (`lib.rs:7309-7354`, feature, RAN). Live, an idle blocker walks a free exit within 10 ticks (30 of 30 looks). The branch is reached only through a timer carried over from a head-on stand-off (a cancel mid-stand-off). A tick-driven cancel case would pin the real route; it waits on 13.4 run-2 decision 1.
+
+## Deferred from: code review of 13-6-two-hundred-on-256 (2026-11-01)
+
+- **`generate_world` reports any worldgen panic as "crew N does not fit the camp's ground"** (`crates/simd/src/main.rs:107-118`, edge + feature, RAN). `--crew 18446744073709551615` panics with `capacity overflow` and is mislabelled, although the true panic prints on the line above. Fix if ever needed: carry the panic payload's message, or bound `--crew`.
+- **After a later snapshot shrinks the world, the gui focus stays outside the new ceiling until the next pan or place** (`crates/gui/src/camera.rs` `fit_world`, `ingest.rs` `follow_snapshot(first=false)`, edge, read). This is by design per the doc comment. Only a Load or reconnect onto a smaller world reaches it.
+- **The fog-volume fix `27fc5c0b` (`fog_volume_transform`) has no row in `mutations/13-6.sh`** (`crates/gui/src/ingest.rs`, acceptance, read). Only a hand sabotage is recorded. The 128² box is pinned exactly by its test.

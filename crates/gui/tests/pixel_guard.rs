@@ -163,7 +163,7 @@ impl Daemon {
              is a COVERAGE HOLE and must fail loudly rather than skip."
         );
         let mut child = Command::new(&simd)
-            .arg("0")
+            .args(["0", "--dims", "128,128,32"])
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()

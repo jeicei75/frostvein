@@ -1,0 +1,463 @@
+---
+model: claude-opus-5-5  # session default (story authored on Opus 5.5)
+baseline_commit: ce69409a2d33f5734d2d35c946bfa2bb30407e56
+---
+
+# Story 13.6: Two Hundred on 256²
+
+Status: review
+
+## Story
+
+As the boss,
+I want the crew size and the map size to be world settings, a fresh game on a 256² valley, and a committed crew-200 scenario that does real work,
+so that every M4 story is measured at the target scale from the first one on, not checked at the end.
+
+## Branch: off local `main`, which is ahead of `origin/main`
+
+Branch `story-13-6-two-hundred-on-256` was cut from local `main` `e8f4a1f9`. It carries three unpushed record commits (`3319e68c` 13.4 done-mark, `ba0b91a0` M4 PRD, `e8f4a1f9` M4 epics) and the uncommitted sprint-planning board (13-6..13-21 keys). These ride into this PR, as `380fd789` did for 13.4. Epic 13's standing ACs bind: M3's ACs 1–8 with **one full gate per story, at PR**, plus **M4 standing ACs 10–18** (`epics.md` Epic 13).
+
+**Wire diff: none.** `Snapshot.dims` already carries the map size (`protocol/src/lib.rs:280`), and positions already travel in the deltas. **Save format: no new field.** `SaveState` already holds `dims` and every dwarf, so the crew size is the saved dwarf list. Keep it that way: the state hash covers the save encoding, so a new saved field moves every committed scenario's hash and breaks AC 4.
+
+## Task 0 — Wolf rules before dev
+
+Each question has a recommendation. The ACs and Tasks are written for it, and a different answer amends the ACs it names.
+
+- **Q1. #187 still reproduces on `main`, so it becomes its own story (ruled 2026-10-28). Where does it go?** Readings are in *Found at creation* below. 13.4 traced its loops as #218's shapes A1–A3 (full pile, refused cut).
+  - (a) **Recommended:** one new story covering #187 and #218, placed after 13.18 (the other movement-debt stories). That makes 17 new stories against the 12–16 cap, so the stretch is on the record.
+  - (b) A #187-only story, with #218 left open.
+  - (c) Fold #187 into 13.18 (stones seal two miners), which holds at 16. **← RULED 2026-10-30.** Q2–Q5 ruled (a). See the Change Log.
+
+  The evidence comment for #187 is drafted in `13-6-signoff/issue-187-comment.md`. Posting it needs Wolf's OK, because the tool blocked the GitHub write at creation.
+- **Q2. What does a scenario `start` with no `dims`/`crew` mean?**
+  - (a) **Recommended: 128×128×32 and crew 5,** the world every committed file was recorded on. The 11 committed files stay byte-for-byte unchanged, `main`'s `simd` can still read them, and `tick-bench.sh main HEAD` measures AC 4 on every old row.
+  - (b) The fresh-game default (256², 5), with explicit `"dims":[128,128,32],"crew":5` written into every committed file. `main`'s `simd` then refuses all 11 files (`deny_unknown_fields`), so 13.6 has no bench delta at all.
+- **Q3. Keeping the daemon tests on the 128² world.** 55 `serve.rs` tests (`Daemon::spawn`, `serve.rs:49-70`) and the gui pixel guards (`pixel_guard.rs:155-170`) all start a bare `simd 0`, which is a fresh game. Several are pinned to DEFAULT_SEED's 128² camp (`serve.rs:584`, `:712`, `:2778`), and the pixel guards' ceilings were calibrated on the 128² boot frame. A fresh 256² game breaks those pins, and every connect then encodes a snapshot of about 28 MB in debug.
+  - (a) **Recommended:** the fresh game takes `simd PORT --dims X,Y,Z [--crew N]` (default 256,256,32 and 5), refused loudly when out of range. `Daemon::spawn` and the pixel guard pass `--dims 128,128,32`, so their worlds, pins and wall-clock stay as they are.
+  - (b) Move the tests to 256: re-pin the camp recipes, re-calibrate the pixel guards, and accept an unmeasured slowdown of the slow suite.
+  - (c) Do not flip the fresh game here. AC 2 moves to 13.8.
+- **Q4. The real-work test cannot run in the debug gate.** A debug build steps 256² crew 200 at 29 ms/tick while the crew is still walking, 22 times release's 1.3 ms, and the first delivery comes at about t1,750 (*Found at creation*).
+  - (a) **Recommended:** an `#[ignore]`d test in `crates/simd/tests/bench.rs` that drives the release binary through `simd --bench`, run by a new full-tier line in `scripts/gate.sh`: `cargo test --release -p simd --test bench -- --ignored two_hundred`. That costs about one release build plus a ~100 s run per full gate, and nothing on the fast tier.
+  - (b) No gate test. The scenario file carries an `expect` block that `--bench` enforces, so `tick-bench.sh` FAILs the row on every later story.
+- **Q5. The gui camera at 256².** The focus clamp is the 128² world (`camera.rs:9-12`, whose own NOTE says a larger world must follow `Dims`), and the boot focus is a literal `(64,64,9)` (`ingest.rs:1615`). On 256² the camp is `(127,128,7)`, so the camera boots off camp and cannot reach three quarters of the map. Sky, fog, aurora and snow are centred on the 128² world (`atmosphere.rs:52`, `:66`, `ingest.rs:1705`).
+  - (a) **Recommended:** the clamp follows the snapshot's `Dims`, and the boot focus is the campfire once the snapshot lands, unless `--camera` was given. On 128² DEFAULT_SEED the campfire is at `(64,64,9)`, so the boot frame there is unchanged. The atmosphere stays as it is; the seat judges it (Task 8).
+  - (b) No gui code. Measure with `--camera` (the clamp still reaches the camp at `(127,127,7)`) and file the camera and atmosphere as issues.
+
+## Found at creation (2026-10-29, `main` code `0a8b4462`)
+
+Throwaway scratch worktrees, release builds. The patches and raw lines are in `13-6-signoff/` (`prototypes/scale-near.patch`, `prototypes/probe187-refusals.patch`, `creation-probes.txt`). Timings are **not** timing-grade: up to four runs shared the devpod.
+
+- **#187 reproduces.** A counter at the channel cut's refusal (`lib.rs:2537-2542`) ran over the four `UNFINISHED_LATE` cage runs (`scenario.rs:3054`) to 16,000 ticks. Runs (0,4) and (6,6) refuse the same cut 56 and 55 times in t12k–16k, about one refusal every 72 ticks to the end of the run. Runs (9,6) and (13,6) never refuse (never claimed: #218 shape B).
+- **#159 does not stop real work, so 13.6 and 13.7 do not swap** (epic Task 0). 13.2's own 256² layout (mine at (64,64), pile at (192,192), legs across the map) stores **0 by t3,000**, with 501 items lying and the tick at 174 ms. The cause is distance, not the search budget: the same layout at crew 5 finishes all 45 marks by t8,000 and stores 2. A layout near the camp (`scale-near.patch`, `SCALE_OFF=16`: mine targets (111,112) and pile (143,144) from camp (127,128,7)) does real work:
+
+  | t | 750 | 1,000 | 1,750 | 2,000 | 2,500 | 3,000 |
+  |---|---:|---:|---:|---:|---:|---:|
+  | stored | 0 | 0 | **5** | 17 | **50** | 74 |
+  | dig / cut marks done (of 1,600 / 200) | 7 / 7 | 39 / 15 | 146 / 58 | 167 / 65 | 227 / 86 | 274 / 114 |
+  | mean ms over the last 250 ticks | 3.6 | 15.0 | 55.5 | 68.1 | 88.7 | 108.5 |
+
+  `SCALE_OFF=32` stores 13 by t3,000. 1,800 marks are under `MAX_DESIGNATIONS` 4096. The camp's walkable component is 64,300 cells, over `MAX_ASTAR_NODES` 50,000 (#159 is live, but not blocking).
+- **The first NFR12 reading will sit far over the bar.** The tick cost climbs with items lying (737 at t3,000), to about 4× NFR12's 25 ms mean. Recording it is this story's job; NFR12 gates the milestone close, and optimization waits for a profile (TP).
+- **Sizes at 256².** A 128² save is 7.27 MB (`scenarios/saves/`) and the 128² snapshot about 6.9 MB (`tui/src/main.rs:40`). 4× both is about 29 MB and 28 MB, under the 64 MB caps (`simd/src/main.rs:33`, `tui/src/main.rs:41`, `gui/src/ingest.rs:85`). Task 2 measures them for real.
+
+## Acceptance Criteria
+
+1. **Settings from a scenario (FR53).** A scenario `start` of `{"seed":S,"dims":[X,Y,Z],"crew":N}` loads a world with those dims and exactly N dwarves. With `dims`/`crew` absent it loads the world Q2 names. The loader refuses, naming the cause: crew 0, dims outside the supported range (x and y in 128..=256, z = 32), and a crew with more dwarves than walkable ground near the camp.
+2. **Saved and deterministic (FR53, AD-11).** A 256² crew-200 world saved at tick T, loaded and stepped N ticks equals the never-saved world (dims, every dwarf, jobs, `to_save` bytes). Two worlds generated from the same seed, dims and crew are identical.
+3. **A fresh game is 256² (FR53).** `simd` with no scenario and no load serves a snapshot whose `dims` are 256×256×32 (emitter `bridge.rs:13-17`) with 5 dwarf entities. Under Q3 (a), `--dims`/`--crew` override that. The 256² DEFAULT_SEED world has the camp and campfire, trees, lake ice, and a walkable component from the camp.
+4. **Two hundred spawn (FR53).** On 256² and on 128², crew 200 spawns with no panic: 200 distinct standable tiles, none a campfire or torch cell, each in the camp's walkable component. A crew that fits the camp ring draws exactly as today: `spawn_positions_for_seed_42_are_pinned` and every other worldgen pin pass unchanged.
+5. **No committed outcome moves (FR53).** `RUNS=3 scripts/tick-bench.sh main HEAD` over the 11 committed scenarios (`scenarios/*.json` before this story) reads `same` on every row.
+6. **The 256² crew-200 scenario does real work (FR54).** `scenarios/two-hundred-on-256.json` runs `--bench` with an end line that gains `done=dig:N,cut:M` (marks the sim completed during the run), `stored=S` (items lying on zone cells at the end) and `cells=C` (tiles that differ from the start world). A test asserts `N ≥ 1`, `M ≥ 1`, `S ≥ 1` and `C ≥ 1` on the real file (Q4). The file holds ≤ 4096 marks.
+   - **AMENDED 2026-11-01 (review run 1, `stored=` finding; run 2 REWORK):** `stored=S` is the sim's stored rule, not "items lying on zone cells": `World::stored_count` over `split_stored` (the goals' rule) counts an item that is uncarried, on a stockpile tile, and the lowest-id item on that tile. A carried stone over a pile tile and a second stone on one tile are not stored. The real file reads `stored=33` (run 1's 59 counted 26 carried stones).
+7. **The instrument moves with the world.** On `tests/fixtures/one-dig.json`: the no-command variant reads `done=dig:0 … stored=0 cells=0`; a variant long enough for the dig to finish reads `done=dig:1` and `cells≥1`.
+8. **NFR12's first reading.** The record holds `simd --bench scenarios/two-hundred-on-256.json --runs 5` (release, nothing else running): each run's mean and p99, the median p99, and the spread as the noise floor. `main` cannot read this file (unknown `dims`), so this reading is HEAD-only. Later stories take their delta against `main` here. The bar does not gate this story.
+9. **The scale traps are each checked** (Task 6): fixed, or carrying a `// NOTE:` that names the story that fixes it. Names repeat past 16 and colours past 5 until 13.8. Professions for crew N are the 2:2:1 miner:hauler:woodcutter mix in one seeded shuffle, not `i % 5`; crew 200 holds 80/80/40, and crew 5 matches today's draw.
+10. **The seat (NFR13's first reading).** Wolf runs the scenario at the seat with `--perf-log`, and the gui frame rate with 200 dwarves on 256² is recorded at working zoom and at full vista against NFR6's bars. A miss is measured and ruled, not fixed here. **Split line:** this AC becomes its own story if 13.6 overruns a session.
+
+## Tasks / Subtasks
+
+- [x] **Task 0: Wolf's rulings (Q1–Q5).** Record the answers in the Change Log and amend the ACs they name. Post `13-6-signoff/issue-187-comment.md` on #187 if Wolf says yes. Then ASK which implementer to use before dev (memory: `dev-implementer-is-sonnet-not-codex`).
+- [x] **Task 1: crew and dims in `sim-core` (AC 2, 4, 9).** UPDATE `crates/sim-core/src/lib.rs`. Port `13-2-signoff/prototypes/scale.patch`'s two `lib.rs` hunks by hand (its `scale_gen` module is NOT shipped).
+  - [x] `pub fn generate_with_crew(seed: u64, dims: Dims, crew: usize) -> World`. `generate(seed, dims)` calls it with 5. Doc the panic: no walkable ground for `crew`.
+  - [x] `spawn_dwarves(camp, rng, identities: Vec<Identity>, professions: Vec<Profession>)` (`:3598`). The ring candidates are drawn exactly as today. Only when the ring holds fewer than `crew`, the candidates become the first `crew` cells of a breadth-first walk from the camp over `astar_neighbours` (`:1130`), with the camp emitters blocked (scale.patch's shape). Then the same `rng.random_range` draw.
+  - [x] Identities: today's shuffled `names` and `colours`, with dwarf i taking `names[i % 16]` and `colours[i % 5]`, and a `// NOTE:` that 13.8 makes names unique. Professions: `[Miner, Miner, Hauler, Hauler, Woodcutter]` cycled to length `crew`, then ONE `shuffle(&mut profession_rng)` over the whole list. For crew 5 this is today's array and today's shuffle.
+  - [x] Wander phase NOTE (`:3635`): rewrite it to say what 200 dwarves give, about 20 per phase. Any assignment into a 10-tick period gives that, so the NOTE says the seat judges lockstep (Task 8) and nothing changes here.
+  - [x] `Dims::DEFAULT` stays 128×128×32 (280+ test sites pin it). Add `Dims::FRESH = 256×256×32`, and give `DEFAULT` a doc line: the 128² world every pinned test and committed scenario runs on.
+- [x] **Task 2: tests for Task 1 (AC 2, 3, 4, 9).**
+  - [x] UPDATE `crates/sim-core/tests/worldgen.rs`. `a_crew_of_200_spawns_near_the_camp_one_per_tile` at 128² and 256² (AC 4's four properties, plus a positive count of 200). `a_256_valley_is_playable` (campfire at the camp, trunk columns > 0 via `tree_trunk_columns`, lake ice cells > 0, the camp component > 50,000 cells: creation read 64,300). `crew_200_holds_the_two_two_one_mix` (80/80/40, and the first five dwarves' professions equal crew 5's).
+  - [x] UPDATE `crates/sim-core/tests/save_load.rs`. `a_256_crew_200_world_saves_loads_and_steps_identically`: save at tick 10, load, step 20, compare `to_save` bytes with the never-saved world. Keep the ticks small: debug runs 29 ms/tick here. Print `to_save` byte length (AC 2's size reading; the snapshot is measured in Task 4).
+- [x] **Task 3: scenario settings and the fresh game in `simd` (AC 1, 3; Q2, Q3).** UPDATE `crates/simd/src/scenario.rs` (`Start` `:36`, `world()` `:120`) and `crates/simd/src/main.rs` (`parse_args` `:92`, fresh world `:174`).
+  - [x] `start` takes optional `dims` and `crew` beside `seed` (not with `save`). Absent means Q2's answer. Refuse at load: crew 0, dims out of 128..=256 / z ≠ 32, `dims`/`crew` with `save`. Each refusal names its field (NFR11). A crew too big for the ground is caught before `generate_with_crew` panics: refuse when the camp's component is smaller than `crew`, or let the panic message name it, but name it either way.
+  - [x] Fresh game: `World::generate_with_crew(DEFAULT_SEED, Dims::FRESH, 5)`. Under Q3 (a), `--dims X,Y,Z` / `--crew N` for the fresh game only (refused with `--scenario`/`--bench`, same range checks), and `Daemon::spawn` (`serve.rs:67`) and the pixel guard (`pixel_guard.rs:165`) pass `--dims 128,128,32`.
+  - [x] **Print no new startup line.** `bench.rs:254` expects `holding` as the second stdout line, `serve.rs:111` `next_log` treats every stderr line as a reply to input, and `Daemon::spawn` drops its stdout receiver after the listening line (a later `println!` can hit a closed pipe). AC 3 reads the snapshot instead.
+  - [x] Tests: extend `every_unusable_scenario_fails_loudly_naming_the_cause` (`bench.rs:149`) with crew 0, an out-of-range dims, dims with save, and a crew too big. Add a `bench.rs` test where a `dims:[256,256,32],"crew":7` variant's end line and the oracle agree (rebuild the expected world in the test with `generate_with_crew`, as `expected()` does). Add `a_fresh_game_serves_a_256_valley_with_five_dwarves` to `serve.rs`: a bare spawn (no `--dims`) serves a snapshot with `dims` 256×256×32 and 5 dwarf entities (a debug 256² snapshot is about 28 MB, so read it once). Under Q3 (a), add `--dims 160,160,32 --crew 7` → those dims and 7 dwarves, plus refusals for an out-of-range `--dims` and `--crew 0`.
+- [x] **Task 4: the instrument, RED first (AC 6, 7).** UPDATE `crates/simd/src/scenario.rs` `bench` (`:281-345`).
+  - [x] Keep a copy of the start tiles. Each tick, outside the timed window, record which Dig/Cut marks existed before `world.step()` and are gone after it: that is `done`. Commands land before the step, so a cancel never counts. At the end, append `done=dig:N,cut:M stored=S cells=C` to the end line, after the existing fields; `field()` (`bench.rs:91`) parses by key.
+  - [x] Tests (AC 7) in `crates/simd/tests/bench.rs`: the fixture's no-command variant reads `done=dig:0,cut:0`, `stored=0`, `cells=0`. A `ticks: 400` variant of `one-dig.json` reads `done=dig:1` and `cells≥1`. Creation read the dig still marked at t100 and finished by t200 (`marks=0 items=1`), so 400 leaves margin.
+  - [x] Print the snapshot byte length once for 256² (a throwaway, or a `bridge.rs` test that prints `serde_json::to_vec(&snapshot(..)).len()`) and record it with Task 2's save size. Both must be under 64 MB.
+- [x] **Task 5: the scenario and its real-work test (AC 6, 8; Q4).**
+  - [x] NEW `scenarios/two-hundred-on-256.json`: copy `13-6-signoff/near16-256-crew200.json` (generated at creation by `scale-near.patch` with `SCALE_OFF=16`), set `"name":"two-hundred-on-256"`, `"ticks":2500` and `"speed":"normal"` (the bench ignores speed; at the seat, fast4x's 5 ms period is far below a 40–100 ms tick), and rewrite `about` to say what it is and how it was made (patch + command). Creation reading at t2,500: stored 50, dig 227, cut 86. Do not hand-edit the commands.
+  - [x] RED: run the release binary on a copy with `"commands":[]` and paste the end line (`done=dig:0,cut:0 stored=0 cells=0`). Then GREEN on the real file.
+  - [x] Under Q4 (a): `#[ignore = "release: steps 256² crew 200 for 2500 ticks"]` test `the_two_hundred_on_256_scenario_does_real_work` in `bench.rs`, running `env!("CARGO_BIN_EXE_simd") --bench scenarios/two-hundred-on-256.json --runs 1` and asserting AC 6 on the end line, with positive values pasted from the run in a comment. UPDATE `scripts/gate.sh`: the full tier (not `--fast`; check the `--range` scope block, `gate.sh:133-145`) runs `cargo test --release -p simd --test bench -- --ignored two_hundred`.
+  - [x] AC 8: `target/release/simd --bench scenarios/two-hundred-on-256.json --runs 5` on an idle devpod. Paste every run line, the median p99 and the spread.
+- [x] **Task 6: the scale traps (AC 9).** One line each in the Debug Log, naming fixed or NOTE and where:
+  - [x] `Dims::DEFAULT` → Task 1. `[Identity; 5]`/`[Profession; 5]` → Task 1. `CAMP_RADIUS` spawn panic → Task 1.
+  - [x] `MAX_ASTAR_NODES` (`lib.rs:50`): `// NOTE:` that the 256² camp component is 64,300 cells and 13.7 (#159) sizes the budget.
+  - [x] `MAX_DESIGNATIONS` (`:49`): the scenario's 1,800 marks are under it. `// NOTE:` that #170 drops cells silently at the cap and M4's forage/fishing marks add to the count.
+  - [x] Wander phases → Task 1. The gui camera → Task 7 (Q5).
+- [x] **Task 7: the gui camera (Q5 a; AC 10's precondition).** UPDATE `crates/gui/src/camera.rs` and `crates/gui/src/ingest.rs`.
+  - [x] `FOCUS_MAX` becomes the snapshot's `Dims` minus one on each axis, for both `place` (`:72`) and `pan` (`:105`). Replace the NOTE at `:9-11`. Tests: the existing clamp tests (`camera.rs:392`, `ingest.rs:7297`) keep their 128² values when given 128² dims, and a 256² rig pans to `(200,200,7)`.
+  - [x] Without `--camera`, the first snapshot moves the focus to the campfire. The rig is built before the snapshot (`ingest.rs:1615`), so this is a one-shot on ingest. Test: on 128² DEFAULT_SEED the focus stays `(64,64,9)` (the boot pin at `ingest.rs:7285` stands), and on 256² it lands at the campfire.
+  - [x] Atmosphere centring (`atmosphere.rs:52`, `:66`; fog volume `ingest.rs:1705`) is not touched. File an issue only if the seat shows a defect (Task 8). Look work waits for a concrete defect (memory: `art-gates-visual-judgement`).
+    - **AMENDED 2026-10-31 (Wolf, #222: "we need to fix that now and re-run perftests"):** the fog volume IS touched. `27fc5c0b` sizes it from the snapshot's `Dims` (`fog_volume_transform`). Sky, aurora and snow centring stay as they are.
+- [x] **Task 8: the seat card (AC 10).** NEW `_bmad-output/implementation-artifacts/13-6-signoff/vehicle-card.md`. Push first (`scripts/push.sh --fast`, standing authorisation: memory `push-branch-for-vehicle-testing`). In WSL, run a release `simd 7451 --scenario scenarios/two-hundred-on-256.json`. In PowerShell from the Windows checkout, run `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-6-perf-working.log','--camera','0.7,0.45,45,127,128,7')` for working zoom. Restart the daemon, then do the same with `13-6-perf-vista.log` and `'0.7,0.45,500,127,128,7'` for full vista. Check both `--camera` lines headless first (lavapipe; memory: `headless-gui-instruments`). Then a bare `simd 7451` (the fresh game) with no `--camera`. Questions for Wolf: (1) fps at each framing against NFR6, read from the perf log; (2) do the camp and the work read on 256² (camera reach, atmosphere)? (3) does the fresh game boot onto the camp of a 256² valley? Record the answers. A defect gets an issue.
+- [x] **Task 9: mutation table.** NEW `_bmad-output/implementation-artifacts/mutations/13-6.sh` in `13-4.sh`'s shape. Commit first, then run it alone (`env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh …`). Every row must be KILLED at its own assert:
+  1. the spill never runs (ring only) → the crew-200 spawn test (panic);
+  2. the spill takes any standable cell in a box instead of the camp component → the component assert;
+  3. the spill always runs, even for crew 5 → `spawn_positions_for_seed_42_are_pinned`;
+  4. professions cycle `i % 5` → `crew_200_holds_the_two_two_one_mix` (it reads 80/80/40 under the cycle too, so the test also needs an order assert that the cycle fails; prove the row KILLS);
+  5. the scenario loader ignores `dims` (generates `Dims::DEFAULT`) → the 256 crew-7 bench test;
+  6. absent `dims` means 256 → `bench_replays_the_scenario_identically_and_reaches_the_oracle_state`;
+  7. the fresh game uses `Dims::DEFAULT` → the bare-spawn `serve.rs` snapshot test;
+  8. `done` never counts → the 400-tick fixture test;
+  9. `cells` compares the end world with itself → the 400-tick fixture test;
+  10. `create_haul_jobs` returns early → `the_two_hundred_on_256_scenario_does_real_work` (release; a heavy row, about 3 min);
+  11. (Q5 a) `FOCUS_MAX` stays 127 → the 256² pan test.
+
+  `python3 scripts/audit-mutations.py` must read every row applying.
+- [x] **Task 10: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~70 min, memory: `gate-ooms-at-default-parallelism`). Paste the block. Paste AC 5's `tick-bench` table. Cost row (`python3 _bmad/scripts/session_tokens.py --phase dev --story 13-6-two-hundred-on-256`), then `phase_state.py clear`, then Status → review on the story and the board.
+
+### Review Findings
+
+Code review run 1 (2026-11-01, a fresh session), on `main...747774a1` (code diff 18 files, +917/−38). Four layers, each running `cargo 1.97.1` in its own `CARGO_TARGET_DIR` under `/tmp/review-<layer>`. None timed out or failed. Territories: Blind Hunter (Sonnet) took `crates/sim-core/src` + `Cargo.toml`. Edge Case Hunter (Sonnet) took `simd`, `gui` (camera, ingest, pick), every `tests/`, the scripts and `mutations/13-6.sh`. The Acceptance and Feature Auditors (Opus) took the whole diff. Nothing in the repo was modified.
+
+What the layers re-ran:
+- **Tests:** worldgen 25 passed (blind, acceptance). `save_load a_256_crew_200` passed: `to_save` is 28,351,241 bytes (blind, acceptance). simd bench 6 passed, 1 ignored (edge, acceptance). serve `fresh_game` and `bad_dims` passed (edge, acceptance). gui `--lib camera` 24 passed (edge).
+- **Release bench:** `--bench scenarios/two-hundred-on-256.json --runs 1`, run independently by acceptance and feature, reads `state=3fc1461d491ee5d9 … done=dig:231,cut:91 stored=59 cells=2165`, the record exactly. mean 36.3–37.0 ms on a loaded devpod.
+- **Mutation audit:** `audit-mutations.py` reads 973 rows applying (acceptance).
+- **Live daemon (feature):**
+  - A bare `simd`: 256×256×32, 5 dwarves, campfire (127,128,7), snapshot 28,053,921 bytes.
+  - `--dims 160,160,32 --crew 7`: those dims and 7 dwarves. `--scenario` with dims and crew 7 serves the same.
+  - Every refusal names its cause.
+  - A headless gui capture against a release bare `simd`, with no `--camera`, boots onto the camp.
+  - The gate's full tier selects exactly `the_two_hundred_on_256_scenario_does_real_work`.
+- **Live flags (edge):** repeated flags, missing values, odd dims (128×256, 131×197, 255×255 crew 200) all behave.
+
+Patches:
+- [x] [Review][Patch] The daemon refuses to load any save with crew ≥ 6, so a 256² crew-200 world cannot be reloaded (feature, RAN; HIGH; issue #226) [crates/simd/src/main.rs:763-768] — `try_load_world_from` refuses a repeated dwarf name or colour (`6a56a894`). 13.6 repeats colours from dwarf 6 on and names from dwarf 17 on. Live: `simd --dims 160,160,32 --crew 7`, then `save`, then `load` gives `could not load frostvein.save: save reuses dwarf colour Purple`. A scenario `start.save` of that file fails `--bench` the same way. AC 2's test calls `World::from_save` directly and never reaches the validator. Fix: drop both checks, with a `// NOTE:` that 13.8 restores name uniqueness. Add a test that loads a crew ≥ 17 save through the daemon's real path (`try_load_world_from`, or a serve save→load round trip), so a repeated name and a repeated colour are both in the fixture. Both sides: the fixture is a save the OLD validator refuses. — **LANDED** `46c7ada8` + `5f5a3856`: both checks dropped with a NOTE naming 13.8. The old serve test that pinned the refusal (`repeated_dwarf_name_or_colour_save_is_logged…`) became `the_live_load_takes_a_save_whose_crew_repeats_names_and_colours`; new bench test `a_save_whose_crew_repeats_names_and_colours_loads_and_steps` (start.save path, from_save oracle). Rows 12-13 KILLED.
+- [x] [Review][Patch] `stored=` counts carried items and stacked items, not the sim's stored rule (acceptance, RAN; the edge hunter suspected it but did not verify; MED, latent silent failure) [crates/simd/src/scenario.rs bench end, `stored`] — the bench counts every `world.items()` entry whose position is a zone cell. `items()` includes carried stones, whose `Pos` is the carrier's tile. The sim's one rule (`split_stored`, `lib.rs:428-448`, which the goals count by) excludes carried stones and counts one per pile tile. Acceptance's replay of the end state: bench rule 59, carried on a zone 26, sim rule 33. The recorded 59 is the baseline later stories take their delta against. AC 7's fixture has no zone, so no test sees this. Fix: expose the sim's count (a `pub fn` over `split_stored`, keeping the rule in ONE place), have the bench use it, and re-read the end line. Correct the 59 in the Completion Notes, the Debug Log and the `bench.rs` comment. Add a fixture with a stone carried over a zone cell (or two on one tile), so a bench-local filter would fail. — **LANDED** `8aa122a6`: `World::stored_count` over `split_stored`; the bench uses it. Re-read 59 → **33**, state `3fc1461d491ee5d9` unchanged; the 59 is corrected in the Completion Notes, Debug Log (Task 5, AC 8) and the `bench.rs` comment. Test `stored_counts_one_item_per_zone_tile_as_the_sim_does`. Row 14 KILLED.
+- [x] [Review][Patch] `done=` counts a mark the sim drops without doing its work (acceptance + edge, read; LOW, in the function patch 2 edits; latent silent failure) [crates/simd/src/scenario.rs bench loop; crates/sim-core/src/lib.rs:2478-2481] — a Dig whose target is no longer solid has its job and mark removed with no tile change. The bench still counts it as dig done. Fix: count a removed mark as done only when its target's tile changed during the step. Cancels are already excluded, because commands land before `before` is taken. A test shows a dropped mark is not counted. — **LANDED** `8aa122a6`: a removed mark counts only if its target's tile changed in that step. Test `a_dig_the_sim_drops_without_work_is_not_counted_as_done`. Row 15 KILLED. The 256² `done=dig:231,cut:91` did not move.
+- [x] [Review][Patch] Task 7 and the scope guardrail still say the fog is not touched (acceptance; LOW, record) [story § Task 7 "Atmosphere centring … fog volume … is not touched"; § Scope guardrails "atmosphere, fog and snow centring stay as they are"] — `27fc5c0b` sizes the fog volume from `Dims` on Wolf's 2026-10-31 #222 ruling (Change Log), but neither line was amended. Add an AMENDED line naming the ruling to each. — **LANDED** (record commit): an AMENDED line naming Wolf's 2026-10-31 #222 ruling under Task 7 and under Scope guardrails.
+- [x] [Review][Patch] "11/11 KILLED, each at its own assert" overstates rows 1 and 6 (acceptance, read; LOW, record) [story § Debug Log Task 9 headline] — row 6 dies at `bench.rs:113 bench failed`: the fixture's dig is refused on a 256² world, so the oracle compare it targets is never reached (the row text says so, the headline does not). Row 1 dies at the sim's empty `random_range` panic (`lib.rs:3677`), which the spec expected. Restate the headline. Row 6 should either get an assert that reaches the oracle, or be named honestly as killed by the refusal. — **LANDED** (record commit): headline and Completion Note restated: all 11 die in their named tests, and rows 1 and 6 die before the assert they target. Row 6 is named honestly as killed by the refusal (the finding's second option). No new oracle assert.
+
+Patch pass 1 closure table (2026-11-01, a fresh session; none is REWORK, this is round 1):
+
+| Item | Fix written for | Side then tested | Pre-existing-state fixture |
+|---|---|---|---|
+| 1 #226 crew>5 load | a save that repeats names and colours loads | the OLD validator against the same save: RED `save reuses dwarf colour Purple` (bench) and no post-load snapshot (serve, `:225`). Then the new code loads it and steps to the `from_save` oracle. The refusal that stays (duplicate id) is pinned by the unchanged `duplicate_dwarf_id_save_is_logged…` | `crew-17.save`: `generate_with_crew(DEFAULT_SEED, 128², 17).to_save()` (colours repeat from dwarf 6, names from 17; the test asserts both repeat). Serve: the same at seed 42 |
+| 2 `stored=` | the sim's stored rule | the OLD bench rule against a stack: RED `stored=2`. Real file: 59 → 33 at the same state hash | `stacked.save`: DEFAULT_SEED's save plus two stones on its one zone tile (66,64,9). It has no carried-on-zone case (the finding allows "or two on one tile"). The carried half is seen only in the real file's 59 → 33, which no test asserts |
+| 3 `done=` | a mark dropped without its work | the OLD bench against a dropped dig: RED `done=dig:1`. The counted side: `a_finished_dig_is_counted…` still reads `dig:1`, and the 256² file still reads 231/91 | `dropped-dig` variant of `one-dig.json`: channel (73,64,12) and dig (73,64,11) both at t5, 400 ticks. The end line reads `marks=0 items=1 cells=2`, so both marks are gone and only the channel yielded. Limitation: a mark dropped in the SAME step that another job changes its tile still counts. The sim's order makes that rare, and it is not pinned |
+| 4 fog AMENDED | record | n/a (record): both lines now carry the AMENDED line | n/a |
+| 5 headline | record | n/a (record): headline and Completion Note match the 11 panic lines | n/a |
+
+Deferred:
+- [x] [Review][Defer] `generate_world` reports any worldgen panic as "crew N does not fit the camp's ground" [crates/simd/src/main.rs:107-118] — deferred, the true cause is printed on the line above (edge + feature, RAN). `--crew 18446744073709551615` panics with `capacity overflow` and is mislabelled. The NOTE already acknowledges the raw panic output. Fix if ever needed: carry the panic payload's message, or bound `--crew`.
+- [x] [Review][Defer] After a later snapshot shrinks the world, the gui focus stays outside the new ceiling until the next pan or place [crates/gui/src/camera.rs `fit_world`; crates/gui/src/ingest.rs `follow_snapshot(first=false)`] — deferred, by design per the doc comment (edge, read). Only a Load or reconnect onto a smaller world reaches it.
+- [x] [Review][Defer] The fog-volume fix (`27fc5c0b`, `fog_volume_transform`) has no row in `mutations/13-6.sh` [crates/gui/src/ingest.rs fog_volume_transform] — deferred (acceptance, read). Only a hand sabotage is recorded. The 128² box is pinned exactly by its test.
+
+Dismissed (7):
+- The spill's compact BFS blob and its threshold jump: specified in Task 1.
+- An emitter-partitioned walk ending early: the assert names it.
+- Repeated identities: NOTE plus 13.8.
+- Only the 128/256 endpoints worldgen-tested: the edge hunter ran 128×256, 131×197 and 255×255 live.
+- `--dims +128,…` accepted: Rust's `u32::parse` behaviour.
+- **For Wolf to see:** sim-core's new `serde_json` dev-dependency. It is a workspace crate, dev-only, justified in the Debug Log, but it breaches "no new dependency" literally.
+- "11 vs 10 committed scenarios": the record already corrects it.
+
+Cost: review row $14.12 (258 turns; 4 subagents 69.1% of tokens). Reap after triage: 10 /tmp directories, 33.9 GB (17.0 GB free space reclaimed). Wolf chose "leave as action items", so Status is in-progress. Next is `bmad-review-patch` in a fresh session. Patch 1 adds a load path test and patch 2 re-reads the scenario's end line, so the full gate re-runs after the patch pass.
+
+#### Code review run 2 (2026-11-01, a fresh session), on `747774a1..b3f8960e`
+
+**Delta vs run 1:** 4 NEW (0 HIGH, 1 MED, 3 LOW), 1 REWORK (closure-table row 2 half-closed). This is the first review of this diff, but the stopping rule reads on severity: no NEW HIGH, so **the audit ends here**. No round 3. The next spend goes to the full gate and the PR.
+
+How it ran: four layers, each running `cargo 1.97.1` in its own `/tmp/review-<layer>` target. None timed out or failed, and nothing in the repo was modified.
+- Blind Hunter (Sonnet) took `sim-core` (`stored_count`).
+- Edge Case Hunter (Sonnet) took `simd` src and tests, plus mutation rows 12-15.
+- The Acceptance and Feature Auditors (Opus) took the whole diff and the closure table.
+
+What the layers re-ran:
+- **Tests:** `cargo test -p sim-core`: all green (blind). `simd --test bench`: 9 passed, 1 ignored (edge, acceptance). Serve `live_load` and `duplicate_dwarf_id`: passed (edge).
+- **Release bench:** `two-hundred-on-256.json` reads `state=3fc1461d491ee5d9 … done=dig:231,cut:91 stored=33 cells=2165` (acceptance, feature).
+- **`stored=33` is the game's number:** an independent Python replay of the t2500 save gives Wood 28 (the HUD's goal-1 progress) + Stone 5. It counts 59 on a zone, 26 of them carried, 0 stacked.
+- **`done` oracle:** all 322 removed marks changed their tile (231 dig, 91 cut, 0 dropped). The `done=` patch is inert on this file (feature).
+- **#226 live at scale (feature, release):** a fresh `--crew 200` saves and loads in the same process and in a fresh one, about 0.5 s to the snapshot. A mid-work save of the scenario at t1201 does the same. Resuming from the t2500 save for 100 ticks gives the same hash as running straight to t2600 (`0c68c1b452f40e71`). A tui `--key S`/`--key L` round trip renders `dwarves 200`. The edge hunter ran the same at crew 20 in debug.
+- **No second validator:** the scenario `start.save` and the live Load both go through `try_load_world_from`. Nothing in simd, tui, gui or client-core keys a map by name or colour.
+- **Mutation:** `audit-mutations.py` reads 977 rows applying. Rows 14 and 15 were reproduced by hand in copies and KILLED by their named tests (`bench.rs:257`, `:198`). Rows 12-15's selectors are not prefixes of other test names.
+
+Closure-table audit (patch pass 1):
+
+| Row | Verdict | Evidence |
+|---|---|---|
+| 1 #226 | CLOSED | Acceptance restored both old checks in a copy. The bench test dies at `bench.rs:471` (`save reuses dwarf colour Purple`), the serve test at `serve.rs:225`. Both fixtures are crew 17 with a repeated name and a repeated colour. NOTE at `main.rs:757` names 13.8 |
+| 2 `stored=` | **HALF-CLOSED (REWORK)** | patch 1 below |
+| 3 `done=` | CLOSED | the old rule dies at `bench.rs:198` (`dig:1`); the limitation has no code NOTE (patch 3) |
+| 4 fog AMENDED | CLOSED | both AMENDED lines are present and match the 2026-10-31 Change Log ruling |
+| 5 headline | CLOSED | the headline and the Completion Note match the panic list in `mutations/13-6.sh` |
+
+Decision:
+- [x] [Review][Decision] From about crew 50 up, idle dwarves never move (feature, RAN; MED; issue #227) — **RULED (b) by Wolf, 2026-11-01: route to 13.11.** It became patch 4 below. — Every dwarf's `Wander.home` is the camp (`lib.rs:3691`), and a wander step must stay within `WANDER_RADIUS` 3 of it (`lib.rs:2781-2783`). Spill dwarves spawn outside that box and the box fills, so no jobless dwarf can step. Measured, release (moved in 60-600 ticks): crew 5 5/5, 17 17/17, 50 39/50, **100 0/100, 200 0/200** (fresh, and after a load). Dwarves with work are unaffected: all 200 moved after a mid-work load of the scenario. The gui capture guard trips on a fresh `--crew 200` (`capture.rs:576`, "no dwarf's lit terrain region ever moved"). This contradicts Dev Notes' "Crowding at the camp is game feel for 13.11": it is a freeze, not crowding. It is pre-existing 13.6 code and outside the round-2 diff. A side effect: any bench phase where dwarves idle does no wander work, so AC 8's NFR12 reading may be optimistic there. Options: (a) fix in 13.6, e.g. spill dwarves get `home` = their spawn tile (crew 5 unchanged), plus a test; this moves the 256² scenario's state, so AC 6 and AC 8 are re-read; (b) route to 13.11 (idle behaviour), with an AMENDED line on the Dev Notes ruling citing #227 and the AC 8 caveat.
+
+Patches:
+- [x] [Review][Patch] REWORK of run 1 patch 2: the carried half of `stored=` has no test (acceptance + blind, RAN; MED, latent silent failure) [crates/simd/tests/bench.rs:208 `stored_counts_one_item_per_zone_tile_as_the_sim_does`] — In a copy, both layers changed `World::stored_count` to count carried items one per zone tile. Every bench test passed (9/9), and the sabotaged release bench printed `stored=59`, run 1's wrong value. On the real file the whole 59 → 33 error was carried stones (26 carried, 0 stacked), so the fixture pins the half that never happened. Fix: give `stacked.save` a dwarf carrying a stone while he stands on the zone tile (expected `stored` stays 1), or add a sim-core unit test of `stored_count` with a carried item on a zone tile. Both sides: re-run the carried-counting sabotage and it must KILL. Add it as a `mutations/13-6.sh` row, with a selector that is not a prefix of another test name. — **LANDED** `e494ab57`: sim-core test `stored_count_skips_a_stone_carried_over_a_pile_tile` (`tests/scenario.rs`; the finding's second option, because the bench steps the world and a carrier would walk or drop its stone). Hauler on pile tile (66,64,9) carrying a stone with its Haul job, a second stone lying on (67,64,9): `stored_count` 1; the same save with the stone set down: 2. Row 16 (the review layers' carried sabotage) KILLED at `scenario.rs:241`.
+- [x] [Review][Patch] AC 6 still defines `stored=S` as "items lying on zone cells at the end" (acceptance, read; LOW, in patch 1's scope) [story § Acceptance Criteria 6] — the code counts the sim's rule (uncarried, one per stockpile tile, `split_stored`), and the new test asserts that. Add an AMENDED line under AC 6 naming the rule and the run-1 finding. — **LANDED** (record commit): AMENDED line under AC 6 naming `split_stored`'s rule and the run-1 finding.
+- [x] [Review][Patch] `done=`'s same-step limitation has no `// NOTE:` in the code (acceptance + edge, read; LOW, CLAUDE.md rule 1) [crates/simd/src/scenario.rs bench loop, the `&& world.tile(pos) != tile` comment] — A Dig dropped in the same step that a channel above opens its tile still counts. The channel's change is at `target.z-1`, the dig's own tile (`lib.rs` ~2465-2475). This is written only in the closure table. Add the NOTE. — **LANDED** `38210b07`: `// NOTE:` at the check in the bench loop.
+- [x] [Review][Patch] From decision (b): the Dev Notes ruling calls the idle freeze "crowding" (record; MED) [story § Dev Notes "`wander` homes all 200 on the camp"] — Add an AMENDED line: from about crew 50 up, no idle dwarf moves (#227: 100 of 100 and 200 of 200 still), and Wolf routed it to 13.11 on 2026-11-01. Add the caveat that AC 8's NFR12 reading carries no wander cost for idle dwarves, so 13.11 re-takes that baseline. — **LANDED** (record commit): AMENDED line under the Dev Notes bullet, with #227's readings, the 13.11 routing and the AC 8 caveat.
+
+Patch pass 2 closure table (2026-11-01, a fresh session):
+
+| Item | Fix written for | Side then tested | Pre-existing-state fixture |
+|---|---|---|---|
+| 1 carried `stored=` (**REWORK** of pass 1 row 2) | a stone carried over a pile tile is not stored | the OLD carried-counting rule (row 16, the review's sabotage, one per zone tile holding any item): KILLED at `scenario.rs:241` (`only the lying stone is stored`). The counted side: the same stone set down reads 2 | `carried-over-pile`: DEFAULT_SEED 128² save, dwarf 0 on (66,64,9) carrying a stone with its Haul job, one stone lying on (67,64,9). This is the real file's shape at t2500 (26 carried on a zone, 0 stacked) |
+| 2 AC 6 AMENDED | record | n/a (record) | n/a |
+| 3 `done=` NOTE | record (code comment) | n/a: the limitation stays unpinned, as the NOTE says | n/a |
+| 4 #227 AMENDED | record | n/a (record) | n/a |
+
+Deferred: none.
+
+Dismissed (10):
+- Edge: rows 12 and 13 share the validator anchor (informational; both paths call `try_load_world_from`).
+- Edge: the remaining id check at crew 200 (checked, valid).
+- Acceptance: the old validator trips the colour check first, so a name check is pinned on the bench path only (one function serves both paths).
+- Acceptance: the serve RED is a timeout, not the refusal text (it still kills; the bench test reads the text).
+- Blind: `stored_count` agrees with the goals only by construction (that is the one-rule point).
+- Blind: `uncarried_stones` counts every item kind (pre-existing name; correct rule).
+- Blind: `stored_count` allocates a set (cold, bench end only).
+- Blind: the fixture's tile (66,64,9) depends on worldgen (its preconditions are asserted).
+- Blind: the `split_stored` doc does not list the bench caller.
+- Feature: the gui near-white look band (`capture.rs:1656`) trips after a crew-200 load. It is a 128²-calibrated look guard; the across-load run passed it.
+
+Cost: review row $17.82 (347 turns; 4 subagents 71.7% of tokens). Reap after triage: 9 /tmp directories, 17.3 GB (9.8 GB free space reclaimed). Wolf chose "leave as action items", so Status is in-progress. Next is `bmad-review-patch` in a fresh session, with patch 1 checked both sides (the carried sabotage must KILL). Patch 1 is test code, so the full gate re-runs before the PR (it is green at `5f5a3856`). There is no round 3.
+
+Not provable without the seat (feature): Ctrl+S/Ctrl+L in the Windows gui at crew 200, the save and load pause the player feels on the vehicle, the gui HUD drawing post-load goal progress, and a Windows client loading crew 200 from the WSL daemon.
+
+## Verification
+
+```bash
+# AC 2, 4, 9: sim-core
+cargo test -p sim-core --test worldgen crew_200 a_256_valley spawn_positions_for_seed_42
+cargo test -p sim-core --test save_load a_256_crew_200
+# AC 1, 3, 7: loader, fresh game, instrument (debug)
+cargo test -p simd --test bench
+cargo test -p simd --test serve fresh_game
+# AC 6: RED (commands removed -> done=dig:0,cut:0 stored=0 cells=0), then GREEN, then the gate's release test
+cargo build --release -p simd
+target/release/simd --bench /tmp/<copy with "commands":[]>.json --runs 1
+target/release/simd --bench scenarios/two-hundred-on-256.json --runs 1     # stored>=1, dig>=1, cut>=1, cells>=1
+cargo test --release -p simd --test bench -- --ignored two_hundred
+# AC 8: NFR12's first reading (idle devpod, nothing else running)
+target/release/simd --bench scenarios/two-hundred-on-256.json --runs 5
+# AC 5: no committed outcome moves (the 11 old files; main cannot read the new one)
+RUNS=3 scripts/tick-bench.sh main HEAD $(git ls-files 'scenarios/*.json' | grep -v two-hundred)
+# AC 9: sabotage table
+env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/13-6.sh
+python3 scripts/audit-mutations.py
+# AC 10: Task 8's seat card (Windows)
+```
+
+## Dev Notes
+
+### Scope guardrails (do NOT)
+
+- No arrivals, unique names or crew list (13.8); no budget or heuristic change to A* (13.7, #159); no #187/#218 fix (Q1).
+- No new saved field, no `protocol` change, no new dependency.
+- No look tuning: atmosphere, fog and snow centring stay as they are (Task 7). No gui work beyond Q5's answer.
+  - **AMENDED 2026-10-31 (Wolf's #222 ruling, Change Log):** the fog volume is sized from `Dims` (`27fc5c0b`). That is the one exception, a defect fix and not look tuning. #222 stays open for the outline seen from outside at vista.
+- No optimization for NFR12: record the reading (AC 8). A profile comes first, in a later story.
+- Do not ship `scale_gen` or any generator. The committed JSON is the artifact, and its `about` names the patch that made it.
+
+### What already exists (build on it)
+
+- `13-2-signoff/prototypes/scale.patch` is the sketch for Task 1 (the spill) and Task 3 (the `StartFile` match). `13-6-signoff/prototypes/scale-near.patch` is scale.patch plus the camp-relative layout (`SCALE_OFF`) and the throwaway `TL`/`PROBE` lines.
+- `World::generate` (`lib.rs:2866-2923`): per-purpose RNG streams (`:28-34`). Identity and profession streams never shift a spawn. Keep that.
+- `SaveState` already has `dims` (`lib.rs:2988-3003`); `from_save` rebuilds dwarves from the saved list.
+- Bench end line and `state_hash`: `scenario.rs:333-345`, `:248`. Test helpers: `field`, `end_line`, `variant`, `expected` (`bench.rs:30-103`).
+- tui camera clamps to the wire `dims` already (`tui/src/view.rs:171-178`), so the tui needs no change.
+
+### Key decisions & traps
+
+- **`tick-bench.sh` reads each scenario file from THIS checkout for both builds.** `main`'s `simd` refuses `dims`/`crew` (`deny_unknown_fields`), so pass the 11 old files explicitly (Verification). The new file is HEAD-only in 13.6.
+- **The state hash covers the save encoding.** No new saved field means AC 5 can read `same`. If any row reads `differ`, find the outcome change. Do not re-pin.
+- **Crew 5 must draw exactly as today.** Ring first, BFS only when the ring runs short. Shuffle the same 5-element mix with the same RNG. `SliceRandom::shuffle` on a `Vec` and on an array is the same algorithm over a slice; the worldgen pins prove it.
+- **Debug is 22× release at this scale** (29 ms/tick idle). No debug test may step a 256² crew-200 world past a few dozen ticks. The real-work test is release (Q4).
+- **The bench's new bookkeeping must stay outside `started.elapsed()`.** `designations()` builds a 1,800-entry Vec, so diff before/after the step outside the timed window.
+- **The tick climbs with items lying** (creation: 108 ms mean over t2,750–3,000). Expect AC 8 well above 25 ms. Record it; do not optimize.
+- **`wander` homes all 200 on the camp.** Crowding at the camp is game feel for 13.11, not a defect here.
+  - **AMENDED 2026-11-01 (review run 2, #227):** it is not crowding, it is a freeze. From about crew 50 up, no idle dwarf moves: 100 of 100 and 200 of 200 stay still (release, 60-600 ticks), because every `Wander.home` is the camp and the box within `WANDER_RADIUS` 3 fills. Dwarves with work are unaffected. Wolf routed it to 13.11 on 2026-11-01 (decision (b)). **Caveat for AC 8:** NFR12's first reading carries no wander cost for idle dwarves, so 13.11 re-takes that baseline once they wander.
+- **Probes go in scratch worktrees, built from inside them, `-j 8`** (memory: `cargo-target-dir-builds-cwd-sources`, `build-parallelism-ooms-the-devpod`). Reap daemons by PID, never `pkill -f` (memory: `pkill-pattern-self-match`, exit 144 at creation).
+
+### Previous story intelligence
+
+- 13.4: the state hash moved everywhere when one saved field was added (memory: `state-hash-covers-save-encoding`). 13.6 adds none, which is why AC 5 can demand `same`.
+- 13.2/13.3: the scale prototypes are throwaway C0-stack patches. Port by hand: no `counters`, no `census`, and `scale.sh` hardcodes `BASE=4f57027`.
+- 13.4 ran Sonnet 5.5 subagents with Opus orchestrating; its full gate was 4,140–4,278 s with `RUST_TEST_THREADS=1`.
+
+### Project Structure Notes
+
+- UPDATE `crates/sim-core/src/lib.rs`: `generate_with_crew`, `spawn_dwarves`, `Dims::FRESH`, NOTEs
+- UPDATE `crates/sim-core/tests/worldgen.rs`, `crates/sim-core/tests/save_load.rs`
+- UPDATE `crates/simd/src/scenario.rs`: `Start`, refusals, end line
+- UPDATE `crates/simd/src/main.rs`: fresh game, `--dims`/`--crew` (Q3 a), world line
+- UPDATE `crates/simd/tests/bench.rs`, `crates/simd/tests/serve.rs`, `crates/gui/tests/pixel_guard.rs` (`--dims`, Q3 a)
+- UPDATE `crates/gui/src/camera.rs`, `crates/gui/src/ingest.rs` (Q5 a)
+- UPDATE `scripts/gate.sh` (Q4 a)
+- NEW `scenarios/two-hundred-on-256.json`; NEW `mutations/13-6.sh`; NEW `13-6-signoff/vehicle-card.md`
+- `13-6-signoff/`: `creation-probes.txt`, `near16-256-crew200.json`, `issue-187-comment.md`, `prototypes/scale-near.patch`, `prototypes/probe187-refusals.patch` (creation)
+
+### References
+
+- `_bmad-output/planning-artifacts/epics.md` Story 13.6 (`:3072-3109`), Epic 13 M4 standing ACs 10–18, Milestone 4 requirements (`:299-330`)
+- `_bmad-output/planning-artifacts/prds/prd-frostvein-2026-10-28/prd.md` FR53, FR54, NFR12, NFR13; `addendum.md` § Scale data, § What the code fixes at five, § Movement and sim debt; `reconcile-inputs.md` 6.1, 6.2
+- `_bmad-output/implementation-artifacts/13-2-signoff/scale-table.md`, `scale/README.md`, `prototypes/scale.patch`
+- `crates/sim-core/src/lib.rs:28-50`, `:134-147`, `:1130`, `:2537-2542`, `:2866-2923`, `:3598-3645`
+- `crates/simd/src/scenario.rs:22-41`, `:118-131`, `:248`, `:281-345`; `crates/simd/src/main.rs:33`, `:92-145`, `:164-177`
+- `crates/simd/tests/bench.rs:30-160`; `crates/simd/tests/serve.rs:49-95`; `crates/gui/tests/pixel_guard.rs:150-185`
+- `crates/gui/src/camera.rs:9-12`, `:68-105`; `crates/gui/src/ingest.rs:1615`, `:1705`, `:7285-7297`; `crates/gui/src/atmosphere.rs:52`, `:66`
+- `scripts/tick-bench.sh`, `scripts/gate.sh`; GitHub #159, #170, #179, #187, #214, #218
+
+## Dev Agent Record
+
+### Agent Model Used
+
+Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating (Wolf, 2026-10-30).
+
+### Debug Log References
+
+- **Tasks 1–2 (`6256b996`, Sonnet 5.5):** `generate_with_crew`, the BFS spill (only when the ring holds fewer than `crew`), cycled identities/professions with one shuffle, `Dims::FRESH`. Readings: the 256² DEFAULT_SEED camp component is **64,301 cells**; `to_save` JSON at 256² crew 200, tick 10, is **28,351,241 bytes** (under the 64 MB cap). Opus re-ran `worldgen -- crew_200 a_256_valley a_crew_of_200 spawn_positions_for_seed_42`: 4 passed. The commit's fast gate was green (fast set 981 s).
+- **Task 2 amendment:** "the first five dwarves' professions equal crew 5's" was impossible as written. One shuffle over 200 entries is not crew 5's shuffle over 5 (crew 200 drew `[M,M,W,M,H]` against crew 5's `[W,H,M,H,M]`), so that assert was dropped. AC 9's claim, that crew 5 draws exactly as today, is still held by `spawn_positions_for_seed_42_are_pinned` and the existing profession tests, which pass unchanged. The order assert that kills an `i % 5` cycle reads "periodic with period 5" (hand sabotage: RED).
+- **Dev-dependency (TP: one sentence each):** `sim-core` gains `serde_json` under `[dev-dependencies]` (already a workspace crate, nothing new in the lock tree beyond the edge). The 256² save test round-trips `to_save` through the JSON bytes simd actually writes, and reads their length.
+- **Component oracle:** the worldgen test's BFS mirrors `astar_neighbours` independently. A spill sabotage that takes the first N box cells in iteration order SURVIVES (the first box cells are all reachable), and a random draw from a ±6 z box is KILLED (`Pos { x: 123, y: 122, z: 13 } is standable but the camp cannot walk to it`). Task 9 row 2 is written as the random draw. The test also runs seeds 0..16 at 128² so that one lucky seed cannot carry it.
+- **Task 3 (`4b476c51`, Sonnet 5.5):** `start` is a `StartFile` (optional seed/save/dims/crew). Absent dims/crew are 128²/5 (Q2 a). Refusals name their field: `start crew`, `start dims X,Y,Z`, dims/crew with save, seed+save or neither. Fresh game `Dims::FRESH`/5 with `--dims`/`--crew` (Q3 a), refused with `--scenario`/`--bench`. **Crew too big:** `generate_world()` (`main.rs`) catches the sim's panic and returns `crew N does not fit the camp's ground at XxYxZ`. Chosen because sim-core has no public count of the camp's ground; the panic hook still prints the sim's own line first. Q3 (a) spawns moved to `--dims 128,128,32`: `Daemon::spawn` (now `spawn_with(&[..])`), the pixel guard, and **`scripts/bench/export_world.py`, a trap the story missed**: its gate test pins the 128² mesh counts. `scripts/tests` 83 passed. No other bare-`simd` spawn exists. Tests: 6 new refusal cases; `a_seed_start_with_dims_and_crew_builds_that_world` (256²/7, no command, oracle via `expected_world`, and ≠ the 128²/5, 128²/7 and 256²/5 oracles); `parse_args` unit tests; serve.rs `a_fresh_game_serves_a_256_valley_with_five_dwarves` (+ `--dims 160,160,32 --crew 7`) and `a_bad_dims_or_crew_flag_is_refused_naming_the_flag`.
+- **Task 4 (`f1c83b7a`, Sonnet 5.5):** the end line gains `done=dig:N,cut:M stored=S cells=C`, with mark bookkeeping outside the timed window. RED: `no done= in "bench one-dig end tick=400 marks=0 items=1 zones=0 goals=0/0/0"`. GREEN: `bench` 6 passed, `--bins` 37 passed. **256² snapshot: 28,053,919 bytes**, pinned under the 64 MiB cap by `bridge.rs::the_fresh_256_snapshot_fits_the_client_cap`. Save at 256²/200 is 28,351,241 bytes (Task 2). Both are under 64 MB.
+- **Task 5 (Opus):** `scenarios/two-hundred-on-256.json` is `13-6-signoff/near16-256-crew200.json` with the name, `ticks` 2500, `speed` normal and a new `about` (the patch plus the exact generator command). The 1,801 commands are byte-identical (1,800 marks, ≤ 4096). Release, scratch worktree at `f1c83b7a`. **RED** (`"commands":[]`): `bench two-hundred-on-256-nocmd end tick=2500 marks=0 items=0 zones=0 goals=0/0/0 done=dig:0,cut:0 stored=0 cells=0`. **GREEN** (the real file, 91 s): `run 1/1: ticks=2500 commands=1801/1801 mean=36.1294 p99=169.1693 max=265.037 over10=1563 state=3fc1461d491ee5d9` / `end tick=2500 marks=1478 items=602 zones=1800 goals=28/0/0 done=dig:231,cut:91 stored=59 cells=2165`. **Corrected at review run 1:** that `stored=59` counted carried and stacked items. The sim's rule reads **`stored=33`** for the same state (`3fc1461d491ee5d9`). Creation read 227/86/50 (the prototype's own counter). The dig/cut difference is the shipped spill against the prototype's, which is expected. `the_two_hundred_on_256_scenario_does_real_work` (`#[ignore]`, panics in a debug build) passed in release twice (95.9 s, 92.5 s). `gate.sh`: the full tier's code arm runs `cargo test --release -p simd --test bench -- --ignored two_hundred`, and the fast and scoped banners name it as SKIPPED.
+- **Task 6, scale traps (AC 9):** `Dims::DEFAULT`: kept 128² with a doc line, `Dims::FRESH` added (Task 1). `[Identity; 5]`/`[Profession; 5]`: FIXED, Vecs sized to the crew (Task 1). `CAMP_RADIUS` spawn panic: FIXED, BFS spill (Task 1). Names repeat past 16 and colours past 5: `// NOTE:` naming 13.8 (`generate_with_crew`). Professions: one seeded shuffle of the cycled 2:2:1 mix (80/80/40 at 200). Wander phases: NOTE rewritten (about 20 per phase at 200; the seat judges). `MAX_ASTAR_NODES` (`lib.rs:55`): `// NOTE:` 64,301-cell camp component, #159, 13.7 sizes it. `MAX_DESIGNATIONS` (`lib.rs:52`): `// NOTE:` 1,800 marks, #170 silent drop, M4 forage/fishing add. gui camera: Task 7.
+- **Task 7 (Sonnet 5.5, committed by Opus):** `CameraRig.focus_max` (boot 127,127,31), `fit_world(dims)` on every snapshot. `follow_snapshot(.., first, start)` on the BOOT snapshot (read by `connect_to_daemon` before the app exists, so it is applied in `setup_camera`) moves the focus to the campfire, or re-applies `--camera` against the real ceiling. **That second half was a trap the story missed:** `--camera ...,127,128,7` was placed before any snapshot and clamped y to 127. Tests: `a_256_world_lifts_the_focus_ceiling_past_the_old_128_clamp` (200,200,7 holds; pans to 255,255,7 and 0,0,7), `the_boot_snapshot_sets_the_focus_ceiling_and_moves_the_focus_to_the_campfire` (128: 64,64,9 unchanged; 256: 127,128,7; no campfire stays; `--camera` wins; 128 still clamps). RED by hand: `fit_world` leaving the ceiling unset failed both. **(64,64,9) verified live:** the first snapshot of `simd 7777 --dims 128,128,32` carries the Campfire at [64,64,9]. The agent kept the old pan-clamp line with an `#[allow(non_snake_case)] let FOCUS_MAX` shim so 10.10's mutation row applied. Opus removed the shim and re-pointed that row's literal to `self.focus_max` instead (audit: 962 rows match). The existing `shift_middle_drag_pans...` fixture now sets `focus_max` (2x1x1 world), with its expected values unchanged.
+- **AC 8, NFR12's first reading (release, idle devpod, HEAD `55202de2`, 2026-10-30 10:41):**
+  ```
+  bench two-hundred-on-256 run 1/5: ticks=2500 commands=1801/1801 mean=33.6414 p99=155.9075 max=257.821 over10=1559 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 2/5: ticks=2500 commands=1801/1801 mean=33.7472 p99=157.4390 max=265.038 over10=1557 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 3/5: ticks=2500 commands=1801/1801 mean=33.9870 p99=158.5101 max=261.579 over10=1557 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 4/5: ticks=2500 commands=1801/1801 mean=33.6294 p99=155.4362 max=256.426 over10=1560 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 run 5/5: ticks=2500 commands=1801/1801 mean=33.5916 p99=155.5446 max=267.331 over10=1558 state=3fc1461d491ee5d9
+  bench two-hundred-on-256 end tick=2500 marks=1478 items=602 zones=1800 goals=28/0/0 done=dig:231,cut:91 stored=59 cells=2165
+  bench two-hundred-on-256: 5 runs, mean 33.5916..33.9870 ms (spread 1.2%), state identical across 5 runs
+  ```
+  **Corrected at review run 1:** the pasted `stored=59` above counts every item on a zone cell, carried and stacked ones included. The bench now uses the sim's stored rule (`World::stored_count`, over `split_stored`), and the same state reads **`stored=33`**. `done` and `cells` do not change. Later stories take their `stored` delta against 33.
+  **Median p99 155.91 ms** (p99 spread 155.44..158.51, 2.0%). **Mean 33.59..33.99 ms, spread 1.2%: the noise floor.** NFR12's bar is 25 ms mean, so this sits about 1.35× over it, and 1,558 of 2,500 ticks run over 10 ms. Recorded, not gated (AC 8). The state equals the GREEN run at `f1c83b7a`, so Tasks 5–7 moved no sim outcome. `main` cannot read this file, so later stories take their delta against this reading.
+- **AC 5** (`RUNS=3 scripts/tick-bench.sh main HEAD` over the committed scenario files; there are **10**, not the 11 the story says, and `ls scenarios/` at creation shows the same 10):
+  ```
+  base e8f4a1f93e04d6505fbd10f302d87b956decd6fd
+  head 55202de279f429d9a73ec635957554b070e3bf6f
+  control: base again, functions shuffled (--shuffle-sections=*=1)
+  runs 3 per build, interleaved; load before: 3.97, 4.01, 3.90
+  scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+  big-pile                   0.1983     0.2019    +1.8%    +1.6%       1.6%       2.7%       1.5%  same   within floor
+  deep-pit                   0.0384     0.0373    -2.9%    -3.8%       2.3%       3.8%       2.2%  same   within floor
+  dig-loop                   0.0282     0.0275    -2.5%    -2.5%       3.9%       0.0%       0.0%  same   within floor
+  full-pile-crowd            0.0319     0.0322    +0.9%    +2.9%       2.8%       2.8%       3.0%  same   within floor
+  plan-compact-piles         0.1584     0.1576    -0.5%    -0.7%       1.1%       1.7%       1.8%  same   within floor
+  plan-far-piles             0.0932     0.0892    -4.3%    -3.5%       3.6%       0.6%       2.1%  same   BEYOND FLOOR
+  plan-spread-piles          0.1782     0.1750    -1.8%    -1.7%       0.8%       0.2%       1.8%  same   BEYOND FLOOR
+  plan                       0.0867     0.0849    -2.2%    -2.0%       2.0%       2.2%       1.4%  same   within floor
+  seat-slow                  0.1703     0.1662    -2.4%    -1.3%       1.2%       0.4%       1.0%  same   BEYOND FLOOR
+  stuck-tunnel               0.0280     0.0275    -2.0%    -2.0%       4.3%       2.5%       4.4%  same   within floor
+  ```
+  **`state` reads `same` on all 10 rows**, so no committed outcome moved. All three "BEYOND FLOOR" rows are head *faster*, and the shuffled control moves the same way (−3.5%, −1.7%, −1.3%): cross-build layout noise (memory: cross-build-layout-noise), not a code effect.
+- **Task 8 headless check (lavapipe, `55202de2`):** working zoom frames the camp, digs, pile and crew, with `focus=127,128,7` live. The full vista shows the whole valley. The fresh game boots onto the campfire. **Defect found: the fog volume is the 128² box** (`ingest.rs:1710`, 160×48×160 at (64,64)), which shows as a hard translucent wall on 256². Filed as **#222** (bug, route:story). Not fixed here (Q5 a, no look work). The capture range checks trip on the `--camera` views, which is expected: their bands are calibrated on the boot framing only.
+- **Task 8 sitting (Wolf, vehicle, 2026-10-31, `b224da85`, RTX 4080 Laptop, vsync on):** full record in `13-6-signoff/vehicle-card.md` § Sitting. Steady frames, cut at the scenario's end. **Working zoom:** p50 25.23 ms (≈ 40 fps), p99 37.70, which **misses NFR6's 60**: **#224**. **Full vista:** p50 11.29 ms (≈ 89 fps), p99 13.69, which meets ≥ 30. **Late in the run the dwarves move in pulses:** the tick overruns its 100 ms period (2,500 ticks in ≈ 321 s on the vehicle), which is NFR12's miss as the player sees it: **#225**. Ruled by Wolf: record and file, no fix in 13.6. **The fresh game** boots onto the campfire, and all four edges are reachable. The one visual defect was the fog wall, **#222**, confirmed on the vehicle GPU. The first run of working zoom used a debug daemon (47 min, the same hash `3fc1461d491ee5d9`). Its fps agrees with the release re-run to within 0.6 ms at p50. A HUD readout of the scenario state is **#223**.
+- **#222 fixed in 13.6 (Wolf, 2026-10-31: "we need to fix that now and re-run perftests").** The fog box covered a quarter of the 256² valley, so the sitting's vista fps never paid for fog over the other three quarters. `fog_volume_transform(dims)` sizes the box from the snapshot's `Dims`, at boot and on every later snapshot, the same way the camera clamp does: centre (X/2, 18, −Y/2), scale (X+32, 48, Y+32). On 128² that is 11.2's box exactly. Test `the_fog_volume_covers_the_world_the_snapshot_describes`. RED: a 256² snapshot left the 128² box. Sabotage: hardcoding the boot box at 128² fails its 256²-boot assert. Headless (lavapipe): the fresh game's wall is gone. The full vista from outside (distance 500) still shows the box's edges as a thin outline round the whole valley. That is look work, so it gets raised with Wolf and not fixed here. Both framings get re-read at the seat.
+- **Seat re-read after the fix (gui `27fc5c0b`, release daemon):** working zoom p50 26.19 ms (≈ 38 fps), p99 38.13, **still misses 60** (#224). Full vista p50 12.22 ms (≈ 82 fps), p99 15.14, **meets ≥ 30**. The full-size fog costs about 1 ms p50 at both framings, so it is not #224's cause. Card § Sitting has the table.
+- **Task 9 mutation run** (`55202de2`, alone, `RUST_TEST_THREADS=1`): **11/11 KILLED, all in their named tests. Nine die at the assert the row targets. Two do not** (read from the panic line; restated at review run 1): row 1 dies at the sim's empty-range panic, which the spec expected and which IS the failure the row names. Row 6 dies at the bench's refusal of the fixture's dig on a 256² world, before the oracle compare it was aimed at:
+  1. `lib.rs:3677`, the per-dwarf `random_range` on the exhausted ring (empty range).
+  2. `worldgen.rs:1020`, the component assert.
+  3. `spawn_positions_for_seed_42_are_pinned:423`.
+  4. `worldgen.rs:1064`, the period-5 order assert.
+  5. `bench.rs:341`, state ≠ the 256²/7 oracle.
+  6. `bench.rs:113`, `bench failed`. The fixture's dig is refused on a 256² world, so this dies before the oracle compare. Still the named test.
+  7. `serve.rs:3319`, the dims assert.
+  8. `bench.rs:170`, `done=dig:0,cut:0`.
+  9. `bench.rs:173`, `cells≥1`.
+  10. `bench.rs:205`, `stored≥1` (release, 66 s).
+  11. `camera.rs:418`.
+
+  `audit-mutations.py`: 973 rows, every literal matches. **Trap:** the release test panics in a debug build on purpose, so the plain `ignored` mode would read row 10 KILLED without running the sabotage. `mutate.sh` gained a `release-ignored` mode. After the run, `target/release/simd` was row 10's mutant (memory: mutant-binary-outlives-restore); it was rebuilt at HEAD before AC 8.
+
+- **Task 10 full gate** (`RUST_TEST_THREADS=1 scripts/gate.sh`, HEAD `527304a1`, devpod, alone):
+  ```
+  frostvein gate
+    cargo fmt --check           ok  0s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  1684s
+    cargo test (release real-work scenario)ok  169s
+    cargo test (pixel guards)   ok  3270s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  21s
+    mutation tables still apply ok  11s
+  reaped 31 stale build artifacts from target (0.2 GB)
+  GATE GREEN  5164s
+  ```
+  AC 5's `tick-bench` table is above. 5,164 s is about 15 min over 13.4's 4,140–4,278 s; the pixel-guard tier alone took 3,270 s.
+
+- **Review patch pass 1 (2026-11-01, Opus 5.5, a fresh session):** 5/5 landed in `46c7ada8` (#226), `8aa122a6` (`stored=`, `done=`), `5f5a3856` (test rename) and the record commit. Closure table under Review Findings.
+  - **REDs, each against the old code:** bench start.save `save reuses dwarf colour Purple`; serve live Load: no snapshot after load (`serve.rs:225`); `stored=2` on the stacked save; `done=dig:1` on the dropped dig.
+  - **The real file re-read** (release, a scratch worktree at `06daca44` plus the patch-2/3 diff that became `8aa122a6`): `end tick=2500 marks=1478 items=602 zones=1800 goals=28/0/0 done=dig:231,cut:91 stored=33 cells=2165`, `state=3fc1461d491ee5d9`, mean 35.51 ms (one run, not timing-grade).
+  - **Mutation rows 12-15** (`mutations/13-6.sh`, run alone from a 4-row copy, `RUST_TEST_THREADS=1`): all KILLED. 12 at `bench.rs:471` (bench failed: the refusal), 13 at `serve.rs:225`, 14 at `bench.rs:257` (`stored=2`), 15 at `bench.rs:198` (`done=dig:1`). **Trap:** row 13 first died in the WRONG test. The serve test's name was a prefix of the bench test's, and cargo filters by substring, so the bench target ran and failed first. It was renamed `the_live_load_takes_a_save_whose_crew_repeats_names_and_colours` (`5f5a3856`) and re-run: KILLED in its own test. `audit-mutations.py`: 977 rows apply.
+  - **Full gate** (`RUST_TEST_THREADS=1 scripts/gate.sh`, HEAD `5f5a3856`, devpod, alone; exit 0):
+    ```
+    frostvein gate
+      cargo fmt --check           ok  1s
+      cargo clippy -D warnings    ok  2s
+      cargo test                  ok  1146s
+      cargo test (release real-work scenario)ok  98s
+      cargo test (pixel guards)   ok  3108s
+      tui has no sim-core edge                ok
+      client-core has no sim-core edge        ok
+      gui has no sim-core edge                ok
+      metrics ledger tests        ok  0s
+      bench tests                 ok  20s
+      mutation tables still apply ok  11s
+    GATE GREEN  4393s
+    ```
+
+### Completion Notes List
+
+- The daemon builds a 256×256×32 valley with a crew of 200 (`start` `dims`/`crew`, `--dims`/`--crew` on the fresh game); every old scenario still builds 128²/5 and reads `same` on `tick-bench` (AC 5).
+- `scenarios/two-hundred-on-256.json` does real work (dig 231, cut 91, stored 33 by the sim's rule, cells 2,165), proven in release by the full gate's `the_two_hundred_on_256_scenario_does_real_work`.
+- NFR12's first reading: mean 33.6 ms, median p99 155.9 ms, 1.35× over the 25 ms bar. Recorded, not gated.
+- The gui fits its camera clamp and, after the in-story #222 fix, its fog volume to the snapshot's `Dims`, and boots onto the campfire.
+- Seat (NFR6): full vista meets ≥ 30 fps (p50 ≈ 82 fps); working zoom misses 60 (p50 ≈ 38 fps), filed as **#224**. The late-run pulse is NFR12 at the seat, **#225**. HUD scenario state is **#223**. **#222 stays open** for the box outline seen from outside at vista distance; the PR must not close it.
+- Mutation: 11/11 KILLED in their named tests. Rows 1 and 6 die before the assert they target (row 6 at the bench's refusal, not the oracle compare). See the Debug Log. Review patch pass 1 added rows 12-15, all KILLED. Pass 2 added row 16 (carried `stored=`), KILLED; the full table read 16/16 KILLED.
+
+### File List
+
+- `crates/sim-core/src/lib.rs`, `crates/sim-core/Cargo.toml`, `crates/sim-core/tests/worldgen.rs`, `crates/sim-core/tests/save_load.rs`, `crates/sim-core/tests/scenario.rs`
+- `crates/simd/src/main.rs`, `crates/simd/src/scenario.rs`, `crates/simd/src/bridge.rs`, `crates/simd/tests/bench.rs`, `crates/simd/tests/serve.rs`
+- `crates/gui/src/camera.rs`, `crates/gui/src/ingest.rs`, `crates/gui/src/pick.rs`, `crates/gui/tests/headless.rs`, `crates/gui/tests/pixel_guard.rs`
+- `Cargo.lock`
+- `scenarios/two-hundred-on-256.json` (new)
+- `scripts/gate.sh`, `scripts/mutate.sh`, `scripts/bench/export_world.py`
+- `_bmad-output/implementation-artifacts/mutations/13-6.sh` (new), `mutations/10-10-take-the-camera-where-you-want-it.sh`
+- `_bmad-output/implementation-artifacts/13-6-signoff/` (new: card, probes, patches, seat CSVs, screenshot)
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, `_bmad-output/planning-artifacts/epics.md`, `metrics/13-6-two-hundred-on-256.md`
+
+## Change Log
+
+| Date | Change |
+|---|---|
+| 2026-10-29 | Story created (Opus 5.5). Creation probes: #187 reproduces on `main`; #159 does not block real work near the camp; layout, readings and patches in `13-6-signoff/`. Task 0 Q1–Q5 await Wolf. |
+| 2026-10-30 | Task 0 ruled (Wolf): **Q1 (c)** fold #187 into 13.18 (epic stays at 16; 13.18's AC amended in `epics.md`); **Q2 (a)** a `start` with no `dims`/`crew` is 128×128×32, crew 5; **Q3 (a)** `--dims`/`--crew` on the fresh game, tests pass `--dims 128,128,32`; **Q4 (a)** release `#[ignore]` test on the full gate tier; **Q5 (a)** clamp follows `Dims`, boot focus is the campfire. Only Q1 differs from the recommendations, and no 13.6 AC names it (Scope: no #187/#218 fix). #187 evidence comment posted, amended to name 13.18. Board, story and `13-6-signoff/` committed on the 13.6 branch. |
+| 2026-10-31 | Seat sitting (Task 8): vista met, working zoom missed (#224), pulse (#225), HUD state (#223). #222's fog volume fixed in-story (`27fc5c0b`) on Wolf's ruling, both framings re-read. Full gate green (5,164 s). Status → review. |
+| 2026-11-01 | Code review run 1: 5 patches, 3 deferred, 7 dismissed. Review patch pass 1: 5/5 landed (#226 crew>5 load; `stored=` by the sim's rule, 59 → 33; `done=` skips dropped marks; two record fixes). Mutation rows 12-15 KILLED. Full gate GREEN on `5f5a3856` (4,393 s). Cost row $9.27 (163 turns). Status → review for round 2. |
+| 2026-11-01 | Code review run 2: 4 new patches (1 REWORK), decision #227 ruled (b) to 13.11, no round 3. Review patch pass 2: 4/4 landed (`e494ab57` carried-stone `stored_count` test + mutation row 16, `38210b07` `done=` NOTE, AC 6 and #227 AMENDED lines). Mutation 16/16 KILLED. Full gate GREEN on `38210b07` (4,399 s). Cost row $3.29 (83 turns). Status → review; next is the PR on Wolf's yes. |

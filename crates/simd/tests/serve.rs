@@ -46,7 +46,13 @@ fn line_channel<R: Read + Send + 'static>(reader: R) -> Receiver<String> {
 }
 
 impl Daemon {
+    /// On the 128² world every pinned test was written against (13.6 Q3 (a)): a bare `simd` is
+    /// now the 256² fresh game.
     fn spawn() -> Self {
+        Self::spawn_with(&["--dims", "128,128,32"])
+    }
+
+    fn spawn_with(extra: &[&str]) -> Self {
         // These tests assert wall-clock cadence and command visibility within a small number of
         // ticks. Running dozens of daemon processes concurrently lets queued startup deltas make
         // those assertions measure scheduler contention instead of the daemon under test.
@@ -66,6 +72,7 @@ impl Daemon {
 
         let mut child = Command::new(env!("CARGO_BIN_EXE_simd"))
             .arg("0")
+            .args(extra)
             .current_dir(&dir)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -1040,41 +1047,36 @@ fn duplicate_dwarf_id_save_is_logged_and_the_daemon_keeps_ticking() {
     assert!(snapshot.tick < first && first < second);
 }
 
+/// 13.6 #226: a crew past five repeats colours (from dwarf 6) and names (from dwarf 17), and the
+/// live Load takes such a save. Until 13.6 the validator refused both (`6a56a894`).
 #[test]
-fn repeated_dwarf_name_or_colour_save_is_logged_and_the_daemon_keeps_ticking() {
+fn the_live_load_takes_a_save_whose_crew_repeats_names_and_colours() {
     let daemon = Daemon::spawn();
+    let state = sim_core::World::generate_with_crew(42, sim_core::Dims::DEFAULT, 17).to_save();
+    let names: std::collections::BTreeSet<_> =
+        state.dwarves.iter().map(|d| d.identity.name).collect();
+    let colours: std::collections::BTreeSet<_> =
+        state.dwarves.iter().map(|d| d.identity.colour).collect();
+    assert!(names.len() < 17, "the fixture repeats a name");
+    assert!(colours.len() < 17, "the fixture repeats a colour");
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode repeated-identity save fixture"),
+    )
+    .expect("write repeated-identity save fixture");
     let stream = daemon.connect();
     let mut writer = stream.try_clone().expect("client write half must clone");
     let mut reader = BufReader::new(stream);
-    let snapshot = read_snapshot(&mut reader);
+    let _ = read_snapshot(&mut reader);
 
-    for (repeat_name, expected) in [
-        (true, "save reuses dwarf name"),
-        (false, "save reuses dwarf colour"),
-    ] {
-        let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
-        if repeat_name {
-            state.dwarves[1].identity.name = state.dwarves[0].identity.name;
-        } else {
-            state.dwarves[1].identity.colour = state.dwarves[0].identity.colour;
-        }
-        fs::write(
-            daemon.save_path(),
-            serde_json::to_vec(&state).expect("encode repeated-identity save fixture"),
-        )
-        .expect("write repeated-identity save fixture");
-
-        send_literal(&mut writer, b"{\"type\":\"load\"}\n");
-        let log = daemon.next_log();
-        assert!(
-            log.contains(expected),
-            "unexpected repeated-identity log: {log}"
-        );
-    }
-
-    let first = read_delta(&mut reader).tick;
-    let second = read_delta(&mut reader).tick;
-    assert!(snapshot.tick < first && first < second);
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+    assert_eq!(loaded.tick, state.tick);
+    assert_eq!(
+        dwarf_identities(&loaded).len(),
+        17,
+        "every saved dwarf loads"
+    );
 }
 
 #[test]
@@ -3292,4 +3294,62 @@ fn a_loaded_pile_reports_its_stored_count_as_goal_progress_in_the_snapshot_and_t
         tetrahedrite,
         stored_count(&delta.items, &delta.zones, &delta.entities, Tetrahedrite)
     );
+}
+
+fn dwarf_count(snapshot: &protocol::Snapshot) -> usize {
+    snapshot
+        .entities
+        .iter()
+        .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+        .count()
+}
+
+/// 13.6 AC 1: a bare `simd` is the fresh game, 256x256x32 with five dwarves; `--dims` and `--crew`
+/// change both. (The ~28 MB debug snapshot is read once, so this is one slow test.)
+#[test]
+fn a_fresh_game_serves_a_256_valley_with_five_dwarves() {
+    let fresh = Daemon::spawn_with(&[]);
+    let snapshot = read_snapshot(&mut BufReader::new(fresh.connect()));
+    drop(fresh);
+    assert_eq!(
+        (snapshot.dims.x, snapshot.dims.y, snapshot.dims.z),
+        (256, 256, 32)
+    );
+    assert_eq!(snapshot.tiles.len(), 256 * 256 * 32);
+    assert_eq!(dwarf_count(&snapshot), 5);
+
+    let custom = Daemon::spawn_with(&["--dims", "160,160,32", "--crew", "7"]);
+    let snapshot = read_snapshot(&mut BufReader::new(custom.connect()));
+    assert_eq!(
+        (snapshot.dims.x, snapshot.dims.y, snapshot.dims.z),
+        (160, 160, 32)
+    );
+    assert_eq!(dwarf_count(&snapshot), 7);
+}
+
+/// 13.6 NFR11: a bad flag is refused before the daemon binds, naming the flag.
+#[test]
+fn a_bad_dims_or_crew_flag_is_refused_naming_the_flag() {
+    for (args, flag) in [
+        (["--dims", "64,64,32"], "--dims"),
+        (["--dims", "128,128,31"], "--dims"),
+        (["--crew", "0"], "--crew"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_simd"))
+            .arg("0")
+            .args(args)
+            .output()
+            .expect("simd must run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{args:?} exited 0");
+        assert!(
+            stderr.contains(flag),
+            "{args:?}: stderr must name {flag}: {stderr}"
+        );
+        assert!(
+            output.stdout.is_empty(),
+            "{args:?} printed {:?}",
+            output.stdout
+        );
+    }
 }

@@ -197,6 +197,57 @@ fn a_full_stockpile_never_stacks_uncarried_stones() {
     }
 }
 
+/// 13.6 review run 2: a stone a hauler carries across a pile tile is NOT stored. On the 256²
+/// scenario the whole 59 → 33 error was carried stones (26 carried, 0 stacked), so this pins the
+/// carried half of `stored_count` that the simd stacked-zone test cannot see.
+#[test]
+fn stored_count_skips_a_stone_carried_over_a_pile_tile() {
+    let mut save = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).to_save();
+    let carried_on = Pos { x: 66, y: 64, z: 9 };
+    let lying_on = Pos { x: 67, y: 64, z: 9 };
+    let control = World::from_save(save.clone());
+    for tile in [carried_on, lying_on] {
+        assert!(is_standable(&control, tile), "{tile:?} is a pile tile");
+        assert!(
+            save.dwarves.iter().all(|d| d.pos != tile),
+            "no dwarf stands on {tile:?}"
+        );
+    }
+    save.zones = vec![carried_on, lying_on];
+    let (carried, lying) = (save.next_id, save.next_id + 1);
+    save.items.push((carried, carried_on, ItemKind::Stone));
+    save.items.push((lying, lying_on, ItemKind::Stone));
+    save.next_id += 2;
+    let job = save.next_job_id;
+    save.jobs.push(Job {
+        id: JobId(job),
+        kind: JobKind::Haul { item: carried },
+        target: carried_on,
+        created_tick: 0,
+        retry_after: 0,
+    });
+    save.next_job_id += 1;
+    let mut set_down = save.clone();
+    let hauler = save.dwarves[0].id;
+    save.dwarves[0].pos = carried_on;
+    save.dwarves[0].current_job = Some(job);
+    save.dwarves[0].carrying = Some(carried);
+
+    let world = World::from_save(save);
+    assert!(
+        world.carrying().contains(&(Id(hauler), Some(carried))),
+        "the hauler holds the stone over the pile"
+    );
+    assert_eq!(world.stored_count(), 1, "only the lying stone is stored");
+
+    set_down.jobs.clear();
+    assert_eq!(
+        World::from_save(set_down).stored_count(),
+        2,
+        "set down, the same stone is stored"
+    );
+}
+
 #[test]
 fn idle_dwarves_stay_standable_and_inside_the_camp() {
     let mut world = World::generate(42, Dims::DEFAULT);

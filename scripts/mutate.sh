@@ -88,6 +88,8 @@ PACKAGES=$(rg -N '^name = "' crates/*/Cargo.toml | sed 's/.*"\(.*\)"/\1/')
 # `#[ignore]`d test silently collects ZERO tests, exits 0, and reports SURVIVED -- "your test is not
 # pinning what it claims" when the truth is "your test never ran". Story 10.5 hit exactly that with
 # its AC10 row, which targets a test that drives the real binary and is therefore ignored by default.
+# `release-ignored` does the same in a release build (13.6): its target panics in debug on purpose,
+# so the plain `ignored` mode would read KILLED with the sabotage never run.
 mutation() {
   local name="$1" tier="$2" test="$3" mode="${4:-}"
   local script; script=$(cat)
@@ -111,6 +113,8 @@ mutation() {
   else
     if [ "$mode" = "ignored" ]; then
       out=$(cargo test --offline -p "$tier" "$test" -- --ignored 2>&1); rc=$?
+    elif [ "$mode" = "release-ignored" ]; then
+      out=$(cargo test --offline --release -p "$tier" "$test" -- --ignored 2>&1); rc=$?
     else
       out=$(cargo test --offline -p "$tier" "$test" 2>&1); rc=$?
     fi

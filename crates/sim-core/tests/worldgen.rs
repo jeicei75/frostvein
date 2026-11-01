@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, VecDeque};
 
 use sim_core::{DEFAULT_SEED, Dims, Id, Material, Pos, Profession, Tile, World};
 
@@ -943,4 +943,126 @@ fn default_seed_ore_census_is_in_band() {
         "bloodstone should be about 1 per 20 tetrahedrite"
     );
     assert!(bloodstone.iter().all(|&depth| depth >= 5));
+}
+
+/// The camp's walkable component, computed here from the public API alone (not by the spawn
+/// under test). Mirrors the sim's movement rule: four sides on the same level, and a step up or
+/// down one level only where the LOWER of the two cells has a ramp beneath it; emitter cells are
+/// blocked. The camp itself is the start cell.
+fn camp_component(world: &World) -> BTreeSet<Pos> {
+    let blocked: BTreeSet<Pos> = world.emitters().iter().map(|(_, pos, _)| *pos).collect();
+    let camp = world.camp_origin();
+    let mut seen = BTreeSet::from([camp]);
+    let mut queue = VecDeque::from([camp]);
+    while let Some(from) = queue.pop_front() {
+        for dz in [-1, 0, 1] {
+            for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let to = Pos {
+                    x: from.x + dx,
+                    y: from.y + dy,
+                    z: from.z + dz,
+                };
+                if !is_standable(world, to) || blocked.contains(&to) {
+                    continue;
+                }
+                if dz != 0 {
+                    let lower = if to.z < from.z { to } else { from };
+                    let below = Pos {
+                        z: lower.z - 1,
+                        ..lower
+                    };
+                    if !matches!(world.tile(below), Some(Tile::Ramp(_))) {
+                        continue;
+                    }
+                }
+                if seen.insert(to) {
+                    queue.push_back(to);
+                }
+            }
+        }
+    }
+    seen
+}
+
+#[test]
+fn a_crew_of_200_spawns_near_the_camp_one_per_tile() {
+    // The camp's component is most of a hilly map, so one seed can pass by luck: sixteen more
+    // 128² seeds keep the component assert able to fail on a spawn that is standable but cut off.
+    let worlds = [(DEFAULT_SEED, Dims::DEFAULT), (DEFAULT_SEED, Dims::FRESH)]
+        .into_iter()
+        .chain((0..16).map(|seed| (seed, Dims::DEFAULT)));
+    for (seed, dims) in worlds {
+        let world = World::generate_with_crew(seed, dims, 200);
+        let spawned: Vec<Pos> = world.dwarves().iter().map(|(_, pos, _, _)| *pos).collect();
+        let emitters: BTreeSet<Pos> = world.emitters().iter().map(|(_, pos, _)| *pos).collect();
+        let component = camp_component(&world);
+        assert!(
+            component.len() > 200,
+            "seed {seed} {dims:?}: camp component only {}",
+            component.len()
+        );
+
+        assert_eq!(spawned.len(), 200, "seed {seed} {dims:?}");
+        assert_eq!(
+            spawned.iter().collect::<BTreeSet<_>>().len(),
+            200,
+            "seed {seed} {dims:?}: two dwarves share a tile"
+        );
+        for pos in &spawned {
+            assert!(
+                is_standable(&world, *pos),
+                "seed {seed} {dims:?}: {pos:?} not standable"
+            );
+            assert!(
+                !emitters.contains(pos),
+                "seed {seed} {dims:?}: {pos:?} is an emitter"
+            );
+            assert!(
+                component.contains(pos),
+                "seed {seed} {dims:?}: {pos:?} is standable but the camp cannot walk to it"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_256_valley_is_playable() {
+    let world = World::generate(DEFAULT_SEED, Dims::FRESH);
+    assert_eq!(world.dims(), Dims::FRESH);
+    let camp = world.camp_origin();
+    assert!(
+        world
+            .emitters()
+            .iter()
+            .any(|(_, pos, light)| *pos == camp && *light == sim_core::LightKind::Campfire),
+        "no campfire at the camp {camp:?}"
+    );
+    assert!(tree_trunk_columns(&world) > 0, "no trees on the 256 valley");
+    let ice = (0..256)
+        .flat_map(|y| (0..256).map(move |x| (x, y)))
+        .filter(|&(x, y)| surface_material(&world, x, y) == Material::Ice)
+        .count();
+    assert!(ice > 0, "no lake ice on the 256 valley");
+    let component = camp_component(&world).len();
+    println!("256 camp component: {component} cells");
+    assert!(component > 50_000, "camp component only {component}");
+}
+
+#[test]
+fn crew_200_holds_the_two_two_one_mix() {
+    let world = World::generate_with_crew(DEFAULT_SEED, Dims::DEFAULT, 200);
+    let professions = world.professions();
+    assert_eq!(professions.len(), 200);
+    let count = |wanted| professions.iter().filter(|(_, p)| *p == wanted).count();
+    assert_eq!(count(Profession::Miner), 80);
+    assert_eq!(count(Profession::Hauler), 80);
+    assert_eq!(count(Profession::Woodcutter), 40);
+
+    // One seeded shuffle over all 200, not the five-cycle: a plain `i % 5` cycle (which also
+    // holds 80/80/40) repeats with period 5 everywhere.
+    let kinds: Vec<Profession> = professions.iter().map(|(_, p)| *p).collect();
+    assert!(
+        (0..195).any(|i| kinds[i] != kinds[i + 5]),
+        "professions are periodic with period 5: that is a cycle, not a shuffle"
+    );
 }

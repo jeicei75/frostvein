@@ -185,6 +185,10 @@ if [ "$FAST" -eq 1 ] || [ "$RUN_SERVE" -eq 0 ]; then
   run "cargo test simd bench.rs" cargo test -p simd --test bench
 else
   run "cargo test" cargo test
+  # 13.6 AC 6 (Q4 a): the committed 256² crew-200 scenario does real work. Release only: debug
+  # steps that world ~22x slower. About one release build plus a ~90 s run.
+  run "cargo test (release real-work scenario)" \
+    cargo test --release -p simd --test bench -- --ignored two_hundred
 fi
 # The pixel guards, and the ONLY checks here that look at a rendered frame. The `cargo test` arm
 # above builds every binary, including the daemon these spawn, so they run after it and never
@@ -251,6 +255,7 @@ if [ "$FAST" -eq 1 ]; then
   echo "GATE GREEN (FAST) -- NOT the full gate.  $((SECONDS - START))s"
   echo "  SKIPPED: crates/simd/tests/serve.rs (61 daemon integration tests)."
   echo "  SKIPPED: crates/gui/tests/pixel_guard.rs (2 rendered-frame guards)."
+  echo "  SKIPPED: the release real-work scenario (scenarios/two-hundred-on-256.json)."
   echo "  This is a COVERAGE HOLE, not a clean result. Run scripts/gate.sh with no"
   echo "  arguments before pushing, and before calling any story done."
   exit 0
@@ -263,6 +268,7 @@ fi
 if [ "$RUN_SERVE" -eq 0 ] || [ "$RUN_PIXEL" -eq 0 ]; then
   echo "GATE GREEN (SCOPED) -- NOT the full gate.  $((SECONDS - START))s"
   [ "$RUN_SERVE" -eq 0 ] && echo "  SKIPPED: crates/simd/tests/serve.rs -- $SKIP_SERVE_WHY."
+  [ "$RUN_SERVE" -eq 0 ] && echo "  SKIPPED: the release real-work scenario -- $SKIP_SERVE_WHY."
   [ "$RUN_PIXEL" -eq 0 ] && echo "  SKIPPED: crates/gui/tests/pixel_guard.rs -- $SKIP_PIXEL_WHY."
   echo "  Scoped by the pushed range, NOT by judgement about what is worth checking."
   echo "  Before calling any story done, run scripts/gate.sh with no arguments."
