@@ -144,3 +144,17 @@ old = ' && world.tile(pos) != tile {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, ' {\n'))
 PY
+
+# Review run 2 (2026-11-01) patch pass. Row 16 is the REWORK of row 14's half: both review layers'
+# sabotage, which passed every bench test and printed run 1's wrong stored=59. It counts each zone
+# tile holding ANY item, carried or not; one per tile, so row 14's stacked fixture stays blind.
+mutation "16 stored_count counts a carried stone on a pile tile" sim-core stored_count_skips_a_stone_carried_over_a_pile_tile <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        split_stored(&self.ecs).0.len()\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''        let zones = &self.ecs.resource::<Zones>().0;
+        let tiles: BTreeSet<Pos> = self.items().into_iter().map(|(_, pos)| pos).filter(|pos| zones.contains(pos)).collect();
+        tiles.len()
+'''))
+PY
