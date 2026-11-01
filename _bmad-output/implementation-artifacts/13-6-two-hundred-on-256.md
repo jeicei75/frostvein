@@ -5,7 +5,7 @@ baseline_commit: ce69409a2d33f5734d2d35c946bfa2bb30407e56
 
 # Story 13.6: Two Hundred on 256²
 
-Status: review
+Status: done
 
 ## Story
 
@@ -461,3 +461,4 @@ Implementer: Sonnet 5.5 subagents (`claude-sonnet-5-5`), Opus 5.5 orchestrating 
 | 2026-10-31 | Seat sitting (Task 8): vista met, working zoom missed (#224), pulse (#225), HUD state (#223). #222's fog volume fixed in-story (`27fc5c0b`) on Wolf's ruling, both framings re-read. Full gate green (5,164 s). Status → review. |
 | 2026-11-01 | Code review run 1: 5 patches, 3 deferred, 7 dismissed. Review patch pass 1: 5/5 landed (#226 crew>5 load; `stored=` by the sim's rule, 59 → 33; `done=` skips dropped marks; two record fixes). Mutation rows 12-15 KILLED. Full gate GREEN on `5f5a3856` (4,393 s). Cost row $9.27 (163 turns). Status → review for round 2. |
 | 2026-11-01 | Code review run 2: 4 new patches (1 REWORK), decision #227 ruled (b) to 13.11, no round 3. Review patch pass 2: 4/4 landed (`e494ab57` carried-stone `stored_count` test + mutation row 16, `38210b07` `done=` NOTE, AC 6 and #227 AMENDED lines). Mutation 16/16 KILLED. Full gate GREEN on `38210b07` (4,399 s). Cost row $3.29 (83 turns). Status → review; next is the PR on Wolf's yes. |
+| 2026-11-01 | Merged as PR #228 (`f148cfbe`, head `788404bd`), closing #226 only (`closingIssuesReferences` [226]); #222 and #227 stay open. Status → done. |
