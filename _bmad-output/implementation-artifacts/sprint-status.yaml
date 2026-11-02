@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-11-01
+# last_updated: 2026-11-02
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-11-01
+last_updated: 2026-11-02
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2823,7 +2823,12 @@ development_status:
   # NOTE; AC 6 + #227 AMENDED). Mutation 16/16 KILLED. Full gate GREEN on 38210b07 (4,399 s). -> review; next = PR on
   # Wolf's yes (no round 3); the PR must NOT close #222 or #227, may close #226.
   # 13.6 MERGED 2026-11-01 as PR #228 (f148cfbe), closed #226 only; #222/#227 open. -> done.
-  13-7-the-long-way: backlog
+  13-7-the-long-way: ready-for-dev
+  # 13.7 CREATED 2026-11-02 (Opus 5.5) on branch story-13-7-the-long-way (off local main 483b95b1). Probes on main f148cfbe:
+  # every 256^2 budget exhaustion is UNREACHABLE (claim 238/238, astar() 915/915; 13.2's 'reachable past the budget' is
+  # wrong); no reachable search from camp > 14,604 nodes. RED on the real valley: a dig designated after 25 unreachable ones
+  # is never claimed by t500 on main, claimed t115 / dug t208 with the claim budget sized to the world. Claim-only resize is
+  # cost-neutral (mean 34.3 -> 33.8 ms); every-site costs +11% mean / +20% p99 for no outcome change. Task 0 Q1-Q3 await Wolf.
   13-8-they-keep-coming: backlog
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog

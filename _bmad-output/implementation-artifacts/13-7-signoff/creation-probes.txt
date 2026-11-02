@@ -1,0 +1,56 @@
+# 13.7 creation probes (2026-11-02, main code f148cfbe / local main 483b95b1). Release builds, scratch worktree.
+
+## A. Fresh 256² DEFAULT_SEED valley (probe159-counters.patch, test probe159::probe)
+camp component 64,300 cells; walkable 73,213; 1,954 other components, all tree-crown tops (floor = TreeFoliage), max 16 cells
+stone/soil dig targets whose every face is off the camp component: 0
+unreachable flood from dwarf 0: expanded=64300, 36.9 / 33.7 / 35.7 ms
+reachable single-goal searches from dwarf 0, every 97th camp cell (663 searches): max 14,604 expansions, 0 over 50,000
+
+## B. two-hundred-on-256, 2,500 ticks, --runs 1, exhausted searches classified by an unbounded re-run (probe159-counters.patch)
+claim_jobs exhausted: 238 (reachable 0, unreachable 238)
+astar() exhausted: 915, all unreachable: resolve_blocked_step reroute 896, execute_jobs re-plan 19
+route_to_nearest exhausted: 27 (not classified)
+
+## C. AC 11 premise: state= per scenario, main vs MAX_ASTAR_NODES = 256*256*32 at every site (budget-all-sites.patch), --runs 1
+big-pile main state=81074e5c52948a13 proto state=81074e5c52948a13
+deep-pit main state=8cfa0773f7a78f43 proto state=8cfa0773f7a78f43
+dig-loop main state=0337abf343bac62f proto state=0337abf343bac62f
+full-pile-crowd main state=eb1112576885e4ad proto state=eb1112576885e4ad
+plan-compact-piles main state=ff7ac70d920a827e proto state=ff7ac70d920a827e
+plan-far-piles main state=f07b194f92a5ec93 proto state=f07b194f92a5ec93
+plan-spread-piles main state=de631ebd8382e8e4 proto state=de631ebd8382e8e4
+plan main state=b124519bce5e6bab proto state=b124519bce5e6bab
+seat-slow main state=c39ed45c4ecc5ff7 proto state=c39ed45c4ecc5ff7
+stuck-tunnel main state=a5d257cac0182a1f proto state=a5d257cac0182a1f
+two-hundred-on-256 main state=3fc1461d491ee5d9 proto state=6ba8edcc3d6c7b9c
+
+## D. Timing, two-hundred-on-256 --runs 3 each, sequential, idle devpod
+== main
+bench two-hundred-on-256 run 1/3: ticks=2500 commands=1801/1801 mean=34.0019 p99=155.2503 max=258.552 over10=1559 state=3fc1461d491ee5d9
+bench two-hundred-on-256 run 2/3: ticks=2500 commands=1801/1801 mean=34.5165 p99=156.8580 max=260.349 over10=1564 state=3fc1461d491ee5d9
+bench two-hundred-on-256 run 3/3: ticks=2500 commands=1801/1801 mean=34.2678 p99=155.9449 max=255.080 over10=1558 state=3fc1461d491ee5d9
+bench two-hundred-on-256 end tick=2500 marks=1478 items=602 zones=1800 goals=28/0/0 done=dig:231,cut:91 stored=33 cells=2165
+== claim
+bench two-hundred-on-256 run 1/3: ticks=2500 commands=1801/1801 mean=33.4441 p99=153.0201 max=311.714 over10=1556 state=6ba8edcc3d6c7b9c
+bench two-hundred-on-256 run 2/3: ticks=2500 commands=1801/1801 mean=33.7748 p99=155.5204 max=302.364 over10=1558 state=6ba8edcc3d6c7b9c
+bench two-hundred-on-256 run 3/3: ticks=2500 commands=1801/1801 mean=33.9531 p99=155.8581 max=305.413 over10=1557 state=6ba8edcc3d6c7b9c
+bench two-hundred-on-256 end tick=2500 marks=1476 items=600 zones=1800 goals=22/0/0 done=dig:234,cut:90 stored=27 cells=2146
+== all
+bench two-hundred-on-256 run 1/3: ticks=2500 commands=1801/1801 mean=37.5787 p99=186.5546 max=373.795 over10=1557 state=6ba8edcc3d6c7b9c
+bench two-hundred-on-256 run 2/3: ticks=2500 commands=1801/1801 mean=37.9895 p99=187.8820 max=380.657 over10=1561 state=6ba8edcc3d6c7b9c
+bench two-hundred-on-256 run 3/3: ticks=2500 commands=1801/1801 mean=38.5837 p99=194.7478 max=371.729 over10=1563 state=6ba8edcc3d6c7b9c
+bench two-hundred-on-256 end tick=2500 marks=1476 items=600 zones=1800 goals=22/0/0 done=dig:234,cut:90 stored=27 cells=2146
+(claim = claim_jobs' per-dwarf budget 256*256*32 only; all = the constant at every site)
+
+## E. Red/green, probe-the-long-way.patch (test probe_the_long_way: 25 sealed one-cell pockets at z=1, x=20+4k, y=20, dig target beside each; one stone placed at dwarf 0 + (3,0,0); 5 miners; claim_jobs alone from tick 100)
+main: tick 100 133.4 ms stamps [120,0,...]; tick 101 136.8 ms [120,121,0,...]; tick 102 133.2 ms; NEVER CLAIMED by t200
+claim budget 256*256*32: tick 100 37.9 ms claimed [(0, 25)] stamps [120 x25, 0]
+
+## F. Full-step form, probe-the-long-way.patch (test probe_the_long_way_stepped): same 25 pockets, 5 miners, the 25 digs
+## designated by SimCommand::Designate at t0, world.step() x100, THEN the reachable dig designated, then step to t500
+(control, all 26 designated at t0: main AND fix both claim at t15 and dig at t98 -- reaction delays stagger the miners,
+ so the reachable job slips in before the unreachable ones cycle. The red needs the late designation.)
+main:  t100 no claims; NOT DUG by t500, never claimed; stamps [508,517,506,...,505, 30,27,29,29,31, 0]: jobs 20-24 never
+       re-attempted after ~t30, the reachable job (last) never attempted; 51.2 s release (~102 ms/tick)
+fix (claim budget 256*256*32): claimed t115 by dwarf 2 (JobId 25), DUG t208; 1.48 s release; debug 10.8 s to DUG
+       (21.0 s with the 256² worldgen)
