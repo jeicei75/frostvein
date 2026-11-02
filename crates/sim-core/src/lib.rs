@@ -49,10 +49,12 @@ const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
 // NOTE: 13.6's 256² crew-200 scenario holds 1,800 marks, under this cap. Past it a designate
 // drops cells silently (#170), and M4's forage and fishing marks add to the same count.
 pub const MAX_DESIGNATIONS: usize = 4096;
-// NOTE: bounds `astar()`, `route_to_nearest` and `stranded` only; `claim_jobs` sizes its own
-// budget to the world (13.7). 13.7 found every 256² exhaustion at those sites to be an unreachable
-// goal, so capping gives the same `None`, cheaper. A reachable reroute or re-plan past it would
-// give up (`resolve_blocked_step`, `execute_jobs` -> `retry_claim`), which no probe has seen.
+// NOTE: bounds `astar()`, `route_to_nearest` and `stranded` only; `claim_jobs` and the
+// `execute_jobs` re-plan size their budget to the world (13.7; the re-plan AMENDED 2026-11-02 by
+// review decision 1, because a capped re-plan of a far claim looped claim/release forever). 13.7
+// found every 256² exhaustion at the capped sites to be an unreachable goal, so capping gives the
+// same `None`, cheaper. A reachable reroute past it (`resolve_blocked_step`) gives up and waits,
+// keeping the claim.
 const MAX_ASTAR_NODES: usize = 50_000;
 /// Ticks of work a hauler spends picking a stone up, and again putting it down.
 pub const WORK_TICKS: u32 = 5;
@@ -2242,7 +2244,17 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             // changes no terrain, so `clear_paths` never ran): plan again rather than step in.
             if path.is_empty() || blocked.contains(&path[0]) {
                 let terrain = ecs.resource::<Terrain>();
-                let Some(computed) = astar(terrain, &blocked, pos, &work_positions) else {
+                // The world's cell count, as at claim time (13.7 review, decision 1): every dig or
+                // cut clears every path, and a re-plan capped at `MAX_ASTAR_NODES` released a far
+                // claim that `claim_jobs` then re-claimed, in a loop that never reached the job.
+                let (computed, _, _) = astar_with_budget(
+                    terrain,
+                    &blocked,
+                    pos,
+                    &work_positions,
+                    &mut terrain.tiles.len(),
+                );
+                let Some(computed) = computed else {
                     retry_claim(ecs, entity, job.id);
                     continue;
                 };
@@ -5726,6 +5738,123 @@ mod tests {
             queued,
             "the unreachable digs stay queued"
         );
+    }
+
+    // #159 (13.7 review, decision 1). Miner 0 stands on a 50,800-cell plate. His dig sits at the end
+    // of a sealed corridor one level up, reached only by a ramp at the plate's far corner, so the
+    // heuristic points almost straight at it and every search from the plate floods the whole
+    // plate first: past `MAX_ASTAR_NODES`. Any tile change anywhere clears every path
+    // (`clear_paths`), so a walker re-plans from where he stands. A re-plan capped at
+    // `MAX_ASTAR_NODES` gave up, released the claim to a 20-tick cooldown and re-claimed it, over
+    // and over, and the dig was never reached. Here a far tile changes every 8 ticks: the
+    // two-hundred bench's rate (324 digs and cuts in 2,500 ticks).
+    #[test]
+    fn a_far_claim_is_kept_through_terrain_churn_past_the_node_cap() {
+        let mut world = World::generate_with_crew(super::DEFAULT_SEED, Dims::FRESH, 5);
+        let dims = world.dims();
+        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        let open = |tiles: &mut [Tile], x: i32, y: i32, z: i32| {
+            tiles[idx(Pos { x, y, z })] = Tile::Empty;
+        };
+        for y in 0..200 {
+            for x in 0..254 {
+                open(&mut tiles, x, y, 1);
+            }
+        }
+        // The ramp up at the far corner, joined_plates' staircase shape.
+        tiles[idx(Pos {
+            x: 252,
+            y: 199,
+            z: 0,
+        })] = Tile::Ramp(Material::Stone);
+        tiles[idx(Pos {
+            x: 253,
+            y: 199,
+            z: 1,
+        })] = Tile::Ramp(Material::Stone);
+        open(&mut tiles, 253, 199, 2);
+        // The corridor at z = 3, over solid z = 2: north, west, then south to the dig at (1, 0, 3).
+        for y in 199..=250 {
+            open(&mut tiles, 254, y, 3);
+        }
+        for x in 1..254 {
+            open(&mut tiles, x, 250, 3);
+        }
+        for y in 1..250 {
+            open(&mut tiles, 1, y, 3);
+        }
+        let pockets = [120, 122, 124, 126].map(|x| Pos { x, y: 120, z: 20 });
+        for pocket in pockets {
+            open(&mut tiles, pocket.x, pocket.y, pocket.z);
+        }
+        let start = Pos { x: 0, y: 0, z: 1 };
+        let target = Pos { x: 1, y: 0, z: 3 };
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(
+            &mut world,
+            [start, pockets[0], pockets[1], pockets[2], pockets[3]],
+        );
+        // Precondition: the dig is reachable, and a search capped at the node budget gives up on it.
+        let blocked = super::blocked_cells(world.emitters().iter().map(|(_, pos, _)| pos));
+        let terrain = world.ecs.resource::<Terrain>();
+        let goals: BTreeSet<Pos> = super::side_neighbours(target)
+            .into_iter()
+            .filter(|cell| super::is_walkable(terrain, &blocked, *cell))
+            .collect();
+        assert!(
+            super::astar(terrain, &blocked, start, &goals).is_none(),
+            "the walk must flood past MAX_ASTAR_NODES"
+        );
+        assert!(
+            super::astar_with_budget(terrain, &blocked, start, &goals, &mut terrain.tiles.len())
+                .0
+                .is_some(),
+            "the dig must be reachable"
+        );
+
+        world.apply_command(super::SimCommand::Designate {
+            kind: super::DesignationKind::Dig,
+            rect: super::Rect {
+                min: target,
+                max: target,
+            },
+        });
+        world.step();
+        assert_eq!(world.jobs().len(), 1, "the dig is queued");
+        let dig = world.jobs()[0].id;
+        let far = Pos {
+            x: 255,
+            y: 255,
+            z: 30,
+        };
+        let (mut claims, mut releases, mut held) = (0, 0, false);
+        let end = world.tick() + 200;
+        while world.tick() < end {
+            if world.tick().is_multiple_of(8) {
+                let tile = if world.tile(far) == Some(Tile::Solid(Material::Stone)) {
+                    Tile::Solid(Material::Soil)
+                } else {
+                    Tile::Solid(Material::Stone)
+                };
+                assert!(world.set_tile(far, tile));
+            }
+            world.step();
+            let holds = world.claims()[0].1 == Some(dig);
+            claims += usize::from(holds && !held);
+            releases += usize::from(held && !holds);
+            held = holds;
+        }
+        println!(
+            "claims={claims} releases={releases} by tick {}",
+            world.tick()
+        );
+        assert_eq!(
+            (claims, releases),
+            (1, 0),
+            "miner 0 must claim the far dig once and keep it through the churn"
+        );
+        assert_ne!(world.dwarves()[0].1, start, "miner 0 walks toward the dig");
     }
 
     // #159 (13.7). Miner 0 in the joined plates cannot reach dig 0, which sits beside miner 1's
