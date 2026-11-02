@@ -144,3 +144,30 @@ p.write_text(s.replace(old, '''                for x in 0..90 {
                     tiles[idx(x, y, 1 + 2 * plate)] = Tile::Empty;
 '''))
 PY
+
+# Rows 8-9: the "stamp, and go on to the next job" seam, unpinned since 12-4 rows 11 and 13-15
+# were retired (review run 1, Edge Case Hunter's two mutants).
+mutation "8 a failed goals search stops the dwarf loop" sim-core a_job_miner_zero_cannot_reach_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                    (None, false, explored) => {
+                        components.push(explored);
+                        continue;
+                    }
+                    (_, true, _) => unreachable!('''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                    (None, false, explored) => {
+                        components.push(explored);
+                        break;
+                    }
+                    (_, true, _) => unreachable!('''))
+PY
+
+mutation "9 the cached flood skips dwarves outside it" sim-core a_job_miner_zero_cannot_reach_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                    component.contains(*pos)
+                        && (goals.is_disjoint(component)'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                    (goals.is_disjoint(component)'''))
+PY
