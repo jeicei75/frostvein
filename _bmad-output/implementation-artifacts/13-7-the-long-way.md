@@ -5,7 +5,7 @@ baseline_commit: 483b95b1
 
 # Story 13.7: The Long Way
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -93,7 +93,7 @@ Throwaway scratch worktree, release builds. Raw lines and patches are in `13-7-s
   3. the cooldown stamp becomes `u64::MAX` (dropped, never retried) → AC 3's rewrite, at the tick-120 assert.
 
   Retire the rows that sabotage removed code, each with a dated `# Retired` comment at the top of its file (`5-1-the-world-grows-things-that-glow.sh:4` is the shape): `12-4.sh` rows 9–16 (`:76-162`), and `3-2-the-dig.sh`'s "each claim search gets a fresh node budget" (`:954-971`, whose sabotage is now the code). Row 16 ("budget raised past the joined plates", `:156`) still applies, because its anchor is the constant, but it targets the deleted precondition's test. Run it once: if it SURVIVES, retire it. Re-point a row instead of retiring it only if its anchor survives and it still kills. `audit-mutations.py` must report no BROKEN row.
-- [ ] **Task 5: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~70 min, memory: `gate-ooms-at-default-parallelism`). Paste the block. Cost row: `python3 _bmad/scripts/session_tokens.py --phase dev --story 13-7-the-long-way`, then `phase_state.py clear`, then Status → review on the story and the board. The PR body may say `Closes #159` and nothing else closing; check `closingIssuesReferences` (memory: `closing-keyword-closes-whole-issue`).
+- [x] **Task 5: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~70 min, memory: `gate-ooms-at-default-parallelism`). Paste the block. Cost row: `python3 _bmad/scripts/session_tokens.py --phase dev --story 13-7-the-long-way`, then `phase_state.py clear`, then Status → review on the story and the board. The PR body may say `Closes #159` and nothing else closing; check `closingIssuesReferences` (memory: `closing-keyword-closes-whole-issue`).
 
 ## Verification
 
@@ -196,6 +196,24 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 o
   - `astar-timer.patch` (`--runs 1`): `tick total 83862.2 ms, astar_with_budget 39539.0 ms (47.1%), route_to_nearest 583.3 ms (0.7%)`; mean 33.54 ms, state `6ba8edcc3d6c7b9c` (= HEAD, so the timer costs nothing measurable). **A\* is 47.1% of the tick.** `astar_with_budget` also counts `astar()`'s re-plans and the 896 unreachable reroutes in `resolve_blocked_step` (creation B, not fixed here: a finding, per the scope guardrails). The systems are `.chain()`ed, so the summed time is a share of wall time, not of thread time.
   - `astar-flat-storage.patch` (`costs`/`came_from` as `Vec`s over the terrain, indexed by `worldgen::index`; `--runs 3`): mean 77.37 / 74.26 / 71.68 ms, p99 456.5 / 422.8 / 403.7 (median 422.8), max 487-559; state `6ba8edcc3d6c7b9c` = HEAD's. **Mean +124%, p99 +174% against HEAD: flat storage as specified is SLOWER.** Inferred, not measured: each search allocates and fills two 2,097,152-entry vectors (8 MB of `u32` costs, 25 MB of `Pos`) whatever its size, and most searches are small. A flat layout would need storage reused across searches to win, which is a signature change and a separate story on Wolf's ruling. No storage change is committed.
 
+- **Full gate GREEN on `92b5e326`** (`RUST_TEST_THREADS=1 scripts/gate.sh`, exit 0):
+
+  ```
+  frostvein gate
+    cargo fmt --check           ok  1s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  1155s
+    cargo test (release real-work scenario)ok  94s
+    cargo test (pixel guards)   ok  3134s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  20s
+    mutation tables still apply ok  10s
+  GATE GREEN  4424s
+  ```
+
 ### Completion Notes List
 
 - **Tasks 1-2 (Sonnet 5.5 agent; Opus reviewed the diff).** `claim_jobs`: `budgets`, `sat_out` and the `enumerate`/`slot` removed; each `astar_with_budget` call gets `let mut budget = terrain.tiles.len();`; one `(_, true, _) => unreachable!("a search sized to the world cannot run out")` arm per match; stamp is `attempted && !assigned`; the header comment, the `components` NOTE and the `MAX_ASTAR_NODES` NOTE rewritten. `MAX_ASTAR_NODES`, `astar()`, `route_to_nearest` and `stranded` are untouched.
@@ -221,3 +239,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 o
 | 2026-11-02 | Story created (Opus 5.5). Creation probes: every 256² budget exhaustion is an unreachable goal (13.2's reading corrected); the red reproduces on the real valley; claim-only resize is cost-neutral. Evidence in `13-7-signoff/`. Task 0 Q1–Q3 await Wolf. |
 | 2026-11-02 | Task 0 RULED (Wolf, "ok for all"): Q1 (a) claim-only resize; Q2 (a) per-search world-sized budget, 12.4 sat-out removed; Q3 (a) epic 13.7 ACs 1-2 amended, `issue-159-comment.md` posted on #159. ACs and Tasks stand as written. Next: ask which implementer. |
 | 2026-11-02 | Dev started: Wolf picked Sonnet 5.5 subagents (Opus orchestrates). Status in-progress. |
+| 2026-11-02 | Dev complete (Sonnet 5.5 agent for Tasks 1-2, Opus for Tasks 3-5): `641dbc7b` claim budget sized to the world + tests + mutation retirements, `92b5e326` record. AC 1 RED/GREEN, 13-7.sh 4/4 KILLED, tick-bench 10/10 same (256² differ, explained), A* 47.1% of the 256² tick, flat storage slower. Full gate GREEN on `92b5e326` (4,424 s). Status review. |
