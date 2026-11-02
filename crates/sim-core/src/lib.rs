@@ -5419,6 +5419,22 @@ mod tests {
         }
     }
 
+    /// The walkable area holding `from`: a flood over `astar_neighbours`, emitters closed.
+    fn walkable_area(world: &World, from: Pos) -> BTreeSet<Pos> {
+        let blocked = super::blocked_cells(world.emitters().iter().map(|(_, pos, _)| pos));
+        let terrain = world.ecs.resource::<Terrain>();
+        let mut area = BTreeSet::from([from]);
+        let mut frontier = vec![from];
+        while let Some(cell) = frontier.pop() {
+            for next in super::astar_neighbours(terrain, &blocked, cell) {
+                if area.insert(next) {
+                    frontier.push(next);
+                }
+            }
+        }
+        area
+    }
+
     fn insert_dig(world: &mut World, id: u32, target: Pos) {
         assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
             id: JobId(id),
@@ -5494,17 +5510,7 @@ mod tests {
         world.ecs.resource_mut::<Terrain>().tiles = tiles;
         stand_miners_at(&mut world, spots);
         // Precondition: dwarf 0's walkable area is over the node budget and holds no pocket.
-        let blocked = super::blocked_cells(world.emitters().iter().map(|(_, pos, _)| pos));
-        let terrain = world.ecs.resource::<Terrain>();
-        let mut camp = BTreeSet::from([spots[0]]);
-        let mut frontier = vec![spots[0]];
-        while let Some(cell) = frontier.pop() {
-            for next in super::astar_neighbours(terrain, &blocked, cell) {
-                if camp.insert(next) {
-                    frontier.push(next);
-                }
-            }
-        }
+        let camp = walkable_area(&world, spots[0]);
         assert!(
             camp.len() > super::MAX_ASTAR_NODES,
             "the camp area ({} cells) must exceed the node budget",
@@ -5527,6 +5533,8 @@ mod tests {
         for _ in 0..100 {
             world.step();
         }
+        // Without this a designate filter that dropped the pocket digs would pass on `main`'s budget.
+        assert_eq!(world.jobs().len(), 25, "the 25 pocket digs are queued");
         let designated = world.tick();
         world.apply_command(super::SimCommand::Designate {
             kind: super::DesignationKind::Dig,
@@ -5539,17 +5547,24 @@ mod tests {
         let mut claimed_at = None;
         while world.tick() < designated + 60 {
             world.step();
-            if world.claims().iter().any(|(_, job)| job.is_some()) {
-                claimed_at = Some(world.tick());
+            if let Some(job) = world.claims().iter().find_map(|(_, job)| *job) {
+                claimed_at = Some((world.tick(), job));
                 break;
             }
         }
-        let Some(claimed) = claimed_at else {
+        let Some((claimed, job)) = claimed_at else {
             println!("never claimed by tick {}", world.tick());
             panic!(
                 "the reachable dig must be claimed within 60 ticks of its designation (tick {designated})"
             );
         };
+        let late = world
+            .jobs()
+            .into_iter()
+            .find(|queued| queued.target == near)
+            .expect("the late dig is queued")
+            .id;
+        assert_eq!(job, late, "the claim must be the late, reachable dig");
         let mut dug_at = None;
         while world.tick() < designated + 300 {
             world.step();
@@ -5691,6 +5706,12 @@ mod tests {
                 pockets[2],
                 pockets[3],
             ],
+        );
+        // Precondition: miner 0's area is over the node budget, or `main`'s budget passes too.
+        let area = walkable_area(&world, Pos { x: 0, y: 0, z: 1 }).len();
+        assert!(
+            area > super::MAX_ASTAR_NODES,
+            "the joined plates ({area} cells) must exceed the node budget"
         );
         for job in 0..10_u32 {
             insert_dig(

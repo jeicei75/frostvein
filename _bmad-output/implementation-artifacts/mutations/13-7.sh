@@ -89,3 +89,58 @@ old = 'claimed.contains(&job.id) || tick.0 < job.retry_after'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'claimed.contains(&job.id) || job.retry_after > 0'))
 PY
+
+# Review run 1 patches (2026-11-02). Rows 4-9 pin the patch pass's fix and its new asserts.
+mutation "4 the execute_jobs re-plan is capped at MAX_ASTAR_NODES again (decision 1)" sim-core a_far_claim_is_kept_through_terrain_churn_past_the_node_cap <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                let (computed, _, _) = astar_with_budget(
+                    terrain,
+                    &blocked,
+                    pos,
+                    &work_positions,
+                    &mut terrain.tiles.len(),
+                );
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let computed = astar(terrain, &blocked, pos, &work_positions);\n'))
+PY
+
+# A designate filter that drops the pocket digs: without the 25-queued assert the test passes
+# on main's budget too, because nothing sits ahead of the late dig.
+mutation "5 the pocket digs are never queued" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''    for (&target, &designation) in &designations.0 {
+        if jobs.targets.contains(&target) {
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''    for (&target, &designation) in &designations.0 {
+        if jobs.targets.contains(&target) || target.z == 1 {
+'''))
+PY
+
+mutation "6 an unreachable dig is claimed with an empty path" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                    (None, false, explored) => {
+                        components.push(explored);
+                        continue;
+                    }
+                    (_, true, _) => unreachable!('''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                    (None, false, _) => Vec::new(),
+                    (_, true, _) => unreachable!('''))
+PY
+
+mutation "7 the joined plates shrink under the node budget" sim-core unreachable_digs_are_stamped_in_one_flood_and_retried_after_the_cooldown <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '''                for x in 0..110 {
+                    tiles[idx(x, y, 1 + 2 * plate)] = Tile::Empty;
+'''
+assert s.count(old) == 1
+p.write_text(s.replace(old, '''                for x in 0..90 {
+                    tiles[idx(x, y, 1 + 2 * plate)] = Tile::Empty;
+'''))
+PY
