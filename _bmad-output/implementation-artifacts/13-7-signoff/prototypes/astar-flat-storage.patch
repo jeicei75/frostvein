@@ -1,0 +1,60 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 69ce6aaa..fafe4df2 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1182,12 +1182,17 @@ fn astar_with_budget(
+     if goals.is_empty() {
+         return (None, false, BTreeSet::new());
+     }
++    // PROFILE (13.7 Task 3, throwaway): flat storage indexed like the terrain.
++    let dims = terrain.dims;
++    let at = |p: Pos| worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+     let mut open = BinaryHeap::from([Reverse((astar_heuristic(from, goals), from))]);
+-    let mut came_from = BTreeMap::new();
+-    let mut costs = BTreeMap::from([(from, 0_u32)]);
++    let mut came_from = vec![from; terrain.tiles.len()];
++    let mut costs = vec![u32::MAX; terrain.tiles.len()];
++    let mut touched = vec![from];
++    costs[at(from)] = 0;
+ 
+     while let Some(Reverse((queued_f, current))) = open.pop() {
+-        let current_cost = costs[&current];
++        let current_cost = costs[at(current)];
+         if queued_f != current_cost + astar_heuristic(current, goals) {
+             continue;
+         }
+@@ -1200,7 +1205,7 @@ fn astar_with_budget(
+             let mut cursor = current;
+             while cursor != from {
+                 path.push(cursor);
+-                cursor = came_from[&cursor];
++                cursor = came_from[at(cursor)];
+             }
+             path.reverse();
+             return (Some(path), false, BTreeSet::new());
+@@ -1208,9 +1213,13 @@ fn astar_with_budget(
+ 
+         for neighbour in astar_neighbours(terrain, blocked, current) {
+             let next_cost = current_cost + 1;
+-            if next_cost < costs.get(&neighbour).copied().unwrap_or(u32::MAX) {
+-                costs.insert(neighbour, next_cost);
+-                came_from.insert(neighbour, current);
++            let i = at(neighbour);
++            if next_cost < costs[i] {
++                if costs[i] == u32::MAX {
++                    touched.push(neighbour);
++                }
++                costs[i] = next_cost;
++                came_from[i] = current;
+                 open.push(Reverse((
+                     next_cost + astar_heuristic(neighbour, goals),
+                     neighbour,
+@@ -1219,7 +1228,7 @@ fn astar_with_budget(
+         }
+     }
+     // A completed failure has flooded `from`'s whole walkable component: hand it back.
+-    (None, false, costs.into_keys().collect())
++    (None, false, touched.into_iter().collect())
+ }
+ 
+ fn astar(

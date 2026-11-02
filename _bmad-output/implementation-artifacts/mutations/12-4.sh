@@ -7,7 +7,11 @@
 # dwarf loop", "budget check before the trade filter", "sat out leaves the dwarf loop") sabotaged
 # the per-dwarf budget, its `(None, true, _)` arms and the sat-out rule. 13.7 Q2 (a) removed all
 # three: every claim search gets a fresh budget of the world's cell count, which cannot run out,
-# so the arms are `unreachable!`. The claim side is pinned by 13-7.sh. Row 16 re-pointed below.
+# so the arms are `unreachable!`. The claim side is pinned by 13-7.sh.
+# Retired 2026-11-02 (13.7): row 16 "budget raised past the joined plates" (MAX_ASTAR_NODES 50,000 ->
+# 60,000) SURVIVED when re-run on its renamed target: the claim no longer reads the constant, and
+# the test lost the exhaustion precondition the bump was meant to fail. The constant's other
+# readers are pinned by 3-2-the-dig.sh "MAX_ASTAR_NODES is widened" (astar_stops_at_the_node_cap).
 
 mutation "trade check removed" sim-core hauling_starts_while_the_dig_backlog_is_still_queued <<'PY'
 import pathlib
@@ -78,16 +82,4 @@ p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 old = '            let trade = profession\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            let trade = profession\n                .filter(|_| false)\n'))
-PY
-
-# Row 16 (12.4 review run 2): a budget bump past the joined plates' 55,003 cells means no miner
-# exhausts. The precondition must fail rather than the test passing vacuously.
-# Re-pointed 2026-11-02 (13.7): the target test was renamed and lost its exhaustion precondition,
-# so this row must be re-run in 13.7's code; retire it if it SURVIVES.
-mutation "budget raised past the joined plates" sim-core a_job_miner_zero_cannot_reach_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = 'const MAX_ASTAR_NODES: usize = 50_000;\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, 'const MAX_ASTAR_NODES: usize = 60_000;\n'))
 PY

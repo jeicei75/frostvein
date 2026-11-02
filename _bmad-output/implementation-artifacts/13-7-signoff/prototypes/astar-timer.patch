@@ -1,0 +1,68 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 69ce6aaa..3c1c57e1 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1172,6 +1172,16 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
+         .unwrap_or(0)
+ }
+ 
++// PROFILE (13.7 Task 3, throwaway): wall time inside the searches, read by `simd --bench`.
++pub static PROFILE_ASTAR_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++pub static PROFILE_ROUTE_NS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++struct ProfileTimer(&'static std::sync::atomic::AtomicU64, std::time::Instant);
++impl Drop for ProfileTimer {
++    fn drop(&mut self) {
++        self.0.fetch_add(self.1.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
++    }
++}
++
+ fn astar_with_budget(
+     terrain: &Terrain,
+     blocked: &BTreeSet<Pos>,
+@@ -1179,6 +1189,7 @@ fn astar_with_budget(
+     goals: &BTreeSet<Pos>,
+     nodes_remaining: &mut usize,
+ ) -> (Option<Vec<Pos>>, bool, BTreeSet<Pos>) {
++    let _profile = ProfileTimer(&PROFILE_ASTAR_NS, std::time::Instant::now());
+     if goals.is_empty() {
+         return (None, false, BTreeSet::new());
+     }
+@@ -1250,6 +1261,7 @@ fn route_to_nearest(
+     from: Pos,
+     accept: impl Fn(Pos) -> bool,
+ ) -> Option<Vec<Pos>> {
++    let _profile = ProfileTimer(&PROFILE_ROUTE_NS, std::time::Instant::now());
+     let mut parents = BTreeMap::new();
+     let mut queue = VecDeque::from([from]);
+     let mut nodes_remaining = MAX_ASTAR_NODES;
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index ba031670..783dcc49 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -333,6 +333,8 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         let mut schedule = scenario.schedule(world.tick());
+         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+         let start_tiles = world.tiles().to_vec();
++        sim_core::PROFILE_ASTAR_NS.store(0, std::sync::atomic::Ordering::Relaxed);
++        sim_core::PROFILE_ROUTE_NS.store(0, std::sync::atomic::Ordering::Relaxed);
+         let (mut dug, mut cut) = (0, 0);
+         for _ in 0..scenario.ticks {
+             for command in schedule.due(world.tick()) {
+@@ -385,6 +387,17 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+             slow,
+         } = stats(&ms);
+         let hash = state_hash(&world);
++        {
++            use std::sync::atomic::Ordering::Relaxed;
++            let tick_ms: f64 = ms.iter().sum();
++            let astar = sim_core::PROFILE_ASTAR_NS.swap(0, Relaxed) as f64 / 1e6;
++            let route = sim_core::PROFILE_ROUTE_NS.swap(0, Relaxed) as f64 / 1e6;
++            println!(
++                "profile {name} run {run}: tick total {tick_ms:.1} ms, astar_with_budget {astar:.1} ms ({:.1}%), route_to_nearest {route:.1} ms ({:.1}%)",
++                astar / tick_ms * 100.0,
++                route / tick_ms * 100.0
++            );
++        }
+         println!(
+             "bench {name} run {run}/{runs}: ticks={} commands={}/{} mean={mean:.4} p99={p99:.4} \
+              max={max:.3} over10={slow} state={hash:016x}",
