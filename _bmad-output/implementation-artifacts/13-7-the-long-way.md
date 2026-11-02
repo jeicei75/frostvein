@@ -5,7 +5,7 @@ baseline_commit: 483b95b1
 
 # Story 13.7: The Long Way
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -94,6 +94,57 @@ Throwaway scratch worktree, release builds. Raw lines and patches are in `13-7-s
 
   Retire the rows that sabotage removed code, each with a dated `# Retired` comment at the top of its file (`5-1-the-world-grows-things-that-glow.sh:4` is the shape): `12-4.sh` rows 9–16 (`:76-162`), and `3-2-the-dig.sh`'s "each claim search gets a fresh node budget" (`:954-971`, whose sabotage is now the code). Row 16 ("budget raised past the joined plates", `:156`) still applies, because its anchor is the constant, but it targets the deleted precondition's test. Run it once: if it SURVIVES, retire it. Re-point a row instead of retiring it only if its anchor survives and it still kills. `audit-mutations.py` must report no BROKEN row.
 - [x] **Task 5: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh` (~70 min, memory: `gate-ooms-at-default-parallelism`). Paste the block. Cost row: `python3 _bmad/scripts/session_tokens.py --phase dev --story 13-7-the-long-way`, then `phase_state.py clear`, then Status → review on the story and the board. The PR body may say `Closes #159` and nothing else closing; check `closingIssuesReferences` (memory: `closing-keyword-closes-whole-issue`).
+
+### Review Findings
+
+Code review run 1 (2026-11-02, a fresh session), on `main...88bb1f2d` (code diff 2 files, +205/−82; 17 files in all). Four layers, each running `cargo 1.97.1` in its own `CARGO_TARGET_DIR` under `/tmp/review-<layer>`. None timed out or failed. Territories: Blind Hunter (Sonnet) took `crates/sim-core`. Edge Case Hunter (Sonnet) took `crates/simd/tests/bench.rs`, the mutation tables, and the sim-core test fixtures, because the shell territory was thin. The Acceptance and Feature Auditors (Opus) took the whole diff. Nothing in the repo was modified. Sabotage ran on private `git archive HEAD` copies.
+
+What the layers re-ran:
+- **Tests:** `cargo test -p sim-core --lib` 103 passed, 1 ignored (blind, acceptance). The AC 1 test prints `claimed at tick 115, dug at tick 208` (acceptance, edge).
+- **Mutation rows:** on private copies, rows 1, 2, 3 and 3b each die at their own assert (edge). Row 1 reads `never claimed by tick 160`, panic `:5543`. `audit-mutations.py` reads 973 rows (edge, acceptance).
+- **`unreachable!` soundness:** a search expands each cell at most once (blind, RAN: 135 random searches, budget used = `explored.len()` on every failure; feature and acceptance, read). The arms cannot fire under today's rules.
+- **Release bench:** `--bench scenarios/two-hundred-on-256.json --runs 1` at HEAD reads `state=6ba8edcc3d6c7b9c … done=dig:234,cut:90 stored=27 cells=2146`, and at `main` reads `3fc1461d491ee5d9 … dig:231,cut:91 stored=33 cells=2165`. Both match the record (feature, acceptance). A 5,000-tick HEAD run reads `stored=106` (feature), so the 33 → 27 is timing, not less hauling.
+- **Cost and cleanup:** review row $15.92 (285 turns). `reap-build-caches.sh --tmp-only --force` reaped 13 directories (13.5 GB, 9.7 GB of free space reclaimed).
+- **Hop trace (feature):** Designate → `apply_command` → `create_jobs` → `claim_jobs` (world budget) → `execute_jobs` → `set_tile` → delta. Every hop is WIRED. The re-plan hop is capped at 50,000 (decision 1).
+
+Decisions:
+- [x] [Review][Decision] **RESOLVED 2026-11-02, Wolf "1": option (a), now patch 0 below.** **A far reachable job that needs a re-plan over 50,000 nodes gets stuck in a silent claim/release loop** (feature, RAN; MED, latent silent failure) [crates/sim-core/src/lib.rs:2245-2246, `MAX_ASTAR_NODES` :56] — every dig or cut calls `clear_paths`, which wipes every dwarf's path. A walker then re-plans with `astar()` (capped at 50,000), and on `None` calls `retry_claim`. The job is released with a 20-tick cooldown, re-claimed with the world budget, and the loop repeats.
+  - **Fixture:** a 256² world with a 51,200-cell plate and a 3-row serpentine mine. The dig is 772 steps by path, and the claim search takes 51,844 expansions.
+  - **Results:**
+
+    | Code | Terrain churn | Outcome |
+    |---|---|---|
+    | HEAD | none | dug at t8566 |
+    | HEAD | one `set_tile` on a far cell every 8 ticks (the bench's real rate: 324 digs and cuts in 2,500 ticks) | 499 claims and 499 releases in 12,000 ticks, never dug |
+    | HEAD with `astar()` on the world budget | same | dug at t8566 |
+    | `main` | either | never claimed |
+
+    So this is not a regression, but the story's promise ("however large the walkable ground grows") stops at the re-plan.
+  - **Why the probes missed it:** Q1 (a) and the `MAX_ASTAR_NODES` NOTE accept that "a reachable re-plan past it would give up". The creation probes saw no such case: probe B's marks are all near camp, and probe A sampled only the undug valley. Neither measured that the consequence is a repeating loop, not a single give-up.
+  - **Not reproduced on the fresh valley.**
+  - **Options:**
+    - (a) The `execute_jobs` re-plan only gets the world budget (`astar_with_budget` with `terrain.tiles.len()` at that one call site). `astar()`, `resolve_blocked_step`, `route_to_nearest` and `stranded` stay capped. `resolve_blocked_step` keeps the claim and waits, with no release. AC 4 and the NOTE are amended. Add a test with the serpentine fixture plus churn: no release while the path is reachable. Add a mutation row. Cost: creation B saw 19 re-plan exhaustions in 2,500 ticks at about 35 ms a flood. That is inferred at under 1% of the tick, so measure it.
+    - (b) Keep Q1 (a). File an issue (`bug` + `route:story`) with this repro, and correct the NOTE to say "loops", not "gives up".
+
+Patches:
+- [ ] [Review][Patch] **Decision 1 (a): the `execute_jobs` re-plan gets the world budget** (feature, RAN; MED, latent silent failure) [crates/sim-core/src/lib.rs:2245-2246; NOTE :52-55; story AC 4] — at that one call site, use `astar_with_budget` with `terrain.tiles.len()` in place of `astar()`. `astar()`, `resolve_blocked_step`, `route_to_nearest` and `stranded` stay at `MAX_ASTAR_NODES`. Amend AC 4 and the NOTE (AMENDED 2026-11-02, naming this ruling). Add a test with the serpentine fixture plus terrain churn: the claim is not released while the job stays reachable. Add a mutation row that puts `astar()` back at the site. Re-read the tick-bench (10 rows `same`?) and the 256² cost. Both sides: the fixture is one HEAD loops on (499 claims and 499 releases), so the RED must reproduce the loop before the fix.
+- [ ] [Review][Patch] **`audit-mutations.py` cannot see `13-7.sh` rows 1 and 2, so the gate's "mutation tables still apply" step cannot catch them rotting** (acceptance, RAN; MED, latent silent failure) [_bmad-output/implementation-artifacts/mutations/13-7.sh:7-57; scripts/audit-mutations.py `LITERAL`/`INLINE_ANCHOR`] — both rows keep their anchors in an `edits = [(old, new, n), …]` tuple list. `LITERAL` sees only a name bound to a literal, and `INLINE_ANCHOR` sees only `s.replace("…", …)`. So the rows are skipped entirely and are not even counted as unguarded. This is a fifth rot shape beside the four the script names. On a copy, Acceptance changed row 1's `let mut assigned = false;` to `let mut assigned: bool = false;` and the audit still printed `973 rows, every literal still matches`. The row's runtime `assert s.count(old) == n` fires only when someone re-runs `13-7.sh`. Fix: the audit reports any row from which it extracts no anchor (closing this shape for good), and rows 1 and 2 are rewritten so every literal is visible to it. Both sides: Acceptance's broken-anchor copy must turn the audit RED, and HEAD must stay clean.
+- [ ] [Review][Patch] **AC 1's test does not assert that the 25 pocket digs are queued, or that the claim is the reachable dig** (acceptance, read; LOW, latent silent failure: memory `silent-sim-filter-trap`) [crates/sim-core/src/lib.rs:5505-5535] — the claim check is `claims().iter().any(|(_, job)| job.is_some())`. If a future designate filter drops the pocket digs, the test passes on `main`'s budget too. Fix: assert `jobs().len() == 25` after the 25 designations, and assert that the claimed job is the late dig's id.
+- [ ] [Review][Patch] **AC 3's test does not assert that `joined_plates` is over `MAX_ASTAR_NODES`** (edge, RAN; LOW, latent: the test would pass on `main` for the wrong reason) [crates/sim-core/src/lib.rs:5626-5658] — AC 1 asserts `camp.len() > MAX_ASTAR_NODES`; AC 3 asserts nothing about its 55,003-cell area. The retired 12-4 row 16 was the only guard. Fix: a flood-size precondition assert. Both sides: on a copy, shrink the plate below 50,000 and the assert must fire.
+- [ ] [Review][Patch] **`a_job_miner_zero_cannot_reach_…` has no mutation row** (edge, RAN; LOW, in `13-7.sh`, which patch 1 edits) [_bmad-output/implementation-artifacts/mutations/13-7.sh] — retiring 12-4 rows 11 and 13-15 removed every row on the "stamp, and go on to the next job" seam. Edge ran two mutants on a copy, and both died at `miner 1 claims the dig miner 0 cannot reach` (`left: (Id(1), None)`): `continue` → `break` in the goals-search `(None, false, explored)` arm, and dropping `component.contains(*pos)` from the cache skip. Add both, with count guards.
+- [ ] [Review][Patch] **Record: the "sequential −5.8%" is a mismatched ratio, the p99 delta has no floor, and the File List is short** (acceptance, read; LOW, record, in this file) [story § Debug Log AC 5; § File List] — 33.18 / 35.22 is HEAD's run 1 against `main`'s run 3. The three-run means give −4.8% (33.31 vs 35.01). State that the p99 −3.3% comes from separate `--runs 3` runs with no floor. Add `epics.md` (Task 0) and the `metrics/` files to the File List.
+
+Deferred (LOW, recorded in `deferred-work.md`):
+- [x] [Review][Defer] `route_to_nearest`'s doc comment still says "Bounded by `MAX_ASTAR_NODES` expansions, like every other search", which has been false since 13.7 (acceptance, read) [crates/sim-core/src/lib.rs:1246] — deferred, LOW cap
+- [x] [Review][Defer] In AC 3's test, the retry at tick 120 is done by the four one-cell-pocket miners, not by the dwarf in the area over 50,000 cells (miner 0 is busy with dig 10) (acceptance, read) [crates/sim-core/src/lib.rs:5658-5729] — deferred, LOW cap
+- [x] [Review][Defer] The `unreachable!` arms rest on a consistent heuristic and unit step cost, and nothing pins that. A future weighted move would panic the daemon (blind, RAN; read by feature and acceptance) [crates/sim-core/src/lib.rs:656-668] — deferred, LOW cap
+- [x] [Review][Defer] No scenario file carries the #159 shape. A far-only scenario (6 far dig columns) reads identical on `main` and HEAD (feature, RAN) [scenarios/] — deferred, LOW cap
+
+Dismissed (4):
+- `bench.rs` says 64,300 cells, but Edge's flood counts 64,299: the start cell counted or not.
+- Successful searches per idle dwarf are no longer capped: this is the Q2 (a) design, and the bench measured it cost-neutral.
+- The haul delivery A\* is repeated before the goals flood is cached: it is bounded by the cache, so only the first occurrence per component is paid.
+- Stored 33 → 27 is timing, not less work: HEAD reaches `stored=106` by t5000.
 
 ## Verification
 
@@ -240,3 +291,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 o
 | 2026-11-02 | Task 0 RULED (Wolf, "ok for all"): Q1 (a) claim-only resize; Q2 (a) per-search world-sized budget, 12.4 sat-out removed; Q3 (a) epic 13.7 ACs 1-2 amended, `issue-159-comment.md` posted on #159. ACs and Tasks stand as written. Next: ask which implementer. |
 | 2026-11-02 | Dev started: Wolf picked Sonnet 5.5 subagents (Opus orchestrates). Status in-progress. |
 | 2026-11-02 | Dev complete (Sonnet 5.5 agent for Tasks 1-2, Opus for Tasks 3-5): `641dbc7b` claim budget sized to the world + tests + mutation retirements, `92b5e326` record. AC 1 RED/GREEN, 13-7.sh 4/4 KILLED, tick-bench 10/10 same (256² differ, explained), A* 47.1% of the 256² tick, flat storage slower. Full gate GREEN on `92b5e326` (4,424 s). Status review. |
+| 2026-11-02 | Code review run 1 (fresh session, 4 layers, none failed): 0 HIGH. Decision 1, Wolf "1": the `execute_jobs` re-plan gets the world budget, which amends Q1 (a) and AC 4 at that one site. 6 patches left as action items (Wolf "2"), 4 deferred, 4 dismissed. Status in-progress. |

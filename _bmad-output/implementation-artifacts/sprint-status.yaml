@@ -2823,7 +2823,7 @@ development_status:
   # NOTE; AC 6 + #227 AMENDED). Mutation 16/16 KILLED. Full gate GREEN on 38210b07 (4,399 s). -> review; next = PR on
   # Wolf's yes (no round 3); the PR must NOT close #222 or #227, may close #226.
   # 13.6 MERGED 2026-11-01 as PR #228 (f148cfbe), closed #226 only; #222/#227 open. -> done.
-  13-7-the-long-way: review
+  13-7-the-long-way: in-progress
   # 13.7 CREATED 2026-11-02 (Opus 5.5) on branch story-13-7-the-long-way (off local main 483b95b1). Probes on main f148cfbe:
   # every 256^2 budget exhaustion is UNREACHABLE (claim 238/238, astar() 915/915; 13.2's 'reachable past the budget' is
   # wrong); no reachable search from camp > 14,604 nodes. RED on the real valley: a dig designated after 25 unreachable ones
@@ -2834,6 +2834,9 @@ development_status:
   # 13.7 DEV STARTED 2026-11-02: Wolf picked Sonnet 5.5 subagents, Opus orchestrates.
   # 13.7 AT REVIEW 2026-11-02: 641dbc7b claim budget = world cells (12.4 sat-out removed), 92b5e326 record; full gate
   # GREEN on 92b5e326 (4424 s). 13-7.sh 4/4 KILLED; 12-4 rows 9-16 retired. Unpushed. Next: bmad-code-review (fresh).
+  # 13.7 CODE REVIEW RUN 1 2026-11-02: 4 layers OK, 0 HIGH. Decision 1 (Wolf "1"): the execute_jobs re-plan gets the world
+  # budget (a far reachable job past 50,000 nodes looped claim/release under terrain churn). 6 patches LEFT AS ACTION ITEMS
+  # (Wolf "2"), 4 deferred. Next: bmad-review-patch (fresh), then the full gate, then PR on Wolf's yes (Closes #159 only).
   13-8-they-keep-coming: backlog
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
