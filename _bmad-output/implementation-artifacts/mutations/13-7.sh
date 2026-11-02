@@ -120,7 +120,9 @@ p.write_text(s.replace(old, '''    for (&target, &designation) in &designations.
 '''))
 PY
 
-mutation "6 an unreachable dig is claimed with an empty path" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
+# Row 6 needs both sites: with only the claim sabotaged, the same tick's re-plan fails and
+# `retry_claim` releases the wrong claim before `claims()` can see it (SURVIVED, 2026-11-02).
+mutation "6 an unreachable dig is claimed with an empty path, and kept" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''                    (None, false, explored) => {
@@ -129,8 +131,15 @@ old = '''                    (None, false, explored) => {
                     }
                     (_, true, _) => unreachable!('''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''                    (None, false, _) => Vec::new(),
-                    (_, true, _) => unreachable!('''))
+s = s.replace(old, '''                    (None, false, _) => Vec::new(),
+                    (_, true, _) => unreachable!(''')
+old_release = '''                let Some(computed) = computed else {
+                    retry_claim(ecs, entity, job.id);
+'''
+assert s.count(old_release) == 1
+s = s.replace(old_release, '''                let Some(computed) = computed else {
+''')
+p.write_text(s)
 PY
 
 mutation "7 the joined plates shrink under the node budget" sim-core unreachable_digs_are_stamped_in_one_flood_and_retried_after_the_cooldown <<'PY'
