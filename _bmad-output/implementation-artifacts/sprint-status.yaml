@@ -2829,6 +2829,8 @@ development_status:
   # wrong); no reachable search from camp > 14,604 nodes. RED on the real valley: a dig designated after 25 unreachable ones
   # is never claimed by t500 on main, claimed t115 / dug t208 with the claim budget sized to the world. Claim-only resize is
   # cost-neutral (mean 34.3 -> 33.8 ms); every-site costs +11% mean / +20% p99 for no outcome change. Task 0 Q1-Q3 await Wolf.
+  # 13.7 Task 0 RULED 2026-11-02 (Wolf "ok for all"): Q1 (a) claim-only; Q2 (a) per-search world budget, sat-out removed;
+  # Q3 (a) epic amended, #159 comment posted. Next: ask implementer, then dev.
   13-8-they-keep-coming: backlog
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog

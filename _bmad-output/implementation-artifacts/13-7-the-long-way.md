@@ -22,13 +22,13 @@ Branch `story-13-7-the-long-way` was cut from local `main` `483b95b1`. That comm
 Each question has a recommendation. The ACs and Tasks are written for it, and a different answer amends the ACs it names.
 
 - **Q1. Which searches get the new budget?** Every 256² exhaustion is an unreachable goal (*Found at creation* B), and the other sites' `None` is the same answer either way (C).
-  - (a) **Recommended: `claim_jobs` only.** It is the only site whose outcome moves, and it is cost-neutral: mean −1%, p99 flat, max +18% (D). `astar()`, `route_to_nearest` and `stranded` keep `MAX_ASTAR_NODES` = 50,000, with a `// NOTE:` naming what 13.7 measured.
+  - (a) **Recommended: `claim_jobs` only. ← RULED 2026-11-02.** It is the only site whose outcome moves, and it is cost-neutral: mean −1%, p99 flat, max +18% (D). `astar()`, `route_to_nearest` and `stranded` keep `MAX_ASTAR_NODES` = 50,000, with a `// NOTE:` naming what 13.7 measured.
   - (b) Every site. The outcome is the same as (a), and it costs +11% mean and +20% p99 (D).
 - **Q2. What shape does the claim budget take?** Searches are bounded per search, never per tick: the heuristic is consistent, so a search expands each cell at most once (A: an unreachable flood expanded exactly 64,300 = its component). A budget equal to the world's cell count therefore cannot run out, and digging cannot outgrow it.
-  - (a) **Recommended:** every claim-time search gets a fresh budget of the world's cell count. 12.4's per-dwarf budget and its sat-out rule (fix B′) existed only for a budget that runs out, so they go. The 12.3 component cache stays: it is what makes an unreachable job cheap, one flood per component per call. The `(None, true, _)` arms become `unreachable!`. 12.4's rows that sabotage the removed code are retired (Task 4).
+  - (a) **Recommended (← RULED 2026-11-02):** every claim-time search gets a fresh budget of the world's cell count. 12.4's per-dwarf budget and its sat-out rule (fix B′) existed only for a budget that runs out, so they go. The 12.3 component cache stays: it is what makes an unreachable job cheap, one flood per component per call. The `(None, true, _)` arms become `unreachable!`. 12.4's rows that sabotage the removed code are retired (Task 4).
   - (b) Keep the per-dwarf, per-tick budget and sat-out, with the budget sized to the world. That is a smaller diff, but sat-out can then no longer happen in any test world, so its code is dead and untested and its rows cannot be killed.
 - **Q3. The epic AC's premise is wrong. Amend it?** Epic 13.7 AC 1 says "a reachable job **beyond the budget**", and AC 2 offers "or improves the heuristic". Both rest on 13.2's reading that most 256² exhaustions were reachable goals farther than the budget. Measured, none is (B), and no reachable search from the camp needs more than 14,604 nodes (A). The live shape is #159's title: a reachable job queued behind more than `RETRY_COOLDOWN` unreachable ones. A heuristic cannot shorten a search that has no goal to find.
-  - (a) **Recommended:** amend epic AC 1 to "a reachable job behind more than `RETRY_COOLDOWN` unreachable ones" and strike the heuristic option from AC 2. Then post `13-7-signoff/issue-159-comment.md` on #159.
+  - (a) **Recommended (← RULED 2026-11-02; epic amended, comment posted):** amend epic AC 1 to "a reachable job behind more than `RETRY_COOLDOWN` unreachable ones" and strike the heuristic option from AC 2. Then post `13-7-signoff/issue-159-comment.md` on #159.
   - (b) Keep the epic text and add a reachable-beyond-the-budget test anyway. Nothing on the valley produces that today, so it would need a hand-built maze.
 
 ## Found at creation (2026-11-02, `main` code `f148cfbe`)
@@ -175,3 +175,4 @@ RUST_TEST_THREADS=1 scripts/gate.sh
 | Date | Change |
 |---|---|
 | 2026-11-02 | Story created (Opus 5.5). Creation probes: every 256² budget exhaustion is an unreachable goal (13.2's reading corrected); the red reproduces on the real valley; claim-only resize is cost-neutral. Evidence in `13-7-signoff/`. Task 0 Q1–Q3 await Wolf. |
+| 2026-11-02 | Task 0 RULED (Wolf, "ok for all"): Q1 (a) claim-only resize; Q2 (a) per-search world-sized budget, 12.4 sat-out removed; Q3 (a) epic 13.7 ACs 1-2 amended, `issue-159-comment.md` posted on #159. ACs and Tasks stand as written. Next: ask which implementer. |
