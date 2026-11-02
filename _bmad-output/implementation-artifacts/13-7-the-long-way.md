@@ -5,7 +5,7 @@ baseline_commit: 483b95b1
 
 # Story 13.7: The Long Way
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -280,6 +280,24 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 o
     | P4 rows 8-9 | the stamp-and-go-on seam left unpinned by the 12-4 retirements | the unchanged miner-zero test, against Edge's two mutants | `a_job_miner_zero_cannot_reach_…`'s joined plates + pockets |
     | P5 record | the mismatched -5.8% ratio | recomputed from the six means: -4.85%; mismatched ratio reproduces -5.79% | the AC 5 Debug Log means |
 
+  - **Full gate GREEN on `da3a502c`** (`RUST_TEST_THREADS=1 scripts/gate.sh`, exit 0), covering every patch-pass commit:
+
+    ```
+    frostvein gate
+      cargo fmt --check           ok  0s
+      cargo clippy -D warnings    ok  3s
+      cargo test                  ok  1186s
+      cargo test (release real-work scenario)ok  99s
+      cargo test (pixel guards)   ok  3069s
+      tui has no sim-core edge                ok
+      client-core has no sim-core edge        ok
+      gui has no sim-core edge                ok
+      metrics ledger tests        ok  0s
+      bench tests                 ok  19s
+      mutation tables still apply ok  11s
+    GATE GREEN  4395s
+    ```
+
 ### Completion Notes List
 
 - **Tasks 1-2 (Sonnet 5.5 agent; Opus reviewed the diff).** `claim_jobs`: `budgets`, `sat_out` and the `enumerate`/`slot` removed; each `astar_with_budget` call gets `let mut budget = terrain.tiles.len();`; one `(_, true, _) => unreachable!("a search sized to the world cannot run out")` arm per match; stamp is `attempted && !assigned`; the header comment, the `components` NOTE and the `MAX_ASTAR_NODES` NOTE rewritten. `MAX_ASTAR_NODES`, `astar()`, `route_to_nearest` and `stranded` are untouched.
@@ -311,4 +329,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 o
 | 2026-11-02 | Dev started: Wolf picked Sonnet 5.5 subagents (Opus orchestrates). Status in-progress. |
 | 2026-11-02 | Dev complete (Sonnet 5.5 agent for Tasks 1-2, Opus for Tasks 3-5): `641dbc7b` claim budget sized to the world + tests + mutation retirements, `92b5e326` record. AC 1 RED/GREEN, 13-7.sh 4/4 KILLED, tick-bench 10/10 same (256² differ, explained), A* 47.1% of the 256² tick, flat storage slower. Full gate GREEN on `92b5e326` (4,424 s). Status review. |
 | 2026-11-02 | Code review run 1 (fresh session, 4 layers, none failed): 0 HIGH. Decision 1, Wolf "1": the `execute_jobs` re-plan gets the world budget, which amends Q1 (a) and AC 4 at that one site. 6 patches left as action items (Wolf "2"), 4 deferred, 4 dismissed. Status in-progress. |
-| 2026-11-02 | Review patch pass 1 (fresh session, Opus 5.5): 6/6 patches landed (`b74f1242`, `faad260a`, `f5b106b4`, `a57ddeff`, record). AC 4 AMENDED (re-plan world budget, decision 1). 13-7.sh 10/10 KILLED (row 6 rewritten after it SURVIVED). tick-bench 11/11 same; two-hundred-on-256 +3.9% mean BEYOND FLOOR, +21% max. |
+| 2026-11-02 | Review patch pass 1 (fresh session, Opus 5.5): 6/6 patches landed (`b74f1242`, `faad260a`, `f5b106b4`, `a57ddeff`, record). AC 4 AMENDED (re-plan world budget, decision 1). 13-7.sh 10/10 KILLED (row 6 rewritten after it SURVIVED). tick-bench 11/11 same; two-hundred-on-256 +3.9% mean BEYOND FLOOR, +21% max. Full gate GREEN on `da3a502c` (4,395 s). Cost row $14.12. Status review; next: round-2 code review. |
