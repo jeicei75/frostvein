@@ -63,6 +63,40 @@ INLINE_ANCHOR = re.compile(
     re.S,
 )
 
+# FIFTH ROT SHAPE (13.7 review, 2026-11-02). A row whose anchors are neither a named literal it
+# counts nor an inline `s.replace("...")` -- 13-7.sh rows 1-2 kept theirs in an
+# `edits = [(old, new, n), ...]` tuple list -- yielded nothing to check, and the row was skipped
+# as silently as the fourth shape: its anchor was broken on a copy and this script still printed
+# the all-clear. Now a row with a target and no checkable anchor fails, because the gate hides
+# this script's output on success and a warning would be read by nobody.
+# NOTE: these 21 rows predate the rule and use shapes the parser cannot read (regex, `for old in`
+# loops, a literal the regex cannot delimit). They are listed so they stay visible; a NEW row
+# must use the named `old = '...'` + `assert s.count(old) == N` form.
+UNREADABLE_ALLOWED = {
+    ("10-1-the-headless-bench.sh", "a hardcoded venue fails the blender-stamp test"),
+    ("10-7-the-sun-lights-the-valley.sh", "bench sun elevation diverges from the client"),
+    ("12-1.sh", "old save haul goals include emitters"),
+    ("12-1.sh", "campfire pile never fills"),
+    ("12-10.sh", "3b ore draws from the tree stream"),
+    ("12-10.sh", "10 ice yields tetrahedrite"),
+    ("12-10.sh", "11 ore takes a snow cap"),
+    ("12-10b.sh", "1 a channel is worked from the same level only"),
+    ("12-10b.sh", "2 a loose item is lifted from the same level only"),
+    ("12-10b.sh", "8 the channel's wall-in check also reads the terrain before the cut"),
+    ("12-10b.sh", "20 a channel's landing check counts the dwarf on the target where it stands"),
+    ("12-12.sh", "16 a tile change keeps the floods' answers (review run 2 Decision 1)"),
+    ("12-12.sh", "18 a flood is bounded by its own pile's box (review run 2 Decision 1, first ruled (a))"),
+    ("12-9.sh", "4 the per-step flip rule"),
+    ("12-9.sh", "7 no dwarf ever steps"),
+    ("12-9.sh", "11 blocked_cells ignores items"),
+    ("12-9.sh", "13 delivery picks the shallowest free pile cell"),
+    ("2-2-dwarves-wander-the-frost.sh", "frames capture goes colourless without saying so"),
+    ("3-2-the-dig.sh", "reaction_delay returns a constant"),
+    ("3-3-the-haul-and-the-skeleton-walks.sh", "free stockpile tiles ignore standability"),
+    ("3-3-the-haul-and-the-skeleton-walks.sh", "free stockpile tiles ignore stored stones"),
+}
+
+
 def rows(table_text):
     """Split a table into (name, block) pairs. A block runs to the next `mutation` line."""
     starts = [(m.start(), m.group(1)) for m in ROW.finditer(table_text)]
@@ -81,6 +115,7 @@ def audit():
     broken = []
     unguarded = []
     orphaned = []
+    unreadable = []
     crates = pathlib.Path("crates")
     sources = "\n".join(
         f.read_text() for f in crates.rglob("*.rs")
@@ -115,6 +150,7 @@ def audit():
                 broken.append((table.name, name, f"target {target} no longer exists"))
                 continue
             source = target.read_text()
+            checked = False
 
             for var, literal in LITERAL.findall(block):
                 # Only literals the row actually matches against the source can rot. One used
@@ -127,6 +163,7 @@ def audit():
                     value = ast.literal_eval(literal)
                 except (ValueError, SyntaxError):
                     continue  # a computed literal; nothing static to check
+                checked = True
                 actual = source.count(value)
                 guard = re.search(rf"assert s\.count\({var}\) == (\d+)", block)
                 if guard:
@@ -170,6 +207,7 @@ def audit():
                         replacement = ast.literal_eval(replacement)
                     except (ValueError, SyntaxError):
                         break  # a computed literal; the rest of the chain is unverifiable
+                    checked = True
                     if staged.count(search) == 0:
                         broken.append((
                             table.name, name,
@@ -179,6 +217,8 @@ def audit():
                         break
                     staged = staged.replace(search, replacement)
                     unguarded.append((table.name, name, "inline s.replace() anchor"))
+                if not checked and (table.name, name) not in UNREADABLE_ALLOWED:
+                    unreadable.append((table.name, name))
 
     if orphaned:
         print(f"  {len(orphaned)} of {total} mutation rows NAME A TEST THAT NO LONGER EXISTS:")
@@ -195,6 +235,16 @@ def audit():
         print("  test that pins the seam today, or write the test that should.")
         print()
 
+    if unreadable:
+        print(f"  {len(unreadable)} of {total} mutation rows HAVE NO ANCHOR THIS AUDIT CAN READ:")
+        for table_name, row_name in unreadable:
+            print(f"    {table_name}")
+            print(f"      - {row_name}")
+        print()
+        print("  Name each literal (`old = '...'`) and guard it (`assert s.count(old) == N`),")
+        print("  or this audit cannot tell when the row stops applying.")
+        print()
+
     if broken:
         print(f"  {len(broken)} of {total} mutation rows CANNOT APPLY:")
         current = None
@@ -209,7 +259,7 @@ def audit():
         print("  Re-point it at the current source, or delete it if the seam is gone.")
         return 1
 
-    if orphaned:
+    if orphaned or unreadable:
         return 1
 
     print(f"  {total} rows, every literal still matches its target", end="")
