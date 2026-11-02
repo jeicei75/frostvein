@@ -5,7 +5,7 @@ baseline_commit: 483b95b1
 
 # Story 13.7: The Long Way
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -64,7 +64,7 @@ Throwaway scratch worktree, release builds. Raw lines and patches are in `13-7-s
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings (Q1–Q3).** Record the answers in the Change Log and amend the ACs they name. Under Q3 (a), amend `epics.md` Story 13.7 ACs 1–2 with an `AMENDED 2026-11-02` line, and post `13-7-signoff/issue-159-comment.md` on #159 if Wolf says yes. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
+- [x] **Task 0: Wolf's rulings (Q1–Q3).** Record the answers in the Change Log and amend the ACs they name. Under Q3 (a), amend `epics.md` Story 13.7 ACs 1–2 with an `AMENDED 2026-11-02` line, and post `13-7-signoff/issue-159-comment.md` on #159 if Wolf says yes. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
 - [ ] **Task 1: the claim budget (AC 2, 4).** UPDATE `crates/sim-core/src/lib.rs` `claim_jobs` (`:559-703`).
   - [ ] Delete `budgets` (`:591-592`), `sat_out` (`:623-624`, `:644-647`, `:697`) and the `enumerate`/`slot` that only indexed the budgets. Before each `astar_with_budget` call (`:658`, `:671`), set `let mut budget = terrain.tiles.len();` and pass `&mut budget`. The stamp condition becomes `attempted && !assigned`.
   - [ ] Both `(None, true, _)` arms (`:665`, `:683`) become one `(_, true, _) => unreachable!("a search sized to the world cannot run out")` per match. The `(Some(_), true, _)` arms fold into it.
@@ -164,6 +164,8 @@ RUST_TEST_THREADS=1 scripts/gate.sh
 
 ### Agent Model Used
 
+Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 orchestrates and verifies, and keeps the mutation table, every mutation run, the bench and the full gate.
+
 ### Debug Log References
 
 ### Completion Notes List
@@ -176,3 +178,4 @@ RUST_TEST_THREADS=1 scripts/gate.sh
 |---|---|
 | 2026-11-02 | Story created (Opus 5.5). Creation probes: every 256² budget exhaustion is an unreachable goal (13.2's reading corrected); the red reproduces on the real valley; claim-only resize is cost-neutral. Evidence in `13-7-signoff/`. Task 0 Q1–Q3 await Wolf. |
 | 2026-11-02 | Task 0 RULED (Wolf, "ok for all"): Q1 (a) claim-only resize; Q2 (a) per-search world-sized budget, 12.4 sat-out removed; Q3 (a) epic 13.7 ACs 1-2 amended, `issue-159-comment.md` posted on #159. ACs and Tasks stand as written. Next: ask which implementer. |
+| 2026-11-02 | Dev started: Wolf picked Sonnet 5.5 subagents (Opus orchestrates). Status in-progress. |

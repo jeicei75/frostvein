@@ -2,6 +2,13 @@
 # budget (#159 fix B'). Run alone after commit:
 #   RUST_TEST_THREADS=1 scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/12-4.sh
 
+# Retired 2026-11-02 (13.7): rows 9-15 ("exhaustion bails out of the tick again", "one shared budget
+# again", "stamp-and-stop on a budget per dwarf", "the sat-out rule dropped", "exhaustion leaves the
+# dwarf loop", "budget check before the trade filter", "sat out leaves the dwarf loop") sabotaged
+# the per-dwarf budget, its `(None, true, _)` arms and the sat-out rule. 13.7 Q2 (a) removed all
+# three: every claim search gets a fresh budget of the world's cell count, which cannot run out,
+# so the arms are `unreachable!`. The claim side is pinned by 13-7.sh. Row 16 re-pointed below.
+
 mutation "trade check removed" sim-core hauling_starts_while_the_dig_backlog_is_still_queued <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
@@ -73,87 +80,11 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            let trade = profession\n                .filter(|_| false)\n'))
 PY
 
-# Row 9: the story named AC11's test, but under a budget per dwarf no dwarf in AC11's 11k-cell
-# plates ever exhausts, so this arm is unreachable there. AC12's 55k area is where it fires.
-# `return` is `main`'s `break 'jobs`: nothing follows the job loop, and the stamp is skipped.
-mutation "exhaustion bails out of the tick again" sim-core a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '(None, true, _) => continue,\n'
-assert s.count(old) == 2
-p.write_text(s.replace(old, '(None, true, _) => return,\n'))
-PY
-
-mutation "one shared budget again" sim-core a_reachable_job_behind_unreachable_ones_is_claimed_when_areas_sum_past_the_budget <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = 'budgets[slot]'
-assert s.count(old) == 3
-p.write_text(s.replace(old, 'budgets[0]'))
-PY
-
-# Row 11: the issue's candidate, stamp-and-stop, on a budget per dwarf (mutA, 12.4 review 2). The
-# exhausting dwarf stamps the job and ends the tick, so a later dwarf of his trade never tries it.
-mutation "stamp-and-stop on a budget per dwarf (the issue's candidate)" sim-core a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '(None, true, _) => continue,\n'
-assert s.count(old) == 2
-p.write_text(s.replace(old, '(None, true, _) => {\n jobs.get_mut(job.id).expect("iterated job still exists").retry_after = tick.0.saturating_add(RETRY_COOLDOWN);\n return;\n }\n'))
-PY
-
-mutation "the sat-out rule dropped" sim-core a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if attempted && !assigned && !sat_out {\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '        if attempted && !assigned {\n'))
-PY
-
-# Row 13 (mutB, 12.4 review 2): exhaustion leaves the dwarf loop, so the next dwarf of the trade
-# never tries the job and it is stamped unclaimed.
-mutation "exhaustion leaves the dwarf loop" sim-core a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '(None, true, _) => continue,\n'
-assert s.count(old) == 2
-p.write_text(s.replace(old, '(None, true, _) => break,\n'))
-PY
-
-# Row 14 (mutC, 12.4 review 3): the budget check moves above the trade filter, so an exhausted
-# miner marks a haul sat out and the unreachable haul is never stamped.
-mutation "budget check before the trade filter" sim-core a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-budget = """                if budgets[slot] == 0 {
-                    sat_out = true;
-                    continue;
-                }
-"""
-assert s.count(budget) == 1
-s = s.replace(budget, '')
-filt = '            if trade(job.kind) != **profession {\n'
-assert s.count(filt) == 1
-p.write_text(s.replace(filt, budget + filt))
-PY
-
-# Row 15 (mutD, 12.4 review run 2): a dwarf with no budget left leaves the dwarf loop, so a later
-# miner never tries a miner job the exhausted lowest-id miner sits out.
-mutation "sat out leaves the dwarf loop" sim-core a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = """                if budgets[slot] == 0 {
-                    sat_out = true;
-                    continue;
-                }
-"""
-assert s.count(old) == 1
-p.write_text(s.replace(old, old.replace('continue;', 'break;')))
-PY
-
 # Row 16 (12.4 review run 2): a budget bump past the joined plates' 55,003 cells means no miner
 # exhausts. The precondition must fail rather than the test passing vacuously.
-mutation "budget raised past the joined plates" sim-core a_job_one_dwarf_exhausted_on_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
+# Re-pointed 2026-11-02 (13.7): the target test was renamed and lost its exhaustion precondition,
+# so this row must be re-run in 13.7's code; retire it if it SURVIVES.
+mutation "budget raised past the joined plates" sim-core a_job_miner_zero_cannot_reach_goes_to_the_next_of_his_trade_and_others_still_stamp <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = 'const MAX_ASTAR_NODES: usize = 50_000;\n'
