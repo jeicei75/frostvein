@@ -5,7 +5,7 @@ baseline_commit: 483b95b1
 
 # Story 13.7: The Long Way
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -145,6 +145,73 @@ Dismissed (4):
 - Successful searches per idle dwarf are no longer capped: this is the Q2 (a) design, and the bench measured it cost-neutral.
 - The haul delivery A\* is repeated before the goals flood is cached: it is bounded by the cache, so only the first occurrence per component is paid.
 - Stored 33 → 27 is timing, not less work: HEAD reaches `stored=106` by t5000.
+
+#### Code review run 2 (2026-11-03, fresh session, Opus 5.5) on `35c6d6f4..b9f7209b`
+
+**Delta against run 1:** 4 NEW findings (0 HIGH / 1 MED / 3 LOW) and 1 REWORK (P2 is half-closed: row 6). 3 deferred, 4 dismissed. **Stopping rule: no NEW finding is HIGH, so this round ends the audit.** No round 3. 13.7 has no seat card (sim work, M2-26), so the next spend after the patches is the PR.
+
+Code diff: 3 files, +363/−56 (`lib.rs`, `audit-mutations.py`, `mutations/13-7.sh`). Four layers ran `cargo 1.97.1`, each in its own `/tmp/review-<layer>` target. None timed out or failed. Territories:
+- **Blind Hunter (Sonnet):** the sim-core diff, blind.
+- **Edge Case Hunter (Sonnet):** the audit script, `13-7.sh` and the test fixtures.
+- **Acceptance and Feature Auditors (Opus):** the whole diff.
+
+Nothing in the repo was modified (`git status` is clean). Sabotage and probes ran on private `git archive` copies. Cost: review row $15.03 (289 turns, 4 subagents = 66.8% of tokens). `reap-build-caches.sh --tmp-only --force` reaped 12 directories (13.5 GB; 8.1 GB of free space reclaimed).
+
+What the layers re-ran:
+- **The new test, at HEAD:** `a_far_claim_…` reads `claims=1 releases=0 by tick 201` (all four layers).
+- **Row 4 by hand** (`astar()` back at the re-plan): the test dies at the churn assert, `left: (8, 8)` (edge, acceptance, blind).
+- **The far dig is actually dug** (feature, RAN; release probe on a copy, run to completion): `dug_at=Some(11140)`, claimed once, through about 1,390 path wipes.
+- **The AC 1 test:** reads `claimed at tick 115, dug at tick 208` (feature).
+- **Release bench at HEAD:** `state=6ba8edcc3d6c7b9c`, `done=dig:234,cut:90 stored=27 cells=2146`, which equals the record. The timing was taken under the load of three sibling layers, so it is no evidence on cost (feature).
+- **`audit-mutations.py`:**
+  - 979 rows, exit 0 at HEAD.
+  - Exit 1 on `13-7.sh` as of `35c6d6f4`, and exit 1 on the broken-anchor copy.
+  - With the allow-list emptied, exactly its 21 rows fail (edge, acceptance).
+  - Six single-line rot probes on a copy were each caught (edge).
+- **Rows 5-9 by hand:**
+  - Each dies at its recorded assert.
+  - With the assert each row is credited to removed, row 5 then passes, so its new assert is the only killer.
+  - Row 6 still dies, at the older `must be dug within 300 ticks` assert (acceptance; see the REWORK patch below).
+- **Hop trace (feature):** Designate (`:3264`) → `create_jobs` (`:410`) → `claim_jobs` (`:567`, world budget) → `execute_jobs` (`:2090`) → `clear_paths` (`:2552`, `:1348`, `:3167`) → re-plan on the world budget (`:2250`) → work → `set_tile` → `drain_dirty` → `bridge.rs:56`. Every hop is WIRED. No other `retry_claim` site (`:2234`, `:2341`, `:2414`, `:2483`, `:2547`) depends on the path budget.
+
+**Closure-table audit** (acceptance, RAN):
+
+| Row | Verdict |
+|---|---|
+| P0 | CLOSED |
+| P1 | CLOSED as written. "For good" is overstated: see patches 1 and 2. |
+| P2 | HALF-CLOSED (REWORK): the queue half is closed, the id half is unpinned |
+| P3 | CLOSED |
+| P4 | CLOSED |
+| P5 | CLOSED |
+
+Decisions:
+- [x] [Review][Decision] **RESOLVED 2026-11-03, Wolf "a": now patch 0 below.** **The allow-listed rows are never anchor-checked, so their rot stays invisible** (edge + acceptance, RAN; latent silent failure) [scripts/audit-mutations.py:72-103 `UNREADABLE_ALLOWED`, :220] — the gate skips all 21 entirely. Two of them already cannot apply (patch 1). The comment's "listed so they stay visible" means visible only in the script's source. Of the 21, 9 keep their anchor in a parenthesised implicit concatenation `old = ('…' '…')`, which `ast.literal_eval` reads exactly: all of `12-10.sh`'s and `12-10b.sh`'s rows and both of `12-12.sh`'s, including both dead rows. The other 12 are `for old in` loops (4), a regex (1), and 7 the parser cannot delimit.
+  - (a) Teach the audit the concatenated form, and drop those 9 rows from the allow-list once they read clean. 12 stay grandfathered.
+  - (b) Fix only patch 1's two rows, and file an issue for the remaining 19.
+
+Patches:
+- [ ] [Review][Patch] **Decision 1 (a): the audit reads a parenthesised implicit concatenation as a literal** (edge + acceptance, RAN; latent silent failure) [scripts/audit-mutations.py `LITERAL` :47-50, `UNREADABLE_ALLOWED` :72-103] — add an alternative for `name = ('…' '…' …)` to `LITERAL`; `ast.literal_eval` already joins it. Drop the 9 concatenated rows from `UNREADABLE_ALLOWED` once each reads clean, and amend the NOTE (12 stay: 4 loops, 1 regex, 7 undelimitable). Land it together with the next patch, since it turns the gate RED on those two rows. Both sides: before the re-point, the new audit must name exactly `12-10b` row 1 and `12-12` row 16 as CANNOT APPLY; after it, it exits 0, and a broken anchor in one of the other 7 on a copy is caught.
+- [ ] [Review][Patch] **Two allow-listed rows cannot apply: their anchors match 0 times** (acceptance, RAN; MED, latent silent failure, rot predating 13.7 that patch pass 1 grandfathered unchecked) [mutations/12-10b.sh:6-17 row 1; mutations/12-12.sh:147-154 row 16] — row 1's anchor is now `let goals: BTreeSet<_> = astar_neighbours(…)` (`lib.rs:1394`). Row 16's `self.pile_ground…open.clear();` is now `let kept = self.pile_ground…; kept.open.clear(); kept.memo = None;` (`lib.rs:756-761`). Both already counted 0 at `origin/main` and at `483b95b1`. Re-point each to today's source and run it alone. If it KILLS, keep it; if it SURVIVES, retire it with a dated comment (Task 4's rule). Either way, drop it from `UNREADABLE_ALLOWED`. Both sides: the audit must go RED on each old anchor before the re-point.
+- [ ] [Review][Patch] **A row with one readable anchor still hides rot in a tuple list or loop beside it** (edge + acceptance, RAN; LOW, latent silent failure: the fifth shape, half-closed in mixed rows) [scripts/audit-mutations.py:153-221] — `checked` goes True on any one literal, so the row counts as read. A probe row with a guarded `old = '…'` plus `edits = [('THIS ANCHOR IS NOT IN THE SOURCE', 'x', 1)]` drew no report. Fix: also flag a row whose block holds an anchor loop or tuple list (`for … in (`/`[`, `edits = [`) unless it is allow-listed. Both sides: the probe row must turn the audit RED, and HEAD must stay clean (or name every existing mixed row).
+- [ ] [Review][Patch] **REWORK of P2: row 6 does not pin the claim-id assert** (acceptance, RAN; LOW, latent silent failure: memory `strengthened-test-needs-remutation`) [mutations/13-7.sh row 6; crates/sim-core/src/lib.rs:5563] — with the id assert replaced by `let _ = (job, late);`, row 6 still dies, at the older `must be dug within 300 ticks` assert. All five miners hold pocket claims forever, so the late dig is never dug. Fix: rewrite row 6 so that only the id assert can catch it: a wrong claim held by one dwarf while another still claims and digs the late dig. Re-run it with and without the id assert. If no such sabotage can be built, say in the closure table that no row pins the id assert.
+- [ ] [Review][Patch] **The record still states the pre-amendment rule, and the AC 5 and AC 6 figures predate the re-plan change** (acceptance, read; LOW, record: memory `partial-doc-update-immunises`) [this file :25, :72, § Debug Log AC 5 and AC 6, § File List; deferred-work.md 13-7 run 1 `route_to_nearest` entry] — fixes:
+  - Line 25 (Q1 (a): "`claim_jobs` only") and line 72 (Task 1's NOTE text, "a reachable reroute or re-plan past it would give up … `execute_jobs` → `retry_claim`") get AMENDED pointers to AC 4.
+  - AC 5's "cost-neutral / max +16%" is from `641dbc7b`. Say that HEAD against `main` was not re-read after the patch, and that by the record's own numbers the max is roughly +30-45% over `main`.
+  - AC 6's "A* 47.1%" predates the re-plan change. Say so.
+  - Add `deferred-work.md` to the File List.
+  - The `route_to_nearest` deferred entry now names two world-sized sites, not one.
+
+Deferred (LOW, recorded in `deferred-work.md` under run 2):
+- [x] [Review][Defer] An unreachable `execute_jobs` re-plan floods the whole component, with no per-tick cache. Measured +2.6-3.9% mean / +21% max today; it grows with the dug area (blind + feature, read) [crates/sim-core/src/lib.rs:2250-2258] — deferred, LOW cap
+- [x] [Review][Defer] `resolve_blocked_step`'s capped reroute holds a far walker on open ground over 50,000 cells behind a parked job-holder; the claim is kept (blind + feature, read, no repro) [crates/sim-core/src/lib.rs:1871, :2283-2297] — deferred, ruled by AC 4 as amended
+- [x] [Review][Defer] The churn test proves the claim is kept for 200 ticks, not that the dig completes. Feature's release run of the same fixture dug at t11140 (blind, read; feature, RAN) [crates/sim-core/src/lib.rs:5773-5880] — deferred, LOW cap
+
+Dismissed (4):
+- `&mut terrain.tiles.len()` as an anonymous temporary (blind): idiomatic; a fresh budget per call is the intent.
+- The plate's "50,800 cells" comment and the 8-tick churn period are not asserted (blind): the precondition asserts the property that matters (capped `astar()` gives `None`).
+- The test cost of the `walkable_area` helper (blind): blind itself raised no issue.
+- "Re-plan cost unmeasured" (blind, reviewed blind): patch pass 1 measured it. It is folded into the first deferral.
 
 ## Verification
 
@@ -330,3 +397,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 o
 | 2026-11-02 | Dev complete (Sonnet 5.5 agent for Tasks 1-2, Opus for Tasks 3-5): `641dbc7b` claim budget sized to the world + tests + mutation retirements, `92b5e326` record. AC 1 RED/GREEN, 13-7.sh 4/4 KILLED, tick-bench 10/10 same (256² differ, explained), A* 47.1% of the 256² tick, flat storage slower. Full gate GREEN on `92b5e326` (4,424 s). Status review. |
 | 2026-11-02 | Code review run 1 (fresh session, 4 layers, none failed): 0 HIGH. Decision 1, Wolf "1": the `execute_jobs` re-plan gets the world budget, which amends Q1 (a) and AC 4 at that one site. 6 patches left as action items (Wolf "2"), 4 deferred, 4 dismissed. Status in-progress. |
 | 2026-11-02 | Review patch pass 1 (fresh session, Opus 5.5): 6/6 patches landed (`b74f1242`, `faad260a`, `f5b106b4`, `a57ddeff`, record). AC 4 AMENDED (re-plan world budget, decision 1). 13-7.sh 10/10 KILLED (row 6 rewritten after it SURVIVED). tick-bench 11/11 same; two-hundred-on-256 +3.9% mean BEYOND FLOOR, +21% max. Full gate GREEN on `da3a502c` (4,395 s). Cost row $14.12. Status review; next: round-2 code review. |
+| 2026-11-03 | Code review run 2 (fresh session, Opus 5.5) on `35c6d6f4..b9f7209b`: 4 layers OK; NEW 4 (0 HIGH/1 MED/3 LOW), REWORK 1 (row 6). Stopping rule: no round 3. Decision 1 (Wolf "a"): audit reads parenthesised concatenations. 5 patches left as action items (Wolf "2"); 3 deferred, 4 dismissed. Cost $15.03. Status in-progress. |
