@@ -125,6 +125,8 @@ fn bench_replays_the_scenario_identically_and_reaches_the_oracle_state() {
     let end = end_line(&text);
     assert_eq!(field(&end, "tick"), TICKS.to_string(), "{end}");
     assert_eq!(field(&end, "marks"), "1", "the dig is still marked: {end}");
+    assert_eq!(field(&end, "crew"), "5", "{end}");
+    assert_eq!(field(&end, "arriving"), "0", "{end}");
     assert!(
         text.contains("one-dig: 3 runs, mean ") && text.contains("state identical across 3 runs"),
         "{text}"
@@ -383,6 +385,13 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "start dims and crew",
         ),
         (
+            "arrivals-with-save",
+            variant("arrivals-with-save", |json| {
+                json["start"] = serde_json::json!({"save": "nowhere.save", "arrivals": true})
+            }),
+            "start arrivals is for a seed start",
+        ),
+        (
             "seed-and-save",
             variant("seed-and-save", |json| {
                 json["start"]["save"] = "nowhere.save".into()
@@ -461,7 +470,13 @@ fn a_save_whose_crew_repeats_names_and_colours_loads_and_steps() {
         saved.dwarves.iter().map(|d| d.identity.name).collect();
     let colours: std::collections::BTreeSet<_> =
         saved.dwarves.iter().map(|d| d.identity.colour).collect();
+    let full: std::collections::BTreeSet<_> = saved
+        .dwarves
+        .iter()
+        .map(|d| (d.identity.name, d.identity.epithet))
+        .collect();
     assert_eq!(saved.dwarves.len(), 17, "the fixture holds 17 dwarves");
+    assert_eq!(full.len(), 17, "13.8: every full name is unique");
     assert!(names.len() < 17, "the fixture repeats a name");
     assert!(colours.len() < 17, "the fixture repeats a colour");
     let path = variant("crew-17-save", |json| {
@@ -482,6 +497,33 @@ fn a_save_whose_crew_repeats_names_and_colours_loads_and_steps() {
         world.step();
     }
     assert_eq!(run_states(&text), vec![fnv(&world)], "{text}");
+}
+
+/// 13.8 Task 6 / AC 8: `"arrivals": true` in a seed start turns arrivals on (the end line's crew
+/// grows past five, with a group still walking in); its absence leaves the crew at five.
+#[test]
+fn a_seed_start_with_arrivals_grows_the_crew_and_without_it_does_not() {
+    let end_of = |tag: &str, arrivals: bool| {
+        let path = variant(tag, |json| {
+            json["commands"] = serde_json::json!([]);
+            json["ticks"] = 1_010.into();
+            if arrivals {
+                json["start"]["arrivals"] = true.into();
+            }
+        });
+        let output = bench(&path, 1);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        assert!(output.status.success(), "bench failed: {output:?}");
+        end_line(&stdout(&output))
+    };
+    let on = end_of("arrivals-on", true);
+    let crew: usize = field(&on, "crew").parse().unwrap();
+    let arriving: usize = field(&on, "arriving").parse().unwrap();
+    assert!(crew > 5, "arrivals on must grow the crew: {on}");
+    assert!(arriving > 0, "a group is still walking in at t1,010: {on}");
+    let off = end_of("arrivals-off", false);
+    assert_eq!(field(&off, "crew"), "5", "{off}");
+    assert_eq!(field(&off, "arriving"), "0", "{off}");
 }
 
 /// 13.8 AC 5: a save whose crew repeats a FULL name (name + epithet) is refused by the daemon's

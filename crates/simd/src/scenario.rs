@@ -32,8 +32,9 @@ struct File {
     commands: Vec<Scheduled>,
 }
 
-/// `{"seed":S}` or `{"save":F}`, where a seed may add `"dims":[X,Y,Z]` and `"crew":N` (13.6).
-/// Absent, a seed start is the 128x128x32 world with five dwarves it always was.
+/// `{"seed":S}` or `{"save":F}`, where a seed may add `"dims":[X,Y,Z]` and `"crew":N` (13.6), and
+/// `"arrivals":true` (13.8). Absent, a seed start is the 128x128x32 world with five dwarves and no
+/// arrivals it always was.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StartFile {
@@ -42,6 +43,7 @@ struct StartFile {
     save: Option<PathBuf>,
     dims: Option<[u32; 3]>,
     crew: Option<usize>,
+    arrivals: Option<bool>,
 }
 
 enum Start {
@@ -49,6 +51,7 @@ enum Start {
         seed: u64,
         dims: sim_core::Dims,
         crew: usize,
+        arrivals: bool,
     },
     Save(PathBuf),
 }
@@ -120,6 +123,7 @@ impl Scenario {
                 save: None,
                 dims,
                 crew,
+                arrivals,
             } => {
                 let dims = dims.map_or(sim_core::Dims::DEFAULT, |[x, y, z]| sim_core::Dims {
                     x,
@@ -129,14 +133,26 @@ impl Scenario {
                 let crew = crew.unwrap_or(5);
                 crate::check_dims("start dims", dims)?;
                 crate::check_crew("start crew", crew)?;
-                Start::Seed { seed, dims, crew }
+                Start::Seed {
+                    seed,
+                    dims,
+                    crew,
+                    arrivals: arrivals.unwrap_or(false),
+                }
             }
             StartFile {
                 seed: None,
                 save: Some(save),
                 dims: None,
                 crew: None,
+                arrivals: None,
             } => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
+            StartFile {
+                save: Some(_),
+                seed: None,
+                arrivals: Some(_),
+                ..
+            } => bail!("start arrivals is for a seed start: a save has its own"),
             StartFile {
                 save: Some(_),
                 seed: None,
@@ -159,7 +175,12 @@ impl Scenario {
     /// A fresh world on the start tick, every time it is called.
     pub fn world(&self) -> anyhow::Result<sim_core::World> {
         match &self.start {
-            Start::Seed { seed, dims, crew } => crate::generate_world(*seed, *dims, *crew)
+            Start::Seed {
+                seed,
+                dims,
+                crew,
+                arrivals,
+            } => crate::generate_world(*seed, *dims, *crew, *arrivals)
                 .with_context(|| format!("scenario {}", self.name)),
             Start::Save(save) => {
                 let path = save.to_str().context("the save path is not UTF-8")?;
@@ -409,12 +430,14 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             .count();
         end = format!(
             "bench {name} end tick={} marks={} items={} zones={} goals={} \
-             done=dig:{dug},cut:{cut} stored={stored} cells={cells}",
+             done=dig:{dug},cut:{cut} stored={stored} cells={cells} crew={} arriving={}",
             world.tick(),
             world.designations().len(),
             world.items().len(),
             zones.len(),
-            goals.join("/")
+            goals.join("/"),
+            world.dwarves().len(),
+            world.arriving_count()
         );
     }
     println!("{end}");

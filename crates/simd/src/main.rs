@@ -101,20 +101,35 @@ fn check_crew(label: &str, crew: usize) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `World::generate_with_crew`, with a crew the camp's ground cannot hold refused by name instead
+/// `World::generate_with_crew` (or `generate_with_arrivals`), with a crew the camp's ground cannot hold refused by name instead
 /// of as a backtrace. NOTE: caught where it is built, not counted beforehand, because sim-core has
 /// no public way to count the camp's ground; the panic hook still prints the sim's own message.
-fn generate_world(seed: u64, dims: sim_core::Dims, crew: usize) -> anyhow::Result<sim_core::World> {
-    std::panic::catch_unwind(|| sim_core::World::generate_with_crew(seed, dims, crew)).map_err(
-        |_| {
-            anyhow::anyhow!(
-                "crew {crew} does not fit the camp's ground at {}x{}x{}",
-                dims.x,
-                dims.y,
-                dims.z
-            )
-        },
-    )
+fn generate_world(
+    seed: u64,
+    dims: sim_core::Dims,
+    crew: usize,
+    arrivals: bool,
+) -> anyhow::Result<sim_core::World> {
+    std::panic::catch_unwind(|| {
+        if arrivals {
+            sim_core::World::generate_with_arrivals(seed, dims, crew)
+        } else {
+            sim_core::World::generate_with_crew(seed, dims, crew)
+        }
+    })
+    .map_err(|_| {
+        anyhow::anyhow!(
+            "crew {crew} does not fit the camp's ground at {}x{}x{}",
+            dims.x,
+            dims.y,
+            dims.z
+        )
+    })
+}
+
+/// The game `simd` starts with no scenario: arrivals on (13.8). A scenario decides for itself.
+fn fresh_world(dims: sim_core::Dims, crew: usize) -> anyhow::Result<sim_core::World> {
+    generate_world(sim_core::DEFAULT_SEED, dims, crew, true)
 }
 
 /// `simd [port] [--pause-at TICK | --scenario FILE] [--dims X,Y,Z] [--crew N]`, or
@@ -248,7 +263,7 @@ fn main() -> anyhow::Result<()> {
             let live = scenario::Live::new(scenario, world.tick());
             (world, Some(live))
         }
-        None => (generate_world(sim_core::DEFAULT_SEED, dims, crew)?, None),
+        None => (fresh_world(dims, crew)?, None),
     };
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
@@ -1216,14 +1231,29 @@ mod tests {
 
     #[test]
     fn a_crew_too_big_for_the_camp_is_an_error_naming_the_crew() {
-        let error = generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 1_000_000)
-            .err()
-            .expect("a million dwarves cannot stand at the camp");
+        let error = generate_world(
+            sim_core::DEFAULT_SEED,
+            sim_core::Dims::DEFAULT,
+            1_000_000,
+            false,
+        )
+        .err()
+        .expect("a million dwarves cannot stand at the camp");
         assert!(error.to_string().contains("crew 1000000"), "{error}");
-        assert!(generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5).is_ok());
+        assert!(generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5, false).is_ok());
     }
 
     use super::*;
+
+    /// 13.8 AC 8: the fresh game has arrivals on. 128x128 so the debug run stays cheap.
+    #[test]
+    fn a_fresh_game_grows_its_crew() {
+        let mut world = fresh_world(sim_core::Dims::DEFAULT, 5).unwrap();
+        for _ in 0..sim_core::ARRIVAL_PERIOD + 10 {
+            world.step();
+        }
+        assert!(world.dwarves().len() > 5, "{}", world.dwarves().len());
+    }
 
     #[test]
     fn tick_period_is_exactly_ten_hertz() {
