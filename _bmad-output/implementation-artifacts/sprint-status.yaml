@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-11-02
+last_updated: 2026-11-03
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2823,7 +2823,7 @@ development_status:
   # NOTE; AC 6 + #227 AMENDED). Mutation 16/16 KILLED. Full gate GREEN on 38210b07 (4,399 s). -> review; next = PR on
   # Wolf's yes (no round 3); the PR must NOT close #222 or #227, may close #226.
   # 13.6 MERGED 2026-11-01 as PR #228 (f148cfbe), closed #226 only; #222/#227 open. -> done.
-  13-7-the-long-way: in-progress
+  13-7-the-long-way: review
   # 13.7 CREATED 2026-11-02 (Opus 5.5) on branch story-13-7-the-long-way (off local main 483b95b1). Probes on main f148cfbe:
   # every 256^2 budget exhaustion is UNREACHABLE (claim 238/238, astar() 915/915; 13.2's 'reachable past the budget' is
   # wrong); no reachable search from camp > 14,604 nodes. RED on the real valley: a dig designated after 25 unreachable ones
@@ -2844,6 +2844,10 @@ development_status:
   # not pin the claim-id assert). Stopping rule: no HIGH, no round 3. Decision 1 (Wolf "a"): audit reads parenthesised
   # concat literals, 9 rows leave UNREADABLE_ALLOWED. 5 patches LEFT AS ACTION ITEMS (Wolf "2"): 12-10b row 1 + 12-12
   # row 16 cannot apply (pre-13.7 rot), mixed-row audit hole, row 6 rewrite, record. Next: fresh bmad-review-patch.
+  # 13.7 REVIEW PATCH PASS 2 2026-11-03: 5/5 landed (02eb29a7 audit reads concat + 2 rows re-pointed, both KILLED;
+  # f21c799b mixed-row check; 56229c37 row 6 KILLED at the id assert, passes with it stubbed; af3c19bf record). 8 rows left
+  # the allow-list, not 9 (12-12 row 18 is a loop row). Full gate GREEN on af3c19bf (4607 s). Unpushed. Next: PR on
+  # Wolf's yes (Closes #159 only); run 2 ruled no round 3.
   13-8-they-keep-coming: backlog
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
