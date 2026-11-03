@@ -126,7 +126,7 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
 
 ## Tasks / Subtasks
 
-- [x] **Task 0: Wolf's rulings (Q1–Q5).** RULED 2026-11-03: all (a); epic amended; implementer still to be asked. Record the answers in the Change Log and amend the ACs they name. Under Q1 (a), amend the epic's Story 13.8 "Given any map size" AC with an `AMENDED 2026-11-03` line. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
+- [x] **Task 0: Wolf's rulings (Q1–Q5).** RULED 2026-11-03: all (a); epic amended. Implementer (asked 2026-11-03): Sonnet 5.5 subagents, Opus orchestrates. Record the answers in the Change Log and amend the ACs they name. Under Q1 (a), amend the epic's Story 13.8 "Given any map size" AC with an `AMENDED 2026-11-03` line. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
 - [ ] **Task 1: unique names and the embark guarantee (AC 1, 5).** UPDATE `crates/sim-core/src/lib.rs`.
   - [ ] NEW `pub enum Epithet` (16 variants, Q5) with `pub const ALL: [Self; 16]`, beside `DwarfName` (`:206-245`). `Identity` (`:261-264`) gains `pub epithet: Epithet`.
   - [ ] `generate_with_crew` (`:2913-2925`): keep the `names` and `colours` shuffles and `names[i % 16]` / `colours[i % 5]` exactly as they are. Then draw each dwarf's epithet uniformly from the epithets not yet used with its base name, continuing on `identity_rng` after the colour shuffle. Replace the "13.8 makes names unique" NOTE.
@@ -316,6 +316,8 @@ AC 6's epithet pattern cannot match before Task 3. The capture command itself ra
 ## Dev Agent Record
 
 ### Agent Model Used
+
+Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 orchestrates and verifies, and keeps the REDs, the mutation run, the bench and the full gate.
 
 ### Debug Log References
 

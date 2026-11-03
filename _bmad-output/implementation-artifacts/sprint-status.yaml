@@ -2855,7 +2855,7 @@ development_status:
   # 191 steps); a general "walk home when far" rule would move 152/200 dwarves on two-hundred-on-256 (#227, 13.11), so
   # the walk-in is arrivals-only (`Arriving`); clear_paths would strand an arrival. Task 0 Q1-Q5 await Wolf.
   # 13.8 Task 0 RULED 2026-11-03 (Wolf "Yes for all recommendations"): Q1-Q5 all (a); epic 13.8 amended (Q1).
-  # Next: ask implementer, then dev.
+  # 13.8: Wolf picked Sonnet 5.5 subagents to implement (2026-11-03); Opus orchestrates. Next: dev (bmad-dev-story).
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
