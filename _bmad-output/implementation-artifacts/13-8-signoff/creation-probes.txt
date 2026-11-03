@@ -1,0 +1,49 @@
+13.8 creation probes (2026-11-03, main code e2e1882d, scratch worktree, release builds)
+
+A. Edge cells in the camp's walkable component (prototypes/probe-edge-cells.patch,
+   `cargo test --release -p sim-core --test worldgen probe_edge -- --ignored --nocapture`).
+   BFS from the camp with the sim's movement rule (camp_component in tests/worldgen.rs), emitters
+   blocked. "steps" = BFS steps from the camp to an edge cell in the component.
+
+PROBE seed=4026891802 dims=128x128: camp=(64,64,9)  component=16064 edge_cells=509  sides[x0,xW,y0,yH]=[128,128,129,128] steps min/med/max=64/95/128
+PROBE seed=4026891802 dims=256x256: camp=(127,128,7) component=64301 edge_cells=1016 sides=[254,255,257,254] steps 127/191/256
+PROBE seed=0 dims=128x128: component=16114 edge_cells=510 steps 64/95/128
+PROBE seed=1 dims=128x128: component=16098 edge_cells=507 steps 56/95/135
+PROBE seed=2 dims=128x128: component=16074 edge_cells=508 steps 63/95/128
+PROBE seed=3 dims=128x128: component=16125 edge_cells=508 steps 62/95/129
+PROBE seed=4 dims=128x128: component=16063 edge_cells=508 steps 63/95/128
+PROBE seed=5 dims=128x128: component=16083 edge_cells=508 steps 46/97/163
+PROBE seed=6 dims=128x128: component=16065 edge_cells=507 steps 64/95/128
+PROBE seed=7 dims=128x128: component=16110 edge_cells=508 steps 64/95/128
+PROBE seed=0 dims=256x256: component=64343 edge_cells=1022 steps 99/191/290
+PROBE seed=1 dims=256x256: component=64247 edge_cells=1019 steps 129/191/256
+PROBE seed=2 dims=256x256: component=64264 edge_cells=1019 steps 106/191/295
+PROBE seed=3 dims=256x256: component=64306 edge_cells=1020 steps 128/191/257
+
+   Reading: on every seed and size, almost every edge cell (all four sides, z 5..31) is in the
+   camp's component, so "edge cells connected to the camp" can happen. The ridge band raises the
+   x=0 and y=H-1 sides but does not wall them off. Walk length at the step pace
+   (STEP_REST_TICKS 10, about 11 ticks a step): 128² median 95 steps, about 1,050 ticks; 256²
+   median 191 steps, about 2,100 ticks (3.5 min at 1x), longest 295 steps.
+
+B. Idle dwarves standing outside WANDER_RADIUS of their home (prototypes/probe-far-idle.patch: a
+   counter in `wander`, after the Path branch, of idle pathless dwarves with |dx| or |dy| to
+   `home` over WANDER_RADIUS; printed after the bench end line).
+
+   all ten 128² scenarios (big-pile, deep-pit, dig-loop, full-pile-crowd, plan, plan-compact-piles,
+   plan-far-piles, plan-spread-piles, seat-slow, stuck-tunnel): far_idle_ticks=0 dwarves=0, and
+   every end line equals main's.
+   two-hundred-on-256 (--runs 1): far_idle_ticks=697 dwarves=152,
+     state=6ba8edcc3d6c7b9c (= main), mean 32.66 ms, p99 151.98, max 352.3,
+     end `marks=1476 items=600 zones=1800 goals=22/0/0 done=dig:234,cut:90 stored=27 cells=2146`.
+
+   Reading: a general rule "an idle dwarf away from home walks home" would not touch the 128²
+   rows, but on 256² crew 200 it would move 152 of the 200 dwarves. They are 13.6's BFS-spill
+   spawns, whose home is the camp and who stand past the radius-3 ring. That crowd is #227,
+   routed to 13.11. So the walk-in rule must apply to arrivals only.
+
+C. clear_paths (lib.rs:1622) removes EVERY entity's Path, idle exit paths included. It is called
+   from every dig and cut completion (:1348, :2552) and from :3167. An arrival that walks in on an
+   idle Path loses that Path at the first dig anywhere. With home = camp it then has no wander
+   candidate (every neighbour is outside WANDER_RADIUS of home) and freezes where it stands. The
+   release_claim NOTE (:1596-1606) describes the same freeze.

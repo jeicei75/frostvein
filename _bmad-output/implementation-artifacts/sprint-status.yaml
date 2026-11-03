@@ -2849,7 +2849,11 @@ development_status:
   # the allow-list, not 9 (12-12 row 18 is a loop row). Full gate GREEN on af3c19bf (4607 s). Unpushed. Next: PR on
   # Wolf's yes (Closes #159 only); run 2 ruled no round 3.
   # 13.7 MERGED 2026-11-03 as PR #229 (f9e33e34), closed #159 only. -> done.
-  13-8-they-keep-coming: backlog
+  13-8-they-keep-coming: ready-for-dev
+  # 13.8 CREATED 2026-11-03 (Opus 5.5) on branch story-13-8-they-keep-coming (off local main e2e1882d). Probes on main:
+  # 507-510 (128^2) / 1,016-1,022 (256^2) edge cells are in the camp component on every probed seed (walk-in median 95 /
+  # 191 steps); a general "walk home when far" rule would move 152/200 dwarves on two-hundred-on-256 (#227, 13.11), so
+  # the walk-in is arrivals-only (`Arriving`); clear_paths would strand an arrival. Task 0 Q1-Q5 await Wolf.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
