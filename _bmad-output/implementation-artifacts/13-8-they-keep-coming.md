@@ -32,22 +32,22 @@ Every state hash therefore moves (memory: `state-hash-covers-save-encoding`). AC
 
 ## Task 0 — Wolf rules before dev
 
-Each question has a recommendation. The ACs and Tasks are written for it, and a different answer amends the ACs it names.
+Each question has a recommendation. The ACs and Tasks are written for it, and a different answer amends the ACs it names. **RULED 2026-11-03 (Wolf, "Yes for all recommendations"): Q1–Q5 all (a).** The epic's Story 13.8 is amended under Q1 (a).
 
 - **Q1. Do the committed scenarios get arrivals?** The 128² rows run 3,000–10,006 ticks. Three of them start from Wolf's seat saves: `dig-loop` (#203), `stuck-tunnel` (#206) and `seat-slow` (#204). 13.17 and 13.18 need those three as reproducers.
-  - (a) **Recommended:** arrivals are a saved world setting. A scenario `start` with no `"arrivals"` key has none: it is the world the file was recorded on, as 13.6 Q2 (a) did for `dims`/`crew`. `"arrivals": true` turns them on. A fresh game (`simd` with no scenario) always has them. This keeps every committed file byte-for-byte unchanged, so `main`'s `simd` still reads them and all 11 rows can read `same` under AC 10. Amend the epic's "Given any map size" AC to: "arrivals run on any map size, 128² included, in a fresh game and in any scenario that asks for them; committed scenarios keep their recorded world."
+  - (a) **Recommended (← RULED 2026-11-03):** arrivals are a saved world setting. A scenario `start` with no `"arrivals"` key has none: it is the world the file was recorded on, as 13.6 Q2 (a) did for `dims`/`crew`. `"arrivals": true` turns them on. A fresh game (`simd` with no scenario) always has them. This keeps every committed file byte-for-byte unchanged, so `main`'s `simd` still reads them and all 11 rows can read `same` under AC 10. Amend the epic's "Given any map size" AC to: "arrivals run on any map size, 128² included, in a fresh game and in any scenario that asks for them; committed scenarios keep their recorded world."
   - (b) As the epic is written: arrivals run in every world. On each 128² row the crew then grows from 5 to about 50–100 inside the window, so every row is re-pinned (standing AC 11), and each row's cost and meaning change. Whether #203, #204 and #206 still reproduce is unmeasured. No saved `arrivals` field is needed.
 - **Q2. What is "the first group arrives at embark"?**
-  - (a) **Recommended:** today's starting crew, spawned at the camp as it is now. Every spawn, identity and profession pin passes unchanged, and the embark guarantee is AC 1.
+  - (a) **Recommended (← RULED 2026-11-03):** today's starting crew, spawned at the camp as it is now. Every spawn, identity and profession pin passes unchanged, and the embark guarantee is AC 1.
   - (b) The embark group also spawns at an edge and walks in. That moves every scenario's outcome and every spawn pin.
 - **Q3. Does a walking arrival take work before it reaches the camp?**
-  - (a) **Recommended:** yes. An arrival is an idle dwarf from the moment it appears, so `claim_jobs` can give it a job of its trade on the way. That is "joins the work". With no such job, it walks to the camp. `claim_jobs` itself is unchanged (AD-12).
+  - (a) **Recommended (← RULED 2026-11-03):** yes. An arrival is an idle dwarf from the moment it appears, so `claim_jobs` can give it a job of its trade on the way. That is "joins the work". With no such job, it walks to the camp. `claim_jobs` itself is unchanged (AD-12).
   - (b) No. `claim_jobs` skips a dwarf that is still arriving, so it reaches the camp first.
 - **Q4. Cadence and group size (standing AC 18).**
-  - (a) **Recommended:** one group every `ARRIVAL_PERIOD = 1_000` ticks (100 s at 1x), the first at tick 1,000. Group size is uniform in 5..=20 and capped at `CREW_CAP − crew`, with `CREW_CAP = 200`. From crew 5 this averages about 16 groups, so the crew reaches 200 near t16,000: about 27 min at 1x, or 7 at fast4x. The seat may retune the numbers (AC 13).
+  - (a) **Recommended (← RULED 2026-11-03):** one group every `ARRIVAL_PERIOD = 1_000` ticks (100 s at 1x), the first at tick 1,000. Group size is uniform in 5..=20 and capped at `CREW_CAP − crew`, with `CREW_CAP = 200`. From crew 5 this averages about 16 groups, so the crew reaches 200 near t16,000: about 27 min at 1x, or 7 at fast4x. The seat may retune the numbers (AC 13).
   - (b) Other numbers.
 - **Q5. The epithets (FR57).** 16 epithets × 16 names = 256 full names, so 200 always fit. A full name reads `Durin Frostbeard`.
-  - (a) **Recommended list:** Ironhand, Stonefoot, Frostbeard, Coldforge, Deepdelver, Greyhelm, Ashbrow, Flintback, Rimecloak, Hammerfall, Copperbeard, Icevein, Stoutheart, Blackanvil, Emberkeep, Snowmantle. None is a Tolkien epithet: Oakenshield, Ironfoot, Stonehelm and Longbeard are left out on purpose.
+  - (a) **Recommended list (← RULED 2026-11-03):** Ironhand, Stonefoot, Frostbeard, Coldforge, Deepdelver, Greyhelm, Ashbrow, Flintback, Rimecloak, Hammerfall, Copperbeard, Icevein, Stoutheart, Blackanvil, Emberkeep, Snowmantle. None is a Tolkien epithet: Oakenshield, Ironfoot, Stonehelm and Longbeard are left out on purpose.
   - (b) Wolf edits the list. Keep at least 13 entries, because 16 × 13 = 208 ≥ 200.
 
 ## Found at creation (2026-11-03, `main` code `e2e1882d`)
@@ -126,7 +126,7 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings (Q1–Q5).** Record the answers in the Change Log and amend the ACs they name. Under Q1 (a), amend the epic's Story 13.8 "Given any map size" AC with an `AMENDED 2026-11-0x` line. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
+- [x] **Task 0: Wolf's rulings (Q1–Q5).** RULED 2026-11-03: all (a); epic amended; implementer still to be asked. Record the answers in the Change Log and amend the ACs they name. Under Q1 (a), amend the epic's Story 13.8 "Given any map size" AC with an `AMENDED 2026-11-03` line. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
 - [ ] **Task 1: unique names and the embark guarantee (AC 1, 5).** UPDATE `crates/sim-core/src/lib.rs`.
   - [ ] NEW `pub enum Epithet` (16 variants, Q5) with `pub const ALL: [Self; 16]`, beside `DwarfName` (`:206-245`). `Identity` (`:261-264`) gains `pub epithet: Epithet`.
   - [ ] `generate_with_crew` (`:2913-2925`): keep the `names` and `colours` shuffles and `names[i % 16]` / `colours[i % 5]` exactly as they are. Then draw each dwarf's epithet uniformly from the epithets not yet used with its base name, continuing on `identity_rng` after the colour shuffle. Replace the "13.8 makes names unique" NOTE.
@@ -328,3 +328,4 @@ AC 6's epithet pattern cannot match before Task 3. The capture command itself ra
 | Date | Change |
 |---|---|
 | 2026-11-03 | Story created (Opus 5.5). Creation probes: 128² and 256² edge cells are in the camp component on every probed seed; a general walk-home rule would move 152/200 dwarves on two-hundred-on-256 (#227), so the walk-in is arrivals-only; `clear_paths` would strand an arrival. Task 0 Q1–Q5 await Wolf. |
+| 2026-11-03 | Task 0 RULED (Wolf, "Yes for all recommendations"): Q1 (a) arrivals are a saved world setting, off in committed scenarios, on in the fresh game; Q2 (a) the embark group spawns at the camp; Q3 (a) an arrival may take a job on the way; Q4 (a) 5–20 every 1,000 ticks, cap 200; Q5 (a) the 16 proposed epithets. Epic Story 13.8 amended (Q1). |

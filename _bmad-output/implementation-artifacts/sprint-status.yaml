@@ -2854,6 +2854,8 @@ development_status:
   # 507-510 (128^2) / 1,016-1,022 (256^2) edge cells are in the camp component on every probed seed (walk-in median 95 /
   # 191 steps); a general "walk home when far" rule would move 152/200 dwarves on two-hundred-on-256 (#227, 13.11), so
   # the walk-in is arrivals-only (`Arriving`); clear_paths would strand an arrival. Task 0 Q1-Q5 await Wolf.
+  # 13.8 Task 0 RULED 2026-11-03 (Wolf "Yes for all recommendations"): Q1-Q5 all (a); epic 13.8 amended (Q1).
+  # Next: ask implementer, then dev.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
