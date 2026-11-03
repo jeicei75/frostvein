@@ -94,6 +94,14 @@ UNREADABLE_ALLOWED = {
     ("3-3-the-haul-and-the-skeleton-walks.sh", "free stockpile tiles ignore stored stones"),
 }
 
+# The fifth shape, half-closed: one readable anchor marked the whole row as read, so a tuple list
+# or loop of anchors beside it still rotted unseen (13.7 review run 2: a probe row with a guarded
+# `old = '...'` plus `edits = [('NOT IN THE SOURCE', 'x', 1)]` drew no report). A row whose CODE
+# (string literals blanked, so Rust inside an anchor cannot match) iterates anchors this way is
+# flagged unless allow-listed.
+STRINGS = re.compile(r"'''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"", re.S)
+ANCHOR_LOOP = re.compile(r"^\s*for\s[^\n]*\sin\s*[\(\[]|^\s*\w+\s*=\s*\[\s*\(", re.M)
+
 
 def rows(table_text):
     """Split a table into (name, block) pairs. A block runs to the next `mutation` line."""
@@ -217,6 +225,13 @@ def audit():
                     unguarded.append((table.name, name, "inline s.replace() anchor"))
                 if not checked and (table.name, name) not in UNREADABLE_ALLOWED:
                     unreadable.append((table.name, name))
+                    continue
+            if (
+                checked
+                and ANCHOR_LOOP.search(STRINGS.sub("''", block))
+                and (table.name, name) not in UNREADABLE_ALLOWED
+            ):
+                unreadable.append((table.name, name))
 
     if orphaned:
         print(f"  {len(orphaned)} of {total} mutation rows NAME A TEST THAT NO LONGER EXISTS:")
