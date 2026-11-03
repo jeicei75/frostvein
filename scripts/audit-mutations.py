@@ -44,8 +44,11 @@ TARGET = re.compile(r"pathlib\.Path\('([^']+)'\)")
 # `item` and slipped past an `old\w*`-only pattern, so it was reported clean and then turned up
 # APPLY-FAILED on a real run. Whether the literal matters is decided below, by whether the row
 # actually uses it against the source.
+# The last alternative is a parenthesised implicit concatenation, `old = ('...' '...')`, which
+# `ast.literal_eval` joins exactly (13.7 review run 2): 9 rows hid behind the allow-list in it.
 LITERAL = re.compile(
-    r"^([A-Za-z_]\w*) = ('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")",
+    r"^([A-Za-z_]\w*) = ('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\""
+    r"|\((?:\s*(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"))+\s*\))",
     re.S | re.M,
 )
 
@@ -69,22 +72,17 @@ INLINE_ANCHOR = re.compile(
 # as silently as the fourth shape: its anchor was broken on a copy and this script still printed
 # the all-clear. Now a row with a target and no checkable anchor fails, because the gate hides
 # this script's output on success and a warning would be read by nobody.
-# NOTE: these 21 rows predate the rule and use shapes the parser cannot read (regex, `for old in`
-# loops, a literal the regex cannot delimit). They are listed so they stay visible; a NEW row
-# must use the named `old = '...'` + `assert s.count(old) == N` form.
+# NOTE: these 13 rows predate the rule and use shapes the parser cannot read (5 `for old in`
+# loops, 1 regex, 7 literals the regex cannot delimit). They are NEVER anchor-checked, so their rot
+# is invisible to the gate; the list only names them. A NEW row must use the named
+# `old = '...'` + `assert s.count(old) == N` form. (13.7 review run 2: 8 rows in the
+# `old = ('...' '...')` form left this list once `LITERAL` read it, and 2 of them could not apply.
+# 12-12 row 18 stays: its concatenation is replacement text and its anchors are in a loop.)
 UNREADABLE_ALLOWED = {
     ("10-1-the-headless-bench.sh", "a hardcoded venue fails the blender-stamp test"),
     ("10-7-the-sun-lights-the-valley.sh", "bench sun elevation diverges from the client"),
     ("12-1.sh", "old save haul goals include emitters"),
     ("12-1.sh", "campfire pile never fills"),
-    ("12-10.sh", "3b ore draws from the tree stream"),
-    ("12-10.sh", "10 ice yields tetrahedrite"),
-    ("12-10.sh", "11 ore takes a snow cap"),
-    ("12-10b.sh", "1 a channel is worked from the same level only"),
-    ("12-10b.sh", "2 a loose item is lifted from the same level only"),
-    ("12-10b.sh", "8 the channel's wall-in check also reads the terrain before the cut"),
-    ("12-10b.sh", "20 a channel's landing check counts the dwarf on the target where it stands"),
-    ("12-12.sh", "16 a tile change keeps the floods' answers (review run 2 Decision 1)"),
     ("12-12.sh", "18 a flood is bounded by its own pile's box (review run 2 Decision 1, first ruled (a))"),
     ("12-9.sh", "4 the per-step flip rule"),
     ("12-9.sh", "7 no dwarf ever steps"),

@@ -144,13 +144,15 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '    if true {\n'))
 PY
 
+# Row 16 re-pointed 2026-11-03 (13.7 review run 2): `set_tile` now binds `kept` and also drops
+# 13.3's `memo`; only the floods' `open` answers are kept, as the row's name says.
 mutation "16 a tile change keeps the floods' answers (review run 2 Decision 1)" sim-core the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = ('        self.pile_ground\n            .get_mut()\n            .expect("nothing panics holding the pile ground")\n'
-       '            .open\n            .clear();\n')
+old = ('        kept.open.clear();\n'
+       '        kept.memo = None;\n')
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '        kept.memo = None;\n'))
 PY
 
 mutation "17 a zone change keeps the floods' answers (review run 2 Decision 1)" sim-core the_entrance_floods_are_kept_until_the_terrain_or_the_zones_change <<'PY'

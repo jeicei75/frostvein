@@ -3,17 +3,19 @@
 # Row names follow the story's Task 7 list; 7-9 are the dev-time additions (AC 4 ruling, the
 # post-cut wall-in check, the gui mirror's second half).
 
+# Row 1 re-pointed 2026-11-03 (13.7 review run 2): its anchor had matched nothing since the
+# Channel arm became `let goals: BTreeSet<_> = ...` (rot found at origin/main and 483b95b1).
 mutation "1 a channel is worked from the same level only" sim-core a_two_wide_staircase_reaches_four_levels_down_for_every_designation_delay <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = ('                astar_neighbours(terrain, blocked, job.target)\n'
+old = ('                let goals: BTreeSet<_> = astar_neighbours(terrain, blocked, job.target)\n'
        '                    .into_iter()\n'
-       '                    .collect()\n')
+       '                    .collect();\n')
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                side_neighbours(job.target)\n'
+p.write_text(s.replace(old, '                let goals: BTreeSet<_> = side_neighbours(job.target)\n'
                             '                    .into_iter()\n'
                             '                    .filter(|candidate| is_walkable(terrain, blocked, *candidate))\n'
-                            '                    .collect()\n'))
+                            '                    .collect();\n'))
 PY
 
 # Row 2 SURVIVED against the staircase sweep (first run, 2026-10-13): since the AC 4 ruling the
