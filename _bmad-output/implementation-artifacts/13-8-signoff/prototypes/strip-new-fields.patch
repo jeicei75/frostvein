@@ -1,0 +1,32 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 0d2a2520..07c9f132 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -322,6 +322,7 @@ impl DwarfColour {
+ #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+ pub struct Identity {
+     pub name: DwarfName,
++    #[serde(skip_serializing)]
+     pub epithet: Epithet,
+     pub colour: DwarfColour,
+ }
+diff --git a/crates/sim-core/src/save.rs b/crates/sim-core/src/save.rs
+index bb3f51a2..ecd4a3a0 100644
+--- a/crates/sim-core/src/save.rs
++++ b/crates/sim-core/src/save.rs
+@@ -29,6 +29,7 @@ pub struct SaveState {
+     pub goals_completed: u32,
+     // NOTE: deliberately no `#[serde(default)]`, like `goals_completed`: a pre-13.8 save fails to
+     // decode and simd refuses it. Arrivals are a world setting, saved with the world.
++    #[serde(skip_serializing)]
+     pub arrivals: bool,
+ }
+ 
+@@ -66,6 +67,7 @@ pub struct SavedDwarf {
+     // `deserialize_with` turns off serde's missing-`Option`-is-`None`. The cell an arriving dwarf
+     // is walking to and its wait count; `None` once its walk-in is over.
+     #[serde(deserialize_with = "Option::deserialize")]
++    #[serde(skip_serializing)]
+     pub arriving: Option<SavedArriving>,
+ }
+ 
