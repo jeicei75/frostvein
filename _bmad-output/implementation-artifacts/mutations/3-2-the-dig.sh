@@ -1,6 +1,10 @@
 # Mutation set for story 3.2. Run:
 # scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/3-2-the-dig.sh
 
+# Retired 2026-11-02 (13.7): "each claim search gets a fresh node budget" replaced the goals
+# search's `budgets[slot]` with a fresh counter. 13.7 Q2 (a) made that the code: every claim search
+# now gets a fresh budget of the world's cell count, so the sabotage has nothing left to change.
+
 mutation "Designate ignores the diggability filter" sim-core designations_keep_only_tiles_workable_by_their_kind <<'PY'
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 split the Dig/Channel filter from the new Cut arm and added the tree exclusions; the sabotage still drops the Dig/Channel filter.
@@ -791,22 +795,16 @@ mutation "unreachable lower id starves a reachable dwarf" sim-core an_unreachabl
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 2026-10-02 (12.4): the search now spends `budgets[slot]` and exhaustion `continue`s.
-old = '''                let path = match astar_with_budget(
-                    &terrain,
-                    &blocked,
-                    **pos,
-                    &goals,
-                    &mut budgets[slot],
-                ) {
+# Re-pointed 2026-11-02 (13.7): a fresh world-sized budget per search, and exhaustion is
+# `unreachable!`; the seam (the claim skips the goals search) is unchanged.
+old = '''                let mut budget = terrain.tiles.len();
+                let path = match astar_with_budget(&terrain, &blocked, **pos, &goals, &mut budget) {
                     (Some(path), false, _) => path,
                     (None, false, explored) => {
                         components.push(explored);
                         continue;
                     }
-                    (None, true, _) => continue,
-                    (Some(_), true, _) => {
-                        unreachable!("a completed search cannot exhaust its budget")
-                    }
+                    (_, true, _) => unreachable!("a search sized to the world cannot run out"),
                 };
 '''
 assert old in s
@@ -949,27 +947,6 @@ old = '''        clear_paths(ecs);
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        if job.kind == JobKind::Dig {\n'))
-PY
-
-mutation "each claim search gets a fresh node budget" sim-core a_dwarf_over_his_budget_sits_out_and_the_crew_goes_on <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 2026-10-02 (12.4 Task 2b): the old test pinned #159's broken shape and is replaced;
-# the goals search gets a fresh counter instead of the dwarf's `budgets[slot]`, so the dwarf
-# claims the reachable dig at tick 100 instead of tick 110.
-old = '''                let path = match astar_with_budget(
-                    &terrain,
-                    &blocked,
-                    **pos,
-                    &goals,
-                    &mut budgets[slot],
-                ) {
-'''
-new = '''                let mut per_search_nodes = MAX_ASTAR_NODES;
-                let path = match astar_with_budget(&terrain, &blocked, **pos, &goals, &mut per_search_nodes) {
-'''
-assert s.count(old) == 1
-p.write_text(s.replace(old, new))
 PY
 
 mutation "release_claim does not re-home the dwarf" sim-core a_dwarf_that_travelled_to_a_distant_job_still_wanders_afterwards <<'PY'

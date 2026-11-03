@@ -44,8 +44,11 @@ TARGET = re.compile(r"pathlib\.Path\('([^']+)'\)")
 # `item` and slipped past an `old\w*`-only pattern, so it was reported clean and then turned up
 # APPLY-FAILED on a real run. Whether the literal matters is decided below, by whether the row
 # actually uses it against the source.
+# The last alternative is a parenthesised implicit concatenation, `old = ('...' '...')`, which
+# `ast.literal_eval` joins exactly (13.7 review run 2): 9 rows hid behind the allow-list in it.
 LITERAL = re.compile(
-    r"^([A-Za-z_]\w*) = ('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")",
+    r"^([A-Za-z_]\w*) = ('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\""
+    r"|\((?:\s*(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"))+\s*\))",
     re.S | re.M,
 )
 
@@ -62,6 +65,43 @@ INLINE_ANCHOR = re.compile(
     r"s\.replace\(\s*('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")\s*,\s*('''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")",
     re.S,
 )
+
+# FIFTH ROT SHAPE (13.7 review, 2026-11-02). A row whose anchors are neither a named literal it
+# counts nor an inline `s.replace("...")` -- 13-7.sh rows 1-2 kept theirs in an
+# `edits = [(old, new, n), ...]` tuple list -- yielded nothing to check, and the row was skipped
+# as silently as the fourth shape: its anchor was broken on a copy and this script still printed
+# the all-clear. Now a row with a target and no checkable anchor fails, because the gate hides
+# this script's output on success and a warning would be read by nobody.
+# NOTE: these 13 rows predate the rule and use shapes the parser cannot read (5 `for old in`
+# loops, 1 regex, 7 literals the regex cannot delimit). They are NEVER anchor-checked, so their rot
+# is invisible to the gate; the list only names them. A NEW row must use the named
+# `old = '...'` + `assert s.count(old) == N` form. (13.7 review run 2: 8 rows in the
+# `old = ('...' '...')` form left this list once `LITERAL` read it, and 2 of them could not apply.
+# 12-12 row 18 stays: its concatenation is replacement text and its anchors are in a loop.)
+UNREADABLE_ALLOWED = {
+    ("10-1-the-headless-bench.sh", "a hardcoded venue fails the blender-stamp test"),
+    ("10-7-the-sun-lights-the-valley.sh", "bench sun elevation diverges from the client"),
+    ("12-1.sh", "old save haul goals include emitters"),
+    ("12-1.sh", "campfire pile never fills"),
+    ("12-12.sh", "18 a flood is bounded by its own pile's box (review run 2 Decision 1, first ruled (a))"),
+    ("12-9.sh", "4 the per-step flip rule"),
+    ("12-9.sh", "7 no dwarf ever steps"),
+    ("12-9.sh", "11 blocked_cells ignores items"),
+    ("12-9.sh", "13 delivery picks the shallowest free pile cell"),
+    ("2-2-dwarves-wander-the-frost.sh", "frames capture goes colourless without saying so"),
+    ("3-2-the-dig.sh", "reaction_delay returns a constant"),
+    ("3-3-the-haul-and-the-skeleton-walks.sh", "free stockpile tiles ignore standability"),
+    ("3-3-the-haul-and-the-skeleton-walks.sh", "free stockpile tiles ignore stored stones"),
+}
+
+# The fifth shape, half-closed: one readable anchor marked the whole row as read, so a tuple list
+# or loop of anchors beside it still rotted unseen (13.7 review run 2: a probe row with a guarded
+# `old = '...'` plus `edits = [('NOT IN THE SOURCE', 'x', 1)]` drew no report). A row whose CODE
+# (string literals blanked, so Rust inside an anchor cannot match) iterates anchors this way is
+# flagged unless allow-listed.
+STRINGS = re.compile(r"'''.*?'''|\"\"\".*?\"\"\"|'(?:[^'\\\n]|\\.)*'|\"(?:[^\"\\\n]|\\.)*\"", re.S)
+ANCHOR_LOOP = re.compile(r"^\s*for\s[^\n]*\sin\s*[\(\[]|^\s*\w+\s*=\s*\[\s*\(", re.M)
+
 
 def rows(table_text):
     """Split a table into (name, block) pairs. A block runs to the next `mutation` line."""
@@ -81,6 +121,7 @@ def audit():
     broken = []
     unguarded = []
     orphaned = []
+    unreadable = []
     crates = pathlib.Path("crates")
     sources = "\n".join(
         f.read_text() for f in crates.rglob("*.rs")
@@ -115,6 +156,7 @@ def audit():
                 broken.append((table.name, name, f"target {target} no longer exists"))
                 continue
             source = target.read_text()
+            checked = False
 
             for var, literal in LITERAL.findall(block):
                 # Only literals the row actually matches against the source can rot. One used
@@ -127,6 +169,7 @@ def audit():
                     value = ast.literal_eval(literal)
                 except (ValueError, SyntaxError):
                     continue  # a computed literal; nothing static to check
+                checked = True
                 actual = source.count(value)
                 guard = re.search(rf"assert s\.count\({var}\) == (\d+)", block)
                 if guard:
@@ -170,6 +213,7 @@ def audit():
                         replacement = ast.literal_eval(replacement)
                     except (ValueError, SyntaxError):
                         break  # a computed literal; the rest of the chain is unverifiable
+                    checked = True
                     if staged.count(search) == 0:
                         broken.append((
                             table.name, name,
@@ -179,6 +223,15 @@ def audit():
                         break
                     staged = staged.replace(search, replacement)
                     unguarded.append((table.name, name, "inline s.replace() anchor"))
+                if not checked and (table.name, name) not in UNREADABLE_ALLOWED:
+                    unreadable.append((table.name, name))
+                    continue
+            if (
+                checked
+                and ANCHOR_LOOP.search(STRINGS.sub("''", block))
+                and (table.name, name) not in UNREADABLE_ALLOWED
+            ):
+                unreadable.append((table.name, name))
 
     if orphaned:
         print(f"  {len(orphaned)} of {total} mutation rows NAME A TEST THAT NO LONGER EXISTS:")
@@ -195,6 +248,16 @@ def audit():
         print("  test that pins the seam today, or write the test that should.")
         print()
 
+    if unreadable:
+        print(f"  {len(unreadable)} of {total} mutation rows HAVE NO ANCHOR THIS AUDIT CAN READ:")
+        for table_name, row_name in unreadable:
+            print(f"    {table_name}")
+            print(f"      - {row_name}")
+        print()
+        print("  Name each literal (`old = '...'`) and guard it (`assert s.count(old) == N`),")
+        print("  or this audit cannot tell when the row stops applying.")
+        print()
+
     if broken:
         print(f"  {len(broken)} of {total} mutation rows CANNOT APPLY:")
         current = None
@@ -209,7 +272,7 @@ def audit():
         print("  Re-point it at the current source, or delete it if the seam is gone.")
         return 1
 
-    if orphaned:
+    if orphaned or unreadable:
         return 1
 
     print(f"  {total} rows, every literal still matches its target", end="")

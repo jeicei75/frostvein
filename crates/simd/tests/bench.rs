@@ -267,6 +267,9 @@ fn stored_counts_one_item_per_zone_tile_as_the_sim_does() {
 /// stored=59 cells=2165` in 91 s, and the same file with `"commands":[]` read
 /// `done=dig:0,cut:0 stored=0 cells=0`. That 59 counted carried and stacked items. Under the sim's
 /// stored rule (review run 1) the same state reads `stored=33`, with `done` and `cells` unchanged.
+/// 13.7 (2026-11-02, `641dbc7b`) reads `done=dig:234,cut:90 stored=27 cells=2146`: claim searches
+/// now run on a world-sized budget and complete, where 238 of them used to exhaust on the camp's
+/// 64,300-cell area, so dwarves claim different jobs at different ticks. Not a regression.
 #[test]
 #[ignore = "release: steps 256² crew 200 for 2500 ticks"]
 fn the_two_hundred_on_256_scenario_does_real_work() {

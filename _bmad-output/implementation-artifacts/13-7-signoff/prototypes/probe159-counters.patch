@@ -1,0 +1,184 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 5fa603cf..bd85d3ee 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -51,7 +51,7 @@ const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
+ pub const MAX_DESIGNATIONS: usize = 4096;
+ // NOTE: the 256² fresh game's camp component is 64,301 cells (13.6), over this budget, so a
+ // search across the whole valley can give up on a reachable goal (#159). 13.7 sizes the budget.
+-const MAX_ASTAR_NODES: usize = 50_000;
++const MAX_ASTAR_NODES: usize = 256 * 256 * 32;
+ /// Ticks of work a hauler spends picking a stone up, and again putting it down.
+ pub const WORK_TICKS: u32 = 5;
+ /// Ticks of work one dig or channel takes: 10 swings of the pick at the client's 5 ticks per swing
+@@ -589,7 +589,7 @@ fn claim_jobs(
+     // Emitters plus every uncarried item (#162): items block claim-time reachability like fires.
+     let blocked = blocked_cells(emitters.iter().chain(items.values()));
+     // One budget per dwarf, indexed like the sorted `dwarves`.
+-    let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];
++    let mut budgets = vec![std::env::var("PROBE_BUDGET").ok().and_then(|v| v.parse().ok()).unwrap_or(MAX_ASTAR_NODES); dwarves.len()];
+     // Walkable components that a COMPLETED failed search has already flooded this call (#132).
+     // Per call only: terrain can change between ticks, so nothing is cached across them.
+     // NOTE: the per-tick bound is (idle dwarves) x `MAX_ASTAR_NODES`. A dwarf whose search runs
+@@ -662,7 +662,7 @@ fn claim_jobs(
+                             components.push(explored);
+                             continue;
+                         }
+-                        (None, true, _) => continue,
++                        (None, true, _) => { probe_classify(&terrain, &blocked, **pos, delivery); continue }
+                         (Some(_), true, _) => {
+                             unreachable!("a completed search cannot exhaust its budget")
+                         }
+@@ -680,7 +680,7 @@ fn claim_jobs(
+                         components.push(explored);
+                         continue;
+                     }
+-                    (None, true, _) => continue,
++                    (None, true, _) => { probe_classify(&terrain, &blocked, **pos, &goals); continue }
+                     (Some(_), true, _) => {
+                         unreachable!("a completed search cannot exhaust its budget")
+                     }
+@@ -1190,6 +1190,16 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
+         .unwrap_or(0)
+ }
+ 
++pub static PROBE_SITES: std::sync::Mutex<BTreeMap<(u32, bool), usize>> = std::sync::Mutex::new(BTreeMap::new());
++pub static PROBE: [std::sync::atomic::AtomicUsize; 5] = [const { std::sync::atomic::AtomicUsize::new(0) }; 5];
++fn probe_classify(terrain: &Terrain, blocked: &BTreeSet<Pos>, from: Pos, goals: &BTreeSet<Pos>) {
++    use std::sync::atomic::Ordering::Relaxed;
++    if std::env::var_os("PROBE_CLASSIFY").is_none() { PROBE[0].fetch_add(1, Relaxed); return; }
++    let mut b = usize::MAX;
++    let (p, _, _) = astar_with_budget(terrain, blocked, from, goals, &mut b);
++    PROBE[if p.is_some() { 1 } else { 2 }].fetch_add(1, Relaxed);
++    if p.is_some() { PROBE[0].fetch_add(usize::MAX - b, Relaxed); }
++}
+ fn astar_with_budget(
+     terrain: &Terrain,
+     blocked: &BTreeSet<Pos>,
+@@ -1240,6 +1250,7 @@ fn astar_with_budget(
+     (None, false, costs.into_keys().collect())
+ }
+ 
++#[track_caller]
+ fn astar(
+     terrain: &Terrain,
+     blocked: &BTreeSet<Pos>,
+@@ -1247,7 +1258,14 @@ fn astar(
+     goals: &BTreeSet<Pos>,
+ ) -> Option<Vec<Pos>> {
+     let mut nodes_remaining = MAX_ASTAR_NODES;
+-    astar_with_budget(terrain, blocked, from, goals, &mut nodes_remaining).0
++    let r = astar_with_budget(terrain, blocked, from, goals, &mut nodes_remaining);
++    if r.1 {
++        PROBE[3].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++        let mut b = usize::MAX;
++        let reach = astar_with_budget(terrain, blocked, from, goals, &mut b).0.is_some();
++        *PROBE_SITES.lock().unwrap().entry((std::panic::Location::caller().line(), reach)).or_insert(0) += 1;
++    }
++    r.0
+ }
+ 
+ /// The tiles live dwarves stand on. FR49: one dwarf per tile. Each writer of a dwarf's `Pos`
+@@ -1273,6 +1291,7 @@ fn route_to_nearest(
+     let mut nodes_remaining = MAX_ASTAR_NODES;
+     while let Some(cell) = queue.pop_front() {
+         if nodes_remaining == 0 {
++            PROBE[4].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+             return None;
+         }
+         nodes_remaining -= 1;
+@@ -8141,3 +8160,82 @@ mod tests {
+         );
+     }
+ }
++
++#[cfg(test)]
++mod probe159 {
++    use super::*;
++    use std::time::Instant;
++
++    #[test]
++    #[ignore]
++    fn probe() {
++        let world = World::generate_with_crew(DEFAULT_SEED, Dims::FRESH, 5);
++        let terrain = world.ecs.resource::<Terrain>();
++        let blocked = blocked_cells(world.emitters().iter().map(|(_, p, _)| p));
++        let dwarves = world.dwarves();
++        let from = dwarves[0].1;
++        println!("dwarves {:?}", dwarves.iter().map(|d| d.1).collect::<Vec<_>>());
++        // component
++        let mut seen = BTreeSet::from([from]);
++        let mut q = VecDeque::from([from]);
++        while let Some(c) = q.pop_front() {
++            for n in astar_neighbours(terrain, &blocked, c) {
++                if seen.insert(n) { q.push_back(n); }
++            }
++        }
++        println!("component {}", seen.len());
++        let d = world.dims();
++        let mut all = BTreeSet::new();
++        for z in 0..d.z as i32 { for y in 0..d.y as i32 { for x in 0..d.x as i32 {
++            let p = Pos{x,y,z}; if is_walkable(terrain, &blocked, p) { all.insert(p); } }}}
++        let mut left: BTreeSet<Pos> = all.difference(&seen).copied().collect();
++        let mut comps = Vec::new();
++        while let Some(&s0) = left.iter().next() {
++            let mut c = BTreeSet::from([s0]); let mut q = VecDeque::from([s0]); left.remove(&s0);
++            while let Some(c0) = q.pop_front() { for n in astar_neighbours(terrain, &blocked, c0) { if left.remove(&n) { c.insert(n); q.push_back(n); } } }
++            comps.push((c.len(), s0));
++        }
++        comps.sort(); comps.reverse();
++        let mut kinds = BTreeMap::new();
++        let mut digfaces = 0; let mut sample = Vec::new();
++        for &(_, s0) in &comps {
++            let below = terrain.tile(Pos{z: s0.z-1, ..s0});
++            *kinds.entry(format!("{:?}", below)).or_insert(0) += 1;
++        }
++        for p in all.difference(&seen) {
++            for side in side_neighbours(*p) {
++                if matches!(terrain.tile(side), Some(Tile::Solid(Material::Stone)) | Some(Tile::Solid(Material::Soil))) {
++                    let ok = side_neighbours(side).into_iter().filter(|c| is_walkable(terrain,&blocked,*c)).all(|c| !seen.contains(&c));
++                    if ok { digfaces += 1; if sample.len() < 40 { sample.push(side); } }
++                }
++            }
++        }
++        println!("island floors {:?}", kinds);
++        println!("unreachable dig targets (stone/soil, every face off-camp): {} e.g. {:?}", digfaces, sample);
++        println!("walkable {} camp {} others {} largest {:?}", all.len(), seen.len(), comps.len(), &comps[..comps.len().min(12)]);
++        // full flood to an unreachable goal, timed
++        let outside = Pos { x: 0, y: 0, z: 31 };
++        for _ in 0..3 {
++            let t = Instant::now();
++            let mut b = 10_000_000usize;
++            let (p, ex, comp) = astar_with_budget(terrain, &blocked, from, &BTreeSet::from([outside]), &mut b);
++            println!("unreachable flood: found={} exhausted={} expanded={} comp={} {:?}", p.is_some(), ex, 10_000_000 - b, comp.len(), t.elapsed());
++        }
++        // sample reachable cells: expansions per search
++        let cells: Vec<Pos> = seen.iter().copied().collect();
++        let mut over = Vec::new();
++        let mut max = 0;
++        let t = Instant::now();
++        for (i, goal) in cells.iter().enumerate() {
++            if i % 97 != 0 { continue; }
++            let mut b = 10_000_000usize;
++            let (p, _, _) = astar_with_budget(terrain, &blocked, from, &BTreeSet::from([*goal]), &mut b);
++            let used = 10_000_000 - b;
++            max = max.max(used);
++            if used > 50_000 { over.push((used, *goal, p.map(|p| p.len()))); }
++        }
++        over.sort();
++        println!("sampled {} max {} over50k {} in {:?}", cells.len() / 97 + 1, max, over.len(), t.elapsed());
++        for o in over.iter().rev().take(15) { println!("  {:?}", o); }
++    }
++}
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index ba031670..03d03570 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -418,6 +418,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         );
+     }
+     println!("{end}");
++    eprintln!("PROBE {:?}", sim_core::PROBE.iter().map(|a| a.load(std::sync::atomic::Ordering::Relaxed)).collect::<Vec<_>>()); eprintln!("SITES {:?}", sim_core::PROBE_SITES.lock().unwrap());
+     let low = means.iter().copied().fold(f64::INFINITY, f64::min);
+     let high = means.iter().copied().fold(0.0, f64::max);
+     let average = means.iter().sum::<f64>() / runs as f64;

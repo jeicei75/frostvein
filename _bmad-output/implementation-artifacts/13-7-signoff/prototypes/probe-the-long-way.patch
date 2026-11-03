@@ -1,0 +1,104 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 5fa603cf..7365c4c3 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -589,7 +589,7 @@ fn claim_jobs(
+     // Emitters plus every uncarried item (#162): items block claim-time reachability like fires.
+     let blocked = blocked_cells(emitters.iter().chain(items.values()));
+     // One budget per dwarf, indexed like the sorted `dwarves`.
+-    let mut budgets = vec![MAX_ASTAR_NODES; dwarves.len()];
++    let mut budgets = vec![256 * 256 * 32; dwarves.len()];
+     // Walkable components that a COMPLETED failed search has already flooded this call (#132).
+     // Per call only: terrain can change between ticks, so nothing is cached across them.
+     // NOTE: the per-tick bound is (idle dwarves) x `MAX_ASTAR_NODES`. A dwarf whose search runs
+@@ -5425,6 +5425,90 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    #[ignore]
++    fn probe_the_long_way() {
++        let mut world = World::generate_with_crew(super::DEFAULT_SEED, Dims::FRESH, 5);
++        let dims = world.dims();
++        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
++        let spots: [Pos; 5] = std::array::from_fn(|i| world.dwarves()[i].1);
++        let mut tiles = world.tiles().to_vec();
++        let mut targets = Vec::new();
++        for k in 0..25_i32 {
++            let pocket = Pos { x: 20 + 4 * k, y: 20, z: 1 };
++            let target = Pos { x: pocket.x + 1, ..pocket };
++            for c in [pocket, target, Pos { z: 0, ..pocket }, Pos { z: 2, ..pocket }, Pos { x: pocket.x - 1, ..pocket }, Pos { y: 19, ..pocket }, Pos { y: 21, ..pocket }] {
++                assert!(matches!(tiles[idx(c)], Tile::Solid(_)), "{c:?} {:?}", tiles[idx(c)]);
++            }
++            tiles[idx(pocket)] = Tile::Empty;
++            targets.push(target);
++        }
++        let near = Pos { x: spots[0].x + 3, ..spots[0] };
++        println!("near tile {:?} below {:?}", tiles[idx(near)], tiles[idx(Pos { z: near.z - 1, ..near })]);
++        tiles[idx(near)] = Tile::Solid(Material::Stone);
++        world.ecs.resource_mut::<Terrain>().tiles = tiles;
++        stand_miners_at(&mut world, spots);
++        for (id, t) in targets.iter().enumerate() { insert_dig(&mut world, id as u32, *t); }
++        insert_dig(&mut world, 25, near);
++        let mut schedule = bevy_ecs::schedule::Schedule::default();
++        schedule.add_systems(super::claim_jobs);
++        for tick in 100..=200_u64 {
++            world.ecs.resource_mut::<super::Tick>().0 = tick;
++            let t = std::time::Instant::now();
++            schedule.run(&mut world.ecs);
++            let el = t.elapsed();
++            let claimed: Vec<_> = world.claims().iter().filter_map(|(id, j)| j.map(|j| (id.0, j.0))).collect();
++            if tick < 103 || !claimed.is_empty() {
++                let stamps: Vec<u64> = world.jobs().iter().map(|j| j.retry_after).collect();
++                println!("tick {tick} {el:?} claimed {claimed:?} stamps {stamps:?}");
++            }
++            if !claimed.is_empty() { return; }
++        }
++        println!("NEVER CLAIMED by t200");
++    }
++
++    #[test]
++    #[ignore]
++    fn probe_the_long_way_stepped() {
++        let mut world = World::generate_with_crew(super::DEFAULT_SEED, Dims::FRESH, 5);
++        let dims = world.dims();
++        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
++        let spots: [Pos; 5] = std::array::from_fn(|i| world.dwarves()[i].1);
++        let mut tiles = world.tiles().to_vec();
++        let mut targets = Vec::new();
++        for k in 0..25_i32 {
++            let pocket = Pos { x: 20 + 4 * k, y: 20, z: 1 };
++            tiles[idx(pocket)] = Tile::Empty;
++            targets.push(Pos { x: pocket.x + 1, ..pocket });
++        }
++        let near = Pos { x: spots[0].x + 3, ..spots[0] };
++        tiles[idx(near)] = Tile::Solid(Material::Stone);
++        world.ecs.resource_mut::<Terrain>().tiles = tiles;
++        stand_miners_at(&mut world, spots);
++        for t in targets.iter() {
++            world.apply_command(super::SimCommand::Designate { kind: super::DesignationKind::Dig, rect: super::Rect { min: *t, max: *t } });
++        }
++        for _ in 0..100 { world.step(); }
++        println!("t{} unreachable cycling, claims {:?}", world.tick(), world.claims());
++        world.apply_command(super::SimCommand::Designate { kind: super::DesignationKind::Dig, rect: super::Rect { min: near, max: near } });
++        println!("jobs {} first {:?} last {:?}", world.jobs().len(), world.jobs().first().map(|j| j.target), world.jobs().last().map(|j| j.target));
++        let start = std::time::Instant::now();
++        let mut claimed_at = None;
++        for _ in 0..400 {
++            world.step();
++            let tick = world.tick();
++            if claimed_at.is_none() && world.claims().iter().any(|(_, j)| j.is_some()) {
++                claimed_at = Some(tick);
++                println!("claimed at {tick}: {:?}", world.claims());
++            }
++            if world.tiles()[idx(near)] == Tile::Empty {
++                println!("DUG at tick {tick}, {:?}", start.elapsed());
++                return;
++            }
++        }
++        println!("NOT DUG by tick {}, claimed_at {claimed_at:?}, {:?}, stamps {:?}", world.tick(), start.elapsed(), world.jobs().iter().map(|j| j.retry_after).collect::<Vec<_>>());
++    }
++
+     fn insert_dig(world: &mut World, id: u32, target: Pos) {
+         assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+             id: JobId(id),

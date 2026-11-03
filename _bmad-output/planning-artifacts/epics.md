@@ -3122,6 +3122,8 @@ So that work far from the camp is never silently starved by the path-search budg
 **Given** ADR 5 as amended,
 **Then** the fix sizes the budget to the walkable component, tracking it as digging grows it, or improves the heuristic. There is no hierarchy.
 
+**AMENDED 2026-11-02 (Wolf, 13.7 Task 0 Q3 (a)):** the first two ACs rested on 13.2's reading that most 256² exhaustions were reachable goals past the budget. 13.7's creation probes found every one unreachable (claim 238/238, `astar()` 915/915 on two-hundred-on-256), and no reachable search from the camp needs more than 14,604 nodes. AC 1 now reads "a reachable job queued behind more than `RETRY_COOLDOWN` unreachable ones" (#159's title). AC 2 drops the heuristic option, because a search with no goal to find floods its whole component whatever the heuristic. Q1 (a): only `claim_jobs`' budget is resized. Q2 (a): it becomes a fresh budget per search, sized to the world's cell count, and 12.4's per-dwarf budget and sat-out rule go.
+
 **Given** an unreachable job,
 **Then** it is still answered without blowing the tick, and it stays queued and retried (M1 FR8).
 
