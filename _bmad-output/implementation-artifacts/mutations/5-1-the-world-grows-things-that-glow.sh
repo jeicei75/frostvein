@@ -67,9 +67,10 @@ PY
 mutation "dwarf wander homes return to random spawn cells" sim-core idle_dwarves_stay_standable_and_inside_the_camp <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    home: camp,\n'
+# Re-pointed 13.8: the bundle moved into `spawn_dwarf`; the embark spawn passes `camp` as its home.
+old = 'spawn_dwarf(&mut self.ecs, pos, camp, identity, profession);'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    home: pos,\n'))
+p.write_text(s.replace(old, 'spawn_dwarf(&mut self.ecs, pos, pos, identity, profession);'))
 PY
 
 mutation "lantern saves reach the live world" simd loading_rejects_static_lantern_emitters_before_the_wire_bridge <<'PY'

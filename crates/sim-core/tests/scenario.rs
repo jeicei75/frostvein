@@ -1639,6 +1639,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             path: Vec::new(),
             clearing: None,
             squeeze: None,
+            arriving: None,
         },
         SavedDwarf {
             id: 1,
@@ -1658,6 +1659,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             path: Vec::new(),
             clearing: None,
             squeeze: None,
+            arriving: None,
         },
     ];
     save.items = vec![(2, first, ItemKind::Stone), (3, second, ItemKind::Stone)];
@@ -4610,6 +4612,7 @@ fn a_miner_caged_by_one_stone_carries_it_out_and_cuts() {
         path: Vec::new(),
         clearing: None,
         squeeze: None,
+        arriving: None,
     }];
     save.items = vec![(1, exit, ItemKind::Stone)];
     save.next_id = 2;

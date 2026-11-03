@@ -38,12 +38,14 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
 old = '''            zones.into_iter().collect(),
             goals_completed,
+            arrivals,
         );
         for dwarf in dwarves {
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
+            arrivals,
         );
         world.schedule = Schedule::default();
         world.schedule.add_systems(advance_tick);
@@ -58,11 +60,13 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
 old = '''            emitters,
             goals_completed,
+            arrivals,
         } = save;
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''            emitters,
             goals_completed,
+            arrivals,
         } = save;
         let tiles = World::generate(seed, dims).to_save().tiles;
 '''))
@@ -83,12 +87,14 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # destructure gained items and emitters, so this anchor rotted. The seam is unchanged.
 old = '''            zones.into_iter().collect(),
             goals_completed,
+            arrivals,
         );
         for dwarf in dwarves {
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
+            arrivals,
         );
         {
             let mut terrain = world.ecs.resource_mut::<Terrain>();
