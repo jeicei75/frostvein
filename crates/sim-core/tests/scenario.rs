@@ -1,8 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use sim_core::{
-    DesignationKind, Dims, DwarfColour, DwarfName, Id, Identity, ItemKind, Job, JobId, JobKind,
-    JobState, Material, Pos, Profession, Rect, Refusal, SavedDwarf, SimCommand, Tile, World,
+    DesignationKind, Dims, DwarfColour, DwarfName, Epithet, Id, Identity, ItemKind, Job, JobId,
+    JobKind, JobState, Material, Pos, Profession, Rect, Refusal, SavedDwarf, SimCommand, Tile,
+    World,
 };
 
 fn rect(min: Pos, max: Pos) -> Rect {
@@ -1631,6 +1632,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             carrying: Some(2),
             identity: Identity {
                 name: DwarfName::Durin,
+                epithet: Epithet::Ironhand,
                 colour: DwarfColour::Red,
             },
             profession: Profession::Hauler,
@@ -1649,6 +1651,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             carrying: Some(3),
             identity: Identity {
                 name: DwarfName::Nori,
+                epithet: Epithet::Ironhand,
                 colour: DwarfColour::Blue,
             },
             profession: Profession::Hauler,
@@ -4600,6 +4603,7 @@ fn a_miner_caged_by_one_stone_carries_it_out_and_cuts() {
         carrying: None,
         identity: Identity {
             name: DwarfName::Durin,
+            epithet: Epithet::Ironhand,
             colour: DwarfColour::Red,
         },
         profession: Profession::Miner,

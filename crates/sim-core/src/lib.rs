@@ -20,7 +20,10 @@ use bevy_ecs::{
     system::{Commands, Query, Res, ResMut},
     world::World as EcsWorld,
 };
-use rand::{RngExt, SeedableRng, seq::SliceRandom};
+use rand::{
+    RngExt, SeedableRng,
+    seq::{IndexedRandom, SliceRandom},
+};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
@@ -245,6 +248,47 @@ impl DwarfName {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Epithet {
+    Ironhand,
+    Stonefoot,
+    Frostbeard,
+    Coldforge,
+    Deepdelver,
+    Greyhelm,
+    Ashbrow,
+    Flintback,
+    Rimecloak,
+    Hammerfall,
+    Copperbeard,
+    Icevein,
+    Stoutheart,
+    Blackanvil,
+    Emberkeep,
+    Snowmantle,
+}
+
+impl Epithet {
+    pub const ALL: [Self; 16] = [
+        Self::Ironhand,
+        Self::Stonefoot,
+        Self::Frostbeard,
+        Self::Coldforge,
+        Self::Deepdelver,
+        Self::Greyhelm,
+        Self::Ashbrow,
+        Self::Flintback,
+        Self::Rimecloak,
+        Self::Hammerfall,
+        Self::Copperbeard,
+        Self::Icevein,
+        Self::Stoutheart,
+        Self::Blackanvil,
+        Self::Emberkeep,
+        Self::Snowmantle,
+    ];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum DwarfColour {
     Red,
     Gold,
@@ -260,6 +304,7 @@ impl DwarfColour {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Identity {
     pub name: DwarfName,
+    pub epithet: Epithet,
     pub colour: DwarfColour,
 }
 
@@ -2917,13 +2962,28 @@ impl World {
         let mut colours = DwarfColour::ALL;
         names.shuffle(&mut identity_rng);
         colours.shuffle(&mut identity_rng);
-        // NOTE: past 16 names and 5 colours they repeat; 13.8 makes names unique.
+        // NOTE: past 16 names a base name repeats, and past 5 colours a colour does; colours stay
+        // free. The epithet makes the FULL name unique: each dwarf draws uniformly from the
+        // epithets not yet used with its base name, after the shuffles so crew-5 draws never move.
+        // 16 x 16 = 256 full names, so a crew past that would run out (the cap is 200).
         let names: Vec<DwarfName> = names.into_iter().cycle().take(crew).collect();
         let colours: Vec<DwarfColour> = colours.into_iter().cycle().take(crew).collect();
+        let mut used: BTreeSet<(DwarfName, Epithet)> = BTreeSet::new();
         let identities: Vec<Identity> = (0..crew)
-            .map(|i| Identity {
-                name: names[i],
-                colour: colours[i],
+            .map(|i| {
+                let free: Vec<Epithet> = Epithet::ALL
+                    .into_iter()
+                    .filter(|&epithet| !used.contains(&(names[i], epithet)))
+                    .collect();
+                let epithet = *free
+                    .choose(&mut identity_rng)
+                    .expect("a crew past 256 runs out of full names");
+                used.insert((names[i], epithet));
+                Identity {
+                    name: names[i],
+                    epithet,
+                    colour: colours[i],
+                }
             })
             .collect();
         // Professions have their own stream too, so they never shift a spawn or an identity.
@@ -2939,6 +2999,17 @@ impl World {
         .cycle()
         .take(crew)
         .collect();
+        // NOTE: a crew of 3 or 4 takes the first of [M, H, W, M] so every trade is held (FR56); a
+        // crew below 3 cannot hold all three and keeps the 5-cycle (simd refuses it).
+        if (3..5).contains(&crew) {
+            professions = [
+                Profession::Miner,
+                Profession::Hauler,
+                Profession::Woodcutter,
+                Profession::Miner,
+            ][..crew]
+                .to_vec();
+        }
         professions.shuffle(&mut profession_rng);
         world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions);
         world.spawn_emitters(camp_origin);

@@ -95,8 +95,8 @@ fn check_dims(label: &str, dims: sim_core::Dims) -> anyhow::Result<()> {
 }
 
 fn check_crew(label: &str, crew: usize) -> anyhow::Result<()> {
-    if crew == 0 {
-        bail!("{label} must be at least 1");
+    if crew < 3 {
+        bail!("{label} must be at least 3: the first group holds one of each trade");
     }
     Ok(())
 }
@@ -754,11 +754,19 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
         let mut seen_ids = BTreeSet::new();
         let mut claimed_job_ids = BTreeSet::new();
         let mut carried_items = BTreeSet::new();
-        // NOTE: names and colours may repeat (13.6: past 16 names and 5 colours, #226). 13.8 makes
-        // names unique and restores a name check here.
+        let mut seen_names = BTreeSet::new();
+        // NOTE: colours may repeat (13.6, #226), and so may a base name past 16 dwarves; the FULL
+        // name (name + epithet) must be unique (13.8).
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
                 bail!("save reuses dwarf id {}", dwarf.id);
+            }
+            if !seen_names.insert((dwarf.identity.name, dwarf.identity.epithet)) {
+                bail!(
+                    "save reuses dwarf name {:?} {:?}",
+                    dwarf.identity.name,
+                    dwarf.identity.epithet
+                );
             }
             if let Some(job_id) = dwarf.current_job {
                 let job_id = sim_core::JobId(job_id);
@@ -1165,6 +1173,7 @@ mod tests {
         let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
         let fresh = parse(&[]).unwrap();
         assert_eq!((fresh.dims, fresh.crew), (sim_core::Dims::FRESH, 5));
+        assert_eq!(parse(&["--crew", "3"]).unwrap().crew, 3);
         let custom = parse(&["--dims", "160,128,32", "--crew", "7"]).unwrap();
         assert_eq!(
             (custom.dims, custom.crew),
@@ -1185,6 +1194,7 @@ mod tests {
             &["--dims", "a,b,c"],
             &["--dims"],
             &["--crew", "0"],
+            &["--crew", "2"],
             &["--crew", "many"],
             &["--crew"],
         ] {

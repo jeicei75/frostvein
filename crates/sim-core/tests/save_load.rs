@@ -1,7 +1,7 @@
 use sim_core::{
-    DIG_WORK_TICKS, DesignationKind, Dims, DwarfColour, DwarfName, Identity, ItemKind, Job, JobId,
-    JobKind, JobState, LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile,
-    World,
+    DIG_WORK_TICKS, DesignationKind, Dims, DwarfColour, DwarfName, Epithet, Identity, ItemKind,
+    Job, JobId, JobKind, JobState, LightKind, Material, Pos, Profession, Rect, SavedDwarf,
+    SimCommand, Tile, World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -553,6 +553,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             carrying: None,
             identity: Identity {
                 name: DwarfName::Durin,
+                epithet: Epithet::Ironhand,
                 colour: DwarfColour::Red,
             },
             profession: Profession::Miner,
@@ -571,6 +572,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             carrying: None,
             identity: Identity {
                 name: DwarfName::Nori,
+                epithet: Epithet::Ironhand,
                 colour: DwarfColour::Blue,
             },
             profession: Profession::Miner,
@@ -680,7 +682,11 @@ fn save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end() {
         current_job: None,
         work_progress: 0,
         carrying: None,
-        identity: Identity { name, colour },
+        identity: Identity {
+            name,
+            epithet: Epithet::Ironhand,
+            colour,
+        },
         profession: Profession::Miner,
         path: Vec::new(),
         clearing: None,
@@ -962,7 +968,11 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
         current_job: None,
         work_progress: 0,
         carrying: None,
-        identity: Identity { name, colour },
+        identity: Identity {
+            name,
+            epithet: Epithet::Ironhand,
+            colour,
+        },
         profession: Profession::Miner,
         path: Vec::new(),
         clearing: None,

@@ -360,6 +360,11 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "start crew",
         ),
         (
+            "crew-two",
+            variant("crew-two", |json| json["start"]["crew"] = 2.into()),
+            "the first group holds one of each trade",
+        ),
+        (
             "dims-out-of-range",
             variant("dims-out-of-range", |json| {
                 json["start"]["dims"] = serde_json::json!([64, 64, 32])
@@ -477,6 +482,45 @@ fn a_save_whose_crew_repeats_names_and_colours_loads_and_steps() {
         world.step();
     }
     assert_eq!(run_states(&text), vec![fnv(&world)], "{text}");
+}
+
+/// 13.8 AC 5: a save whose crew repeats a FULL name (name + epithet) is refused by the daemon's
+/// validator, naming the cause. The control is the same save with the full names left unique.
+#[test]
+fn a_save_that_repeats_a_full_name_is_refused_naming_the_cause() {
+    let saved =
+        sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 17)
+            .to_save();
+    let mut repeated = saved.clone();
+    repeated.dwarves[1].identity.name = repeated.dwarves[0].identity.name;
+    repeated.dwarves[1].identity.epithet = repeated.dwarves[0].identity.epithet;
+    let run = |tag: &str, state: &sim_core::SaveState| {
+        let path = variant(tag, |json| {
+            json["commands"] = serde_json::json!([]);
+            json["start"] = serde_json::json!({"save": "full-name.save"});
+        });
+        fs::write(
+            path.with_file_name("full-name.save"),
+            serde_json::to_vec(state).unwrap(),
+        )
+        .unwrap();
+        let output = bench(&path, 1);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        output
+    };
+    let control = run("full-name-control", &saved);
+    assert!(control.status.success(), "control failed: {control:?}");
+    let refused = run("full-name-repeated", &repeated);
+    assert!(!refused.status.success(), "exited 0: {refused:?}");
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    let want = format!(
+        "save reuses dwarf name {:?} {:?}",
+        repeated.dwarves[0].identity.name, repeated.dwarves[0].identity.epithet
+    );
+    assert!(
+        stderr.contains(&want),
+        "stderr must name {want:?}: {stderr}"
+    );
 }
 
 fn lines(reader: impl Read + Send + 'static) -> Receiver<String> {

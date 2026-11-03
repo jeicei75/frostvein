@@ -1059,6 +1059,12 @@ fn the_live_load_takes_a_save_whose_crew_repeats_names_and_colours() {
         state.dwarves.iter().map(|d| d.identity.colour).collect();
     assert!(names.len() < 17, "the fixture repeats a name");
     assert!(colours.len() < 17, "the fixture repeats a colour");
+    let full_names: std::collections::BTreeSet<_> = state
+        .dwarves
+        .iter()
+        .map(|d| (d.identity.name, d.identity.epithet))
+        .collect();
+    assert_eq!(full_names.len(), 17, "the fixture's full names are unique");
     fs::write(
         daemon.save_path(),
         serde_json::to_vec(&state).expect("encode repeated-identity save fixture"),
@@ -1077,6 +1083,38 @@ fn the_live_load_takes_a_save_whose_crew_repeats_names_and_colours() {
         17,
         "every saved dwarf loads"
     );
+}
+
+/// 13.8 AC 5: the live Load refuses a save whose crew repeats a full name, naming the cause, and
+/// the daemon keeps ticking.
+#[test]
+fn the_live_load_refuses_a_save_that_repeats_a_full_name() {
+    let daemon = Daemon::spawn();
+    let mut state = sim_core::World::generate_with_crew(42, sim_core::Dims::DEFAULT, 17).to_save();
+    state.dwarves[1].identity.name = state.dwarves[0].identity.name;
+    state.dwarves[1].identity.epithet = state.dwarves[0].identity.epithet;
+    let (name, epithet) = (
+        state.dwarves[0].identity.name,
+        state.dwarves[0].identity.epithet,
+    );
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode repeated-full-name save fixture"),
+    )
+    .expect("write repeated-full-name save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    let want = format!("save reuses dwarf name {name:?} {epithet:?}");
+    assert!(log.contains(&want), "unexpected full-name log: {log}");
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
 }
 
 #[test]
