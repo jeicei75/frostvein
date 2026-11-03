@@ -122,7 +122,11 @@ PY
 
 # Row 6 needs both sites: with only the claim sabotaged, the same tick's re-plan fails and
 # `retry_claim` releases the wrong claim before `claims()` can see it (SURVIVED, 2026-11-02).
-mutation "6 an unreachable dig is claimed with an empty path, and kept" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
+# Rewritten 2026-11-03 (13.7 review run 2, REWORK): when EVERY miner kept a wrong claim the late
+# dig was never dug, so the older `must be dug within 300 ticks` assert killed the row and the id
+# assert stayed unpinned. Now only miner Id(0) keeps one. Miners 1-4 still claim and dig the late
+# dig, and `claims()` lists Id(0) first, so only `assert_eq!(job, late)` can see it.
+mutation "6 miner 0 keeps an unreachable dig with an empty path while the others dig on" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''                    (None, false, explored) => {
@@ -131,7 +135,11 @@ old = '''                    (None, false, explored) => {
                     }
                     (_, true, _) => unreachable!('''
 assert s.count(old) == 1
-s = s.replace(old, '''                    (None, false, _) => Vec::new(),
+s = s.replace(old, '''                    (None, false, _) if id.0 == 0 => Vec::new(),
+                    (None, false, explored) => {
+                        components.push(explored);
+                        continue;
+                    }
                     (_, true, _) => unreachable!(''')
 old_release = '''                let Some(computed) = computed else {
                     retry_claim(ecs, entity, job.id);
