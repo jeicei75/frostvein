@@ -52,9 +52,9 @@ PY
 mutation "5 the scenario loader ignores dims (AC 1)" simd a_seed_start_with_dims_and_crew_builds_that_world <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/scenario.rs'); s = p.read_text()
-old = 'crate::generate_world(*seed, *dims, *crew)'
+old = 'crate::generate_world(*seed, *dims, *crew, *arrivals)'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'crate::generate_world(*seed, sim_core::Dims::DEFAULT, *crew)'))
+p.write_text(s.replace(old, 'crate::generate_world(*seed, sim_core::Dims::DEFAULT, *crew, *arrivals)'))
 PY
 
 mutation "6 an absent dims means 256 (AC 1, AC 5, Q2 a)" simd bench_replays_the_scenario_identically_and_reaches_the_oracle_state <<'PY'

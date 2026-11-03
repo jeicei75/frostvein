@@ -3,7 +3,7 @@
 mod save;
 mod worldgen;
 
-pub use save::{SaveState, SavedClearing, SavedDwarf, SavedSqueeze};
+pub use save::{SaveState, SavedArriving, SavedClearing, SavedDwarf, SavedSqueeze};
 
 use std::{
     cmp::Reverse,
@@ -50,6 +50,11 @@ const ARRIVAL_PROFESSIONS: [(Profession, u32); 3] = [
     (Profession::Woodcutter, 1),
 ];
 const WANDER_REST_TICKS: u32 = 10;
+/// 13.8: ticks an arrival waits on an occupied next tile before its walk ends where it stands.
+/// #227's crowd jams the camp, and a follower otherwise waits forever behind dwarves that are
+/// not leaving; on 256^2 that queued 68 arrivals for good. Saved with the dwarf (`waited`), so a
+/// load does not hand out a fresh patience.
+const ARRIVAL_PATIENCE_TICKS: u32 = 100;
 /// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
 ///
 /// Without it a pathing dwarf took one cell per tick. A cell is 1.6 m and a tick is 100 ms, so
@@ -751,11 +756,13 @@ struct Wander {
 }
 
 /// 13.8: a dwarf walking in from the valley edge to `to`, a free cell near the camp. `wander`
-/// plans (and, after a `clear_paths`, re-plans) the walk; the dwarf ends it within
-/// `WANDER_RADIUS` of `to`, or when a job takes it (`release_claim`).
+/// plans (and, after a `clear_paths`, re-plans) the walk. It ends within `WANDER_RADIUS` of `to`,
+/// when a job takes the dwarf (`release_claim`), when no route exists, or where the dwarf stands
+/// once it has waited `ARRIVAL_PATIENCE_TICKS` on an occupied tile (`waited`, reset by a step).
 #[derive(Component)]
 struct Arriving {
     to: Pos,
+    waited: u32,
 }
 
 /// 13.8: the world setting that lets groups arrive. Off for every `generate_with_crew` world and
@@ -2771,7 +2778,7 @@ fn wander(
             &CurrentJob,
             Option<&mut Path>,
             &Carrying,
-            Option<&Arriving>,
+            Option<&mut Arriving>,
         ),
         (Without<Emitter>, Without<Item>),
     >,
@@ -2796,7 +2803,7 @@ fn wander(
         ),
     );
 
-    for (entity, _, mut pos, mut wander, mut state, current_job, path, _, arriving) in dwarves {
+    for (entity, _, mut pos, mut wander, mut state, current_job, path, _, mut arriving) in dwarves {
         if current_job.0.is_some() {
             continue;
         }
@@ -2821,7 +2828,20 @@ fn wander(
                     continue;
                 }
                 if occupied.contains(&next) {
+                    // 13.8: a blocked follower sets no cooldown, so it re-checks every tick and
+                    // one wait is one tick. Out of patience, the arrival's walk ends here.
+                    if let Some(arriving) = arriving.as_deref_mut() {
+                        arriving.waited += 1;
+                        if arriving.waited >= ARRIVAL_PATIENCE_TICKS {
+                            wander.home = here;
+                            commands.entity(entity).remove::<Path>();
+                            commands.entity(entity).remove::<Arriving>();
+                        }
+                    }
                     continue;
+                }
+                if let Some(arriving) = arriving.as_deref_mut() {
+                    arriving.waited = 0;
                 }
                 path.0.remove(0);
                 occupied.remove(&here);
@@ -2836,7 +2856,10 @@ fn wander(
                 // 13.8: this branch also walks exit paths (`resolve_blocked_step`, `step_aside`),
                 // which end anywhere. An arrival's walk is over only if it now stands near `to`;
                 // otherwise it keeps `Arriving` and re-plans.
-                if arriving.is_some_and(|arriving| near_arrival_target(arriving.to, *pos)) {
+                if arriving
+                    .as_deref()
+                    .is_some_and(|arriving| near_arrival_target(arriving.to, *pos))
+                {
                     commands.entity(entity).remove::<Arriving>();
                 }
             }
@@ -2845,7 +2868,7 @@ fn wander(
         // 13.8: an idle arrival with no path plans its walk-in (a `clear_paths` wipes every
         // `Path`, so this is also the re-plan). It draws no wander number. The budget is the
         // world's: an edge-to-camp search can pass `MAX_ASTAR_NODES` on a large map (13.7).
-        if let Some(arriving) = arriving {
+        if let Some(arriving) = arriving.as_deref() {
             if near_arrival_target(arriving.to, here) {
                 wander.home = here;
                 commands.entity(entity).remove::<Arriving>();
@@ -3155,7 +3178,10 @@ impl World {
                         since: squeeze.since,
                         last: squeeze.last,
                     }),
-                    arriving: entity.get::<Arriving>().map(|arriving| arriving.to),
+                    arriving: entity.get::<Arriving>().map(|arriving| SavedArriving {
+                        to: arriving.to,
+                        waited: arriving.waited,
+                    }),
                 })
             })
             .collect();
@@ -3282,8 +3308,11 @@ impl World {
                     last: squeeze.last,
                 });
             }
-            if let Some(to) = dwarf.arriving {
-                world.ecs.entity_mut(entity).insert(Arriving { to });
+            if let Some(saved) = dwarf.arriving {
+                world.ecs.entity_mut(entity).insert(Arriving {
+                    to: saved.to,
+                    waited: saved.waited,
+                });
             }
         }
         for (id, pos, kind) in items {
@@ -4003,7 +4032,7 @@ fn arrive(ecs: &mut EcsWorld) {
         };
         // Home is the entry cell; `wander` plans the walk-in before it would ever wander from it.
         let dwarf = spawn_dwarf(ecs, pos, pos, identity, profession);
-        ecs.entity_mut(dwarf).insert(Arriving { to });
+        ecs.entity_mut(dwarf).insert(Arriving { to, waited: 0 });
     }
 }
 
@@ -8740,6 +8769,105 @@ mod tests {
         }
     }
 
+    fn arrival_waited(world: &mut World, id: super::Id) -> Option<u32> {
+        world
+            .ecs
+            .query::<(&super::Id, &super::Arriving)>()
+            .iter(&world.ecs)
+            .find(|(candidate, _)| **candidate == id)
+            .map(|(_, arriving)| arriving.waited)
+    }
+
+    /// Dwarf 1 is an arrival on a one-tile path whose next tile is held by dwarf 0, who never
+    /// leaves (a `Wander.cooldown` no run reaches the end of). Returns the world and the arrival's
+    /// start tile.
+    fn arrival_behind_a_fixed_blocker() -> (World, Pos) {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let blocker_at = world.dwarves()[0].1;
+        let occupied: BTreeSet<Pos> = world.dwarves().iter().map(|d| d.1).collect();
+        let start = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .into_iter()
+            .map(|(dx, dy)| Pos {
+                x: blocker_at.x + dx,
+                y: blocker_at.y + dy,
+                z: blocker_at.z,
+            })
+            .find(|p| {
+                world.ecs.resource::<super::Terrain>().is_standable(*p) && !occupied.contains(p)
+            })
+            .expect("a free standable tile beside dwarf 0");
+        for (id, at) in [(0, blocker_at), (1, start)] {
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(id)))
+                .expect("dwarf exists")
+                .id();
+            let mut entity = world.ecs.entity_mut(entity);
+            entity.insert(at);
+            if id == 0 {
+                entity.get_mut::<super::Wander>().unwrap().cooldown = u32::MAX;
+            } else {
+                let mut wander = entity.get_mut::<super::Wander>().unwrap();
+                wander.home = at;
+                wander.cooldown = 0;
+                entity.insert((
+                    super::Path(vec![blocker_at]),
+                    super::Arriving {
+                        to: Pos {
+                            x: 0,
+                            y: 0,
+                            z: at.z,
+                        },
+                        waited: 0,
+                    },
+                ));
+            }
+        }
+        (world, start)
+    }
+
+    // 13.8 (Wolf's ruling on the stalled they-keep-coming): an arrival that has waited
+    // `ARRIVAL_PATIENCE_TICKS` on an occupied tile ends its walk where it stands.
+    #[test]
+    fn an_arrival_gives_up_after_waiting_the_patience_limit_behind_a_blocker() {
+        let (mut world, start) = arrival_behind_a_fixed_blocker();
+        let id = super::Id(1);
+        for _ in 0..super::ARRIVAL_PATIENCE_TICKS - 1 {
+            world.step();
+        }
+        assert_eq!(arrival_waited(&mut world, id), Some(99), "still waiting");
+        assert_eq!(world.dwarves()[1].1, start);
+        world.step();
+        assert_eq!(arrival_waited(&mut world, id), None, "the walk ended");
+        assert_eq!(world.dwarves()[1].1, start);
+        assert_eq!(dwarf_home(&mut world, id), start);
+    }
+
+    // 13.8: `waited` is saved. A load that reset it would give the arrival a fresh patience.
+    #[test]
+    fn a_save_round_trip_keeps_the_arrival_wait_count() {
+        let (mut world, _) = arrival_behind_a_fixed_blocker();
+        for _ in 0..40 {
+            world.step();
+        }
+        let id = super::Id(1);
+        assert_eq!(arrival_waited(&mut world, id), Some(40));
+        let json = serde_json::to_string(&world.to_save()).unwrap();
+        let mut loaded = World::from_save(serde_json::from_str(&json).unwrap());
+        assert_eq!(arrival_waited(&mut loaded, id), Some(40));
+        for _ in 0..70 {
+            world.step();
+            loaded.step();
+        }
+        assert_eq!(arrival_waited(&mut world, id), None);
+        assert_eq!(arrival_waited(&mut loaded, id), None);
+        assert_eq!(
+            serde_json::to_string(&world.to_save()).unwrap(),
+            serde_json::to_string(&loaded.to_save()).unwrap()
+        );
+    }
+
     /// The first group appears; further groups are switched off so only its walk is watched.
     /// Returns each arrival's destination and the tile it stood on when its `Arriving` ended (it
     /// wanders about its new home afterwards, so the end of the run is not where the walk ended).
@@ -8904,7 +9032,10 @@ mod tests {
             };
             let entity =
                 super::spawn_dwarf(&mut world.ecs, at, camp, identity, super::Profession::Miner);
-            world.ecs.entity_mut(entity).insert(super::Arriving { to });
+            world
+                .ecs
+                .entity_mut(entity)
+                .insert(super::Arriving { to, waited: 0 });
             let id = *world.ecs.get::<super::Id>(entity).unwrap();
             spawned.push((id, at));
         }
