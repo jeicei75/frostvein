@@ -4949,6 +4949,7 @@ fn a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it() {
         Entity {
             identity: Some(Identity {
                 name: DwarfName::Durin,
+                epithet: protocol::Epithet::Ironhand,
                 colour,
             }),
             ..dwarf(id, [x, 0, 0])

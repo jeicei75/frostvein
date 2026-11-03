@@ -50,6 +50,28 @@ pub fn dwarf_name_text(name: protocol::DwarfName) -> &'static str {
     }
 }
 
+/// The one spelling of a dwarf's epithet, shared by both clients.
+pub fn epithet_text(epithet: protocol::Epithet) -> &'static str {
+    match epithet {
+        protocol::Epithet::Ironhand => "Ironhand",
+        protocol::Epithet::Stonefoot => "Stonefoot",
+        protocol::Epithet::Frostbeard => "Frostbeard",
+        protocol::Epithet::Coldforge => "Coldforge",
+        protocol::Epithet::Deepdelver => "Deepdelver",
+        protocol::Epithet::Greyhelm => "Greyhelm",
+        protocol::Epithet::Ashbrow => "Ashbrow",
+        protocol::Epithet::Flintback => "Flintback",
+        protocol::Epithet::Rimecloak => "Rimecloak",
+        protocol::Epithet::Hammerfall => "Hammerfall",
+        protocol::Epithet::Copperbeard => "Copperbeard",
+        protocol::Epithet::Icevein => "Icevein",
+        protocol::Epithet::Stoutheart => "Stoutheart",
+        protocol::Epithet::Blackanvil => "Blackanvil",
+        protocol::Epithet::Emberkeep => "Emberkeep",
+        protocol::Epithet::Snowmantle => "Snowmantle",
+    }
+}
+
 /// The one spelling of a dwarf's trade, shared by both clients.
 pub fn profession_text(profession: protocol::Profession) -> &'static str {
     match profession {
@@ -505,6 +527,31 @@ mod tests {
             (Frosti, "Frosti"),
         ] {
             assert_eq!(dwarf_name_text(name), text);
+        }
+    }
+
+    #[test]
+    fn every_epithet_has_its_one_spelling() {
+        use protocol::Epithet::*;
+        for (epithet, text) in [
+            (Ironhand, "Ironhand"),
+            (Stonefoot, "Stonefoot"),
+            (Frostbeard, "Frostbeard"),
+            (Coldforge, "Coldforge"),
+            (Deepdelver, "Deepdelver"),
+            (Greyhelm, "Greyhelm"),
+            (Ashbrow, "Ashbrow"),
+            (Flintback, "Flintback"),
+            (Rimecloak, "Rimecloak"),
+            (Hammerfall, "Hammerfall"),
+            (Copperbeard, "Copperbeard"),
+            (Icevein, "Icevein"),
+            (Stoutheart, "Stoutheart"),
+            (Blackanvil, "Blackanvil"),
+            (Emberkeep, "Emberkeep"),
+            (Snowmantle, "Snowmantle"),
+        ] {
+            assert_eq!(epithet_text(epithet), text);
         }
     }
 
