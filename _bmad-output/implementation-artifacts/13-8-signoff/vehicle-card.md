@@ -57,6 +57,15 @@ Answers in your own words, please. They go into the story as you say them.
   `ARRIVAL_PERIOD = 1_000`, 5–20 per group, `CREW_CAP = 200`.
 - **Unprompted, Wolf: "still performance issue .. all was ok as long as I cut down a few trees and
   digged a little bit ..when in the end I designated bigger dig are again stuttering started".** No
-  measurement was taken at the sitting. The 13.8 bench shows no regression on two-hundred-on-256
-  (mean -0.2%, Debug Log). The stutter is likely #225's tick overrun, now triggered by a large dig
-  designation at full crew rather than by the scenario's late run. That attribution is unverified.
+  measurement was taken at the sitting.
+- **Then, Wolf: "it's not just digging issue but eventually after a while it starts to slow down and
+  stutter and slow down (also fps) and it happens even without designations".** So the slowdown grows
+  with run time, and the gui frame rate falls too, with or without a dig. In this run the crew also
+  grows from 5 to 200 over the same span, so time and crew size are confounded. Candidates are #225
+  (tick overruns its period at 200) and #224 (gui ~40 fps at 200), but a fall in fps over time was
+  flat at 13.6's sitting (5-minute buckets p50 23.8–29.7 ms). The 13.8 bench shows no tick regression
+  on two-hundred-on-256 (mean -0.2%, Debug Log). Unmeasured; the cause is not established.
+- **Then, Wolf: "zooming to 200 dwarf nest will take fps to knees 6pfs or something".** Close framing on
+  the camp crowd at 200, unmeasured (no perf log). #224 measured working zoom at ~40 fps on
+  two-hundred-on-256, where the crowd is spread; this reading is the packed camp. Wolf: "performance issue
+  we need to solve". Q3's crew list is #230.

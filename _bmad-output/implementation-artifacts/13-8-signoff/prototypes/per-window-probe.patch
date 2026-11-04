@@ -1,0 +1,43 @@
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 0d1fabe5..5c9c5f76 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -355,6 +355,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+         let start_tiles = world.tiles().to_vec();
+         let (mut dug, mut cut) = (0, 0);
++        let mut win: Vec<(f64, f64, usize)> = Vec::new();
+         for _ in 0..scenario.ticks {
+             for command in schedule.due(world.tick()) {
+                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
+@@ -393,11 +394,28 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+                     }
+                 }
+             }
+-            serde_json::to_string(&crate::bridge::delta(
++            let enc_start = Instant::now();
++            let bytes = serde_json::to_string(&crate::bridge::delta(
+                 &mut world,
+                 scenario.speed,
+                 Vec::new(),
+-            ))?;
++            ))?
++            .len();
++            let enc = enc_start.elapsed().as_secs_f64() * 1000.0;
++            win.push((*ms.last().unwrap(), enc, bytes));
++            if win.len() == 500 {
++                let n = win.len() as f64;
++                let step_mean = win.iter().map(|w| w.0).sum::<f64>() / n;
++                let step_max = win.iter().map(|w| w.0).fold(0.0, f64::max);
++                let enc_mean = win.iter().map(|w| w.1).sum::<f64>() / n;
++                let kb_mean = win.iter().map(|w| w.2 as f64).sum::<f64>() / n / 1024.0;
++                eprintln!(
++                    "PROBE tick={} crew={} arriving={} marks={} items={} step_mean={step_mean:.2} step_max={step_max:.1} enc_mean={enc_mean:.2} kb_mean={kb_mean:.1}",
++                    world.tick(), world.dwarves().len(), world.arriving_count(),
++                    world.designations().len(), world.items().len()
++                );
++                win.clear();
++            }
+         }
+         let Stats {
+             mean,
