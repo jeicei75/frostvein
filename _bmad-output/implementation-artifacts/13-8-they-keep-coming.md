@@ -364,6 +364,24 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
 
   All 11 read `differ`, as AC 10 expects (the new saved fields). Four rows are BEYOND FLOOR at +2.5% to +4.9%, each with its own layout control at +2.1% to +3.0%. Every one is under |control| × 2, which the script calls weak evidence between builds (memory `cross-build-layout-noise`). With arrivals off, these worlds pay only the `arrive` early return and the extra `Option<&mut Arriving>` fetch in `wander`. No profile was taken (no premature optimisation). **two-hundred-on-256: mean -0.2%, against floors 0.9% (base) / 0.5% (head) and control -2.0%.**
 - **Reach, through the strip build (`13-8-signoff/prototypes/strip-new-fields.patch`: `#[serde(skip_serializing)]` on `Identity.epithet`, `SavedDwarf.arriving` and `SaveState.arrivals`; release builds of the strip and of `main` in scratch worktrees, `simd --bench F --runs 1`):** `state=` is **identical on all 11 files**: big-pile 81074e5c52948a13, deep-pit 8cfa0773f7a78f43, dig-loop 0337abf343bac62f, full-pile-crowd eb1112576885e4ad, plan-compact-piles ff7ac70d920a827e, plan-far-piles f07b194f92a5ec93, plan-spread-piles de631ebd8382e8e4, plan b124519bce5e6bab, seat-slow c39ed45c4ecc5ff7, stuck-tunnel a5d257cac0182a1f, two-hundred-on-256 6ba8edcc3d6c7b9c. No row is a behaviour change. `main`'s `simd` read the three patched saves (dig-loop, seat-slow and stuck-tunnel start from them), which confirms it ignores the new keys (Task 4). two-hundred-on-256's end line is `tick=2500 marks=1476 items=600 zones=1800 goals=22/0/0 done=dig:234,cut:90 stored=27 cells=2146` on `main`, on the strip build and on HEAD; HEAD and the strip build add `crew=200 arriving=0`, so arrivals are inert at the cap.
+- **Full gate, `RUST_TEST_THREADS=1 scripts/gate.sh` on `71a7390c` (2026-11-03):**
+  ```
+  frostvein gate
+    cargo fmt --check           ok  0s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  1223s
+    cargo test (release real-work scenario)ok  98s
+    cargo test (pixel guards)   ok  3092s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  19s
+    mutation tables still apply ok  11s
+  reaped 18 stale build artifacts from target (0.3 GB)
+  GATE GREEN  4452s
+  ```
+- **The seat, 2026-11-04 (Wolf, fresh game, release `simd`, `71a7390c`; record in `13-8-signoff/vehicle-card.md` § Sitting):** Q1 "yes"; Q2 "yes"; Q3 "yes the current list is too big to fit ofc so we need to have story for hud and ui"; Q4 "I think it's ok now.. ofc new groups are coming too fast atm but it helps testing... and damn it looks cool when new dwarves arrive especially during night...", so the constants stay. Unprompted: "still performance issue .. all was ok as long as I cut down a few trees and digged a little bit ..when in the end I designated bigger dig are again stuttering started". Not measured; likely #225 (tick overrun), unverified.
 
 ### Completion Notes List
 
@@ -375,3 +393,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
 |---|---|
 | 2026-11-03 | Story created (Opus 5.5). Creation probes: 128² and 256² edge cells are in the camp component on every probed seed; a general walk-home rule would move 152/200 dwarves on two-hundred-on-256 (#227), so the walk-in is arrivals-only; `clear_paths` would strand an arrival. Task 0 Q1–Q5 await Wolf. |
 | 2026-11-03 | Task 0 RULED (Wolf, "Yes for all recommendations"): Q1 (a) arrivals are a saved world setting, off in committed scenarios, on in the fresh game; Q2 (a) the embark group spawns at the camp; Q3 (a) an arrival may take a job on the way; Q4 (a) 5–20 every 1,000 ticks, cap 200; Q5 (a) the 16 proposed epithets. Epic Story 13.8 amended (Q1). |
+| 2026-11-04 | Seat (AC 13): Q1 yes, Q2 yes, Q3 yes (a crew list is needed: HUD/UI story), Q4 constants stay. Wolf reports stutter after a large dig designation at full crew (likely #225). |

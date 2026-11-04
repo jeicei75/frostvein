@@ -43,3 +43,20 @@ before an elapsed time that is a multiple of 1:40 (the readout's `elapsed` clock
    with `CREW_CAP = 200`. They are tuning constants, so name new numbers if they feel off.
 
 Answers in your own words, please. They go into the story as you say them.
+
+## Sitting
+
+2026-11-04, Wolf, fresh game (`simd 7451`, release), `71a7390c`.
+
+- **Q1, Wolf: "yes".** Groups appear at the edge and walk in.
+- **Q2, Wolf: "yes".** Selecting an arrival names him in full.
+- **Q3, Wolf: "yes the current list is too big to fit ofc so we need to have story for hud and ui".**
+  At around 200 the roster under the clock does not fit. Not part of 13.8 (AC 13).
+- **Q4, Wolf: "I think it's ok now.. ofc new groups are coming too fast atm but it helps testing...
+  and damn it looks cool when new dwarves arrive especially during night..."** The constants stay:
+  `ARRIVAL_PERIOD = 1_000`, 5–20 per group, `CREW_CAP = 200`.
+- **Unprompted, Wolf: "still performance issue .. all was ok as long as I cut down a few trees and
+  digged a little bit ..when in the end I designated bigger dig are again stuttering started".** No
+  measurement was taken at the sitting. The 13.8 bench shows no regression on two-hundred-on-256
+  (mean -0.2%, Debug Log). The stutter is likely #225's tick overrun, now triggered by a large dig
+  designation at full crew rather than by the scenario's late run. That attribution is unverified.
