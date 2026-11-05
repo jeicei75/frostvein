@@ -30,6 +30,31 @@ walk that waits 100 ticks behind a dwarf who won't move ends where it stands (yo
 To watch a group come in, zoom out (`Q`, or wheel with `shift`) until the valley edges are on screen just
 before an elapsed time that is a multiple of 1:40 (the readout's `elapsed` clock: 1,000 ticks = 1:40 of sim time).
 
+## Run 3: seat-like again, after the claim_jobs skip (AC 14)
+
+This is the same scenario as run 2, which is your seat run in miniature: a few trees and a little digging at t6,
+then 1,500 digs at t17,000 (crew 200). Headless, the fix changes nothing the sim does (the same state hash),
+and before the big dig the tick falls from about 10 ms to about 2.7 ms.
+
+```bash
+# WSL, from the repo, at the branch HEAD
+cargo build --release -p simd
+target/release/simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototypes/seat-like.json
+```
+
+```powershell
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-8-seat-like-run3.csv')
+```
+
+**What to expect.** Up to the big dig (tick 17,000), the stutter that grew with the haul backlog in run 2 should
+be gone. **After the big dig, it stays slow:** headless, the tick is still about 50 ms from about tick 20,000
+(failing claim searches and `execute_jobs`; your ruling, 2026-11-05: issue #231, not 13.8). The gui's
+crowd cost at 200 (#224) is unchanged too. Keep the zoom at one framing if you can, so the perf log's buckets
+compare with run 2's.
+
+**R3 question:** before the big dig, does it run smoothly now, where run 2 stuttered?
+
 ## Questions
 
 1. **Do groups appear at the edge and walk in?** Is the cadence visible: about every 100 s at Normal?
