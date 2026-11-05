@@ -123,6 +123,12 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
     - A test drives the binary: the one-dig fixture reads `crew=5 arriving=0`, and an arrivals variant past `ARRIVAL_PERIOD` reads `crew>5`.
 12. **The mutation table kills** (Task 8), and `python3 scripts/audit-mutations.py` exits 0.
 13. **The seat (FR57).** Wolf watches a fresh game's crew grow, selects an arrival and reads its full name, then rules whether 200 dwarves need a crew list. His answer is recorded in his words. A "yes" becomes an issue or a story, not part of this one.
+14. **A job that no dwarf can try costs nothing (Wolf, 2026-11-04 and 2026-11-05; Task 11).**
+    - `claim_jobs` builds no goal or delivery set for a job when no dwarf can try it this tick. A dwarf can try it when he is of its trade, holds no job, and is past his reaction delay for it. That is exactly the condition that sets `attempted` today.
+    - A test counts the builds with a `#[cfg(test)]` counter, in the shape of `FLOODED` / `MEMO_HITS`. With every hauler holding a job and haul jobs unclaimed, one tick builds 0. With one hauler free and past his delay, the same world builds sets and the hauler claims.
+    - Behaviour is unchanged: `simd --bench` `state=` on all 11 committed files and on `13-8-signoff/prototypes/seat-like.json` equals the pre-fix commit `99440a2a` (seat-like: `5511268fb5faf97f`).
+    - The seat-like timer split (`claim-jobs-split-probe.patch`) is re-run after the fix and recorded beside the before figures: `claim_jobs` at t9000, and the run's mean, p99 and `over10`.
+    - Out of scope (Wolf, 2026-11-05): the failing claim searches after a big dig and `execute_jobs`' per-dwarf stone/blocked rebuild. Both go to an issue.
 
 ## Tasks / Subtasks
 
@@ -220,6 +226,13 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
   - Questions: Q1, do groups appear at the edge and walk in? Q2, does selecting an arrival name it in full? Q3, at around 200, does Wolf need a crew list (FR57)? Q4, do the cadence and group size feel right (Q4's constants)?
 
   Wolf speeds the game up with the speed keys. Record his answers in his words. A "yes" to Q3 becomes an issue (`gh issue create`, on Wolf's OK).
+- [ ] **Task 11: skip the job no dwarf can try (AC 14).** UPDATE `crates/sim-core/src/lib.rs` `claim_jobs` (`:630`).
+  - [ ] RED first: NEW lib test(s) in `mod tests` (see `claim_jobs_takes_fifo_and_skips_busy_dwarves_and_claimed_jobs` for the setup shape, and `FLOODED` / `MEMO_HITS` at `:911` for the counter). The busy case must fail on HEAD with one build per unclaimed job. Paste the failing line.
+  - [ ] Fix: decide "can any dwarf try this job" BEFORE `work_positions`. Use ONE predicate for both that check and the inner loop's `attempted`, so the two cannot drift. No other change to claim order, cooldown or searches.
+  - [ ] `cargo test -p sim-core` green, with no existing test changed.
+  - [ ] Opus: release `simd --bench` `state=` on the 11 files and seat-like vs `99440a2a`; the timer split re-run on seat-like; `RUNS=5 scripts/tick-bench.sh 99440a2a HEAD`, table pasted.
+  - [ ] Mutation row 13 in `mutations/13-8.sh`: the skip removed (the predicate check always passes) → the busy-case counter test. Run it alone and read the panic line.
+  - [ ] File the out-of-scope issue (AC 14's last bullet) with the 30k split's figures.
 - [ ] **Task 10: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh`, about 75 min (memory: `gate-ooms-at-default-parallelism`). Paste the block. Then:
   - the cost row: `python3 _bmad/scripts/session_tokens.py --phase dev --story 13-8-they-keep-coming`, then `phase_state.py clear`;
   - Status → review, on the story and on the board.
@@ -398,3 +411,6 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
 | 2026-11-03 | Story created (Opus 5.5). Creation probes: 128² and 256² edge cells are in the camp component on every probed seed; a general walk-home rule would move 152/200 dwarves on two-hundred-on-256 (#227), so the walk-in is arrivals-only; `clear_paths` would strand an arrival. Task 0 Q1–Q5 await Wolf. |
 | 2026-11-03 | Task 0 RULED (Wolf, "Yes for all recommendations"): Q1 (a) arrivals are a saved world setting, off in committed scenarios, on in the fresh game; Q2 (a) the embark group spawns at the camp; Q3 (a) an arrival may take a job on the way; Q4 (a) 5–20 every 1,000 ticks, cap 200; Q5 (a) the 16 proposed epithets. Epic Story 13.8 amended (Q1). |
 | 2026-11-04 | Seat (AC 13): Q1 yes, Q2 yes, Q3 yes (a crew list is needed: HUD/UI story), Q4 constants stay. Wolf reports a slowdown and stutter (tick and fps) that grows over the run, with or without designations; unmeasured. |
+| 2026-11-04 | Seat-like probe: after a dig, the haul backlog drives `claim_jobs` to 9.6 ms of a 13.1 ms tick at t9000 and to 50–140 ms ticks after the big dig. RULED (Wolf): "1 think we will fix it with this story unless you disagree". The sim side goes into 13.8 (AC 14, Task 11). |
+| 2026-11-05 | RULED (Wolf): the gui's crowd frame cost (#224, ~6 fps close on the 200-dwarf camp) and the idle crew's 33 KB/tick delta (a wire change) go to their own story, not 13.8. Implementer for Task 11: Sonnet 5.5 subagents, with Opus orchestrating, as before. |
+| 2026-11-05 | Timer split inside `claim_jobs` (`13-8-signoff/prototypes/claim-jobs-split-{9k,30k}.txt`, `claim-jobs-split-probe.patch`; probe `state=` equals the unpatched run). At t9000, 7.57 of `claim_jobs`' 7.66 ms (tick 10.47) builds goal sets for about 119 jobs a tick that no dwarf can try. After the big dig, that part is 9–54 ms of a 52–105 ms tick. The rest is failing searches (2–27 ms) and `execute_jobs` (23–41 ms). RULED (Wolf): 13.8 takes the skip only (AC 14, Task 11), and the other two go to an issue. |

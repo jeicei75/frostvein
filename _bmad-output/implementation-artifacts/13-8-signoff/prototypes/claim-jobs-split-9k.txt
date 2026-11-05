@@ -1,0 +1,39 @@
+PROBE tick=500 crew=5 arriving=0 marks=129 items=4 step_mean=0.16 step_max=1.8 enc_mean=0.05 kb_mean=41.9
+  SYS n_idle_build=126.14 claim_jobs=0.10 cj_goals_nobody=0.08 execute_jobs=0.05 n_could=0.01 cj_search=0.00 settle=0.00 create_jobs=0.00 create_haul_jobs=0.00 advance_goals=0.00 wander=0.00 cj_setup=0.00
+PROBE tick=1000 crew=18 arriving=13 marks=124 items=21 step_mean=0.56 step_max=36.9 enc_mean=0.05 kb_mean=42.7
+  SYS n_idle_build=130.81 claim_jobs=0.38 cj_goals_nobody=0.35 execute_jobs=0.10 arrive=0.07 n_could=0.02 cj_goals_could=0.00 settle=0.00 create_jobs=0.00 cj_search=0.00 create_haul_jobs=0.00 advance_goals=0.00
+PROBE tick=1500 crew=18 arriving=13 marks=112 items=42 step_mean=1.61 step_max=30.1 enc_mean=0.07 kb_mean=45.6
+  SYS n_idle_build=126.12 claim_jobs=1.11 cj_goals_nobody=1.08 execute_jobs=0.47 n_could=0.07 cj_search=0.01 settle=0.01 advance_goals=0.00 create_haul_jobs=0.00 create_jobs=0.00 wander=0.00 cj_setup=0.00
+PROBE tick=2000 crew=29 arriving=24 marks=101 items=61 step_mean=3.25 step_max=42.6 enc_mean=0.07 kb_mean=46.2
+  SYS n_idle_build=137.52 claim_jobs=2.41 cj_goals_nobody=2.38 execute_jobs=0.73 arrive=0.08 n_could=0.04 settle=0.01 create_haul_jobs=0.01 advance_goals=0.00 cj_search=0.00 cj_setup=0.00 create_jobs=0.00
+PROBE tick=2500 crew=29 arriving=24 marks=94 items=74 step_mean=4.07 step_max=39.6 enc_mean=0.08 kb_mean=48.6
+  SYS n_idle_build=131.07 claim_jobs=3.02 cj_goals_nobody=2.91 execute_jobs=1.01 cj_search=0.08 n_could=0.07 settle=0.01 create_haul_jobs=0.01 advance_goals=0.01 cj_setup=0.01 wander=0.01 create_jobs=0.00
+PROBE tick=3000 crew=40 arriving=35 marks=83 items=88 step_mean=4.66 step_max=47.5 enc_mean=0.08 kb_mean=48.8
+  SYS n_idle_build=133.43 claim_jobs=3.53 cj_goals_nobody=3.50 execute_jobs=0.99 arrive=0.09 n_could=0.06 settle=0.02 create_haul_jobs=0.01 advance_goals=0.01 wander=0.01 cj_setup=0.01 cj_search=0.01
+PROBE tick=3500 crew=40 arriving=33 marks=69 items=112 step_mean=5.26 step_max=12.1 enc_mean=0.09 kb_mean=51.2
+  SYS n_idle_build=126.01 claim_jobs=4.08 cj_goals_nobody=4.03 execute_jobs=1.13 n_could=0.08 settle=0.02 cj_search=0.02 create_haul_jobs=0.01 advance_goals=0.01 wander=0.01 cj_setup=0.01 carry_items=0.00
+PROBE tick=4000 crew=53 arriving=37 marks=46 items=146 step_mean=7.56 step_max=47.2 enc_mean=0.10 kb_mean=52.0
+  SYS n_idle_build=136.15 claim_jobs=5.77 cj_goals_nobody=5.72 execute_jobs=1.65 arrive=0.08 n_could=0.08 settle=0.02 create_haul_jobs=0.01 advance_goals=0.01 cj_search=0.01 wander=0.01 cj_setup=0.01
+PROBE tick=4500 crew=53 arriving=26 marks=17 items=200 step_mean=12.03 step_max=78.6 enc_mean=0.12 kb_mean=55.4
+  SYS n_idle_build=145.26 claim_jobs=8.41 cj_goals_nobody=8.12 execute_jobs=3.53 cj_search=0.23 n_could=0.08 settle=0.03 create_haul_jobs=0.02 wander=0.02 advance_goals=0.01 cj_setup=0.01 carry_items=0.01
+PROBE tick=5000 crew=67 arriving=38 marks=11 items=209 step_mean=11.60 step_max=49.4 enc_mean=0.12 kb_mean=55.8
+  SYS n_idle_build=163.59 claim_jobs=9.49 cj_goals_nobody=9.42 execute_jobs=1.94 arrive=0.08 settle=0.03 create_haul_jobs=0.02 advance_goals=0.02 cj_search=0.02 wander=0.01 cj_setup=0.01 n_could=0.00
+PROBE tick=5500 crew=67 arriving=38 marks=11 items=209 step_mean=11.15 step_max=18.4 enc_mean=0.13 kb_mean=58.1
+  SYS n_idle_build=159.46 claim_jobs=9.27 cj_goals_nobody=9.20 execute_jobs=1.76 settle=0.03 wander=0.02 cj_search=0.02 create_haul_jobs=0.02 advance_goals=0.02 n_could=0.01 cj_setup=0.01 carry_items=0.01
+PROBE tick=6000 crew=85 arriving=52 marks=7 items=213 step_mean=11.30 step_max=51.0 enc_mean=0.14 kb_mean=58.1
+  SYS n_idle_build=159.45 claim_jobs=9.36 cj_goals_nobody=9.28 execute_jobs=1.74 arrive=0.08 wander=0.04 settle=0.03 create_haul_jobs=0.02 advance_goals=0.02 cj_search=0.02 cj_setup=0.01 carry_items=0.01
+PROBE tick=6500 crew=85 arriving=46 marks=1 items=224 step_mean=12.31 step_max=83.9 enc_mean=0.14 kb_mean=61.2
+  SYS n_idle_build=156.63 claim_jobs=9.28 cj_goals_nobody=9.08 execute_jobs=2.81 cj_search=0.14 wander=0.12 settle=0.04 n_could=0.03 create_haul_jobs=0.02 advance_goals=0.02 cj_setup=0.02 carry_items=0.01
+PROBE tick=7000 crew=96 arriving=55 marks=0 items=227 step_mean=11.63 step_max=63.8 enc_mean=0.14 kb_mean=61.3
+  SYS n_idle_build=160.11 claim_jobs=9.52 cj_goals_nobody=9.44 execute_jobs=1.89 arrive=0.08 settle=0.04 wander=0.03 create_haul_jobs=0.02 advance_goals=0.02 cj_search=0.02 cj_setup=0.02 carry_items=0.01
+PROBE tick=7500 crew=96 arriving=39 marks=0 items=227 step_mean=11.07 step_max=15.6 enc_mean=0.15 kb_mean=63.1
+  SYS n_idle_build=149.10 claim_jobs=8.88 cj_goals_nobody=8.80 execute_jobs=2.06 settle=0.04 wander=0.03 n_could=0.03 cj_search=0.02 advance_goals=0.02 create_haul_jobs=0.02 cj_setup=0.02 carry_items=0.01
+PROBE tick=8000 crew=112 arriving=52 marks=0 items=227 step_mean=10.95 step_max=58.1 enc_mean=0.15 kb_mean=63.1
+  SYS n_idle_build=141.13 claim_jobs=8.71 cj_goals_nobody=8.62 execute_jobs=2.02 arrive=0.09 settle=0.04 advance_goals=0.02 create_haul_jobs=0.02 wander=0.02 cj_setup=0.02 cj_search=0.02 n_could=0.02
+PROBE tick=8500 crew=112 arriving=50 marks=0 items=227 step_mean=10.89 step_max=104.7 enc_mean=0.17 kb_mean=65.8
+  SYS n_idle_build=128.37 claim_jobs=8.14 cj_goals_nobody=7.93 execute_jobs=2.59 cj_search=0.14 settle=0.04 wander=0.04 n_could=0.03 advance_goals=0.03 create_haul_jobs=0.02 cj_setup=0.02 carry_items=0.02
+PROBE tick=9000 crew=120 arriving=43 marks=0 items=227 step_mean=10.47 step_max=51.7 enc_mean=0.17 kb_mean=65.8
+  SYS n_idle_build=119.39 claim_jobs=7.66 cj_goals_nobody=7.57 execute_jobs=2.58 arrive=0.08 settle=0.04 n_could=0.04 advance_goals=0.03 wander=0.03 create_haul_jobs=0.03 cj_search=0.02 carry_items=0.02
+bench seat-like run 1/1: ticks=9000 commands=131/131 mean=7.8064 p99=19.4382 max=104.665 over10=4379 state=41928b1adbacc5aa
+bench seat-like end tick=9000 marks=0 items=227 zones=1800 goals=47/0/0 done=dig:100,cut:30 stored=65 cells=737 crew=120 arriving=43
+bench seat-like: 1 run, mean 7.8064 ms (1 run: no floor)
