@@ -662,24 +662,46 @@ fn claim_jobs(
     // per call, cached here.
     let mut components: Vec<BTreeSet<Pos>> = Vec::new();
 
+    // The one test of whether a dwarf tries a job this tick: his trade, no job, past his reaction
+    // delay. It gates both the early skip below and `attempted`, so the two cannot drift.
+    let can_try = |job: &Job, id: Id, profession: Profession, free: bool| {
+        trade(job.kind) == profession
+            && free
+            && tick.0
+                >= job
+                    .created_tick
+                    .saturating_add(reaction_delay(seed.0, id, job.id))
+    };
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
     for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
+        // No dwarf can try it: building its goal sets would be wasted, and no cooldown is stamped.
+        if !dwarves.iter().any(|(_, id, _, current, _, profession)| {
+            can_try(&job, **id, **profession, current.0.is_none())
+        }) {
+            continue;
+        }
         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
         // set serves every candidate.
         let goals = work_positions(&terrain, &blocked, &zones.0, &items, job, None);
+        #[cfg(test)]
+        CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
         // A haul's delivery leg: the stone must also have somewhere reachable to go (#132).
         let delivery = match job.kind {
-            JobKind::Haul { item } => Some(work_positions(
-                &terrain,
-                &blocked,
-                &zones.0,
-                &items,
-                job,
-                Some(item),
-            )),
+            JobKind::Haul { item } => {
+                #[cfg(test)]
+                CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
+                Some(work_positions(
+                    &terrain,
+                    &blocked,
+                    &zones.0,
+                    &items,
+                    job,
+                    Some(item),
+                ))
+            }
             _ => None,
         };
         let mut attempted = false;
@@ -687,20 +709,12 @@ fn claim_jobs(
         for (entity, id, pos, current, carrying, profession) in dwarves.iter_mut() {
             // NOTE: a trade with no dwarf leaves its jobs unclaimed and silent, by Wolf's ruling
             // (12.6 Task 0.2); the roster is the player's signal.
-            if trade(job.kind) != **profession {
-                // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
-                continue;
-            }
+            // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
             debug_assert!(
                 current.0.is_some() || carrying.0.is_none(),
                 "a dwarf holding no job must be carrying nothing"
             );
-            if current.0.is_none()
-                && tick.0
-                    >= job
-                        .created_tick
-                        .saturating_add(reaction_delay(seed.0, **id, job.id))
-            {
+            if can_try(&job, **id, **profession, current.0.is_none()) {
                 attempted = true;
                 // A component belongs to its start: it proves nothing for a dwarf outside it.
                 if components.iter().any(|component| {
@@ -914,6 +928,8 @@ thread_local! {
     static FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// `pile_targets` calls answered from the memo: the hit test's count.
     static MEMO_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Goal and delivery sets `claim_jobs` has built: the skip test's count.
+    static CLAIM_SET_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -5729,6 +5745,63 @@ mod tests {
         // Control: with one hauler free, the same job is claimed rather than ignored.
         set_profession(&mut world, 3, super::Profession::Hauler);
         schedule.run(&mut world.ecs);
+        assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
+    }
+
+    /// Three unclaimed haul jobs, five haulers, and one `claim_jobs` run: how many goal and
+    /// delivery sets it built. Every hauler holds a job except `free_hauler`.
+    fn claim_set_builds(world: &mut World, free_hauler: Option<u32>) -> usize {
+        for id in 0..5 {
+            set_profession(world, id, super::Profession::Hauler);
+        }
+        let (_, near) = dwarf_of(world, super::Profession::Hauler, 3);
+        let mut taken = vec![];
+        let pile = free_cell_beside(world, near, &taken);
+        taken.push(pile);
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        for item in 50..53 {
+            let stone = free_cell_beside(world, near, &taken);
+            taken.push(stone);
+            world
+                .ecs
+                .spawn((super::Item(super::ItemKind::Stone), super::Id(item), stone));
+            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+                id: JobId(item - 50),
+                kind: JobKind::Haul { item },
+                target: stone,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        {
+            let mut query = world.ecs.query::<(&super::Id, &mut super::CurrentJob)>();
+            for (id, mut current) in query.iter_mut(&mut world.ecs) {
+                current.0 = (Some(id.0) != free_hauler).then_some(JobId(100 + id.0));
+            }
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        // The counter is thread-local: a multi-threaded executor (workspace feature unification)
+        // would run the system on another thread and the test would read 0 whatever it built.
+        schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+        schedule.add_systems(super::claim_jobs);
+        super::CLAIM_SET_BUILDS.with(|n| n.set(0));
+        schedule.run(&mut world.ecs);
+        super::CLAIM_SET_BUILDS.with(|n| n.get())
+    }
+
+    #[test]
+    fn claim_jobs_builds_no_goal_sets_when_every_hauler_is_busy() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        assert_eq!(claim_set_builds(&mut world, None), 0);
+        assert_eq!(world.jobs().len(), 3);
+        assert!(world.jobs().iter().all(|job| job.retry_after == 0));
+    }
+
+    #[test]
+    fn claim_jobs_still_builds_sets_and_claims_when_one_hauler_is_free() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        assert!(claim_set_builds(&mut world, Some(3)) > 0);
         assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
     }
 

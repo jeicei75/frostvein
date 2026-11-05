@@ -324,14 +324,13 @@ PY
 mutation "claim_jobs ignores reaction delay" sim-core claim_jobs_waits_for_the_reaction_delay <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            if current.0.is_none()
-                && tick.0
-                    >= job
-                        .created_tick
-                        .saturating_add(reaction_delay(seed.0, **id, job.id))
+old = '''            && tick.0
+                >= job
+                    .created_tick
+                    .saturating_add(reaction_delay(seed.0, id, job.id))
 '''
 assert old in s
-p.write_text(s.replace(old, '            if current.0.is_none()\n'))
+p.write_text(s.replace(old, ''))
 PY
 
 mutation "claim_jobs ignores retry_after" sim-core unreachable_job_stays_queued_and_retries_after_twenty_ticks <<'PY'
