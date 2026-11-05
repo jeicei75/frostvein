@@ -103,3 +103,13 @@ old = '                    waited: saved.waited,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    waited: 0,\n'))
 PY
+
+# Row 13: Wolf's 2026-11-04/05 ruling (AC 14): a job no dwarf can try builds no goal sets.
+# Behaviour-neutral by design, so only the counter test can see it.
+mutation "13 the no-candidate skip is gone: busy haulers' jobs still build goal sets (AC 14)" sim-core claim_jobs_builds_no_goal_sets_when_every_hauler_is_busy <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        if !dwarves.iter().any(|(_, id, _, current, _, profession)| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if false && !dwarves.iter().any(|(_, id, _, current, _, profession)| {\n'))
+PY
