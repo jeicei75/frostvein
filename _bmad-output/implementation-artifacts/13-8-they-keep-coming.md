@@ -421,6 +421,23 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
   | two-hundred-on-256 | 33.7620 | 22.5217 | -33.3% | -2.8% | 3.2% | 4.3% | 4.2% | same | BEYOND FLOOR |
 
   `state` is `same` on all 12, so the skip is behaviour-neutral on every committed file. Nine rows are BEYOND FLOOR, all faster, at −5.2% to −69.1%, against controls of −2.8% to +0.4%. two-hundred-on-256 reads −33.3% (33.76 → 22.52 ms). dig-loop, stuck-tunnel and they-keep-coming are within floor.
+- **Full gate after Task 11, `RUST_TEST_THREADS=1 scripts/gate.sh` on `cc796d2e` (2026-11-05):**
+  ```
+  frostvein gate
+    cargo fmt --check           ok  0s
+    cargo clippy -D warnings    ok  2s
+    cargo test                  ok  1201s
+    cargo test (release real-work scenario)ok  70s
+    cargo test (pixel guards)   ok  3062s
+    tui has no sim-core edge                ok
+    client-core has no sim-core edge        ok
+    gui has no sim-core edge                ok
+    metrics ledger tests        ok  0s
+    bench tests                 ok  19s
+    mutation tables still apply ok  11s
+  reaped 410 stale build artifacts from target (0.4 GB)
+  GATE GREEN  4373s
+  ```
 
 ### Completion Notes List
 
