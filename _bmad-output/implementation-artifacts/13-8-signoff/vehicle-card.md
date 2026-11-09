@@ -94,3 +94,22 @@ Answers in your own words, please. They go into the story as you say them.
   the camp crowd at 200, unmeasured (no perf log). #224 measured working zoom at ~40 fps on
   two-hundred-on-256, where the crowd is spread; this reading is the packed camp. Wolf: "performance issue
   we need to solve". Q3's crew list is #230.
+
+## Run 3 sitting
+
+2026-11-09, Wolf, seat-like (`simd 7451 --scenario …/seat-like.json`, release), `62b8d4ff`, Normal speed. Perf log
+`13-8-signoff/13-8-seat-like-run3.csv` (131,986 frames over 2,689 s).
+
+- **R3, Wolf: "yes .. I don't know exactly when it started but fews secs stop few secs stops".** Asked whether it
+  was everyone at once or single dwarves, Wolf: **"everyone"**.
+- **Reading (Opus, from the perf log):** the stops came after the big dig (tick 17,000, minute ~28). The gui logged
+  every arrival exactly 100–101 s after the one before, up to crew 200 at 1,701 s. `simd` does not catch up after a
+  slow tick, so a stop of a few seconds anywhere in the chain (sim, wire, gui ingest) before tick 17,000 would have
+  made every later arrival late. None was. No frame took 250 ms or more after the first, so the gui never froze;
+  the world did. After the big dig, the headless post-fix probe has 22–59 ms mean ticks and single ticks up to
+  377 ms (`claim-jobs-split-30k-after.txt`), which is #231. **R3 passes:** run 2's stutter before the big dig is
+  gone. The stops after it are #231 (ruled out of 13.8, 2026-11-05).
+- **Frame time, 3-minute p50 buckets, run 2 → run 3:** 14.5 → 15.1 ms (crew 18), 15.6 → 15.7 (96), 17.8 → 17.9
+  (148), 18.9 → 18.9 (198), then after the big dig 20.7 → 21.4, 31.9 → 30.1, 29.2 → 23.9 (crew 200). Run 3 goes on
+  at 24.4–26.7 ms to minute 44. The gui's frame cost is unchanged, as expected (#224 is not 13.8). Run 2's last
+  bucket mixes Fast4x and zooming.

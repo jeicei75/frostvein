@@ -2849,7 +2849,7 @@ development_status:
   # the allow-list, not 9 (12-12 row 18 is a loop row). Full gate GREEN on af3c19bf (4607 s). Unpushed. Next: PR on
   # Wolf's yes (Closes #159 only); run 2 ruled no round 3.
   # 13.7 MERGED 2026-11-03 as PR #229 (f9e33e34), closed #159 only. -> done.
-  13-8-they-keep-coming: in-progress
+  13-8-they-keep-coming: review
   # 13.8 CREATED 2026-11-03 (Opus 5.5) on branch story-13-8-they-keep-coming (off local main e2e1882d). Probes on main:
   # 507-510 (128^2) / 1,016-1,022 (256^2) edge cells are in the camp component on every probed seed (walk-in median 95 /
   # 191 steps); a general "walk home when far" rule would move 152/200 dwarves on two-hundred-on-256 (#227, 13.11), so
@@ -2857,6 +2857,8 @@ development_status:
   # 13.8 Task 0 RULED 2026-11-03 (Wolf "Yes for all recommendations"): Q1-Q5 all (a); epic 13.8 amended (Q1).
   # 13.8: Wolf picked Sonnet 5.5 subagents to implement (2026-11-03); Opus orchestrates. Next: dev (bmad-dev-story).
   # 13.8 DEV STARTED 2026-11-03 (baseline e2e1882d) -> in-progress.
+  # 13.8 -> review 2026-11-09: seat run 3 passes (stutter before the big dig gone; stops after it = #231). Wolf ruled
+  # "ok then 1": 13.8 closes as is, #231 (failing claim searches + execute_jobs after a big dig) is the next story.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog

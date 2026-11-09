@@ -5,7 +5,7 @@ baseline_commit: e2e1882d
 
 # Story 13.8: They Keep Coming
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -220,7 +220,7 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
   8. Crew 3 takes `[M, M, H]` → AC 1.
   9. The edge filter is removed (the group spawns at the camp) → AC 2's edge assert.
   10. The scenario `arrivals` key is ignored → the bench variant test.
-- [ ] **Task 9: the seat (AC 13).** The draft is skipped: there is no new UI. Write `13-8-signoff/vehicle-card.md` before handing the seat over. Push first (memory: `push-branch-for-vehicle-testing`, `push-before-seat-handoff`). Commands are written as the seat runs them:
+- [x] **Task 9: the seat (AC 13).** The draft is skipped: there is no new UI. Write `13-8-signoff/vehicle-card.md` before handing the seat over. Push first (memory: `push-branch-for-vehicle-testing`, `push-before-seat-handoff`). Commands are written as the seat runs them:
   - WSL: `simd 7451` (a fresh 256² game, crew 5, arrivals on).
   - PowerShell, from the Windows checkout: `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4')`.
   - Questions: Q1, do groups appear at the edge and walk in? Q2, does selecting an arrival name it in full? Q3, at around 200, does Wolf need a crew list (FR57)? Q4, do the cadence and group size feel right (Q4's constants)?
@@ -233,7 +233,7 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
   - [x] Opus: release `simd --bench` `state=` on the 11 files and seat-like vs `99440a2a`; the timer split re-run on seat-like; `RUNS=5 scripts/tick-bench.sh 99440a2a HEAD`, table pasted.
   - [x] Mutation row 13 in `mutations/13-8.sh`: the skip removed (the predicate check always passes) → the busy-case counter test. Run it alone and read the panic line.
   - [x] File the out-of-scope issue (AC 14's last bullet) with the 30k split's figures. Filed as #231.
-- [ ] **Task 10: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh`, about 75 min (memory: `gate-ooms-at-default-parallelism`). Paste the block. Then:
+- [x] **Task 10: gate and close.** Fast tier on every commit (pre-commit hook). ONE full gate at PR: `RUST_TEST_THREADS=1 scripts/gate.sh`, about 75 min (memory: `gate-ooms-at-default-parallelism`). Paste the block. Then:
   - the cost row: `python3 _bmad/scripts/session_tokens.py --phase dev --story 13-8-they-keep-coming`, then `phase_state.py clear`;
   - Status → review, on the story and on the board.
 
@@ -438,10 +438,27 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
   reaped 410 stale build artifacts from target (0.4 GB)
   GATE GREEN  4373s
   ```
+- **Seat run 3, 2026-11-09 (Wolf, `62b8d4ff`, seat-like at Normal, gui `--perf-log`; `13-8-signoff/13-8-seat-like-run3.csv`, 131,986 frames over 2,689 s).** Wolf on R3: "yes .. I don't know exactly when it started but fews secs stop few secs stops"; asked whether everyone stopped at once or single dwarves: "everyone". **The stops are after the big dig.** The gui logged every arrival exactly 100–101 s after the one before, up to crew 200 at 1,701 s (tick 17,000). `simd` does not catch up after a slow tick (`main.rs:449`), so a stop of a few seconds anywhere before tick 17,000 would have made every later arrival late. No frame took 250 ms or more after the first, so the gui never froze; the world did. After the big dig, the post-fix headless probe has 22–59 ms mean ticks and single ticks up to 377 ms: #231. **R3 passes:** run 2's stutter before the big dig is gone. `perf_summary.py`: steady p50 17.89 ms, p95 36.70, p99 43.36, worst 359.11; edit frames p50 40.19 (2.25×). 3-minute p50 buckets match run 2 within 1.3 ms at every crew size up to 198 (the gui's crowd cost, #224, is unchanged). Card § Run 3 sitting.
 
 ### Completion Notes List
 
+- Arrivals (AC 1–13): groups of 5–20 walk in from the valley edge every 1,000 ticks up to crew 200, as a saved world setting that is off in the committed scenarios. Seat Q1–Q4 passed (2026-11-04); Q3's crew list is #230.
+- AC 14 (Task 11): `claim_jobs` skips a job no dwarf of its trade can try before building its goal sets. The change is behaviour-neutral (`state` same on all 12 files and on seat-like), the tick at t9000 drops from 10.18 to 2.70 ms, and two-hundred-on-256 is −33.3%. Seat run 3 confirms the stutter before the big dig is gone.
+- Not 13.8, by Wolf's rulings: the stops after a big dig at crew 200 (#231: failing claim searches, `execute_jobs`), the gui's crowd frame cost (#224) and the idle crew's per-tick delta (their own story).
+
 ### File List
+
+- `crates/sim-core/src/lib.rs`, `crates/sim-core/src/save.rs`
+- `crates/sim-core/tests/save_load.rs`, `crates/sim-core/tests/scenario.rs`, `crates/sim-core/tests/worldgen.rs`
+- `crates/protocol/src/lib.rs`, `crates/client-core/src/lib.rs`
+- `crates/simd/src/main.rs`, `crates/simd/src/bridge.rs`, `crates/simd/src/scenario.rs`, `crates/simd/tests/bench.rs`, `crates/simd/tests/serve.rs`
+- `crates/gui/src/ingest.rs`, `crates/gui/tests/headless.rs`
+- `crates/tui/src/view.rs`, `crates/tui/tests/client.rs`
+- `scenarios/they-keep-coming.json` (new); `scenarios/saves/12-11-dig-loop-patched.save`, `12-12-seat-loop.save`, `12-12-seat-slow.save`
+- `_bmad-output/implementation-artifacts/mutations/13-8.sh` (new); `12-11.sh`, `12-2.sh`, `12-4.sh`, `13-6.sh`, `2-4-the-world-endures.sh`, `3-2-the-dig.sh`, `5-1-the-world-grows-things-that-glow.sh`
+- `_bmad-output/implementation-artifacts/13-8-signoff/` (new: vehicle card, creation probes, both seat-like perf logs, `prototypes/`)
+- `_bmad-output/implementation-artifacts/13-8-they-keep-coming.md`, `sprint-status.yaml`, `metrics/13-8-they-keep-coming.md`, `metrics/.session-cursors.json`
+- `_bmad-output/planning-artifacts/epics.md`
 
 ## Change Log
 
@@ -453,3 +470,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
 | 2026-11-04 | Seat-like probe: after a dig, the haul backlog drives `claim_jobs` to 9.6 ms of a 13.1 ms tick at t9000 and to 50–140 ms ticks after the big dig. RULED (Wolf): "1 think we will fix it with this story unless you disagree". The sim side goes into 13.8 (AC 14, Task 11). |
 | 2026-11-05 | RULED (Wolf): the gui's crowd frame cost (#224, ~6 fps close on the 200-dwarf camp) and the idle crew's 33 KB/tick delta (a wire change) go to their own story, not 13.8. Implementer for Task 11: Sonnet 5.5 subagents, with Opus orchestrating, as before. |
 | 2026-11-05 | Timer split inside `claim_jobs` (`13-8-signoff/prototypes/claim-jobs-split-{9k,30k}.txt`, `claim-jobs-split-probe.patch`; probe `state=` equals the unpatched run). At t9000, 7.57 of `claim_jobs`' 7.66 ms (tick 10.47) builds goal sets for about 119 jobs a tick that no dwarf can try. After the big dig, that part is 9–54 ms of a 52–105 ms tick. The rest is failing searches (2–27 ms) and `execute_jobs` (23–41 ms). RULED (Wolf): 13.8 takes the skip only (AC 14, Task 11), and the other two go to an issue. |
+| 2026-11-09 | Seat run 3 (seat-like after the skip, `62b8d4ff`): Wolf, "fews secs stop few secs stops", everyone at once. The perf log places the stops after the big dig (arrivals on time to tick 17,000), so R3 passes and the stops are #231. RULED (Wolf, "ok then 1"): 13.8 closes as it is and #231 is the next story. Full gate GREEN on `cc796d2e` (4373 s; `62b8d4ff` is record-only). Status → review. |

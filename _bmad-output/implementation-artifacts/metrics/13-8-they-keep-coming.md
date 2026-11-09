@@ -11,3 +11,9 @@ New columns are APPENDED, never inserted, so rows written before a column existe
 | phase | tool | model | turns | input | cache_create | cache_read | output | total | est_usd | transcript | recorded | minutes | quota_pp |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | create | claude | claude-opus-5-5 | 125 | 256 | 468,728 | 21,317,764 | 167,599 | 21,954,347 | $9.96 | `a40d2bec-9575-4f6e-949f-b49e9af68093.jsonl` | 2026-11-03 11:33 UTC · rates 2026-08-31 | 27 | — |
+| dev | claude | claude-opus-5-5, claude-sonnet-5-5 | 722 | 1,530 | 1,581,609 | 89,923,221 | 455,290 | 91,961,650 | $37.02 | `7a307005-4a32-4f0e-8100-ec5d5bb13682.jsonl` | 2026-11-03 18:30 UTC · rates 2026-08-31 | 382 | — |
+| dev | claude | claude-opus-5-5 | 195 | 464 | 1,049,933 | 19,536,077 | 135,203 | 20,721,677 | $11.86 | `7b72ad2d-f5d2-4074-b61a-eda8168b7cc3.jsonl` | 2026-11-09 19:47 UTC · rates 2026-08-31 | 793 | — |
+| dev | claude | claude-opus-5-5, claude-sonnet-5-5 | 218 | 464 | 854,925 | 21,527,441 | 132,061 | 22,514,891 | $11.34 | `586c456e-2b14-4575-913b-543852ea81ac.jsonl` | 2026-11-09 19:47 UTC · rates 2026-08-31 | 825 | — |
+| dev | claude | claude-opus-5-5 | 20 | 50 | 134,134 | 897,359 | 6,524 | 1,038,067 | $0.98 | `a934d2e8-afb2-4f2f-bc25-9d5e48bf986b.jsonl` | 2026-11-09 19:47 UTC · rates 2026-08-31 | 667 | — |
+| dev | claude | claude-opus-5-5 | 11 | 22 | 60,140 | 477,748 | 4,003 | 541,913 | $0.48 | `8f51de55-0f7e-493e-ad1d-579ddcc39bcb.jsonl` | 2026-11-09 19:47 UTC · rates 2026-08-31 | 0 | — |
+| dev | claude | claude-opus-5-5 | 79 | 188 | 315,854 | 6,874,109 | 47,060 | 7,237,211 | $3.90 | `5ff49832-e80c-441d-bab0-55a3b4f03129.jsonl` | 2026-11-09 19:48 UTC · rates 2026-08-31 | 805 | — |
