@@ -5,7 +5,7 @@ baseline_commit: e2e1882d
 
 # Story 13.8: They Keep Coming
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -238,6 +238,41 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
   - Status → review, on the story and on the board.
 
   The PR closes no issue: check `closingIssuesReferences` (memory: `closing-keyword-closes-whole-issue`).
+
+### Review Findings
+
+Code review, round 1, 2026-11-10 (Opus 5.5, fresh session; diff `main...e7fcffdb`). Layers: Blind Hunter (Sonnet; sim-core + client-core), Edge Case Hunter (Sonnet; simd, tui, protocol, gui, all tests), Acceptance Auditor (Opus; whole diff), Feature Auditor (Opus; whole diff). All four ran cargo (1.97.1) in their own `/tmp/review-<layer>/target` and finished; none timed out. Totals: 1 decision, 3 patch, 9 defer, 12 dismissed. No HIGH. Cost $17.95 over 343 turns (subagents 70.4% of tokens). `reap-build-caches.sh --tmp-only --force`: 10 dirs, 11.3 GB reaped (6.0 GB free space reclaimed). **Patches LEFT AS ACTION ITEMS (Wolf, 2026-11-10); Status → in-progress.**
+
+- [x] [Review][Decision → Defer] **`arriving=0` no longer shows a stall, and 39% of 256² arrivals end their walk by running out of patience** (acceptance, MED). **Wolf ruled 2026-11-10: option 2, "2"**: a separate bug for its own story; **AC 3 (i) stays as written and is NOT MET** at 256². Issue drafted (body in this review session's scratchpad, `issue-giveup.md`); `gh issue create` was blocked by the session's classifier, so its number goes here once posted. The auditor ran `they-keep-coming` on a probe copy (state `75fd7c20e91eeb0f`, unchanged). 118 of 195 arrivals ended near their target; **77 ended at `ARRIVAL_PATIENCE_TICKS`**, standing 3–13 cells from `to` (median 6, against `WANDER_RADIUS` 3), queued south of the camp behind #227's crowd. On seat-like: 81 near target, 10 gave up, 104 took a job. Wolf ruled the wait limit on 2026-11-03 on the evidence "arriving 0 at 256², sim-core green", and that evidence did not show how many walks gave up. Since then the limit makes every stall end within about 100 ticks, so `arriving=0` (AC 11, and Task 6's "any `arriving` > 0 is a stalled walk") holds by construction. AC 3 (i) ("every arrival ends its walk within `WANDER_RADIUS` of its destination") was never amended, and its test covers only the first 128² group, where nothing jams.
+- [ ] [Review][Patch] **The load validator does not bounds-check `SavedDwarf.arriving.to`** (edge, MED; found by running) [crates/simd/src/main.rs:883]. It checks `pos`, `home` and `path` but not the new field. Repro: a real save with `arriving.to = (i32::MIN, i32::MIN, 0)` passes validation, then panics under `simd --bench` with "attempt to subtract with overflow" at `crates/sim-core/src/lib.rs:2894`. In release the arithmetic wraps, the goal set comes out empty, and the arrival is silently stranded at the edge.
+- [ ] [Review][Patch] **A crew above 256 is refused with the wrong cause** (edge + acceptance, LOW; patched under the misreported-error exception) [crates/simd/src/main.rs:97]. `simd --crew 300` prints the sim panic "a crew past 256 runs out of full names", then `Error: crew 300 does not fit the camp's ground at 128x128x32`. The epithet `expect` (`lib.rs:3099`) runs inside `generate_world`'s `catch_unwind`, which relabels every panic as camp ground. Fix: give `check_crew` an upper bound that names the full-name limit.
+- [ ] [Review][Patch] **The story's record has drifted from the rulings** (acceptance + feature, LOW; same file).
+  - The header still declares `SavedDwarf.arriving: Option<Pos>`; the code saves `Option<SavedArriving { to, waited }>`, per the wait-limit ruling.
+  - The scope guardrails still say "No change to `claim_jobs`" and "No optimization", although Task 11 / AC 14 changed `claim_jobs` on Wolf's 2026-11-04/05 rulings.
+  - AC 6's TUI half is proven only on a wide terminal. At 100 columns the one-row roster fits about 3.5 names. Arrivals sort after the embark five, so no arrival is named (#230).
+- [x] [Review][Defer] `Arriving` is kept while the dwarf holds a job; it is removed only at `release_claim`, so `arriving=K` mid-run counts working dwarves [crates/sim-core/src/lib.rs:1707] — deferred, LOW (blind + feature)
+- [x] [Review][Defer] Four tick-bench rows were BEYOND FLOOR at `94968b93` with no Wolf ruling, and no `main`→HEAD table was re-run after Task 11 [13-8-they-keep-coming.md Task 7] — deferred, LOW (acceptance)
+- [x] [Review][Defer] An orphaned comment ("Before `attempted`: a dwarf of another trade …") now sits above a `debug_assert!` in `claim_jobs` [crates/sim-core/src/lib.rs claim_jobs] — deferred, LOW (acceptance)
+- [x] [Review][Defer] `reach_from` duplicates `spawn_dwarves`' BFS spill instead of reusing it (Dev Notes asked for reuse) [crates/sim-core/src/lib.rs reach_from] — deferred, LOW (acceptance)
+- [x] [Review][Defer] Both arrival streams are seeded `seed ^ STREAM_ARRIVAL ^ tick`, so seeds S and S^Δ share draws at swapped ticks; no same-seed AC is affected [crates/sim-core/src/lib.rs:3978] — deferred, LOW (blind + acceptance)
+- [x] [Review][Defer] `arrive` costs about 35–65 ms on its one firing tick at 256² (two whole-component BFS walks plus `world_blocked`); `they-keep-coming` max tick 53.5 ms, 29 ticks over 10 ms. At fast4x that is a one-frame hitch about every 5 s; it is not the run-3 stops [crates/sim-core/src/lib.rs:3963] — deferred, LOW (feature; measured)
+- [x] [Review][Defer] An entry cell may be any edge cell in the camp's component at any z, so a tunnel dug to the map border puts a group underground (the spec's wording allows it) [crates/sim-core/src/lib.rs:3990] — deferred, LOW (blind)
+- [x] [Review][Defer] No simd test watches the crew grow over a live per-tick delta; `serve.rs` reads only the first snapshot (the gui mirror test covers the client side) [crates/simd/tests/serve.rs] — deferred, LOW (edge)
+- [x] [Review][Defer] The TUI never names an arrival at a normal terminal width: one roster row, ordered by id [crates/tui/src/view.rs:470] — deferred, LOW (feature), already #230
+
+**Dismissed (12):**
+- crew 1–2 now refused (AC 1 asks for it; no committed scenario uses it) — edge;
+- the A* budget comment is accurate — blind;
+- `unused.remove` cannot empty, because `room` < 256 − crew — blind;
+- crew 3–4 professions changed (AC 1 asks for it) — blind;
+- the `claim_jobs` skip changes no behaviour (confirmed) — blind; also confirmed by `state=5511268fb5faf97f` — acceptance;
+- `waited` persists across a re-plan (the documented semantics) — blind;
+- old saves are refused loudly (intended) — blind;
+- there is no multi-period sim-core test to 200 (`two_hundred_by_arrivals…` exists) — blind;
+- arrivals pack the camp (as ruled; #224/#227) — feature;
+- walk-ins past 4,000 ticks on seat-like (the `arriving` count includes job-holders, see the first defer) — feature;
+- the #231 attribution is unproven (already the #231 story's first measurement) — feature;
+- TUI tests use one epithet (`every_epithet_has_its_one_spelling` covers the mapping) — edge.
 
 ## Verification
 
