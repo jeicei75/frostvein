@@ -892,6 +892,20 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     save.dims.z
                 );
             }
+            if let Some(to) = dwarf.arriving.map(|arriving| arriving.to)
+                && !in_bounds(to)
+            {
+                bail!(
+                    "save dwarf {} arrival target {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    to.x,
+                    to.y,
+                    to.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
         }
         for (id, ..) in &save.items {
             if !seen_ids.insert(*id) {
@@ -1455,6 +1469,43 @@ mod tests {
         assert!(
             off_map.is_none(),
             "a save with an off-map path tile was loaded"
+        );
+    }
+
+    /// 13.8 review: `SavedDwarf.arriving.to` is range-checked like `path`. An off-map walk-in
+    /// target was loaded and overflowed the goal-set arithmetic (debug panic, release stranding).
+    #[test]
+    fn loading_refuses_an_arrival_target_outside_the_map() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-13-8-arriving-bounds-save-{}.json",
+            std::process::id()
+        ));
+        let mut world = fresh_world(sim_core::Dims::DEFAULT, 5).unwrap();
+        for _ in 0..=sim_core::ARRIVAL_PERIOD {
+            world.step();
+        }
+        let mut save = world.to_save();
+        let arrival = save
+            .dwarves
+            .iter()
+            .position(|dwarf| dwarf.arriving.is_some())
+            .expect("a group arrived at ARRIVAL_PERIOD and is still walking in");
+        // Positive control: the save as the sim wrote it, mid walk-in, loads.
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write walk-in save fixture");
+        let in_bounds = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        save.dwarves[arrival].arriving.as_mut().unwrap().to = sim_core::Pos {
+            x: i32::MIN,
+            y: i32::MIN,
+            z: 0,
+        };
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write off-map save fixture");
+        let off_map = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(in_bounds.is_some(), "a save mid walk-in must load");
+        assert!(
+            off_map.is_none(),
+            "a save with an off-map arrival target was loaded"
         );
     }
 
