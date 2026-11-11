@@ -5,7 +5,7 @@ baseline_commit: e2e1882d
 
 # Story 13.8: They Keep Coming
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -25,7 +25,7 @@ Branch `story-13-8-they-keep-coming` was cut from local `main` `e2e1882d`, which
 
 **Saved fields (three):**
 - `Identity.epithet`.
-- `SavedDwarf.arriving: Option<Pos>`.
+- `SavedDwarf.arriving: Option<SavedArriving { to, waited }>` (AMENDED 2026-11-11, review round 1: the wait count was added by Wolf's 2026-11-03 wait-limit ruling).
 - `SaveState.arrivals: bool` (under Q1 a).
 
 Every state hash therefore moves (memory: `state-hash-covers-save-encoding`). AC 10 reads the reach with those fields stripped from the encoding.
@@ -102,6 +102,7 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
    - The wire `Identity` carries the epithet.
    - The TUI roster row shows `Name Epithet` for each dwarf (emitter `tui/src/view.rs:470-475`).
    - The Bevy client names a selected dwarf `Name Epithet` (emitter `gui/src/ingest.rs:1888-1898`), and that includes a dwarf that arrived after the snapshot.
+   - AMENDED 2026-11-11 (review round 1): the TUI half is proven only on a wide terminal (`COLUMNS=200`). At 100 columns the one-row roster fits about 3.5 names and arrivals sort after the embark five, so no arrival is named. That is #230 (crew list), not a 13.8 defect.
 7. **A save made while a group walks in reloads identically (NFR9, AD-11).** A world saved at a tick when at least one dwarf holds `Arriving`, loaded and stepped 300 ticks, equals the never-saved world (`to_save` bytes).
 8. **The arrivals setting decides (Q1 a; seam exercised).**
    - A world with arrivals off holds its starting crew through 3 arrival periods.
@@ -166,7 +167,7 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
     - If no path is found, remove `Arriving` and set `home = here`.
     - `release_claim` (`:1588-1610`, the funnel for every job end) removes `Arriving`: a job took the dwarf, so it has joined the work.
     - No other dwarf's wander changes (Found B).
-  - [x] Save: `SavedDwarf.arriving: Option<Pos>` with `#[serde(deserialize_with = "Option::deserialize")]`, so a missing key is refused (memory: `serde-option-is-never-required`). `to_save` and `from_save` carry it.
+  - [x] Save: `SavedDwarf.arriving: Option<SavedArriving>` (`to`, plus `waited` after the 2026-11-03 wait-limit ruling) with `#[serde(deserialize_with = "Option::deserialize")]`, so a missing key is refused (memory: `serde-option-is-never-required`). `to_save` and `from_save` carry it.
 - [x] **Task 3: the wire and both clients (AC 6).**
   - [x] UPDATE `crates/protocol/src/lib.rs`: NEW `Epithet` (snake_case), and `Identity.epithet`. Fix the raw-wire tests (`:419`, `:443`).
   - [x] UPDATE `crates/simd/src/bridge.rs`: `fn epithet(…)` as an exhaustive `match` with no wildcard (`:241` is the shape), used at `:188-190`.
@@ -244,9 +245,9 @@ The probes ran in a throwaway scratch worktree on release builds. Raw lines are 
 Code review, round 1, 2026-11-10 (Opus 5.5, fresh session; diff `main...e7fcffdb`). Layers: Blind Hunter (Sonnet; sim-core + client-core), Edge Case Hunter (Sonnet; simd, tui, protocol, gui, all tests), Acceptance Auditor (Opus; whole diff), Feature Auditor (Opus; whole diff). All four ran cargo (1.97.1) in their own `/tmp/review-<layer>/target` and finished; none timed out. Totals: 1 decision, 3 patch, 9 defer, 12 dismissed. No HIGH. Cost $17.95 over 343 turns (subagents 70.4% of tokens). `reap-build-caches.sh --tmp-only --force`: 10 dirs, 11.3 GB reaped (6.0 GB free space reclaimed). **Patches LEFT AS ACTION ITEMS (Wolf, 2026-11-10); Status → in-progress.**
 
 - [x] [Review][Decision → Defer] **`arriving=0` no longer shows a stall, and 39% of 256² arrivals end their walk by running out of patience** (acceptance, MED). **Wolf ruled 2026-11-10: option 2, "2"**: a separate bug for its own story; **AC 3 (i) stays as written and is NOT MET** at 256². Filed as **#232** (`bug`, `route:story`). The auditor ran `they-keep-coming` on a probe copy (state `75fd7c20e91eeb0f`, unchanged). 118 of 195 arrivals ended near their target; **77 ended at `ARRIVAL_PATIENCE_TICKS`**, standing 3–13 cells from `to` (median 6, against `WANDER_RADIUS` 3), queued south of the camp behind #227's crowd. On seat-like: 81 near target, 10 gave up, 104 took a job. Wolf ruled the wait limit on 2026-11-03 on the evidence "arriving 0 at 256², sim-core green", and that evidence did not show how many walks gave up. Since then the limit makes every stall end within about 100 ticks, so `arriving=0` (AC 11, and Task 6's "any `arriving` > 0 is a stalled walk") holds by construction. AC 3 (i) ("every arrival ends its walk within `WANDER_RADIUS` of its destination") was never amended, and its test covers only the first 128² group, where nothing jams.
-- [ ] [Review][Patch] **The load validator does not bounds-check `SavedDwarf.arriving.to`** (edge, MED; found by running) [crates/simd/src/main.rs:883]. It checks `pos`, `home` and `path` but not the new field. Repro: a real save with `arriving.to = (i32::MIN, i32::MIN, 0)` passes validation, then panics under `simd --bench` with "attempt to subtract with overflow" at `crates/sim-core/src/lib.rs:2894`. In release the arithmetic wraps, the goal set comes out empty, and the arrival is silently stranded at the edge.
-- [ ] [Review][Patch] **A crew above 256 is refused with the wrong cause** (edge + acceptance, LOW; patched under the misreported-error exception) [crates/simd/src/main.rs:97]. `simd --crew 300` prints the sim panic "a crew past 256 runs out of full names", then `Error: crew 300 does not fit the camp's ground at 128x128x32`. The epithet `expect` (`lib.rs:3099`) runs inside `generate_world`'s `catch_unwind`, which relabels every panic as camp ground. Fix: give `check_crew` an upper bound that names the full-name limit.
-- [ ] [Review][Patch] **The story's record has drifted from the rulings** (acceptance + feature, LOW; same file).
+- [x] [Review][Patch] **The load validator does not bounds-check `SavedDwarf.arriving.to`** (edge, MED; found by running) [crates/simd/src/main.rs:883]. It checks `pos`, `home` and `path` but not the new field. Repro: a real save with `arriving.to = (i32::MIN, i32::MIN, 0)` passes validation, then panics under `simd --bench` with "attempt to subtract with overflow" at `crates/sim-core/src/lib.rs:2894`. In release the arithmetic wraps, the goal set comes out empty, and the arrival is silently stranded at the edge. — **LANDED `b0c0009c`**: test `loading_refuses_an_arrival_target_outside_the_map`, row 14 KILLED.
+- [x] [Review][Patch] **A crew above 256 is refused with the wrong cause** (edge + acceptance, LOW; patched under the misreported-error exception) [crates/simd/src/main.rs:97]. `simd --crew 300` prints the sim panic "a crew past 256 runs out of full names", then `Error: crew 300 does not fit the camp's ground at 128x128x32`. The epithet `expect` (`lib.rs:3099`) runs inside `generate_world`'s `catch_unwind`, which relabels every panic as camp ground. Fix: give `check_crew` an upper bound that names the full-name limit. — **LANDED `65b85a0f`**: test `a_crew_past_the_full_names_is_refused_by_name`, row 15 KILLED; `simd --crew 300` now prints `Error: --crew must be at most 256: there are 256 full names`.
+- [x] [Review][Patch] **The story's record has drifted from the rulings** (acceptance + feature, LOW; same file). — **LANDED in the patch pass record commit**: each site carries an `AMENDED 2026-11-11` line (header, Task 2's save line, both guardrails, AC 6).
   - The header still declares `SavedDwarf.arriving: Option<Pos>`; the code saves `Option<SavedArriving { to, waited }>`, per the wait-limit ruling.
   - The scope guardrails still say "No change to `claim_jobs`" and "No optimization", although Task 11 / AC 14 changed `claim_jobs` on Wolf's 2026-11-04/05 rulings.
   - AC 6's TUI half is proven only on a wide terminal. At 100 columns the one-row roster fits about 3.5 names. Arrivals sort after the embark five, so no arrival is named (#230).
@@ -307,8 +308,8 @@ AC 6's epithet pattern cannot match before Task 3. The capture command itself ra
 ### Scope guardrails (do NOT)
 
 - No crew list or roster UI: that is the seat's ruling, and its own story. No change to the TUI's input (NFR10). No gui change beyond the name text.
-- No fix for #227: the spill spawns' `home` and the wander radius stay as they are. Only `Arriving` dwarves walk in (Found B). No change to `claim_jobs` (AD-12, Q3 a).
-- No new trade, no colour change (colours repeat), and no new dependency. No optimization.
+- No fix for #227: the spill spawns' `home` and the wander radius stay as they are. Only `Arriving` dwarves walk in (Found B). No change to `claim_jobs` (AD-12, Q3 a). AMENDED 2026-11-11: Task 11 / AC 14 changed `claim_jobs` (the no-candidate skip) on Wolf's 2026-11-04/05 rulings.
+- No new trade, no colour change (colours repeat), and no new dependency. No optimization. AMENDED 2026-11-11: except AC 14's `claim_jobs` skip (Wolf, 2026-11-04/05); every other optimization is #231's.
 - No migration code for old saves: they are refused (AD-11 precedent). The three committed saves are patched as data.
 
 ### What already exists (build on it)
@@ -475,6 +476,36 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
   ```
 - **Seat run 3, 2026-11-09 (Wolf, `62b8d4ff`, seat-like at Normal, gui `--perf-log`; `13-8-signoff/13-8-seat-like-run3.csv`, 131,986 frames over 2,689 s).** Wolf on R3: "yes .. I don't know exactly when it started but fews secs stop few secs stops"; asked whether everyone stopped at once or single dwarves: "everyone". **The stops are after the big dig.** The gui logged every arrival exactly 100–101 s after the one before, up to crew 200 at 1,701 s (tick 17,000). `simd` does not catch up after a slow tick (`main.rs:449`), so a stop of a few seconds anywhere before tick 17,000 would have made every later arrival late. No frame took 250 ms or more after the first, so the gui never froze; the world did. After the big dig, the post-fix headless probe has 22–59 ms mean ticks and single ticks up to 377 ms: #231. **R3 passes:** run 2's stutter before the big dig is gone. `perf_summary.py`: steady p50 17.89 ms, p95 36.70, p99 43.36, worst 359.11; edit frames p50 40.19 (2.25×). 3-minute p50 buckets match run 2 within 1.3 ms at every crew size up to 198 (the gui's crowd cost, #224, is unchanged). Card § Run 3 sitting.
 
+- **Review patch pass 1 (2026-11-11, fresh session, Opus 5.5).** Commits: `b0c0009c` validator range-checks `arriving.to` (P1), `65b85a0f` `check_crew` ceiling + mutation rows 14-15 (P2), then the record commit (P3: the story text).
+  - **P1 RED** (test written first): the positive control loaded and the off-map save loaded too, `a save with an off-map arrival target was loaded` (`main.rs:1492`). GREEN after the `if let … && !in_bounds(to)` check. The bench path (`scenario.rs:187`) uses the same `try_load_world_from`.
+  - **P2 RED** (test written first): `--crew 257` parsed, so the test died at `unwrap_err` (`main.rs:1252`). GREEN after the ceiling. Live: `target/debug/simd --crew 300` prints only `Error: --crew must be at most 256: there are 256 full names` (exit 1), with no sim panic before it. `every_unusable_scenario_fails_loudly_naming_the_cause`'s `crew-too-big` variant (crew 1,000,000) now expects `256 full names`: a scenario crew goes through `check_crew` (`scenario.rs:135`) before worldgen. `a_crew_too_big_for_the_camp_is_an_error_naming_the_crew` calls `generate_world` directly and is unchanged, so it still pins the camp-ground relabel.
+  - **Mutation run** (`65b85a0f`, `env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh …/13-8.sh`): **15/15 KILLED**. Each of rows 14 and 15 reproduces its patch's pre-fix code (`&& false` / `if false &&`), whose RED above is the intended assert. Each test name is unique, so the cargo filter selects only that test (memory `mutation-test-name-prefix-trap`).
+  - **Closure table** (both sides; no row re-closes a prior round's fix, so none is REWORK):
+
+    | Item | Written for | Tested from | Pre-existing-state fixture |
+    |---|---|---|---|
+    | P1 validator checks `arriving.to` | a save whose walk-in target is off the map (`i32::MIN, i32::MIN, 0`) | the save the sim itself writes mid walk-in: unmodified, it still loads (positive control). The full gate's save/load tests load the three committed saves, patched as data in Task 2 | `fresh_world(Dims::DEFAULT, 5)` (DEFAULT_SEED, arrivals on) stepped to tick 1,001: the first group holds `Arriving`; `to_save()` bytes |
+    | P2 `check_crew` ceiling | a crew past the 256 full names (257, 300, 1,000,000) | the crews that must still pass: `--crew 256` parses (the bound is not off by one), and the committed scenarios' crews still load and run in the full gate | `scenarios/two-hundred-on-256.json` (crew 200), `scenarios/they-keep-coming.json` (crew 5 → 200 by arrivals) |
+    | P3 record drift | the header, Task 2's save line, the guardrails, AC 6 | read against the code and the rulings: `save.rs:69-79` (`SavedArriving { to, waited }`), AC 14/Task 11 (`claim_jobs` skip), the AC 6 recipe in this Debug Log (`COLUMNS=200`), #230 | this file's lines 28, 169, 310-311 and AC 6, as committed at `c330c9ed` |
+  - **Full gate GREEN on `65b85a0f`** (`RUST_TEST_THREADS=1 scripts/gate.sh`, exit 0), covering both code commits (the record commit is text only):
+
+    ```
+    frostvein gate
+      cargo fmt --check           ok  1s
+      cargo clippy -D warnings    ok  3s
+      cargo test                  ok  1225s
+      cargo test (release real-work scenario)ok  70s
+      cargo test (pixel guards)   ok  3086s
+      tui has no sim-core edge                ok
+      client-core has no sim-core edge        ok
+      gui has no sim-core edge                ok
+      metrics ledger tests        ok  0s
+      bench tests                 ok  19s
+      mutation tables still apply ok  12s
+    reaped 60 stale build artifacts from target (2.5 GB)
+    GATE GREEN  4422s
+    ```
+
 ### Completion Notes List
 
 - Arrivals (AC 1–13): groups of 5–20 walk in from the valley edge every 1,000 ticks up to crew 200, as a saved world setting that is off in the committed scenarios. Seat Q1–Q4 passed (2026-11-04); Q3's crew list is #230.
@@ -506,3 +537,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
 | 2026-11-05 | RULED (Wolf): the gui's crowd frame cost (#224, ~6 fps close on the 200-dwarf camp) and the idle crew's 33 KB/tick delta (a wire change) go to their own story, not 13.8. Implementer for Task 11: Sonnet 5.5 subagents, with Opus orchestrating, as before. |
 | 2026-11-05 | Timer split inside `claim_jobs` (`13-8-signoff/prototypes/claim-jobs-split-{9k,30k}.txt`, `claim-jobs-split-probe.patch`; probe `state=` equals the unpatched run). At t9000, 7.57 of `claim_jobs`' 7.66 ms (tick 10.47) builds goal sets for about 119 jobs a tick that no dwarf can try. After the big dig, that part is 9–54 ms of a 52–105 ms tick. The rest is failing searches (2–27 ms) and `execute_jobs` (23–41 ms). RULED (Wolf): 13.8 takes the skip only (AC 14, Task 11), and the other two go to an issue. |
 | 2026-11-09 | Seat run 3 (seat-like after the skip, `62b8d4ff`): Wolf, "fews secs stop few secs stops", everyone at once. The perf log places the stops after the big dig (arrivals on time to tick 17,000), so R3 passes and the stops are #231. RULED (Wolf, "ok then 1"): 13.8 closes as it is and #231 is the next story. Full gate GREEN on `cc796d2e` (4373 s; `62b8d4ff` is record-only). Status → review. |
+| 2026-11-11 | Review patch pass 1 (Opus 5.5): 3/3 landed. `b0c0009c` the load validator range-checks `arriving.to`; `65b85a0f` `check_crew` refuses a crew past 256, naming the full-name limit; story text amended (header, Task 2, guardrails, AC 6). Mutation rows 14-15 added, 15/15 KILLED. |
