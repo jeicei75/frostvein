@@ -98,6 +98,10 @@ fn check_crew(label: &str, crew: usize) -> anyhow::Result<()> {
     if crew < 3 {
         bail!("{label} must be at least 3: the first group holds one of each trade");
     }
+    let full_names = sim_core::DwarfName::ALL.len() * sim_core::Epithet::ALL.len();
+    if crew > full_names {
+        bail!("{label} must be at most {full_names}: there are {full_names} full names");
+    }
     Ok(())
 }
 
@@ -1241,6 +1245,19 @@ mod tests {
         ] {
             assert!(parse(refused).is_err(), "{refused:?}");
         }
+    }
+
+    /// 13.8 review: a crew past the 256 full names was refused as "does not fit the camp's
+    /// ground", because `generate_world`'s `catch_unwind` relabels the sim's epithet panic.
+    #[test]
+    fn a_crew_past_the_full_names_is_refused_by_name() {
+        let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
+        assert_eq!(parse(&["--crew", "256"]).unwrap().crew, 256);
+        let error = parse(&["--crew", "257"]).unwrap_err().to_string();
+        assert!(
+            error.contains("--crew") && error.contains("256 full names"),
+            "{error}"
+        );
     }
 
     #[test]

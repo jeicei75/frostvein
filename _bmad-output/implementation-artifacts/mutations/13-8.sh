@@ -113,3 +113,21 @@ old = '        if !dwarves.iter().any(|(_, id, _, current, _, profession)| {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        if false && !dwarves.iter().any(|(_, id, _, current, _, profession)| {\n'))
 PY
+
+# Row 14: review round 1 patch 1: the load validator range-checks the walk-in target.
+mutation "14 the load validator skips arriving.to (review patch 1)" simd loading_refuses_an_arrival_target_outside_the_map <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if let Some(to) = dwarf.arriving.map(|arriving| arriving.to)\n                && !in_bounds(to)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if let Some(to) = dwarf.arriving.map(|arriving| arriving.to)\n                && false\n'))
+PY
+
+# Row 15: review round 1 patch 2: check_crew names the full-name ceiling.
+mutation "15 check_crew has no ceiling: a crew past 256 reaches the sim (review patch 2)" simd a_crew_past_the_full_names_is_refused_by_name <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '    if crew > full_names {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false && crew > full_names {\n'))
+PY

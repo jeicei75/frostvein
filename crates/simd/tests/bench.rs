@@ -410,7 +410,7 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             variant("crew-too-big", |json| {
                 json["start"]["crew"] = 1_000_000.into()
             }),
-            "crew 1000000 does not fit",
+            "256 full names",
         ),
         (
             "unknown-field",
