@@ -2853,7 +2853,7 @@ development_status:
   # 13.8 REVIEW PATCH PASS 2 2026-11-11 (Opus 5.5, fresh session, $4.86): 2/2 landed (3576d68f validator refuses
   # arriving.waited >= ARRIVAL_PATIENCE_TICKS, live u32::MAX refused by name; cd821a51 row 16, 16/16 KILLED; record
   # over-claims struck + stale text amended, REWORK of P3). Full gate GREEN on cd821a51 (4460 s). No round 3
-  # (stopping rule). Unpushed past 805a0be9. Next: push, then PR on Wolf's yes (closes no issue), then #231.
+  # (stopping rule). Pushed 1a91e21f; PR #233 opened on Wolf's yes (closes no issue). Next: merge, done-mark, #231.
   # 13.8 REVIEW ROUND 2 2026-11-11 (Opus 5.5, fresh session; diff c330c9ed..805a0be9): 4 layers ran, none timed out.
   # NEW 3 (0 HIGH/1 MED/2 LOW), REWORK 1 (P3). P1 + P2 CLOSED (run live). 2 patches LEFT AS ACTION ITEMS (Wolf "2"):
   # validator range-checks arriving.waited (u32::MAX debug overflow lib.rs:2850; refuse >= ARRIVAL_PATIENCE_TICKS,
