@@ -5,7 +5,7 @@ baseline_commit: 483b95b1
 
 # Story 13.7: The Long Way
 
-Status: review
+Status: done
 
 ## Story
 
@@ -437,3 +437,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-02); Opus 5.5 o
 | 2026-11-02 | Review patch pass 1 (fresh session, Opus 5.5): 6/6 patches landed (`b74f1242`, `faad260a`, `f5b106b4`, `a57ddeff`, record). AC 4 AMENDED (re-plan world budget, decision 1). 13-7.sh 10/10 KILLED (row 6 rewritten after it SURVIVED). tick-bench 11/11 same; two-hundred-on-256 +3.9% mean BEYOND FLOOR, +21% max. Full gate GREEN on `da3a502c` (4,395 s). Cost row $14.12. Status review; next: round-2 code review. |
 | 2026-11-03 | Code review run 2 (fresh session, Opus 5.5) on `35c6d6f4..b9f7209b`: 4 layers OK; NEW 4 (0 HIGH/1 MED/3 LOW), REWORK 1 (row 6). Stopping rule: no round 3. Decision 1 (Wolf "a"): audit reads parenthesised concatenations. 5 patches left as action items (Wolf "2"); 3 deferred, 4 dismissed. Cost $15.03. Status in-progress. |
 | 2026-11-03 | Review patch pass 2 (fresh session, Opus 5.5): 5/5 patches landed (`02eb29a7`, `f21c799b`, `56229c37`, `af3c19bf`). The audit reads concatenated anchors (8 rows leave the allow-list, 13 stay) and flags mixed rows. `12-10b` row 1 and `12-12` row 16 re-pointed, both KILLED. 13-7 row 6 rewritten, KILLED at the id assert and passing with it stubbed. Full gate GREEN on `af3c19bf` (4,607 s). Cost row $8.12. Status review; run 2 ruled no round 3, so next: PR on Wolf's yes. |
+| 2026-11-03 | Merged as PR #229 (`f9e33e34`, head `95bbc922`), closing #159 only (`closingIssuesReferences` [159]). Status → done. |

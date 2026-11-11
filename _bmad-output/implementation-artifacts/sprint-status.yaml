@@ -1,5 +1,5 @@
 # generated: 2026-08-02
-# last_updated: 2026-11-03
+# last_updated: 2026-11-11
 # project: frostvein
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-11-03
+last_updated: 2026-11-11
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2823,7 +2823,7 @@ development_status:
   # NOTE; AC 6 + #227 AMENDED). Mutation 16/16 KILLED. Full gate GREEN on 38210b07 (4,399 s). -> review; next = PR on
   # Wolf's yes (no round 3); the PR must NOT close #222 or #227, may close #226.
   # 13.6 MERGED 2026-11-01 as PR #228 (f148cfbe), closed #226 only; #222/#227 open. -> done.
-  13-7-the-long-way: review
+  13-7-the-long-way: done
   # 13.7 CREATED 2026-11-02 (Opus 5.5) on branch story-13-7-the-long-way (off local main 483b95b1). Probes on main f148cfbe:
   # every 256^2 budget exhaustion is UNREACHABLE (claim 238/238, astar() 915/915; 13.2's 'reachable past the budget' is
   # wrong); no reachable search from camp > 14,604 nodes. RED on the real valley: a dig designated after 25 unreachable ones
@@ -2848,7 +2848,32 @@ development_status:
   # f21c799b mixed-row check; 56229c37 row 6 KILLED at the id assert, passes with it stubbed; af3c19bf record). 8 rows left
   # the allow-list, not 9 (12-12 row 18 is a loop row). Full gate GREEN on af3c19bf (4607 s). Unpushed. Next: PR on
   # Wolf's yes (Closes #159 only); run 2 ruled no round 3.
-  13-8-they-keep-coming: backlog
+  # 13.7 MERGED 2026-11-03 as PR #229 (f9e33e34), closed #159 only. -> done.
+  13-8-they-keep-coming: review
+  # 13.8 REVIEW PATCH PASS 2 2026-11-11 (Opus 5.5, fresh session, $4.86): 2/2 landed (3576d68f validator refuses
+  # arriving.waited >= ARRIVAL_PATIENCE_TICKS, live u32::MAX refused by name; cd821a51 row 16, 16/16 KILLED; record
+  # over-claims struck + stale text amended, REWORK of P3). Full gate GREEN on cd821a51 (4460 s). No round 3
+  # (stopping rule). Unpushed past 805a0be9. Next: push, then PR on Wolf's yes (closes no issue), then #231.
+  # 13.8 REVIEW ROUND 2 2026-11-11 (Opus 5.5, fresh session; diff c330c9ed..805a0be9): 4 layers ran, none timed out.
+  # NEW 3 (0 HIGH/1 MED/2 LOW), REWORK 1 (P3). P1 + P2 CLOSED (run live). 2 patches LEFT AS ACTION ITEMS (Wolf "2"):
+  # validator range-checks arriving.waited (u32::MAX debug overflow lib.rs:2850; refuse >= ARRIVAL_PATIENCE_TICKS,
+  # test + row 16); record over-claims + stale text. 1 defer, 2 dismissed. Stopping rule: no round 3. Next: fresh
+  # bmad-review-patch, one full gate, then PR on Wolf's yes (closes no issue).
+  # 13.8 REVIEW PATCH PASS 1 2026-11-11 (Opus 5.5, fresh session, $7.55 = $5.51 + planning 40730b6f $2.04): 3/3 landed (b0c0009c arriving.to load
+  # bounds check; 65b85a0f check_crew ceiling 256; story text amended in the record commit). Rows 14-15, 15/15 KILLED.
+  # Full gate GREEN on 65b85a0f (4422 s). Pushed (remote 805a0be9; AMENDED round 2). Next: round-2 bmad-code-review, fresh session.
+  # 13.8 REVIEW ROUND 1 2026-11-10 (Opus 5.5, fresh session): 0 HIGH; 1 decision (Wolf "2": arrivals' 77/195
+  # patience give-ups at 256^2 -> own bug #232, AC 3 (i) NOT MET), 3 patches LEFT AS ACTION ITEMS (arriving.to
+  # load bounds check; crew >256 refused naming the name limit; story-text drift), 9 defer, 12 dismissed.
+  # 13.8 CREATED 2026-11-03 (Opus 5.5) on branch story-13-8-they-keep-coming (off local main e2e1882d). Probes on main:
+  # 507-510 (128^2) / 1,016-1,022 (256^2) edge cells are in the camp component on every probed seed (walk-in median 95 /
+  # 191 steps); a general "walk home when far" rule would move 152/200 dwarves on two-hundred-on-256 (#227, 13.11), so
+  # the walk-in is arrivals-only (`Arriving`); clear_paths would strand an arrival. Task 0 Q1-Q5 await Wolf.
+  # 13.8 Task 0 RULED 2026-11-03 (Wolf "Yes for all recommendations"): Q1-Q5 all (a); epic 13.8 amended (Q1).
+  # 13.8: Wolf picked Sonnet 5.5 subagents to implement (2026-11-03); Opus orchestrates. Next: dev (bmad-dev-story).
+  # 13.8 DEV STARTED 2026-11-03 (baseline e2e1882d) -> in-progress.
+  # 13.8 -> review 2026-11-09: seat run 3 passes (stutter before the big dig gone; stops after it = #231). Wolf ruled
+  # "ok then 1": 13.8 closes as is, #231 (failing claim searches + execute_jobs after a big dig) is the next story.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog

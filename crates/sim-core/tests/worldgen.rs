@@ -1066,3 +1066,147 @@ fn crew_200_holds_the_two_two_one_mix() {
         "professions are periodic with period 5: that is a cycle, not a shuffle"
     );
 }
+
+/// 13.8: a crew of 5 or more draws exactly as before epithets existed. Read from `main` e2e1882d.
+#[test]
+fn crew_5_keeps_its_name_colour_and_trade_draws() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let professions = world.professions();
+    let got: Vec<_> = world
+        .identities()
+        .into_iter()
+        .map(|(id, identity)| {
+            let trade = professions.iter().find(|(pid, _)| *pid == id).unwrap().1;
+            (
+                format!("{:?}", identity.name),
+                format!("{:?}", identity.colour),
+                trade,
+            )
+        })
+        .collect();
+    let want = [
+        ("Nain", "Purple", Profession::Woodcutter),
+        ("Ori", "Green", Profession::Hauler),
+        ("Bifur", "Red", Profession::Miner),
+        ("Frar", "Gold", Profession::Hauler),
+        ("Dori", "Blue", Profession::Miner),
+    ];
+    assert_eq!(got.len(), want.len());
+    for (got, want) in got.iter().zip(want) {
+        assert_eq!((got.0.as_str(), got.1.as_str(), got.2), want);
+    }
+}
+
+/// 13.8 AC 1: every crew of 3 or more holds a miner, a hauler and a woodcutter.
+#[test]
+fn every_crew_of_three_or_more_holds_all_three_trades() {
+    for crew in [3, 4, 5, 17, 200] {
+        let world = World::generate_with_crew(DEFAULT_SEED, Dims::DEFAULT, crew);
+        let professions = world.professions();
+        assert_eq!(professions.len(), crew);
+        for trade in [
+            Profession::Miner,
+            Profession::Hauler,
+            Profession::Woodcutter,
+        ] {
+            assert!(
+                professions.iter().any(|(_, p)| *p == trade),
+                "crew {crew} holds no {trade:?}"
+            );
+        }
+    }
+}
+
+/// 13.8 AC 5: 200 dwarves hold 200 distinct full names, while colours still repeat.
+#[test]
+fn crew_200_holds_two_hundred_distinct_full_names() {
+    let world = World::generate_with_crew(DEFAULT_SEED, Dims::DEFAULT, 200);
+    let identities = world.identities();
+    assert_eq!(identities.len(), 200);
+    let full: BTreeSet<_> = identities
+        .iter()
+        .map(|(_, i)| (i.name, i.epithet))
+        .collect();
+    assert_eq!(full.len(), 200);
+    let colours: BTreeSet<_> = identities.iter().map(|(_, i)| i.colour).collect();
+    assert!(colours.len() < 200);
+}
+
+fn step_to(world: &mut World, tick: u64) {
+    while world.tick() < tick {
+        world.step();
+    }
+}
+
+/// 13.8 AC 2: no group before `ARRIVAL_PERIOD`, then 5-20 on distinct cells of the camp's walkable
+/// component, the first on the map's edge.
+#[test]
+fn the_first_group_arrives_at_the_period_on_distinct_camp_cells_from_the_edge() {
+    let mut world = World::generate_with_arrivals(DEFAULT_SEED, Dims::DEFAULT, 5);
+    step_to(&mut world, sim_core::ARRIVAL_PERIOD - 1);
+    assert_eq!(world.dwarves().len(), 5, "no arrival before the period");
+    let embark: BTreeSet<Id> = world.dwarves().iter().map(|(id, ..)| *id).collect();
+
+    world.step();
+    assert_eq!(world.tick(), sim_core::ARRIVAL_PERIOD);
+    let fresh: Vec<(Id, Pos)> = world
+        .dwarves()
+        .into_iter()
+        .filter(|(id, ..)| !embark.contains(id))
+        .map(|(id, pos, ..)| (id, pos))
+        .collect();
+    assert!(
+        (5..=20).contains(&fresh.len()),
+        "the group holds {} dwarves",
+        fresh.len()
+    );
+    let cells: BTreeSet<Pos> = fresh.iter().map(|(_, pos)| *pos).collect();
+    assert_eq!(cells.len(), fresh.len(), "one dwarf per tile");
+    let dims = world.dims();
+    let (_, first) = fresh[0];
+    assert!(
+        first.x == 0
+            || first.y == 0
+            || first.x == dims.x as i32 - 1
+            || first.y == dims.y as i32 - 1,
+        "the first arrival stands at {first:?}, not on an edge"
+    );
+    let component = camp_component(&world);
+    for (id, pos) in &fresh {
+        assert!(
+            component.contains(pos),
+            "arrival {id:?} at {pos:?} is cut off from the camp"
+        );
+    }
+    assert_eq!(world.arriving_count(), fresh.len());
+}
+
+/// 13.8 AC 2: a crew 10 short of the cap gets a group capped to fit, and then no more.
+#[test]
+fn the_crew_stops_at_two_hundred() {
+    let mut world = World::generate_with_arrivals(DEFAULT_SEED, Dims::DEFAULT, 190);
+    step_to(&mut world, sim_core::ARRIVAL_PERIOD);
+    assert_eq!(world.dwarves().len(), sim_core::CREW_CAP);
+    step_to(&mut world, 3 * sim_core::ARRIVAL_PERIOD);
+    assert_eq!(world.dwarves().len(), sim_core::CREW_CAP);
+}
+
+/// 13.8 AC 5: 190 embark dwarves plus a capped group are 200 distinct full names, with colours
+/// repeating.
+#[test]
+fn two_hundred_by_arrivals_hold_two_hundred_distinct_full_names() {
+    let mut world = World::generate_with_arrivals(DEFAULT_SEED, Dims::DEFAULT, 190);
+    step_to(&mut world, sim_core::ARRIVAL_PERIOD);
+    let identities = world.identities();
+    assert_eq!(identities.len(), 200);
+    let names: BTreeSet<_> = identities
+        .iter()
+        .map(|(_, identity)| (identity.name, identity.epithet))
+        .collect();
+    assert_eq!(names.len(), 200, "a full name repeats");
+    let colours: BTreeSet<_> = identities
+        .iter()
+        .map(|(_, identity)| identity.colour)
+        .collect();
+    assert!(colours.len() < 200 && colours.len() >= 2);
+}

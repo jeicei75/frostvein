@@ -1,0 +1,39 @@
+PROBE tick=500 crew=5 arriving=0 marks=129 items=4 step_mean=0.17 step_max=2.6 enc_mean=0.06 kb_mean=41.9
+  SYS claim_jobs=0.10 execute_jobs=0.06 create_jobs=0.00 settle=0.00 create_haul_jobs=0.00
+PROBE tick=1000 crew=18 arriving=13 marks=124 items=21 step_mean=0.72 step_max=52.3 enc_mean=0.08 kb_mean=42.7
+  SYS claim_jobs=0.46 execute_jobs=0.14 arrive=0.10 settle=0.00 create_jobs=0.00
+PROBE tick=1500 crew=18 arriving=13 marks=112 items=42 step_mean=1.83 step_max=32.5 enc_mean=0.08 kb_mean=45.6
+  SYS claim_jobs=1.26 execute_jobs=0.54 settle=0.01 create_jobs=0.00 create_haul_jobs=0.00
+PROBE tick=2000 crew=29 arriving=24 marks=101 items=61 step_mean=3.82 step_max=59.1 enc_mean=0.09 kb_mean=46.2
+  SYS claim_jobs=2.79 execute_jobs=0.88 arrive=0.11 settle=0.01 create_haul_jobs=0.01
+PROBE tick=2500 crew=29 arriving=24 marks=94 items=74 step_mean=4.99 step_max=48.8 enc_mean=0.10 kb_mean=48.6
+  SYS claim_jobs=3.65 execute_jobs=1.28 settle=0.02 create_haul_jobs=0.01 advance_goals=0.01
+PROBE tick=3000 crew=40 arriving=35 marks=83 items=88 step_mean=5.88 step_max=66.0 enc_mean=0.11 kb_mean=48.8
+  SYS claim_jobs=4.45 execute_jobs=1.25 arrive=0.12 settle=0.02 create_haul_jobs=0.01
+PROBE tick=3500 crew=40 arriving=33 marks=69 items=112 step_mean=6.20 step_max=17.3 enc_mean=0.11 kb_mean=51.2
+  SYS claim_jobs=4.80 execute_jobs=1.34 settle=0.02 create_haul_jobs=0.01 advance_goals=0.01
+PROBE tick=4000 crew=53 arriving=37 marks=46 items=146 step_mean=8.74 step_max=52.8 enc_mean=0.12 kb_mean=52.0
+  SYS claim_jobs=6.63 execute_jobs=1.94 arrive=0.09 settle=0.03 create_haul_jobs=0.02
+PROBE tick=4500 crew=53 arriving=26 marks=17 items=200 step_mean=17.77 step_max=86.5 enc_mean=0.18 kb_mean=55.4
+  SYS claim_jobs=12.65 execute_jobs=4.99 settle=0.05 create_haul_jobs=0.03 advance_goals=0.02
+PROBE tick=5000 crew=67 arriving=38 marks=11 items=209 step_mean=19.18 step_max=78.0 enc_mean=0.21 kb_mean=55.8
+  SYS claim_jobs=15.67 execute_jobs=3.23 arrive=0.12 settle=0.05 create_haul_jobs=0.03
+PROBE tick=5500 crew=67 arriving=38 marks=11 items=209 step_mean=16.22 step_max=30.5 enc_mean=0.19 kb_mean=58.1
+  SYS claim_jobs=13.48 execute_jobs=2.58 settle=0.05 wander=0.03 create_haul_jobs=0.03
+PROBE tick=6000 crew=85 arriving=52 marks=7 items=213 step_mean=16.66 step_max=79.9 enc_mean=0.20 kb_mean=58.1
+  SYS claim_jobs=13.76 execute_jobs=2.58 arrive=0.13 settle=0.05 wander=0.05
+PROBE tick=6500 crew=85 arriving=46 marks=1 items=224 step_mean=17.65 step_max=119.8 enc_mean=0.21 kb_mean=61.2
+  SYS claim_jobs=13.38 execute_jobs=3.96 wander=0.16 settle=0.06 create_haul_jobs=0.03
+PROBE tick=7000 crew=96 arriving=55 marks=0 items=227 step_mean=15.83 step_max=81.9 enc_mean=0.20 kb_mean=61.3
+  SYS claim_jobs=12.94 execute_jobs=2.59 arrive=0.11 settle=0.06 wander=0.05
+PROBE tick=7500 crew=96 arriving=39 marks=0 items=227 step_mean=14.65 step_max=19.7 enc_mean=0.20 kb_mean=63.1
+  SYS claim_jobs=11.74 execute_jobs=2.72 settle=0.06 wander=0.04 advance_goals=0.03
+PROBE tick=8000 crew=112 arriving=52 marks=0 items=227 step_mean=14.35 step_max=71.4 enc_mean=0.20 kb_mean=63.1
+  SYS claim_jobs=11.39 execute_jobs=2.67 arrive=0.11 settle=0.05 advance_goals=0.03
+PROBE tick=8500 crew=112 arriving=50 marks=0 items=227 step_mean=13.82 step_max=115.7 enc_mean=0.21 kb_mean=65.8
+  SYS claim_jobs=10.30 execute_jobs=3.31 settle=0.06 wander=0.05 advance_goals=0.03
+PROBE tick=9000 crew=120 arriving=43 marks=0 items=227 step_mean=13.14 step_max=66.2 enc_mean=0.22 kb_mean=65.8
+  SYS claim_jobs=9.56 execute_jobs=3.27 arrive=0.11 settle=0.06 advance_goals=0.04
+bench seat-like-9k run 1/1: ticks=9000 commands=131/131 mean=10.6458 p99=29.3773 max=119.812 over10=5054 state=41928b1adbacc5aa
+bench seat-like-9k end tick=9000 marks=0 items=227 zones=1800 goals=47/0/0 done=dig:100,cut:30 stored=65 cells=737 crew=120 arriving=43
+bench seat-like-9k: 1 run, mean 10.6458 ms (1 run: no floor)

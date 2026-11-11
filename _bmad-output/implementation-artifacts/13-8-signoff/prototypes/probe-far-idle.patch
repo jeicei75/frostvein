@@ -1,0 +1,36 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 4f442ca6..bc7c2084 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -24,6 +24,8 @@ use rand::{RngExt, SeedableRng, seq::SliceRandom};
+ use rand_chacha::ChaCha8Rng;
+ use serde::{Deserialize, Serialize};
+ 
++pub static PROBE_FAR: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++pub static PROBE_FAR_IDS: std::sync::Mutex<BTreeSet<u64>> = std::sync::Mutex::new(BTreeSet::new());
+ pub const DEFAULT_SEED: u64 = 0xF005_7E1A;
+ const STREAM_WORLDGEN: u64 = 0x4652_4f53_5456_4549;
+ const STREAM_SPAWN: u64 = 0x5350_4157_4e5f_5f5f;
+@@ -2762,6 +2764,10 @@ fn wander(
+             }
+             continue;
+         }
++        if (here.x - wander.home.x).abs() > WANDER_RADIUS || (here.y - wander.home.y).abs() > WANDER_RADIUS {
++            PROBE_FAR.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++            PROBE_FAR_IDS.lock().unwrap().insert(entity.to_bits());
++        }
+         // NOTE: fixed order, same z only. Ramp climbing arrives with A* in Story 3.2.
+         let candidates: Vec<Pos> = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+             .into_iter()
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index ba031670..3be27ade 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -418,6 +418,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         );
+     }
+     println!("{end}");
++    println!("PROBE far_idle_ticks={} dwarves={}", sim_core::PROBE_FAR.load(std::sync::atomic::Ordering::Relaxed), sim_core::PROBE_FAR_IDS.lock().unwrap().len());
+     let low = means.iter().copied().fold(f64::INFINITY, f64::min);
+     let high = means.iter().copied().fold(0.0, f64::max);
+     let average = means.iter().sum::<f64>() / runs as f64;

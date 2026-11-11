@@ -1677,7 +1677,11 @@ fn identified_dwarf(
     profession: protocol::Profession,
 ) -> protocol::Entity {
     protocol::Entity {
-        identity: Some(protocol::Identity { name, colour }),
+        identity: Some(protocol::Identity {
+            name,
+            epithet: protocol::Epithet::Ironhand,
+            colour,
+        }),
         profession: Some(profession),
         id,
         ..dwarf_at(id as i32 + 4)
@@ -1886,17 +1890,17 @@ fn each_trade_word_sits_after_its_own_dwarfs_name_in_grey_and_follows_a_professi
     assert_eq!(rows.len(), 2, "one roster row per frame: {rows:?}");
     let plain: Vec<String> = rows.iter().map(|row| strip_ansi(row)).collect();
     assert!(
-        plain[0].contains("Durin miner  Nori hauler"),
+        plain[0].contains("Durin Ironhand miner  Nori Ironhand hauler"),
         "frame 1 must put each trade after its own name: {:?}",
         plain[0]
     );
     assert!(
-        plain[1].contains("Nori miner  Durin woodcutter"),
+        plain[1].contains("Nori Ironhand miner  Durin Ironhand woodcutter"),
         "frame 2 must carry the changed trade after Durin: {:?}",
         plain[1]
     );
     assert!(
-        rows[0].contains(&format!("{RED_SGR}mDurin\u{1b}[{GREY_SGR}m miner")),
+        rows[0].contains(&format!("{RED_SGR}mDurin Ironhand\u{1b}[{GREY_SGR}m miner")),
         "the trade word must be status grey, straight after the red name: {:?}",
         rows[0]
     );
@@ -1911,12 +1915,12 @@ fn the_trade_words_survive_no_color() {
 
     assert_eq!(plain.len(), 2);
     assert!(
-        plain[0].contains("Durin miner  Nori hauler"),
+        plain[0].contains("Durin Ironhand miner  Nori Ironhand hauler"),
         "{:?}",
         plain[0]
     );
     assert!(
-        plain[1].contains("Nori miner  Durin woodcutter"),
+        plain[1].contains("Nori Ironhand miner  Durin Ironhand woodcutter"),
         "{:?}",
         plain[1]
     );

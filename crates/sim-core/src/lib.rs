@@ -3,7 +3,7 @@
 mod save;
 mod worldgen;
 
-pub use save::{SaveState, SavedClearing, SavedDwarf, SavedSqueeze};
+pub use save::{SaveState, SavedArriving, SavedClearing, SavedDwarf, SavedSqueeze};
 
 use std::{
     cmp::Reverse,
@@ -20,7 +20,10 @@ use bevy_ecs::{
     system::{Commands, Query, Res, ResMut},
     world::World as EcsWorld,
 };
-use rand::{RngExt, SeedableRng, seq::SliceRandom};
+use rand::{
+    RngExt, SeedableRng,
+    seq::{IndexedRandom, SliceRandom},
+};
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
@@ -32,8 +35,26 @@ const STREAM_TREES: u64 = 0x5452_4545_535f_5f5f;
 const STREAM_IDENTITY: u64 = 0x4944_454e_5449_5459; // "IDENTITY"
 const STREAM_PROFESSION: u64 = 0x5052_4f46_4553_534e; // "PROFESSN"
 const STREAM_ORE: u64 = 0x4f52_455f_5f5f_5f5f; // "ORE_____"
+const STREAM_ARRIVAL: u64 = 0x4152_5249_5641_4c53; // "ARRIVALS"
 const WANDER_RADIUS: i32 = 3;
+/// 13.8: ticks between arriving groups (100 s at 1x). The first group appears at this tick.
+pub const ARRIVAL_PERIOD: u64 = 1_000;
+/// 13.8: a group's size, drawn uniformly, then capped at what `CREW_CAP` leaves.
+const ARRIVAL_GROUP: std::ops::RangeInclusive<usize> = 5..=20;
+/// 13.8: arrivals stop here. 16 names x 16 epithets = 256 full names, so 200 always fit.
+pub const CREW_CAP: usize = 200;
+/// 13.8: the trade of an arrival, miner : hauler : woodcutter = 2 : 2 : 1 (the embark mix).
+const ARRIVAL_PROFESSIONS: [(Profession, u32); 3] = [
+    (Profession::Miner, 2),
+    (Profession::Hauler, 2),
+    (Profession::Woodcutter, 1),
+];
 const WANDER_REST_TICKS: u32 = 10;
+/// 13.8: ticks an arrival waits on an occupied next tile before its walk ends where it stands.
+/// #227's crowd jams the camp, and a follower otherwise waits forever behind dwarves that are
+/// not leaving; on 256^2 that queued 68 arrivals for good. Saved with the dwarf (`waited`), so a
+/// load does not hand out a fresh patience.
+pub const ARRIVAL_PATIENCE_TICKS: u32 = 100;
 /// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
 ///
 /// Without it a pathing dwarf took one cell per tick. A cell is 1.6 m and a tick is 100 ms, so
@@ -245,6 +266,47 @@ impl DwarfName {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Epithet {
+    Ironhand,
+    Stonefoot,
+    Frostbeard,
+    Coldforge,
+    Deepdelver,
+    Greyhelm,
+    Ashbrow,
+    Flintback,
+    Rimecloak,
+    Hammerfall,
+    Copperbeard,
+    Icevein,
+    Stoutheart,
+    Blackanvil,
+    Emberkeep,
+    Snowmantle,
+}
+
+impl Epithet {
+    pub const ALL: [Self; 16] = [
+        Self::Ironhand,
+        Self::Stonefoot,
+        Self::Frostbeard,
+        Self::Coldforge,
+        Self::Deepdelver,
+        Self::Greyhelm,
+        Self::Ashbrow,
+        Self::Flintback,
+        Self::Rimecloak,
+        Self::Hammerfall,
+        Self::Copperbeard,
+        Self::Icevein,
+        Self::Stoutheart,
+        Self::Blackanvil,
+        Self::Emberkeep,
+        Self::Snowmantle,
+    ];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum DwarfColour {
     Red,
     Gold,
@@ -260,6 +322,7 @@ impl DwarfColour {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Identity {
     pub name: DwarfName,
+    pub epithet: Epithet,
     pub colour: DwarfColour,
 }
 
@@ -599,24 +662,46 @@ fn claim_jobs(
     // per call, cached here.
     let mut components: Vec<BTreeSet<Pos>> = Vec::new();
 
+    // The one test of whether a dwarf tries a job this tick: his trade, no job, past his reaction
+    // delay. It gates both the early skip below and `attempted`, so the two cannot drift.
+    let can_try = |job: &Job, id: Id, profession: Profession, free: bool| {
+        trade(job.kind) == profession
+            && free
+            && tick.0
+                >= job
+                    .created_tick
+                    .saturating_add(reaction_delay(seed.0, id, job.id))
+    };
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
     for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
         }
+        // No dwarf can try it: building its goal sets would be wasted, and no cooldown is stamped.
+        if !dwarves.iter().any(|(_, id, _, current, _, profession)| {
+            can_try(&job, **id, **profession, current.0.is_none())
+        }) {
+            continue;
+        }
         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
         // set serves every candidate.
         let goals = work_positions(&terrain, &blocked, &zones.0, &items, job, None);
+        #[cfg(test)]
+        CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
         // A haul's delivery leg: the stone must also have somewhere reachable to go (#132).
         let delivery = match job.kind {
-            JobKind::Haul { item } => Some(work_positions(
-                &terrain,
-                &blocked,
-                &zones.0,
-                &items,
-                job,
-                Some(item),
-            )),
+            JobKind::Haul { item } => {
+                #[cfg(test)]
+                CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
+                Some(work_positions(
+                    &terrain,
+                    &blocked,
+                    &zones.0,
+                    &items,
+                    job,
+                    Some(item),
+                ))
+            }
             _ => None,
         };
         let mut attempted = false;
@@ -624,20 +709,12 @@ fn claim_jobs(
         for (entity, id, pos, current, carrying, profession) in dwarves.iter_mut() {
             // NOTE: a trade with no dwarf leaves its jobs unclaimed and silent, by Wolf's ruling
             // (12.6 Task 0.2); the roster is the player's signal.
-            if trade(job.kind) != **profession {
-                // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
-                continue;
-            }
+            // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
             debug_assert!(
                 current.0.is_some() || carrying.0.is_none(),
                 "a dwarf holding no job must be carrying nothing"
             );
-            if current.0.is_none()
-                && tick.0
-                    >= job
-                        .created_tick
-                        .saturating_add(reaction_delay(seed.0, **id, job.id))
-            {
+            if can_try(&job, **id, **profession, current.0.is_none()) {
                 attempted = true;
                 // A component belongs to its start: it proves nothing for a dwarf outside it.
                 if components.iter().any(|component| {
@@ -691,6 +768,21 @@ struct Wander {
     home: Pos,
     cooldown: u32,
 }
+
+/// 13.8: a dwarf walking in from the valley edge to `to`, a free cell near the camp. `wander`
+/// plans (and, after a `clear_paths`, re-plans) the walk. It ends within `WANDER_RADIUS` of `to`,
+/// when a job takes the dwarf (`release_claim`), when no route exists, or where the dwarf stands
+/// once it has waited `ARRIVAL_PATIENCE_TICKS` on an occupied tile (`waited`, reset by a step).
+#[derive(Component)]
+struct Arriving {
+    to: Pos,
+    waited: u32,
+}
+
+/// 13.8: the world setting that lets groups arrive. Off for every `generate_with_crew` world and
+/// every old scenario; saved with the world (`SaveState.arrivals`).
+#[derive(Resource)]
+struct Arrivals(bool);
 
 #[derive(Resource)]
 struct WanderRng(ChaCha8Rng);
@@ -836,6 +928,8 @@ thread_local! {
     static FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// `pile_targets` calls answered from the memo: the hit test's count.
     static MEMO_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Goal and delivery sets `claim_jobs` has built: the skip test's count.
+    static CLAIM_SET_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -1609,6 +1703,8 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
     let mut entity = ecs.entity_mut(entity);
     entity.remove::<Path>();
     entity.remove::<WorkProgress>();
+    // 13.8: a job took the arrival, so it has joined the work and its walk-in is over.
+    entity.remove::<Arriving>();
 }
 
 fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
@@ -2698,6 +2794,7 @@ fn wander(
             &CurrentJob,
             Option<&mut Path>,
             &Carrying,
+            Option<&mut Arriving>,
         ),
         (Without<Emitter>, Without<Item>),
     >,
@@ -2711,7 +2808,7 @@ fn wander(
     // before this tick's move, so it is left out; items do not move in this system.
     let carried: BTreeSet<u32> = dwarves
         .iter()
-        .filter_map(|(.., carrying)| carrying.0)
+        .filter_map(|(.., carrying, _)| carrying.0)
         .collect();
     let blocked = blocked_cells(
         emitters.iter().chain(
@@ -2722,7 +2819,7 @@ fn wander(
         ),
     );
 
-    for (entity, _, mut pos, mut wander, mut state, current_job, path, _) in dwarves {
+    for (entity, _, mut pos, mut wander, mut state, current_job, path, _, mut arriving) in dwarves {
         if current_job.0.is_some() {
             continue;
         }
@@ -2747,7 +2844,20 @@ fn wander(
                     continue;
                 }
                 if occupied.contains(&next) {
+                    // 13.8: a blocked follower sets no cooldown, so it re-checks every tick and
+                    // one wait is one tick. Out of patience, the arrival's walk ends here.
+                    if let Some(arriving) = arriving.as_deref_mut() {
+                        arriving.waited += 1;
+                        if arriving.waited >= ARRIVAL_PATIENCE_TICKS {
+                            wander.home = here;
+                            commands.entity(entity).remove::<Path>();
+                            commands.entity(entity).remove::<Arriving>();
+                        }
+                    }
                     continue;
+                }
+                if let Some(arriving) = arriving.as_deref_mut() {
+                    arriving.waited = 0;
                 }
                 path.0.remove(0);
                 occupied.remove(&here);
@@ -2759,6 +2869,50 @@ fn wander(
             if path.0.is_empty() {
                 wander.home = *pos;
                 commands.entity(entity).remove::<Path>();
+                // 13.8: this branch also walks exit paths (`resolve_blocked_step`, `step_aside`),
+                // which end anywhere. An arrival's walk is over only if it now stands near `to`;
+                // otherwise it keeps `Arriving` and re-plans.
+                if arriving
+                    .as_deref()
+                    .is_some_and(|arriving| near_arrival_target(arriving.to, *pos))
+                {
+                    commands.entity(entity).remove::<Arriving>();
+                }
+            }
+            continue;
+        }
+        // 13.8: an idle arrival with no path plans its walk-in (a `clear_paths` wipes every
+        // `Path`, so this is also the re-plan). It draws no wander number. The budget is the
+        // world's: an edge-to-camp search can pass `MAX_ASTAR_NODES` on a large map (13.7).
+        if let Some(arriving) = arriving.as_deref() {
+            if near_arrival_target(arriving.to, here) {
+                wander.home = here;
+                commands.entity(entity).remove::<Arriving>();
+                continue;
+            }
+            let mut goals = BTreeSet::new();
+            for y in arriving.to.y - WANDER_RADIUS..=arriving.to.y + WANDER_RADIUS {
+                for x in arriving.to.x - WANDER_RADIUS..=arriving.to.x + WANDER_RADIUS {
+                    let cell = Pos {
+                        x,
+                        y,
+                        z: arriving.to.z,
+                    };
+                    if is_walkable(&terrain, &blocked, cell) {
+                        goals.insert(cell);
+                    }
+                }
+            }
+            let mut walk_budget = terrain.tiles.len();
+            match astar_with_budget(&terrain, &blocked, here, &goals, &mut walk_budget).0 {
+                Some(route) => {
+                    commands.entity(entity).insert(Path(route));
+                }
+                // No way to the camp: the walk ends where it stands, never walking forever.
+                None => {
+                    wander.home = here;
+                    commands.entity(entity).remove::<Arriving>();
+                }
             }
             continue;
         }
@@ -2789,6 +2943,11 @@ fn wander(
             }
         }
     }
+}
+
+/// Is `at` within `WANDER_RADIUS` of an arrival's `to` on its level: the walk-in is over there.
+fn near_arrival_target(to: Pos, at: Pos) -> bool {
+    at.z == to.z && (at.x - to.x).abs() <= WANDER_RADIUS && (at.y - to.y).abs() <= WANDER_RADIUS
 }
 
 #[derive(Resource, Default)]
@@ -2824,6 +2983,7 @@ fn assemble(
     designations: BTreeMap<Pos, DesignationKind>,
     zones: BTreeSet<Pos>,
     goals_completed: u32,
+    arrivals: bool,
 ) -> World {
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
@@ -2834,6 +2994,7 @@ fn assemble(
     ecs.insert_resource(Designations(designations));
     ecs.insert_resource(Zones(zones));
     ecs.insert_resource(GoalsCompleted(goals_completed));
+    ecs.insert_resource(Arrivals(arrivals));
     ecs.insert_resource(jobs);
     ecs.insert_resource(Terrain {
         dims,
@@ -2853,6 +3014,8 @@ fn assemble(
             wander,
             carry_items,
             advance_goals,
+            // Last, so no other system sees a half-spawned group mid-tick.
+            arrive,
         )
             .chain(),
     );
@@ -2910,6 +3073,7 @@ impl World {
             BTreeMap::new(),
             BTreeSet::new(),
             0,
+            false,
         );
         // Identity has its own stream so it never shifts a spawn position.
         let mut identity_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY);
@@ -2917,13 +3081,28 @@ impl World {
         let mut colours = DwarfColour::ALL;
         names.shuffle(&mut identity_rng);
         colours.shuffle(&mut identity_rng);
-        // NOTE: past 16 names and 5 colours they repeat; 13.8 makes names unique.
+        // NOTE: past 16 names a base name repeats, and past 5 colours a colour does; colours stay
+        // free. The epithet makes the FULL name unique: each dwarf draws uniformly from the
+        // epithets not yet used with its base name, after the shuffles so crew-5 draws never move.
+        // 16 x 16 = 256 full names, so a crew past that would run out (the cap is 200).
         let names: Vec<DwarfName> = names.into_iter().cycle().take(crew).collect();
         let colours: Vec<DwarfColour> = colours.into_iter().cycle().take(crew).collect();
+        let mut used: BTreeSet<(DwarfName, Epithet)> = BTreeSet::new();
         let identities: Vec<Identity> = (0..crew)
-            .map(|i| Identity {
-                name: names[i],
-                colour: colours[i],
+            .map(|i| {
+                let free: Vec<Epithet> = Epithet::ALL
+                    .into_iter()
+                    .filter(|&epithet| !used.contains(&(names[i], epithet)))
+                    .collect();
+                let epithet = *free
+                    .choose(&mut identity_rng)
+                    .expect("a crew past 256 runs out of full names");
+                used.insert((names[i], epithet));
+                Identity {
+                    name: names[i],
+                    epithet,
+                    colour: colours[i],
+                }
             })
             .collect();
         // Professions have their own stream too, so they never shift a spawn or an identity.
@@ -2939,10 +3118,37 @@ impl World {
         .cycle()
         .take(crew)
         .collect();
+        // NOTE: a crew of 3 or 4 takes the first of [M, H, W, M] so every trade is held (FR56); a
+        // crew below 3 cannot hold all three and keeps the 5-cycle (simd refuses it).
+        if (3..5).contains(&crew) {
+            professions = [
+                Profession::Miner,
+                Profession::Hauler,
+                Profession::Woodcutter,
+                Profession::Miner,
+            ][..crew]
+                .to_vec();
+        }
         professions.shuffle(&mut profession_rng);
         world.spawn_dwarves(camp_origin, &mut spawn_rng, identities, professions);
         world.spawn_emitters(camp_origin);
         world
+    }
+
+    /// `generate_with_crew` with arrivals on (13.8): a group of 5-20 walks in from the valley edge
+    /// every `ARRIVAL_PERIOD` ticks until the crew reaches `CREW_CAP`.
+    pub fn generate_with_arrivals(seed: u64, dims: Dims, crew: usize) -> World {
+        let mut world = World::generate_with_crew(seed, dims, crew);
+        world.ecs.resource_mut::<Arrivals>().0 = true;
+        world
+    }
+
+    /// Dwarves still walking in from the edge (13.8).
+    pub fn arriving_count(&self) -> usize {
+        self.ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Arriving>())
+            .count()
     }
 
     pub fn to_save(&self) -> SaveState {
@@ -2952,9 +3158,10 @@ impl World {
             .iter_entities()
             .filter(|entity| entity.contains::<Dwarf>())
             // NOTE: a `Dwarf` missing any of these components is skipped rather than reported, so
-            // it would vanish from the save silently. Both construction sites (`spawn_dwarves` and
-            // `from_save`) attach the whole set together, so that cannot happen today; a story
-            // that spawns dwarves a third way must keep the set intact.
+            // it would vanish from the save silently. All three construction sites (`spawn_dwarf`,
+            // which the embark spawn and `arrive` share, and `from_save`) attach the whole set
+            // together, so that cannot happen today; a story that spawns dwarves a fourth way must
+            // keep the set intact.
             .filter_map(|entity| {
                 let wander = entity.get::<Wander>()?;
                 let current_job = entity.get::<CurrentJob>()?;
@@ -2986,6 +3193,10 @@ impl World {
                         blocker: squeeze.blocker.0,
                         since: squeeze.since,
                         last: squeeze.last,
+                    }),
+                    arriving: entity.get::<Arriving>().map(|arriving| SavedArriving {
+                        to: arriving.to,
+                        waited: arriving.waited,
                     }),
                 })
             })
@@ -3023,6 +3234,7 @@ impl World {
             items,
             emitters,
             goals_completed: self.ecs.resource::<GoalsCompleted>().0,
+            arrivals: self.ecs.resource::<Arrivals>().0,
         }
     }
 
@@ -3043,6 +3255,7 @@ impl World {
             items,
             emitters,
             goals_completed,
+            arrivals,
         } = save;
         let mut job_resource = Jobs {
             next_id: next_job_id,
@@ -3067,6 +3280,7 @@ impl World {
             designations.into_iter().collect(),
             zones.into_iter().collect(),
             goals_completed,
+            arrivals,
         );
         for dwarf in dwarves {
             let current_job = dwarf.current_job.map(JobId);
@@ -3108,6 +3322,12 @@ impl World {
                     blocker: Id(squeeze.blocker),
                     since: squeeze.since,
                     last: squeeze.last,
+                });
+            }
+            if let Some(saved) = dwarf.arriving {
+                world.ecs.entity_mut(entity).insert(Arriving {
+                    to: saved.to,
+                    waited: saved.waited,
                 });
             }
         }
@@ -3676,25 +3896,7 @@ impl World {
         for (identity, profession) in identities.into_iter().zip(professions) {
             let candidate = rng.random_range(0..candidates.len());
             let pos = candidates.swap_remove(candidate);
-            let id = self.ecs.resource_mut::<IdAllocator>().allocate();
-            self.ecs.spawn((
-                Dwarf,
-                id,
-                pos,
-                JobState::Idle,
-                Wander {
-                    home: camp,
-                    // NOTE: staggers the spawn phases so the dwarves do not step in lockstep,
-                    // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so 200
-                    // dwarves give about 20 per phase. Any assignment into a 10-tick period gives
-                    // that; whether 20 at a time reads as lockstep is the seat's call (13.6 Task 8).
-                    cooldown: id.0 % WANDER_REST_TICKS,
-                },
-                CurrentJob(None),
-                Carrying(None),
-                identity,
-                profession,
-            ));
+            spawn_dwarf(&mut self.ecs, pos, camp, identity, profession);
         }
     }
 
@@ -3703,6 +3905,150 @@ impl World {
             let id = self.ecs.resource_mut::<IdAllocator>().allocate();
             self.ecs.spawn((Emitter(light), id, pos));
         }
+    }
+}
+
+/// The one dwarf bundle, for the embark spawn and for `arrive`.
+fn spawn_dwarf(
+    ecs: &mut EcsWorld,
+    pos: Pos,
+    home: Pos,
+    identity: Identity,
+    profession: Profession,
+) -> Entity {
+    let id = ecs.resource_mut::<IdAllocator>().allocate();
+    ecs.spawn((
+        Dwarf,
+        id,
+        pos,
+        JobState::Idle,
+        Wander {
+            home,
+            // NOTE: staggers the spawn phases so the dwarves do not step in lockstep,
+            // without spending a second RNG draw. It wraps at WANDER_REST_TICKS, so 200
+            // dwarves give about 20 per phase. Any assignment into a 10-tick period gives
+            // that; whether 20 at a time reads as lockstep is the seat's call (13.6 Task 8).
+            cooldown: id.0 % WANDER_REST_TICKS,
+        },
+        CurrentJob(None),
+        Carrying(None),
+        identity,
+        profession,
+    ))
+    .id()
+}
+
+/// Cells reachable from `start` over `astar_neighbours`, in breadth-first order, `start` first.
+fn reach_from(terrain: &Terrain, blocked: &BTreeSet<Pos>, start: Pos) -> Vec<Pos> {
+    let mut seen = BTreeSet::from([start]);
+    let mut order = vec![start];
+    let mut next = 0;
+    while next < order.len() {
+        for cell in astar_neighbours(terrain, blocked, order[next]) {
+            if seen.insert(cell) {
+                order.push(cell);
+            }
+        }
+        next += 1;
+    }
+    order
+}
+
+/// 13.8: every `ARRIVAL_PERIOD` ticks a group appears at one free edge cell of the camp's walkable
+/// component, one dwarf per tile, and each starts walking to a free cell near the camp (`wander`).
+///
+/// No RNG state is saved: this tick's streams are re-seeded from the world seed and the tick.
+/// Stream 0 draws the place and size, stream 1 each dwarf's name, colour and trade, so neither
+/// shifts the other and none touches the worldgen, spawn, identity, profession or wander streams.
+fn arrive(ecs: &mut EcsWorld) {
+    let tick = ecs.resource::<Tick>().0;
+    if !ecs.resource::<Arrivals>().0 || !tick.is_multiple_of(ARRIVAL_PERIOD) {
+        return;
+    }
+    let dwarves: BTreeMap<Id, (Pos, Identity)> = ecs
+        .query_filtered::<(&Id, &Pos, &Identity), With<Dwarf>>()
+        .iter(ecs)
+        .map(|(id, pos, identity)| (*id, (*pos, *identity)))
+        .collect();
+    let room = CREW_CAP.saturating_sub(dwarves.len());
+    if room == 0 {
+        return;
+    }
+    let seed = ecs.resource::<Seed>().0;
+    let mut place_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_ARRIVAL ^ tick);
+    place_rng.set_stream(0);
+    let mut identity_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_ARRIVAL ^ tick);
+    identity_rng.set_stream(1);
+
+    let blocked = world_blocked(ecs);
+    let mut occupied: BTreeSet<Pos> = dwarves.values().map(|(pos, _)| *pos).collect();
+    let camp = ecs.resource::<Camp>().0;
+    let terrain = ecs.resource::<Terrain>();
+    let dims = terrain.dims;
+    let free = |cell: &Pos, occupied: &BTreeSet<Pos>| !occupied.contains(cell);
+    let from_camp = reach_from(terrain, &blocked, camp);
+    let edge = |cell: &Pos| {
+        cell.x == 0 || cell.y == 0 || cell.x == dims.x as i32 - 1 || cell.y == dims.y as i32 - 1
+    };
+    // `from_camp` is breadth-first order, which is deterministic; the camp cell itself is a fire.
+    let edges: Vec<Pos> = from_camp
+        .iter()
+        .copied()
+        .filter(|cell| edge(cell) && free(cell, &occupied) && !blocked.contains(cell))
+        .collect();
+    // NOTE: no free edge cell in the camp's component (a walled-in camp): skip this arrival. The
+    // next period tries again.
+    if edges.is_empty() {
+        return;
+    }
+    let entry = edges[place_rng.random_range(0..edges.len())];
+    let size = place_rng.random_range(ARRIVAL_GROUP).min(room);
+    // The group takes the first free cells of a walk from the entry cell, the entry cell first.
+    let cells: Vec<Pos> = reach_from(terrain, &blocked, entry)
+        .into_iter()
+        .filter(|cell| free(cell, &occupied) && !blocked.contains(cell))
+        .take(size)
+        .collect();
+    occupied.extend(cells.iter().copied());
+    // Where each walks to: the nearest free cells to the camp, none given twice.
+    let targets: Vec<Pos> = from_camp
+        .iter()
+        .copied()
+        .filter(|cell| free(cell, &occupied) && !blocked.contains(cell))
+        .take(cells.len())
+        .collect();
+
+    let mut unused: Vec<(DwarfName, Epithet)> = DwarfName::ALL
+        .into_iter()
+        .flat_map(|name| Epithet::ALL.into_iter().map(move |epithet| (name, epithet)))
+        .filter(|(name, epithet)| {
+            !dwarves
+                .values()
+                .any(|(_, identity)| identity.name == *name && identity.epithet == *epithet)
+        })
+        .collect();
+    let weight_total: u32 = ARRIVAL_PROFESSIONS.iter().map(|(_, weight)| weight).sum();
+    for (pos, to) in cells.into_iter().zip(targets) {
+        let (name, epithet) = unused.remove(identity_rng.random_range(0..unused.len()));
+        let colour = DwarfColour::ALL[identity_rng.random_range(0..DwarfColour::ALL.len())];
+        let mut roll = identity_rng.random_range(0..weight_total);
+        let profession = ARRIVAL_PROFESSIONS
+            .iter()
+            .find(|(_, weight)| {
+                let hit = roll < *weight;
+                roll = roll.saturating_sub(*weight);
+                hit
+            })
+            .expect("the roll is under the weight total")
+            .0;
+        let identity = Identity {
+            name,
+            epithet,
+            colour,
+        };
+        // Home is the entry cell; `wander` plans the walk-in before it would ever wander from it.
+        let dwarf = spawn_dwarf(ecs, pos, pos, identity, profession);
+        ecs.entity_mut(dwarf).insert(Arriving { to, waited: 0 });
     }
 }
 
@@ -5399,6 +5745,63 @@ mod tests {
         // Control: with one hauler free, the same job is claimed rather than ignored.
         set_profession(&mut world, 3, super::Profession::Hauler);
         schedule.run(&mut world.ecs);
+        assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
+    }
+
+    /// Three unclaimed haul jobs, five haulers, and one `claim_jobs` run: how many goal and
+    /// delivery sets it built. Every hauler holds a job except `free_hauler`.
+    fn claim_set_builds(world: &mut World, free_hauler: Option<u32>) -> usize {
+        for id in 0..5 {
+            set_profession(world, id, super::Profession::Hauler);
+        }
+        let (_, near) = dwarf_of(world, super::Profession::Hauler, 3);
+        let mut taken = vec![];
+        let pile = free_cell_beside(world, near, &taken);
+        taken.push(pile);
+        world.ecs.resource_mut::<super::Zones>().0.insert(pile);
+        for item in 50..53 {
+            let stone = free_cell_beside(world, near, &taken);
+            taken.push(stone);
+            world
+                .ecs
+                .spawn((super::Item(super::ItemKind::Stone), super::Id(item), stone));
+            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+                id: JobId(item - 50),
+                kind: JobKind::Haul { item },
+                target: stone,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        {
+            let mut query = world.ecs.query::<(&super::Id, &mut super::CurrentJob)>();
+            for (id, mut current) in query.iter_mut(&mut world.ecs) {
+                current.0 = (Some(id.0) != free_hauler).then_some(JobId(100 + id.0));
+            }
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        // The counter is thread-local: a multi-threaded executor (workspace feature unification)
+        // would run the system on another thread and the test would read 0 whatever it built.
+        schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+        schedule.add_systems(super::claim_jobs);
+        super::CLAIM_SET_BUILDS.with(|n| n.set(0));
+        schedule.run(&mut world.ecs);
+        super::CLAIM_SET_BUILDS.with(|n| n.get())
+    }
+
+    #[test]
+    fn claim_jobs_builds_no_goal_sets_when_every_hauler_is_busy() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        assert_eq!(claim_set_builds(&mut world, None), 0);
+        assert_eq!(world.jobs().len(), 3);
+        assert!(world.jobs().iter().all(|job| job.retry_after == 0));
+    }
+
+    #[test]
+    fn claim_jobs_still_builds_sets_and_claims_when_one_hauler_is_free() {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        assert!(claim_set_builds(&mut world, Some(3)) > 0);
         assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
     }
 
@@ -8409,5 +8812,323 @@ mod tests {
             vec![(10, true), (10, true), (1, true)],
             "goal 1 meeting its target completes goals 2 and 3, whose stock is already there"
         );
+    }
+
+    // ---- 13.8: arrivals walk in ----
+
+    fn arrival_targets(world: &mut World) -> BTreeMap<super::Id, Pos> {
+        world
+            .ecs
+            .query::<(&super::Id, &super::Arriving)>()
+            .iter(&world.ecs)
+            .map(|(id, arriving)| (*id, arriving.to))
+            .collect()
+    }
+
+    fn dwarf_home(world: &mut World, id: super::Id) -> Pos {
+        world
+            .ecs
+            .query::<(&super::Id, &super::Wander)>()
+            .iter(&world.ecs)
+            .find(|(candidate, _)| **candidate == id)
+            .expect("dwarf exists")
+            .1
+            .home
+    }
+
+    fn step_to(world: &mut World, tick: u64) {
+        while world.tick() < tick {
+            world.step();
+        }
+    }
+
+    fn arrival_waited(world: &mut World, id: super::Id) -> Option<u32> {
+        world
+            .ecs
+            .query::<(&super::Id, &super::Arriving)>()
+            .iter(&world.ecs)
+            .find(|(candidate, _)| **candidate == id)
+            .map(|(_, arriving)| arriving.waited)
+    }
+
+    /// Dwarf 1 is an arrival on a one-tile path whose next tile is held by dwarf 0, who never
+    /// leaves (a `Wander.cooldown` no run reaches the end of). Returns the world and the arrival's
+    /// start tile.
+    fn arrival_behind_a_fixed_blocker() -> (World, Pos) {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let blocker_at = world.dwarves()[0].1;
+        let occupied: BTreeSet<Pos> = world.dwarves().iter().map(|d| d.1).collect();
+        let start = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            .into_iter()
+            .map(|(dx, dy)| Pos {
+                x: blocker_at.x + dx,
+                y: blocker_at.y + dy,
+                z: blocker_at.z,
+            })
+            .find(|p| {
+                world.ecs.resource::<super::Terrain>().is_standable(*p) && !occupied.contains(p)
+            })
+            .expect("a free standable tile beside dwarf 0");
+        for (id, at) in [(0, blocker_at), (1, start)] {
+            let entity = world
+                .ecs
+                .iter_entities()
+                .find(|entity| entity.get::<super::Id>() == Some(&super::Id(id)))
+                .expect("dwarf exists")
+                .id();
+            let mut entity = world.ecs.entity_mut(entity);
+            entity.insert(at);
+            if id == 0 {
+                entity.get_mut::<super::Wander>().unwrap().cooldown = u32::MAX;
+            } else {
+                let mut wander = entity.get_mut::<super::Wander>().unwrap();
+                wander.home = at;
+                wander.cooldown = 0;
+                entity.insert((
+                    super::Path(vec![blocker_at]),
+                    super::Arriving {
+                        to: Pos {
+                            x: 0,
+                            y: 0,
+                            z: at.z,
+                        },
+                        waited: 0,
+                    },
+                ));
+            }
+        }
+        (world, start)
+    }
+
+    // 13.8 (Wolf's ruling on the stalled they-keep-coming): an arrival that has waited
+    // `ARRIVAL_PATIENCE_TICKS` on an occupied tile ends its walk where it stands.
+    #[test]
+    fn an_arrival_gives_up_after_waiting_the_patience_limit_behind_a_blocker() {
+        let (mut world, start) = arrival_behind_a_fixed_blocker();
+        let id = super::Id(1);
+        for _ in 0..super::ARRIVAL_PATIENCE_TICKS - 1 {
+            world.step();
+        }
+        assert_eq!(arrival_waited(&mut world, id), Some(99), "still waiting");
+        assert_eq!(world.dwarves()[1].1, start);
+        world.step();
+        assert_eq!(arrival_waited(&mut world, id), None, "the walk ended");
+        assert_eq!(world.dwarves()[1].1, start);
+        assert_eq!(dwarf_home(&mut world, id), start);
+    }
+
+    // 13.8: `waited` is saved. A load that reset it would give the arrival a fresh patience.
+    #[test]
+    fn a_save_round_trip_keeps_the_arrival_wait_count() {
+        let (mut world, _) = arrival_behind_a_fixed_blocker();
+        for _ in 0..40 {
+            world.step();
+        }
+        let id = super::Id(1);
+        assert_eq!(arrival_waited(&mut world, id), Some(40));
+        let json = serde_json::to_string(&world.to_save()).unwrap();
+        let mut loaded = World::from_save(serde_json::from_str(&json).unwrap());
+        assert_eq!(arrival_waited(&mut loaded, id), Some(40));
+        for _ in 0..70 {
+            world.step();
+            loaded.step();
+        }
+        assert_eq!(arrival_waited(&mut world, id), None);
+        assert_eq!(arrival_waited(&mut loaded, id), None);
+        assert_eq!(
+            serde_json::to_string(&world.to_save()).unwrap(),
+            serde_json::to_string(&loaded.to_save()).unwrap()
+        );
+    }
+
+    /// The first group appears; further groups are switched off so only its walk is watched.
+    /// Returns each arrival's destination and the tile it stood on when its `Arriving` ended (it
+    /// wanders about its new home afterwards, so the end of the run is not where the walk ended).
+    fn first_group(churn: bool) -> (BTreeMap<super::Id, Pos>, BTreeMap<super::Id, Pos>) {
+        let mut world = World::generate_with_arrivals(super::DEFAULT_SEED, Dims::DEFAULT, 5);
+        step_to(&mut world, super::ARRIVAL_PERIOD);
+        world.ecs.resource_mut::<super::Arrivals>().0 = false;
+        let targets = arrival_targets(&mut world);
+        assert!(targets.len() >= 5, "the group is {} dwarves", targets.len());
+        let start = world.tick();
+        let far = Pos {
+            x: 127,
+            y: 127,
+            z: world.dims().z as i32 - 1,
+        };
+        let mut ended = BTreeMap::new();
+        while ended.len() < targets.len() && world.tick() < start + 4_000 {
+            let walking = arrival_targets(&mut world);
+            for id in targets.keys().filter(|id| !walking.contains_key(id)) {
+                let pos = world.dwarves().into_iter().find(|d| d.0 == *id).unwrap().1;
+                ended.entry(*id).or_insert(pos);
+            }
+            if churn && world.tick().is_multiple_of(8) {
+                let tile = if world.tile(far) == Some(Tile::Solid(Material::Stone)) {
+                    Tile::Solid(Material::Soil)
+                } else {
+                    Tile::Solid(Material::Stone)
+                };
+                assert!(world.set_tile(far, tile));
+            }
+            world.step();
+        }
+        (targets, ended)
+    }
+
+    fn assert_walks_ended_near_targets(
+        targets: &BTreeMap<super::Id, Pos>,
+        ended: &BTreeMap<super::Id, Pos>,
+    ) {
+        assert_eq!(ended.len(), targets.len(), "an arrival is still walking");
+        for (id, to) in targets {
+            assert!(
+                super::near_arrival_target(*to, ended[id]),
+                "arrival {id:?} ended at {:?}, not within WANDER_RADIUS of {to:?}",
+                ended[id]
+            );
+        }
+    }
+
+    // 13.8 AC 3 (i): with no work to take them, every arrival walks in from the edge.
+    #[test]
+    fn every_arrival_ends_its_walk_near_its_destination() {
+        let (targets, ended) = first_group(false);
+        assert_walks_ended_near_targets(&targets, &ended);
+    }
+
+    // 13.8 AC 3 (ii), Found C: a far tile changes every 8 ticks and each change clears every
+    // path, so only the `Arriving` re-plan finishes the walk.
+    #[test]
+    fn every_arrival_ends_its_walk_through_terrain_churn() {
+        let (targets, ended) = first_group(true);
+        assert_walks_ended_near_targets(&targets, &ended);
+    }
+
+    // 13.8 AC 3 (iii): the embark crew cannot dig, so the dig near the camp is taken by an
+    // arriving miner on its way in, which has then joined the work and holds no `Arriving`.
+    #[test]
+    fn an_arriving_miner_claims_a_dig_and_digs_it() {
+        let mut world = World::generate_with_arrivals(super::DEFAULT_SEED, Dims::DEFAULT, 5);
+        for id in 0..5 {
+            set_profession(&mut world, id, super::Profession::Hauler);
+        }
+        let camp = world.camp_origin();
+        // A walkable cell with walkable ground on all four sides, made solid: a block in open
+        // ground that a miner can dig from any side.
+        let target = (2..10)
+            .map(|d| Pos {
+                x: camp.x + d,
+                y: camp.y + 2,
+                ..camp
+            })
+            .find(|cell| {
+                let terrain = world.ecs.resource::<Terrain>();
+                terrain.is_standable(*cell)
+                    && super::side_neighbours(*cell)
+                        .iter()
+                        .all(|side| terrain.is_standable(*side))
+            })
+            .expect("open ground east of the camp");
+        assert!(world.set_tile(target, Tile::Solid(Material::Stone)));
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: super::Rect {
+                min: target,
+                max: target,
+            },
+        });
+        step_to(&mut world, super::ARRIVAL_PERIOD - 1);
+        assert_eq!(
+            world.tile(target),
+            Some(Tile::Solid(Material::Stone)),
+            "nobody can dig yet"
+        );
+        world.step();
+        let group = arrival_targets(&mut world);
+        assert!(group.len() >= 5, "the group has arrived");
+        world.ecs.resource_mut::<super::Arrivals>().0 = false;
+        let mut claimants = BTreeSet::new();
+        let end = super::ARRIVAL_PERIOD + 4_000;
+        while world.tile(target) != Some(Tile::Empty) && world.tick() < end {
+            world.step();
+            claimants.extend(
+                world
+                    .claims()
+                    .into_iter()
+                    .filter(|(_, job)| job.is_some())
+                    .map(|(id, _)| id),
+            );
+        }
+        assert_eq!(
+            world.tile(target),
+            Some(Tile::Empty),
+            "the dig was never done"
+        );
+        assert!(!claimants.is_empty());
+        let still_walking = arrival_targets(&mut world);
+        for id in &claimants {
+            assert!(group.contains_key(id), "an embark hauler dug: {id:?}");
+            assert!(
+                !still_walking.contains_key(id),
+                "{id:?} took a job and kept Arriving"
+            );
+        }
+    }
+
+    // 13.8 AC 3: an arrival with no way to its destination ends its walk where it stands, with
+    // that spot as its home, and does not walk forever. Two kinds: no walkable goal at all, and a
+    // sealed pocket of goals.
+    #[test]
+    fn an_arrival_with_no_way_to_the_camp_ends_its_walk_where_it_stands() {
+        let mut world = World::generate(super::DEFAULT_SEED, Dims::DEFAULT);
+        let camp = world.camp_origin();
+        let sealed = Pos { x: 40, y: 40, z: 2 };
+        assert!(world.set_tile(sealed, Tile::Empty));
+        let no_goals = Pos {
+            x: 40,
+            y: 40,
+            z: world.dims().z as i32 - 2,
+        };
+        let mut spawned = Vec::new();
+        for (i, to) in [sealed, no_goals].into_iter().enumerate() {
+            let at = Pos {
+                x: camp.x + 2 + i as i32,
+                y: camp.y + 3,
+                ..camp
+            };
+            assert!(world.ecs.resource::<Terrain>().is_standable(at));
+            let identity = super::Identity {
+                name: super::DwarfName::ALL[i],
+                epithet: super::Epithet::Ironhand,
+                colour: super::DwarfColour::Red,
+            };
+            let entity =
+                super::spawn_dwarf(&mut world.ecs, at, camp, identity, super::Profession::Miner);
+            world
+                .ecs
+                .entity_mut(entity)
+                .insert(super::Arriving { to, waited: 0 });
+            let id = *world.ecs.get::<super::Id>(entity).unwrap();
+            spawned.push((id, at));
+        }
+        assert_eq!(world.arriving_count(), 2);
+        let mut ended = BTreeMap::new();
+        for _ in 0..30 {
+            let walking = arrival_targets(&mut world);
+            for (id, _) in &spawned {
+                if !walking.contains_key(id) {
+                    let pos = world.dwarves().into_iter().find(|d| d.0 == *id).unwrap().1;
+                    ended
+                        .entry(*id)
+                        .or_insert((pos, dwarf_home(&mut world, *id)));
+                }
+            }
+            world.step();
+        }
+        assert_eq!(ended.len(), 2, "a walk with no way in went on");
+        for (id, at) in spawned {
+            assert_eq!(ended[&id], (at, at), "{id:?} did not end where it stood");
+        }
     }
 }

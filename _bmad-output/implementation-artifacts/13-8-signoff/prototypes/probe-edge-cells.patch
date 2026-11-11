@@ -1,0 +1,68 @@
+diff --git a/crates/sim-core/tests/worldgen.rs b/crates/sim-core/tests/worldgen.rs
+index 83d9f523..449e164d 100644
+--- a/crates/sim-core/tests/worldgen.rs
++++ b/crates/sim-core/tests/worldgen.rs
+@@ -1066,3 +1066,63 @@ fn crew_200_holds_the_two_two_one_mix() {
+         "professions are periodic with period 5: that is a cycle, not a shuffle"
+     );
+ }
++
++/// PROBE 13.8 creation: edge cells in the camp component, per side, and BFS steps from camp.
++#[test]
++#[ignore]
++fn probe_edge_cells_connected_to_camp() {
++    use std::collections::BTreeMap;
++    let worlds = [(DEFAULT_SEED, Dims::DEFAULT), (DEFAULT_SEED, Dims::FRESH)]
++        .into_iter()
++        .chain((0..8).map(|seed| (seed, Dims::DEFAULT)))
++        .chain((0..4).map(|seed| (seed, Dims::FRESH)));
++    for (seed, dims) in worlds {
++        let world = World::generate_with_crew(seed, dims, 5);
++        let blocked: BTreeSet<Pos> = world.emitters().iter().map(|(_, pos, _)| *pos).collect();
++        let camp = world.camp_origin();
++        let mut dist = BTreeMap::from([(camp, 0u32)]);
++        let mut queue = VecDeque::from([camp]);
++        while let Some(from) = queue.pop_front() {
++            let d = dist[&from];
++            for dz in [-1, 0, 1] {
++                for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
++                    let to = Pos { x: from.x + dx, y: from.y + dy, z: from.z + dz };
++                    if !is_standable(&world, to) || blocked.contains(&to) {
++                        continue;
++                    }
++                    if dz != 0 {
++                        let lower = if to.z < from.z { to } else { from };
++                        let below = Pos { z: lower.z - 1, ..lower };
++                        if !matches!(world.tile(below), Some(Tile::Ramp(_))) {
++                            continue;
++                        }
++                    }
++                    if !dist.contains_key(&to) {
++                        dist.insert(to, d + 1);
++                        queue.push_back(to);
++                    }
++                }
++            }
++        }
++        let (w, h) = (dims.x as i32, dims.y as i32);
++        let mut sides = [0usize; 4]; // x=0, x=W-1, y=0, y=H-1
++        let mut steps: Vec<u32> = Vec::new();
++        let mut zs = BTreeSet::new();
++        for (p, d) in &dist {
++            let on = [p.x == 0, p.x == w - 1, p.y == 0, p.y == h - 1];
++            if on.iter().any(|b| *b) {
++                for (i, b) in on.iter().enumerate() {
++                    if *b { sides[i] += 1; }
++                }
++                steps.push(*d);
++                zs.insert(p.z);
++            }
++        }
++        steps.sort();
++        let (min, med, max) = if steps.is_empty() { (0, 0, 0) } else { (steps[0], steps[steps.len() / 2], steps[steps.len() - 1]) };
++        println!(
++            "PROBE seed={seed} dims={}x{}: camp={:?} component={} edge_cells={} sides[x0,xW,y0,yH]={:?} steps min/med/max={min}/{med}/{max} edge_z={:?}",
++            dims.x, dims.y, camp, dist.len(), steps.len(), sides, zs
++        );
++    }
++}

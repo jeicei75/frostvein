@@ -193,9 +193,10 @@ PY
 mutation "19b a pre-12.11 save decodes with no clearing (review HIGH, Wolf's ruling b)" simd loading_refuses_a_pre_12_11_save_without_dwarf_clearing <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/save.rs'); s = p.read_text()
-old = '    #[serde(deserialize_with = "Option::deserialize")]\n'
+# Re-pointed 13.8: `arriving` carries the same attribute, so the anchor now names the field after it.
+old = '    #[serde(deserialize_with = "Option::deserialize")]\n    pub clearing:'
 assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+p.write_text(s.replace(old, '    pub clearing:'))
 PY
 
 mutation "20 simd lets a hauler clear (review MED)" simd a_clearing_save_whose_carrier_is_a_hauler_is_logged_and_the_daemon_keeps_ticking <<'PY'
@@ -281,9 +282,9 @@ PY
 mutation "23b the no-throw sweep's level assert: no dwarf ever claims a job (review LOW)" sim-core a_carried_stone_is_always_set_down_beside_its_carrier <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            if trade(job.kind) != **profession {'
+old = '        trade(job.kind) == profession\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if true || trade(job.kind) != **profession {'))
+p.write_text(s.replace(old, '        false\n'))
 PY
 
 mutation "24 the fall is removed: a fallen stone's haul is never delivered (review MED, AC 3)" sim-core a_fallen_stone_with_a_haul_job_is_delivered_to_the_pile <<'PY'

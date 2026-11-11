@@ -1,7 +1,7 @@
 use sim_core::{
-    DIG_WORK_TICKS, DesignationKind, Dims, DwarfColour, DwarfName, Identity, ItemKind, Job, JobId,
-    JobKind, JobState, LightKind, Material, Pos, Profession, Rect, SavedDwarf, SimCommand, Tile,
-    World,
+    DIG_WORK_TICKS, DesignationKind, Dims, DwarfColour, DwarfName, Epithet, Identity, ItemKind,
+    Job, JobId, JobKind, JobState, LightKind, Material, Pos, Profession, Rect, SavedDwarf,
+    SimCommand, Tile, World,
 };
 
 const MUTATED_POS: Pos = Pos { x: 0, y: 0, z: 0 };
@@ -553,12 +553,14 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             carrying: None,
             identity: Identity {
                 name: DwarfName::Durin,
+                epithet: Epithet::Ironhand,
                 colour: DwarfColour::Red,
             },
             profession: Profession::Miner,
             path: Vec::new(),
             clearing: None,
             squeeze: None,
+            arriving: None,
         },
         SavedDwarf {
             id: 1,
@@ -571,12 +573,14 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             carrying: None,
             identity: Identity {
                 name: DwarfName::Nori,
+                epithet: Epithet::Ironhand,
                 colour: DwarfColour::Blue,
             },
             profession: Profession::Miner,
             path: Vec::new(),
             clearing: None,
             squeeze: None,
+            arriving: None,
         },
     ];
     save.designations = vec![
@@ -680,11 +684,16 @@ fn save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end() {
         current_job: None,
         work_progress: 0,
         carrying: None,
-        identity: Identity { name, colour },
+        identity: Identity {
+            name,
+            epithet: Epithet::Ironhand,
+            colour,
+        },
         profession: Profession::Miner,
         path: Vec::new(),
         clearing: None,
         squeeze: None,
+        arriving: None,
     };
     let mut save = World::generate(42, dims).to_save();
     save.tick = 100;
@@ -962,11 +971,16 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
         current_job: None,
         work_progress: 0,
         carrying: None,
-        identity: Identity { name, colour },
+        identity: Identity {
+            name,
+            epithet: Epithet::Ironhand,
+            colour,
+        },
         profession: Profession::Miner,
         path: Vec::new(),
         clearing: None,
         squeeze: None,
+        arriving: None,
     };
     let fixture = || {
         let mut save = World::generate(42, dims).to_save();
@@ -1100,4 +1114,152 @@ fn a_256_crew_200_world_saves_loads_and_steps_identically() {
     assert_eq!(loaded.dwarves(), never_saved.dwarves());
     assert_eq!(loaded.jobs(), never_saved.jobs());
     assert_eq!(encode(&loaded), encode(&never_saved));
+}
+
+fn encode(world: &World) -> Vec<u8> {
+    serde_json::to_vec(&world.to_save()).expect("a world encodes")
+}
+
+fn step_to(world: &mut World, tick: u64) {
+    while world.tick() < tick {
+        world.step();
+    }
+}
+
+/// 13.8 AC 4: arrivals are seeded from the world seed and the tick alone, so two worlds agree.
+#[test]
+fn same_seed_arrival_worlds_are_identical_after_three_periods() {
+    let mut a = World::generate_with_arrivals(sim_core::DEFAULT_SEED, Dims::DEFAULT, 5);
+    let mut b = World::generate_with_arrivals(sim_core::DEFAULT_SEED, Dims::DEFAULT, 5);
+    step_to(&mut a, 3 * sim_core::ARRIVAL_PERIOD);
+    step_to(&mut b, 3 * sim_core::ARRIVAL_PERIOD);
+
+    assert!(
+        a.dwarves().len() > 5,
+        "the worlds must have grown to compare anything"
+    );
+    assert_eq!(encode(&a), encode(&b));
+}
+
+/// 13.8 AC 4: turning arrivals on shifts no embark draw, so up to the first period the two worlds
+/// are the same world apart from the setting itself.
+#[test]
+fn arrivals_on_and_off_agree_until_the_first_period() {
+    let seed = sim_core::DEFAULT_SEED;
+    let mut off = World::generate(seed, Dims::DEFAULT);
+    let mut on = World::generate_with_arrivals(seed, Dims::DEFAULT, 5);
+    step_to(&mut off, sim_core::ARRIVAL_PERIOD - 1);
+    step_to(&mut on, sim_core::ARRIVAL_PERIOD - 1);
+    let mut on_save = on.to_save();
+    assert!(on_save.arrivals && !off.to_save().arrivals);
+    on_save.arrivals = false;
+
+    assert_eq!(
+        serde_json::to_vec(&on_save).unwrap(),
+        encode(&off),
+        "the setting must be the only difference"
+    );
+    step_to(&mut off, sim_core::ARRIVAL_PERIOD);
+    step_to(&mut on, sim_core::ARRIVAL_PERIOD);
+    assert_eq!(off.dwarves().len(), 5);
+    assert!(on.dwarves().len() > 5);
+}
+
+/// 13.8 AC 7: a save taken while a group walks in carries each dwarf's destination, so the loaded
+/// world steps on exactly like the never-saved one.
+#[test]
+fn a_save_made_while_a_group_walks_in_reloads_identically() {
+    let mut control = World::generate_with_arrivals(sim_core::DEFAULT_SEED, Dims::DEFAULT, 5);
+    while control.arriving_count() == 0 {
+        control.step();
+        assert!(
+            control.tick() < 2 * sim_core::ARRIVAL_PERIOD,
+            "nobody ever arrived"
+        );
+    }
+    // Walking by now: the saved paths and cooldowns are mid-walk, not just-spawned.
+    let walking = control.tick() + 100;
+    step_to(&mut control, walking);
+    let save = serde_json::to_vec(&control.to_save()).unwrap();
+    assert!(
+        control
+            .to_save()
+            .dwarves
+            .iter()
+            .any(|dwarf| dwarf.arriving.is_some()),
+        "the save must hold a walking arrival"
+    );
+    let mut loaded = World::from_save(serde_json::from_slice(&save).expect("a save decodes"));
+
+    let end = control.tick() + 300;
+    step_to(&mut control, end);
+    step_to(&mut loaded, end);
+    assert_eq!(encode(&loaded), encode(&control));
+}
+
+/// 13.8 AC 8 (sim half): the setting decides, and a save keeps it.
+#[test]
+fn the_arrivals_setting_decides_the_crew_and_survives_a_save() {
+    let seed = sim_core::DEFAULT_SEED;
+    let mut off = World::generate(seed, Dims::DEFAULT);
+    let mut on = World::generate_with_arrivals(seed, Dims::DEFAULT, 5);
+    step_to(&mut off, 3 * sim_core::ARRIVAL_PERIOD);
+    step_to(&mut on, 3 * sim_core::ARRIVAL_PERIOD);
+    assert_eq!(off.dwarves().len(), 5);
+    assert!(on.dwarves().len() > 5);
+
+    for (world, setting) in [(&off, false), (&on, true)] {
+        let bytes = serde_json::to_vec(&world.to_save()).unwrap();
+        let loaded = World::from_save(serde_json::from_slice(&bytes).unwrap());
+        assert_eq!(loaded.to_save().arrivals, setting);
+    }
+}
+
+/// 13.8 AC 9: `epithet`, `arriving` and `arrivals` are required keys, and the unstripped save is
+/// the control that loads.
+#[test]
+fn a_save_missing_an_arrivals_key_is_refused() {
+    let mut world = World::generate_with_arrivals(sim_core::DEFAULT_SEED, Dims::DEFAULT, 5);
+    step_to(&mut world, sim_core::ARRIVAL_PERIOD);
+    let json: serde_json::Value = serde_json::to_value(world.to_save()).unwrap();
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(json.clone()).is_ok(),
+        "the control must load"
+    );
+
+    let strip = |key: &str| {
+        let mut json = json.clone();
+        match key {
+            "arrivals" => {
+                json.as_object_mut()
+                    .unwrap()
+                    .remove(key)
+                    .expect("a top-level key");
+            }
+            "arriving" => {
+                for dwarf in json["dwarves"].as_array_mut().unwrap() {
+                    dwarf
+                        .as_object_mut()
+                        .unwrap()
+                        .remove(key)
+                        .expect("a dwarf key");
+                }
+            }
+            "epithet" => {
+                for dwarf in json["dwarves"].as_array_mut().unwrap() {
+                    dwarf["identity"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove(key)
+                        .expect("an identity key");
+                }
+            }
+            _ => unreachable!(),
+        }
+        json
+    };
+    for key in ["epithet", "arriving", "arrivals"] {
+        let refused = serde_json::from_value::<sim_core::SaveState>(strip(key));
+        assert!(refused.is_err(), "a save without `{key}` loaded");
+    }
 }

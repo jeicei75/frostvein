@@ -95,26 +95,45 @@ fn check_dims(label: &str, dims: sim_core::Dims) -> anyhow::Result<()> {
 }
 
 fn check_crew(label: &str, crew: usize) -> anyhow::Result<()> {
-    if crew == 0 {
-        bail!("{label} must be at least 1");
+    if crew < 3 {
+        bail!("{label} must be at least 3: the first group holds one of each trade");
+    }
+    let full_names = sim_core::DwarfName::ALL.len() * sim_core::Epithet::ALL.len();
+    if crew > full_names {
+        bail!("{label} must be at most {full_names}: there are {full_names} full names");
     }
     Ok(())
 }
 
-/// `World::generate_with_crew`, with a crew the camp's ground cannot hold refused by name instead
+/// `World::generate_with_crew` (or `generate_with_arrivals`), with a crew the camp's ground cannot hold refused by name instead
 /// of as a backtrace. NOTE: caught where it is built, not counted beforehand, because sim-core has
 /// no public way to count the camp's ground; the panic hook still prints the sim's own message.
-fn generate_world(seed: u64, dims: sim_core::Dims, crew: usize) -> anyhow::Result<sim_core::World> {
-    std::panic::catch_unwind(|| sim_core::World::generate_with_crew(seed, dims, crew)).map_err(
-        |_| {
-            anyhow::anyhow!(
-                "crew {crew} does not fit the camp's ground at {}x{}x{}",
-                dims.x,
-                dims.y,
-                dims.z
-            )
-        },
-    )
+fn generate_world(
+    seed: u64,
+    dims: sim_core::Dims,
+    crew: usize,
+    arrivals: bool,
+) -> anyhow::Result<sim_core::World> {
+    std::panic::catch_unwind(|| {
+        if arrivals {
+            sim_core::World::generate_with_arrivals(seed, dims, crew)
+        } else {
+            sim_core::World::generate_with_crew(seed, dims, crew)
+        }
+    })
+    .map_err(|_| {
+        anyhow::anyhow!(
+            "crew {crew} does not fit the camp's ground at {}x{}x{}",
+            dims.x,
+            dims.y,
+            dims.z
+        )
+    })
+}
+
+/// The game `simd` starts with no scenario: arrivals on (13.8). A scenario decides for itself.
+fn fresh_world(dims: sim_core::Dims, crew: usize) -> anyhow::Result<sim_core::World> {
+    generate_world(sim_core::DEFAULT_SEED, dims, crew, true)
 }
 
 /// `simd [port] [--pause-at TICK | --scenario FILE] [--dims X,Y,Z] [--crew N]`, or
@@ -248,7 +267,7 @@ fn main() -> anyhow::Result<()> {
             let live = scenario::Live::new(scenario, world.tick());
             (world, Some(live))
         }
-        None => (generate_world(sim_core::DEFAULT_SEED, dims, crew)?, None),
+        None => (fresh_world(dims, crew)?, None),
     };
     let listener = TcpListener::bind(("127.0.0.1", port))
         .with_context(|| format!("could not bind 127.0.0.1:{port}"))?;
@@ -754,11 +773,19 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
         let mut seen_ids = BTreeSet::new();
         let mut claimed_job_ids = BTreeSet::new();
         let mut carried_items = BTreeSet::new();
-        // NOTE: names and colours may repeat (13.6: past 16 names and 5 colours, #226). 13.8 makes
-        // names unique and restores a name check here.
+        let mut seen_names = BTreeSet::new();
+        // NOTE: colours may repeat (13.6, #226), and so may a base name past 16 dwarves; the FULL
+        // name (name + epithet) must be unique (13.8).
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
                 bail!("save reuses dwarf id {}", dwarf.id);
+            }
+            if !seen_names.insert((dwarf.identity.name, dwarf.identity.epithet)) {
+                bail!(
+                    "save reuses dwarf name {:?} {:?}",
+                    dwarf.identity.name,
+                    dwarf.identity.epithet
+                );
             }
             if let Some(job_id) = dwarf.current_job {
                 let job_id = sim_core::JobId(job_id);
@@ -867,6 +894,30 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     save.dims.x,
                     save.dims.y,
                     save.dims.z
+                );
+            }
+            if let Some(to) = dwarf.arriving.map(|arriving| arriving.to)
+                && !in_bounds(to)
+            {
+                bail!(
+                    "save dwarf {} arrival target {},{},{} is outside dims {}x{}x{}",
+                    dwarf.id,
+                    to.x,
+                    to.y,
+                    to.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+            if let Some(waited) = dwarf.arriving.map(|arriving| arriving.waited)
+                && waited >= sim_core::ARRIVAL_PATIENCE_TICKS
+            {
+                bail!(
+                    "save dwarf {} arrival waited {} ticks, not below the patience {}",
+                    dwarf.id,
+                    waited,
+                    sim_core::ARRIVAL_PATIENCE_TICKS
                 );
             }
         }
@@ -1165,6 +1216,7 @@ mod tests {
         let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
         let fresh = parse(&[]).unwrap();
         assert_eq!((fresh.dims, fresh.crew), (sim_core::Dims::FRESH, 5));
+        assert_eq!(parse(&["--crew", "3"]).unwrap().crew, 3);
         let custom = parse(&["--dims", "160,128,32", "--crew", "7"]).unwrap();
         assert_eq!(
             (custom.dims, custom.crew),
@@ -1185,6 +1237,7 @@ mod tests {
             &["--dims", "a,b,c"],
             &["--dims"],
             &["--crew", "0"],
+            &["--crew", "2"],
             &["--crew", "many"],
             &["--crew"],
         ] {
@@ -1204,16 +1257,44 @@ mod tests {
         }
     }
 
+    /// 13.8 review: a crew past the 256 full names was refused as "does not fit the camp's
+    /// ground", because `generate_world`'s `catch_unwind` relabels the sim's epithet panic.
+    #[test]
+    fn a_crew_past_the_full_names_is_refused_by_name() {
+        let parse = |args: &[&str]| super::parse_args(args.iter().map(std::ffi::OsString::from));
+        assert_eq!(parse(&["--crew", "256"]).unwrap().crew, 256);
+        let error = parse(&["--crew", "257"]).unwrap_err().to_string();
+        assert!(
+            error.contains("--crew") && error.contains("256 full names"),
+            "{error}"
+        );
+    }
+
     #[test]
     fn a_crew_too_big_for_the_camp_is_an_error_naming_the_crew() {
-        let error = generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 1_000_000)
-            .err()
-            .expect("a million dwarves cannot stand at the camp");
+        let error = generate_world(
+            sim_core::DEFAULT_SEED,
+            sim_core::Dims::DEFAULT,
+            1_000_000,
+            false,
+        )
+        .err()
+        .expect("a million dwarves cannot stand at the camp");
         assert!(error.to_string().contains("crew 1000000"), "{error}");
-        assert!(generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5).is_ok());
+        assert!(generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5, false).is_ok());
     }
 
     use super::*;
+
+    /// 13.8 AC 8: the fresh game has arrivals on. 128x128 so the debug run stays cheap.
+    #[test]
+    fn a_fresh_game_grows_its_crew() {
+        let mut world = fresh_world(sim_core::Dims::DEFAULT, 5).unwrap();
+        for _ in 0..sim_core::ARRIVAL_PERIOD + 10 {
+            world.step();
+        }
+        assert!(world.dwarves().len() > 5, "{}", world.dwarves().len());
+    }
 
     #[test]
     fn tick_period_is_exactly_ten_hertz() {
@@ -1415,6 +1496,83 @@ mod tests {
         assert!(
             off_map.is_none(),
             "a save with an off-map path tile was loaded"
+        );
+    }
+
+    /// 13.8 review: `SavedDwarf.arriving.to` is range-checked like `path`. An off-map walk-in
+    /// target was loaded and overflowed the goal-set arithmetic (debug panic, release stranding).
+    #[test]
+    fn loading_refuses_an_arrival_target_outside_the_map() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-13-8-arriving-bounds-save-{}.json",
+            std::process::id()
+        ));
+        let mut world = fresh_world(sim_core::Dims::DEFAULT, 5).unwrap();
+        for _ in 0..=sim_core::ARRIVAL_PERIOD {
+            world.step();
+        }
+        let mut save = world.to_save();
+        let arrival = save
+            .dwarves
+            .iter()
+            .position(|dwarf| dwarf.arriving.is_some())
+            .expect("a group arrived at ARRIVAL_PERIOD and is still walking in");
+        // Positive control: the save as the sim wrote it, mid walk-in, loads.
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write walk-in save fixture");
+        let in_bounds = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        save.dwarves[arrival].arriving.as_mut().unwrap().to = sim_core::Pos {
+            x: i32::MIN,
+            y: i32::MIN,
+            z: 0,
+        };
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write off-map save fixture");
+        let off_map = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(in_bounds.is_some(), "a save mid walk-in must load");
+        assert!(
+            off_map.is_none(),
+            "a save with an off-map arrival target was loaded"
+        );
+    }
+
+    /// 13.8 review round 2: `SavedDwarf.arriving.waited` is range-checked like `to`. A saved
+    /// `u32::MAX` overflowed the first blocked step (debug panic, release wrap to 0). The sim
+    /// ends the walk the step `waited` reaches `ARRIVAL_PATIENCE_TICKS`, so it never saves more
+    /// than one below it.
+    #[test]
+    fn loading_refuses_an_arrival_wait_at_the_patience_limit() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-13-8-arriving-waited-save-{}.json",
+            std::process::id()
+        ));
+        let mut world = fresh_world(sim_core::Dims::DEFAULT, 5).unwrap();
+        for _ in 0..=sim_core::ARRIVAL_PERIOD {
+            world.step();
+        }
+        let mut save = world.to_save();
+        let arrival = save
+            .dwarves
+            .iter()
+            .position(|dwarf| dwarf.arriving.is_some())
+            .expect("a group arrived at ARRIVAL_PERIOD and is still walking in");
+        // Positive control: the most a sim-written save can hold loads.
+        save.dwarves[arrival].arriving.as_mut().unwrap().waited =
+            sim_core::ARRIVAL_PATIENCE_TICKS - 1;
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write walk-in save fixture");
+        let below = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        save.dwarves[arrival].arriving.as_mut().unwrap().waited = sim_core::ARRIVAL_PATIENCE_TICKS;
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write over-wait save fixture");
+        let at_limit = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(
+            below.is_some(),
+            "a save waiting one below the limit must load"
+        );
+        assert!(
+            at_limit.is_none(),
+            "a save whose arrival waited the whole patience was loaded"
         );
     }
 

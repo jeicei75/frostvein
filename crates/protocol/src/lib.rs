@@ -80,6 +80,27 @@ pub enum DwarfName {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum Epithet {
+    Ironhand,
+    Stonefoot,
+    Frostbeard,
+    Coldforge,
+    Deepdelver,
+    Greyhelm,
+    Ashbrow,
+    Flintback,
+    Rimecloak,
+    Hammerfall,
+    Copperbeard,
+    Icevein,
+    Stoutheart,
+    Blackanvil,
+    Emberkeep,
+    Snowmantle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DwarfColour {
     Red,
     Gold,
@@ -91,6 +112,7 @@ pub enum DwarfColour {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Identity {
     pub name: DwarfName,
+    pub epithet: Epithet,
     pub colour: DwarfColour,
 }
 
@@ -416,13 +438,14 @@ mod tests {
 
     #[test]
     fn an_identified_dwarf_round_trips_and_other_entities_stay_byte_identical() {
-        let wire = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null,"identity":{"name":"durin","colour":"red"},"profession":"miner"}"#;
+        let wire = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"idle","light":null,"identity":{"name":"durin","epithet":"ironhand","colour":"red"},"profession":"miner"}"#;
         let entity: Entity = serde_json::from_str(wire).unwrap();
         assert_eq!(entity.profession, Some(Profession::Miner));
         assert_eq!(
             entity.identity,
             Some(Identity {
                 name: DwarfName::Durin,
+                epithet: Epithet::Ironhand,
                 colour: DwarfColour::Red,
             })
         );
@@ -440,7 +463,7 @@ mod tests {
 
     #[test]
     fn a_working_dwarf_round_trips_each_job_and_the_stone_he_carries() {
-        let head = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"work","light":null,"identity":{"name":"durin","colour":"red"},"profession":"miner""#;
+        let head = r#"{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"work","light":null,"identity":{"name":"durin","epithet":"ironhand","colour":"red"},"profession":"miner""#;
         for (tail, job, carrying) in [
             (
                 r#","job":{"dig":{"target":[5,5,6]}}}"#,

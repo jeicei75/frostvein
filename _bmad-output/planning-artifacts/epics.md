@@ -3156,6 +3156,8 @@ So that the fortress grows while I watch.
 **Given** any map size,
 **Then** arrivals run, 128² included. Committed scenarios that change outcome are re-pinned with the reason (standing AC 11).
 
+**AMENDED 2026-11-03 (Wolf, 13.8 Task 0 Q1 (a)):** arrivals are a saved world setting. They run on any map size, 128² included, in a fresh game and in any scenario that asks for them (`"arrivals": true` in its `start`). A committed scenario keeps the world it was recorded on, with no arrivals, so the three seat-save reproducers (#203, #204, #206) and the bench rows keep their meaning.
+
 **Given** the seat,
 **Then** Wolf watches the crew grow and rules whether 200 dwarves need a crew list (FR57). The answer is recorded; a "yes" becomes a story or an issue, not part of this one.
 

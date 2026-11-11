@@ -27,6 +27,9 @@ pub struct SaveState {
     // NOTE: deliberately no `#[serde(default)]`, like `items`: a pre-12.12 save fails to decode and
     // simd refuses it. The count is of `GOALS` done, in order; simd refuses one beyond the chain.
     pub goals_completed: u32,
+    // NOTE: deliberately no `#[serde(default)]`, like `goals_completed`: a pre-13.8 save fails to
+    // decode and simd refuses it. Arrivals are a world setting, saved with the world.
+    pub arrivals: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,6 +62,19 @@ pub struct SavedDwarf {
     // field as `None`, and a pre-13.4 save cannot hold a stand-off timer, so `None` is exact. A
     // pre-13.4 save loads, with no stand-off under way.
     pub squeeze: Option<SavedSqueeze>,
+    // NOTE: REQUIRED, like `clearing` (13.8): a pre-13.8 save fails to decode and simd refuses it.
+    // `deserialize_with` turns off serde's missing-`Option`-is-`None`. The cell an arriving dwarf
+    // is walking to and its wait count; `None` once its walk-in is over.
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub arriving: Option<SavedArriving>,
+}
+
+/// An arrival's walk-in (13.8): the cell it walks to, and how many ticks it has waited on an
+/// occupied tile (`ARRIVAL_PATIENCE_TICKS` ends the walk).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedArriving {
+    pub to: Pos,
+    pub waited: u32,
 }
 
 /// A holder's stand-off behind one blocker (13.4): who holds him, since which tick, and the tick

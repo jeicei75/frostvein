@@ -1,0 +1,151 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 0d2a2520..25b98df6 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -471,6 +471,7 @@ impl Jobs {
+ }
+ 
+ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMut<Jobs>) {
++    let _probe = probe::T::new("create_jobs");
+     for (&target, &designation) in &designations.0 {
+         if jobs.targets.contains(&target) {
+             continue;
+@@ -535,6 +536,7 @@ fn stored_by_kind(ecs: &EcsWorld) -> BTreeMap<ItemKind, u32> {
+ /// Completes the next goal while its stored count meets its target, so a chain whose later stock
+ /// is already there finishes in one tick (12.12 D2). A completed goal stays completed.
+ fn advance_goals(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("advance_goals");
+     let stored = stored_by_kind(ecs);
+     let mut done = ecs.resource::<GoalsCompleted>().0;
+     while let Some(&(kind, target)) = GOALS.get(done as usize) {
+@@ -550,6 +552,7 @@ fn advance_goals(ecs: &mut EcsWorld) {
+ /// schedule, so a paused daemon takes new stockpiles and designations but derives no work from
+ /// them — 3.2's line, extended to stones unchanged.
+ fn create_haul_jobs(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("create_haul_jobs");
+     let (stored, loose) = split_stored(ecs);
+     let any_zone = !ecs.resource::<Zones>().0.is_empty();
+ 
+@@ -638,6 +641,7 @@ fn claim_jobs(
+     emitters: Query<&Pos, With<Emitter>>,
+     mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying, &Profession)>,
+ ) {
++    let _probe = probe::T::new("claim_jobs");
+     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+     dwarves.sort_by_key(|(_, id, _, _, _, _)| **id);
+     let mut claimed: BTreeSet<_> = dwarves
+@@ -2168,6 +2172,7 @@ fn clearing_set_down(
+ 
+ /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
+ fn execute_jobs(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("execute_jobs");
+     // Built once, before the loop borrows the world for terrain. Emitters are static; the items
+     // are not (a pick-up, a drop or a spawn changes them mid-loop), so `blocked` is rebuilt from
+     // them for every dwarf.
+@@ -2648,6 +2653,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+ }
+ 
+ fn settle(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("settle");
+     // Dwarves move first; their new positions must refuse item landings this tick.
+     let blocked = world_blocked(ecs);
+     let mut occupied = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
+@@ -2730,6 +2736,7 @@ fn settle(ecs: &mut EcsWorld) {
+ /// carrier's tile at the end of every tick no matter which system moved the carrier. Only
+ /// `advance_goals` follows it, because it must judge final positions.
+ fn carry_items(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("carry_items");
+     let mut carriers: Vec<_> = ecs
+         .iter_entities()
+         .filter(|entity| entity.contains::<Dwarf>())
+@@ -2752,6 +2759,7 @@ fn carry_items(ecs: &mut EcsWorld) {
+ }
+ 
+ fn advance_tick(mut tick: ResMut<Tick>) {
++    let _probe = probe::T::new("advance_tick");
+     tick.0 += 1;
+ }
+ 
+@@ -2783,6 +2791,7 @@ fn wander(
+         (Without<Emitter>, Without<Item>),
+     >,
+ ) {
++    let _probe = probe::T::new("wander");
+     // AD-7: query iteration is archetype order, not Id order, and all dwarves draw from
+     // one stream. Draw order is a sim outcome, so sort before touching the RNG.
+     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+@@ -3945,6 +3954,7 @@ fn reach_from(terrain: &Terrain, blocked: &BTreeSet<Pos>, start: Pos) -> Vec<Pos
+ /// Stream 0 draws the place and size, stream 1 each dwarf's name, colour and trade, so neither
+ /// shifts the other and none touches the worldgen, spawn, identity, profession or wander streams.
+ fn arrive(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("arrive");
+     let tick = ecs.resource::<Tick>().0;
+     if !ecs.resource::<Arrivals>().0 || !tick.is_multiple_of(ARRIVAL_PERIOD) {
+         return;
+@@ -9059,3 +9069,19 @@ mod tests {
+         }
+     }
+ }
++
++pub mod probe {
++    use std::cell::RefCell;
++    use std::collections::BTreeMap;
++    use std::time::Instant;
++    thread_local!(static ACC: RefCell<BTreeMap<&'static str, f64>> = RefCell::new(BTreeMap::new()));
++    pub struct T(&'static str, Instant);
++    impl T { pub fn new(n: &'static str) -> T { T(n, Instant::now()) } }
++    impl Drop for T {
++        fn drop(&mut self) {
++            let ms = self.1.elapsed().as_secs_f64() * 1000.0;
++            ACC.with(|a| *a.borrow_mut().entry(self.0).or_default() += ms);
++        }
++    }
++    pub fn take() -> BTreeMap<&'static str, f64> { ACC.with(|a| std::mem::take(&mut *a.borrow_mut())) }
++}
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 0d1fabe5..71106549 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -355,6 +355,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+         let start_tiles = world.tiles().to_vec();
+         let (mut dug, mut cut) = (0, 0);
++        let mut win: Vec<(f64, f64, usize)> = Vec::new();
+         for _ in 0..scenario.ticks {
+             for command in schedule.due(world.tick()) {
+                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
+@@ -393,11 +394,32 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+                     }
+                 }
+             }
+-            serde_json::to_string(&crate::bridge::delta(
++            let enc_start = Instant::now();
++            let bytes = serde_json::to_string(&crate::bridge::delta(
+                 &mut world,
+                 scenario.speed,
+                 Vec::new(),
+-            ))?;
++            ))?
++            .len();
++            let enc = enc_start.elapsed().as_secs_f64() * 1000.0;
++            win.push((*ms.last().unwrap(), enc, bytes));
++            if win.len() == 500 {
++                let n = win.len() as f64;
++                let step_mean = win.iter().map(|w| w.0).sum::<f64>() / n;
++                let step_max = win.iter().map(|w| w.0).fold(0.0, f64::max);
++                let enc_mean = win.iter().map(|w| w.1).sum::<f64>() / n;
++                let kb_mean = win.iter().map(|w| w.2 as f64).sum::<f64>() / n / 1024.0;
++                eprintln!(
++                    "PROBE tick={} crew={} arriving={} marks={} items={} step_mean={step_mean:.2} step_max={step_max:.1} enc_mean={enc_mean:.2} kb_mean={kb_mean:.1}",
++                    world.tick(), world.dwarves().len(), world.arriving_count(),
++                    world.designations().len(), world.items().len()
++                );
++                let mut sys: Vec<_> = sim_core::probe::take().into_iter().collect();
++                sys.sort_by(|a, b| b.1.total_cmp(&a.1));
++                let top: Vec<String> = sys.iter().take(5).map(|(k, v)| format!("{k}={:.2}", v / n)).collect();
++                eprintln!("  SYS {}", top.join(" "));
++                win.clear();
++            }
+         }
+         let Stats {
+             mean,

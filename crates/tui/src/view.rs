@@ -469,9 +469,14 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         })
         .flat_map(|(identity, profession)| {
             let fg = dwarf_colour(identity.colour);
-            let name = client_core::dwarf_name_text(identity.name)
-                .chars()
-                .map(move |glyph| Cell { glyph, fg });
+            let name = format!(
+                "{} {}",
+                client_core::dwarf_name_text(identity.name),
+                client_core::epithet_text(identity.epithet)
+            )
+            .chars()
+            .map(move |glyph| Cell { glyph, fg })
+            .collect::<Vec<_>>();
             // One blank, then the trade in status grey; a dwarf with no trade shows his name only.
             let trade = profession
                 .map(|profession| format!(" {}", client_core::profession_text(profession)))
@@ -483,7 +488,7 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
                 })
                 .collect::<Vec<_>>();
             // Two blank cells between dwarves.
-            name.chain(trade).chain([BLANK, BLANK])
+            name.into_iter().chain(trade).chain([BLANK, BLANK])
         });
     for (x, cell) in (0..w).zip(roster) {
         framebuffer.cells[usize::from(x) + usize::from(roster_y) * usize::from(w)] = cell;
@@ -1273,6 +1278,7 @@ mod tests {
             light: None,
             identity: Some(protocol::Identity {
                 name,
+                epithet: protocol::Epithet::Ironhand,
                 colour: protocol::DwarfColour::Blue,
             }),
             profession,
@@ -1288,14 +1294,17 @@ mod tests {
             ),
         ];
 
-        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 30, 6);
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 40, 6);
 
-        let row: String = (0..30).map(|x| framebuffer.cell(x, 3).glyph).collect();
-        assert!(row.starts_with("Ori  Nori hauler  "), "{row:?}");
-        assert_eq!(framebuffer.cell(10, 3).glyph, 'h');
-        assert_eq!(framebuffer.cell(9, 3).fg, STATUS_TEXT);
+        let row: String = (0..40).map(|x| framebuffer.cell(x, 3).glyph).collect();
+        assert!(
+            row.starts_with("Ori Ironhand  Nori Ironhand hauler  "),
+            "{row:?}"
+        );
+        assert_eq!(framebuffer.cell(28, 3).glyph, 'h');
+        assert_eq!(framebuffer.cell(27, 3).fg, STATUS_TEXT);
         assert_eq!(
-            framebuffer.cell(5, 3).fg,
+            framebuffer.cell(14, 3).fg,
             dwarf_colour(protocol::DwarfColour::Blue)
         );
     }
@@ -1319,6 +1328,7 @@ mod tests {
             light: None,
             identity: Some(protocol::Identity {
                 name: protocol::DwarfName::Ori,
+                epithet: protocol::Epithet::Ironhand,
                 colour,
             }),
             profession: None,

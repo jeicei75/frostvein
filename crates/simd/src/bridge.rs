@@ -187,6 +187,7 @@ fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Ent
                 .find(|(identity_id, _)| *identity_id == id)
                 .map(|(_, identity)| protocol::Identity {
                     name: dwarf_name(identity.name),
+                    epithet: epithet(identity.epithet),
                     colour: dwarf_colour(identity.colour),
                 }),
             profession: professions
@@ -256,6 +257,27 @@ fn dwarf_name(v: sim_core::DwarfName) -> protocol::DwarfName {
         sim_core::DwarfName::Alf => protocol::DwarfName::Alf,
         sim_core::DwarfName::Fjalar => protocol::DwarfName::Fjalar,
         sim_core::DwarfName::Frosti => protocol::DwarfName::Frosti,
+    }
+}
+
+fn epithet(v: sim_core::Epithet) -> protocol::Epithet {
+    match v {
+        sim_core::Epithet::Ironhand => protocol::Epithet::Ironhand,
+        sim_core::Epithet::Stonefoot => protocol::Epithet::Stonefoot,
+        sim_core::Epithet::Frostbeard => protocol::Epithet::Frostbeard,
+        sim_core::Epithet::Coldforge => protocol::Epithet::Coldforge,
+        sim_core::Epithet::Deepdelver => protocol::Epithet::Deepdelver,
+        sim_core::Epithet::Greyhelm => protocol::Epithet::Greyhelm,
+        sim_core::Epithet::Ashbrow => protocol::Epithet::Ashbrow,
+        sim_core::Epithet::Flintback => protocol::Epithet::Flintback,
+        sim_core::Epithet::Rimecloak => protocol::Epithet::Rimecloak,
+        sim_core::Epithet::Hammerfall => protocol::Epithet::Hammerfall,
+        sim_core::Epithet::Copperbeard => protocol::Epithet::Copperbeard,
+        sim_core::Epithet::Icevein => protocol::Epithet::Icevein,
+        sim_core::Epithet::Stoutheart => protocol::Epithet::Stoutheart,
+        sim_core::Epithet::Blackanvil => protocol::Epithet::Blackanvil,
+        sim_core::Epithet::Emberkeep => protocol::Epithet::Emberkeep,
+        sim_core::Epithet::Snowmantle => protocol::Epithet::Snowmantle,
     }
 }
 

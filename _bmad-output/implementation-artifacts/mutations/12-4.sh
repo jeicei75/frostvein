@@ -16,25 +16,14 @@
 mutation "trade check removed" sim-core hauling_starts_while_the_dig_backlog_is_still_queued <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            if trade(job.kind) != **profession {\n'
+old = '        trade(job.kind) == profession\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            if false && trade(job.kind) != **profession {\n'))
+p.write_text(s.replace(old, '        true\n'))
 PY
 
-mutation "trade check moved after attempted" sim-core a_job_with_no_free_dwarf_of_its_trade_gets_no_retry_stamp <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''            if trade(job.kind) != **profession {
-                // Before `attempted`: a dwarf of another trade must not stamp a cooldown on this job.
-                continue;
-            }
-'''
-assert s.count(old) == 1
-s = s.replace(old, '')
-old = '                attempted = true;\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, old + '                if trade(job.kind) != **profession {\n                    continue;\n                }\n'))
-PY
+# Retired 2026-11-05 (13.8): "trade check moved after attempted" sabotaged an inline trade `continue`
+# placed before `attempted`. 13.8 folded the trade, free and reaction-delay tests into the one `can_try`
+# predicate that gates both the early skip and `attempted`, so there is no second place to move it to.
 
 mutation "trade maps Haul to Miner" sim-core each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders <<'PY'
 import pathlib

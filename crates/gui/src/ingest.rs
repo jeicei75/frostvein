@@ -1887,14 +1887,18 @@ fn name_readout_spans(mirror: &Mirror, selected: Option<u32>) -> Vec<(String, Co
             return Vec::new();
         };
         let mut spans = Vec::new();
-        let name = client_core::dwarf_name_text(identity.name);
+        let name = format!(
+            "{} {}",
+            client_core::dwarf_name_text(identity.name),
+            client_core::epithet_text(identity.epithet)
+        );
         let color = crate::appearance::dwarf_tunic_color(identity.colour);
         match trade(entity) {
             Some(trade) => {
                 spans.push((format!("{name}\n"), color));
                 spans.push((format!("{trade}   T: change trade"), grey));
             }
-            None => spans.push((name.to_owned(), color)),
+            None => spans.push((name, color)),
         }
         return spans;
     }
@@ -1905,8 +1909,16 @@ fn name_readout_spans(mirror: &Mirror, selected: Option<u32>) -> Vec<(String, Co
         .filter_map(|entity| Some((entity, entity.identity?)))
         .collect::<Vec<_>>();
     for (index, (entity, identity)) in dwarves.iter().enumerate() {
-        // NOTE: names are padded to the longest (6) so the trade column lines up; no wrapping logic.
-        let name = format!("{:<7}", client_core::dwarf_name_text(identity.name));
+        // NOTE: full names are padded to the longest (18: "Thrain Copperbeard") plus one blank so
+        // the trade column lines up; no wrapping logic.
+        let name = format!(
+            "{:<19}",
+            format!(
+                "{} {}",
+                client_core::dwarf_name_text(identity.name),
+                client_core::epithet_text(identity.epithet)
+            )
+        );
         let newline = if index + 1 < dwarves.len() { "\n" } else { "" };
         spans.push((name, crate::appearance::dwarf_tunic_color(identity.colour)));
         spans.push((
@@ -3821,7 +3833,11 @@ mod tests {
             pos: [id as i32, 0, 0],
             state: protocol::JobState::Idle,
             light: None,
-            identity: Some(protocol::Identity { name, colour }),
+            identity: Some(protocol::Identity {
+                name,
+                epithet: protocol::Epithet::Ironhand,
+                colour,
+            }),
             profession: Some(profession),
             job: None,
             carrying: None,
@@ -3869,15 +3885,15 @@ mod tests {
         assert_eq!(
             name_spans(&mut app),
             vec![
-                name("Nain   ", [0x80, 0x4C, 0xA8]),
+                name("Nain Ironhand      ", [0x80, 0x4C, 0xA8]),
                 name("woodcutter\n", GREY),
-                name("Ori    ", [0x3E, 0x92, 0x4C]),
+                name("Ori Ironhand       ", [0x3E, 0x92, 0x4C]),
                 name("hauler\n", GREY),
-                name("Bifur  ", [0xB2, 0x3A, 0x34]),
+                name("Bifur Ironhand     ", [0xB2, 0x3A, 0x34]),
                 name("miner\n", GREY),
-                name("Frar   ", [0xD6, 0xA4, 0x2C]),
+                name("Frar Ironhand      ", [0xD6, 0xA4, 0x2C]),
                 name("hauler\n", GREY),
-                name("Dori   ", [0x3C, 0x62, 0xBA]),
+                name("Dori Ironhand      ", [0x3C, 0x62, 0xBA]),
                 name("miner", GREY),
             ]
         );
@@ -3890,8 +3906,25 @@ mod tests {
         app.update();
         assert_eq!(
             name_text(&mut app),
-            "Nain   woodcutter\nOri    hauler\nBifur  hauler\nFrar   hauler\nDori   miner"
+            "Nain Ironhand      woodcutter\nOri Ironhand       hauler\nBifur Ironhand     hauler\nFrar Ironhand      hauler\nDori Ironhand      miner"
         );
+    }
+
+    /// 13.8 AC6: an arrival is a dwarf the snapshot never held, so the mirror learns him from a
+    /// delta. Selected, the name slot reads his FULL name, base name and epithet.
+    #[test]
+    fn a_dwarf_first_seen_in_a_delta_reads_name_and_epithet_when_selected() {
+        let mut mirror = Mirror::from_snapshot(snapshot_at_tick(0, Speed::Normal)).unwrap();
+        let mut arrival = trade_dwarf(
+            9,
+            protocol::DwarfName::Thrain,
+            protocol::DwarfColour::Gold,
+            protocol::Profession::Miner,
+        );
+        arrival.identity.as_mut().unwrap().epithet = protocol::Epithet::Copperbeard;
+        mirror.apply_delta(entity_delta(1, vec![arrival]));
+        let spans = super::name_readout_spans(&mirror, Some(9));
+        assert_eq!(spans[0].0, "Thrain Copperbeard\n");
     }
 
     /// The goal list's spans, in order: `(text, colour)` per `TextSpan` child of the readout.
@@ -4016,7 +4049,7 @@ mod tests {
         app.update();
         assert_eq!(
             name_text(&mut app),
-            "Durin  miner\nBifur  hauler",
+            "Durin Ironhand     miner\nBifur Ironhand     hauler",
             "no selection shows the roster"
         );
         let select = |app: &mut App, id| {
@@ -4029,7 +4062,7 @@ mod tests {
         assert_eq!(
             name_spans(&mut app),
             vec![
-                ("Durin\n".to_owned(), [0xB2, 0x3A, 0x34]),
+                ("Durin Ironhand\n".to_owned(), [0xB2, 0x3A, 0x34]),
                 ("miner   T: change trade".to_owned(), [150, 160, 170]),
             ]
         );
@@ -4037,14 +4070,14 @@ mod tests {
         assert_eq!(
             name_spans(&mut app),
             vec![
-                ("Bifur\n".to_owned(), [0x3C, 0x62, 0xBA]),
+                ("Bifur Ironhand\n".to_owned(), [0x3C, 0x62, 0xBA]),
                 ("hauler   T: change trade".to_owned(), [150, 160, 170]),
             ]
         );
         select(&mut app, None);
         assert_eq!(
             name_text(&mut app),
-            "Durin  miner\nBifur  hauler",
+            "Durin Ironhand     miner\nBifur Ironhand     hauler",
             "clearing the selection brings the roster back"
         );
     }
@@ -4090,7 +4123,7 @@ mod tests {
         );
         assert_eq!(
             name_text(&mut app),
-            "Bifur\nminer   T: change trade",
+            "Bifur Ironhand\nminer   T: change trade",
             "the readout must still say the OLD trade until the wire changes it"
         );
 
@@ -4100,7 +4133,10 @@ mod tests {
             .send(Ok(WireMessage::Delta(Box::new(entity_delta(1, crew)))))
             .unwrap();
         app.update();
-        assert_eq!(name_text(&mut app), "Bifur\nhauler   T: change trade");
+        assert_eq!(
+            name_text(&mut app),
+            "Bifur Ironhand\nhauler   T: change trade"
+        );
 
         // The order wraps: a woodcutter's next trade is miner.
         app.world_mut()
