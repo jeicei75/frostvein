@@ -54,7 +54,7 @@ const WANDER_REST_TICKS: u32 = 10;
 /// #227's crowd jams the camp, and a follower otherwise waits forever behind dwarves that are
 /// not leaving; on 256^2 that queued 68 arrivals for good. Saved with the dwarf (`waited`), so a
 /// load does not hand out a fresh patience.
-const ARRIVAL_PATIENCE_TICKS: u32 = 100;
+pub const ARRIVAL_PATIENCE_TICKS: u32 = 100;
 /// Ticks a dwarf rests between steps while WORKING, so a job-walk is paced like a wander.
 ///
 /// Without it a pathing dwarf took one cell per tick. A cell is 1.6 m and a tick is 100 ms, so

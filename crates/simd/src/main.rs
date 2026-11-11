@@ -910,6 +910,16 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     save.dims.z
                 );
             }
+            if let Some(waited) = dwarf.arriving.map(|arriving| arriving.waited)
+                && waited >= sim_core::ARRIVAL_PATIENCE_TICKS
+            {
+                bail!(
+                    "save dwarf {} arrival waited {} ticks, not below the patience {}",
+                    dwarf.id,
+                    waited,
+                    sim_core::ARRIVAL_PATIENCE_TICKS
+                );
+            }
         }
         for (id, ..) in &save.items {
             if !seen_ids.insert(*id) {
@@ -1523,6 +1533,46 @@ mod tests {
         assert!(
             off_map.is_none(),
             "a save with an off-map arrival target was loaded"
+        );
+    }
+
+    /// 13.8 review round 2: `SavedDwarf.arriving.waited` is range-checked like `to`. A saved
+    /// `u32::MAX` overflowed the first blocked step (debug panic, release wrap to 0). The sim
+    /// ends the walk the step `waited` reaches `ARRIVAL_PATIENCE_TICKS`, so it never saves more
+    /// than one below it.
+    #[test]
+    fn loading_refuses_an_arrival_wait_at_the_patience_limit() {
+        let path = std::env::temp_dir().join(format!(
+            "frostvein-13-8-arriving-waited-save-{}.json",
+            std::process::id()
+        ));
+        let mut world = fresh_world(sim_core::Dims::DEFAULT, 5).unwrap();
+        for _ in 0..=sim_core::ARRIVAL_PERIOD {
+            world.step();
+        }
+        let mut save = world.to_save();
+        let arrival = save
+            .dwarves
+            .iter()
+            .position(|dwarf| dwarf.arriving.is_some())
+            .expect("a group arrived at ARRIVAL_PERIOD and is still walking in");
+        // Positive control: the most a sim-written save can hold loads.
+        save.dwarves[arrival].arriving.as_mut().unwrap().waited =
+            sim_core::ARRIVAL_PATIENCE_TICKS - 1;
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write walk-in save fixture");
+        let below = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        save.dwarves[arrival].arriving.as_mut().unwrap().waited = sim_core::ARRIVAL_PATIENCE_TICKS;
+        fs::write(&path, serde_json::to_vec(&save).unwrap()).expect("write over-wait save fixture");
+        let at_limit = load_world_from(path.to_str().expect("temporary path is UTF-8"));
+        fs::remove_file(&path).expect("remove save fixture");
+
+        assert!(
+            below.is_some(),
+            "a save waiting one below the limit must load"
+        );
+        assert!(
+            at_limit.is_none(),
+            "a save whose arrival waited the whole patience was loaded"
         );
     }
 
