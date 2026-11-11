@@ -131,3 +131,12 @@ old = '    if crew > full_names {\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    if false && crew > full_names {\n'))
 PY
+
+# Row 16: review round 2 patch 1: the load validator range-checks the walk-in wait count.
+mutation "16 the load validator skips arriving.waited (review round 2 patch 1)" simd loading_refuses_an_arrival_wait_at_the_patience_limit <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                && waited >= sim_core::ARRIVAL_PATIENCE_TICKS\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                && false\n'))
+PY
