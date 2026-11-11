@@ -5,7 +5,7 @@ baseline_commit: e2e1882d
 
 # Story 13.8: They Keep Coming
 
-Status: review
+Status: in-progress
 
 ## Story
 
@@ -275,6 +275,31 @@ Code review, round 1, 2026-11-10 (Opus 5.5, fresh session; diff `main...e7fcffdb
 - the #231 attribution is unproven (already the #231 story's first measurement) — feature;
 - TUI tests use one epithet (`every_epithet_has_its_one_spelling` covers the mapping) — edge.
 
+Code review, round 2, 2026-11-11 (Opus 5.5, fresh session; diff `c330c9ed..805a0be9`, the review patch pass 1). Layers: Blind Hunter (Sonnet; sim-core consumers of the new guards), Edge Case Hunter (Sonnet; simd, tests, rows 14-15), Acceptance Auditor (Opus; whole diff), Feature Auditor (Opus; whole diff). All four ran cargo (1.97.1) in their own `/tmp/review-<layer>/target` and finished; none timed out. Nobody re-ran the full gate: "GREEN on `65b85a0f`" is taken from the record. Cost $10.93 over 201 turns (subagents 58.0% of tokens). `reap-build-caches.sh --tmp-only --force`: 10 dirs, 12.3 GB reaped (6.2 GB free space reclaimed). **Patches LEFT AS ACTION ITEMS (Wolf, 2026-11-11); Status → in-progress.**
+
+**Delta vs round 1:** NEW 3 (0 HIGH / 1 MED / 2 LOW), REWORK 1 (P3 half-closed). **Closure table audit:**
+- P1 CLOSED. Proven live through the daemon's Load and through `--bench` (`save dwarf 10 arrival target 256,128,7 is outside dims 256x256x32`, daemon kept running). Every map edge was tried (x=128, y=128, z=32, z=-1, x=-1 refused; 127,127,31 loads), and an unedited mid-walk-in save loads and its 13 walkers keep walking. Row 14 re-applied by hand: dies at the new off-map assert. The "three committed saves" half of the other side is vacuous: all three hold `"arriving":null`.
+- P2 CLOSED. `--crew 256` starts and serves at 128², 192² and 256² (a real snapshot held 256 unique full names); 257 is refused on `--crew`, `--bench` and `--scenario`. Arrivals cannot reach the ceiling (`room = CREW_CAP − crew`, crew 250 + arrivals ran 2,010 ticks, no panic). Row 15 re-applied by hand: dies at `unwrap_err` for 257. The "they-keep-coming runs in the full gate" half of the other side is false: no test or gate step runs that scenario.
+- P3 REWORK: the listed sites are fixed, but other text from the same rulings is still stale (patch 2 below).
+
+**Stopping rule:** no new finding is HIGH, so the static audit ends after this round. There is no round 3.
+
+- [ ] [Review][Patch] **The load validator does not range-check `SavedDwarf.arriving.waited`** (blind + edge, MED; found by running, independently, by both) [crates/simd/src/main.rs:899]. P1 checked the target `to` but not its sibling field. A save with `waited: u32::MAX` loads, and the first blocked step panics in debug with `attempt to add with overflow` at `crates/sim-core/src/lib.rs:2850`. Release wraps it to 0 silently. A save the sim writes always holds `waited` ≤ 99: the walk ends the step `waited` reaches `ARRIVAL_PATIENCE_TICKS` (`lib.rs:2851-2855`), so refusing `waited >= ARRIVAL_PATIENCE_TICKS` at load rejects no real save. Fix: expose the constant to simd, refuse it in the validator next to the `to` check, and add a test (the mid-walk-in fixture, with `waited` set to the limit) plus mutation row 16.
+- [ ] [Review][Patch] **The patch pass's record over-claims its closure and left stale text** (acceptance, LOW; patched under the misreported-verification exception: the next review audits this table instead of re-deriving it) [_bmad-output/implementation-artifacts/13-8-they-keep-coming.md]. REWORK of round 1's P3.
+  - The P2 closure row says `they-keep-coming` "still loads and runs in the full gate". Nothing runs it (`rg` finds only `two-hundred-on-256` at `bench.rs:285`). It also never passes `check_crew` above crew 5.
+  - The P1 closure row cites the three committed saves as the other side. All three hold `"arriving":null`, so the new branch never runs for them.
+  - P3 says each site carries an `AMENDED 2026-11-11` line. Task 2's save line (170) was rewritten without one.
+  - Still stale after the wait-limit ruling (2026-11-03): Key decisions line 327 ("the follower waits forever … `arriving=0` (AC 11) is the alarm if it stalls"), and Task 6 line 208 ("Any `arriving` > 0 is a stalled walk").
+  - AC 3 (i) NOT MET (#232) is recorded only in round 1's Decision and on the board. AC 3 (line 90) has no marker.
+  - The board comment says "Unpushed past c330c9ed". The remote has been at `805a0be9` since the push.
+  - The patch pass is recorded as $5.51. The ledger also holds its planning session `40730b6f` ($2.04, review-patch), so it cost $7.55.
+  - The File List omits `deferred-work.md`, which round 1 changed (`009dc878`, `c330c9ed`).
+- [x] [Review][Defer] `a_crew_too_big_for_the_camp_is_an_error_naming_the_crew` (crew 1,000,000) catches the epithet panic (`lib.rs:3099`), which no user can now reach. It never exercises a camp that is really too small, and on DEFAULT_SEED 256 dwarves fit even at 128², so the "does not fit the camp's ground" message has no shown trigger [crates/simd/src/main.rs:1263] — deferred, LOW (feature). The patch pass left the test alone on purpose and told Wolf.
+
+**Dismissed (2):**
+- crews of 201-256 start with arrivals on and nobody arrives (recorded at line 212, "arrivals are inert at the cap") — feature;
+- a refused Load tells only the daemon's stderr, not the client (every load failure behaves this way) — feature.
+
 ## Verification
 
 ```bash
@@ -538,3 +563,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
 | 2026-11-05 | Timer split inside `claim_jobs` (`13-8-signoff/prototypes/claim-jobs-split-{9k,30k}.txt`, `claim-jobs-split-probe.patch`; probe `state=` equals the unpatched run). At t9000, 7.57 of `claim_jobs`' 7.66 ms (tick 10.47) builds goal sets for about 119 jobs a tick that no dwarf can try. After the big dig, that part is 9–54 ms of a 52–105 ms tick. The rest is failing searches (2–27 ms) and `execute_jobs` (23–41 ms). RULED (Wolf): 13.8 takes the skip only (AC 14, Task 11), and the other two go to an issue. |
 | 2026-11-09 | Seat run 3 (seat-like after the skip, `62b8d4ff`): Wolf, "fews secs stop few secs stops", everyone at once. The perf log places the stops after the big dig (arrivals on time to tick 17,000), so R3 passes and the stops are #231. RULED (Wolf, "ok then 1"): 13.8 closes as it is and #231 is the next story. Full gate GREEN on `cc796d2e` (4373 s; `62b8d4ff` is record-only). Status → review. |
 | 2026-11-11 | Review patch pass 1 (Opus 5.5): 3/3 landed. `b0c0009c` the load validator range-checks `arriving.to`; `65b85a0f` `check_crew` refuses a crew past 256, naming the full-name limit; story text amended (header, Task 2, guardrails, AC 6). Mutation rows 14-15 added, 15/15 KILLED. |
+| 2026-11-11 | Code review round 2 (`c330c9ed..805a0be9`): NEW 3 (0 HIGH/1 MED/2 LOW), REWORK 1 (P3). P1 and P2 closed, run live. 2 patches left as action items (Wolf "2"): validator range-checks `arriving.waited`; record over-claims and stale text. 1 deferred, 2 dismissed. No round 3 (stopping rule). Status → in-progress. |

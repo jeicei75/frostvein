@@ -2828,3 +2828,7 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **No simd test sees the crew grow over a live delta** (`crates/simd/tests/serve.rs`, edge). Only the first snapshot is read; the gui mirror test covers the client side.
 - **TUI never names an arrival at a normal width** (`crates/tui/src/view.rs:470`, feature). One roster row, ordered by id: the five embark dwarves fill 100 columns. Tracked as #230.
 - **Arrivals give up their walk-in: 77 of 195 at 256² end at `ARRIVAL_PATIENCE_TICKS`, 3–13 cells from `to`** (acceptance, MED, measured; Wolf 2026-11-10: "2", own story, AC 3 (i) not met). Seat-like: 81 near / 10 give-up / 104 job. The blocker is #227's camp crowd. `arriving=0` holds by construction under the wait limit, so the fixing story must measure give-ups. THE ISSUE IS THE STATE: #232.
+
+## Deferred from: code review round 2 of 13-8-they-keep-coming (2026-11-11)
+
+- **`a_crew_too_big_for_the_camp_is_an_error_naming_the_crew` pins an unreachable panic** (`crates/simd/src/main.rs:1263`, feature, measured). Crew 1,000,000 hits the epithet `expect` (`lib.rs:3099`), which the new `check_crew` ceiling makes unreachable for users. No test exercises a camp that is really too small; on DEFAULT_SEED 256 dwarves fit even at 128², so the "does not fit the camp's ground" message has no shown trigger.
