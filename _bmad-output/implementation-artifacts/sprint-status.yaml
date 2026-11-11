@@ -2849,15 +2849,19 @@ development_status:
   # the allow-list, not 9 (12-12 row 18 is a loop row). Full gate GREEN on af3c19bf (4607 s). Unpushed. Next: PR on
   # Wolf's yes (Closes #159 only); run 2 ruled no round 3.
   # 13.7 MERGED 2026-11-03 as PR #229 (f9e33e34), closed #159 only. -> done.
-  13-8-they-keep-coming: in-progress
+  13-8-they-keep-coming: review
+  # 13.8 REVIEW PATCH PASS 2 2026-11-11 (Opus 5.5, fresh session, $4.86): 2/2 landed (3576d68f validator refuses
+  # arriving.waited >= ARRIVAL_PATIENCE_TICKS, live u32::MAX refused by name; cd821a51 row 16, 16/16 KILLED; record
+  # over-claims struck + stale text amended, REWORK of P3). Full gate GREEN on cd821a51 (4460 s). No round 3
+  # (stopping rule). Unpushed past 805a0be9. Next: push, then PR on Wolf's yes (closes no issue), then #231.
   # 13.8 REVIEW ROUND 2 2026-11-11 (Opus 5.5, fresh session; diff c330c9ed..805a0be9): 4 layers ran, none timed out.
   # NEW 3 (0 HIGH/1 MED/2 LOW), REWORK 1 (P3). P1 + P2 CLOSED (run live). 2 patches LEFT AS ACTION ITEMS (Wolf "2"):
   # validator range-checks arriving.waited (u32::MAX debug overflow lib.rs:2850; refuse >= ARRIVAL_PATIENCE_TICKS,
   # test + row 16); record over-claims + stale text. 1 defer, 2 dismissed. Stopping rule: no round 3. Next: fresh
   # bmad-review-patch, one full gate, then PR on Wolf's yes (closes no issue).
-  # 13.8 REVIEW PATCH PASS 1 2026-11-11 (Opus 5.5, fresh session, $5.51): 3/3 landed (b0c0009c arriving.to load
+  # 13.8 REVIEW PATCH PASS 1 2026-11-11 (Opus 5.5, fresh session, $7.55 = $5.51 + planning 40730b6f $2.04): 3/3 landed (b0c0009c arriving.to load
   # bounds check; 65b85a0f check_crew ceiling 256; story text amended in the record commit). Rows 14-15, 15/15 KILLED.
-  # Full gate GREEN on 65b85a0f (4422 s). Unpushed past c330c9ed. Next: round-2 bmad-code-review, fresh session.
+  # Full gate GREEN on 65b85a0f (4422 s). Pushed (remote 805a0be9; AMENDED round 2). Next: round-2 bmad-code-review, fresh session.
   # 13.8 REVIEW ROUND 1 2026-11-10 (Opus 5.5, fresh session): 0 HIGH; 1 decision (Wolf "2": arrivals' 77/195
   # patience give-ups at 256^2 -> own bug #232, AC 3 (i) NOT MET), 3 patches LEFT AS ACTION ITEMS (arriving.to
   # load bounds check; crew >256 refused naming the name limit; story-text drift), 9 defer, 12 dismissed.

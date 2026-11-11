@@ -1553,6 +1553,26 @@
     "schema": 2,
     "turns": 294
   },
+  "42a09d9e-ef8a-4bfb-87e0-7e0ed7499762.jsonl": {
+    "by_model": {
+      "claude-opus-5-5": {
+        "cache_creation": 303071,
+        "cache_read": 10252641,
+        "input": 240,
+        "output": 64547
+      }
+    },
+    "cache_creation": 303071,
+    "cache_read": 10252641,
+    "input": 240,
+    "last_ts": "2026-11-11T21:17:43.710Z",
+    "marked_at": null,
+    "output": 64547,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 113
+  },
   "44ce9deb-fddf-44ac-80e8-ab90e174fb85.jsonl": {
     "by_model": {
       "claude-opus-5": {
