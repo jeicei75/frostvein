@@ -53,17 +53,22 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 
 FAST=0
+STAGED=0
 RANGE_BASE=""
 RANGE_TIP=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --fast) FAST=1; shift ;;
+    --staged) STAGED=1; shift ;;
     --range)
       [ $# -ge 3 ] || { echo "--range needs a base and a tip" >&2; exit 2; }
       RANGE_BASE="$2"; RANGE_TIP="$3"; shift 3 ;;
-    *) echo "unknown argument: $1 (expected --fast, --range <base> <tip>, or nothing)" >&2; exit 2 ;;
+    *) echo "unknown argument: $1 (expected --fast [--staged], --range <base> <tip>, or nothing)" >&2; exit 2 ;;
   esac
 done
+if [ "$STAGED" -eq 1 ] && [ "$FAST" -eq 0 ]; then
+  echo "--staged only narrows the fast tier: pass it with --fast" >&2; exit 2
+fi
 if [ "$FAST" -eq 1 ] && [ -n "$RANGE_BASE" ]; then
   echo "--fast and --range are mutually exclusive: --fast IS a scope decision" >&2; exit 2
 fi
@@ -170,12 +175,38 @@ if [ -n "$RANGE_BASE" ]; then
   fi
 fi
 
+# THE COMMIT HOOK'S SCOPE (2026-11-12, Wolf: a one-line board commit cost ~18 min). `--staged`
+# skips the fast tier's cargo tests when every staged path is markdown or YAML. An allow-list,
+# not CODE_RE: Rust tests read files outside crates/ -- the sign-off PNGs under `_bmad-output/`,
+# `scripts/bench/*.py`, `scenarios/*.json` -- but none reads a .md or .yaml (checked that day).
+# fmt, clippy, the edge probes, both Python suites and the mutation audit still run: the last
+# three are what grade a record-only commit.
+RUN_TESTS=1
+if [ "$STAGED" -eq 1 ]; then
+  staged=$(git diff --cached --name-only)
+  if [ -n "$staged" ] && ! printf '%s\n' "$staged" | rg -qNv '\.(md|ya?ml)$'; then
+    RUN_TESTS=0
+  fi
+fi
+
+# A GREEN RUN RECORDS THE TREE IT JUDGED (2026-11-12), so scripts/push.sh need not run the same
+# tier again on the same content: the commit hook and `push.sh --fast` used to run back to back.
+# The tree is the index's, and only when the working tree matches it -- otherwise what was
+# tested is not what the hash names. NOTE: untracked files are not in the hash.
+STAMP_DIR=target
+stamp_tree=""
+if git diff --quiet; then
+  stamp_tree=$(git write-tree) || stamp_tree=""
+fi
+
 START=$SECONDS
 echo "frostvein gate"
 [ -n "$SCOPE_NOTE" ] && echo "  $SCOPE_NOTE"
 run "cargo fmt --check" cargo fmt --check
 run "cargo clippy -D warnings" cargo clippy --all-targets -- -D warnings
-if [ "$FAST" -eq 1 ] || [ "$RUN_SERVE" -eq 0 ]; then
+if [ "$RUN_TESTS" -eq 0 ]; then
+  :
+elif [ "$FAST" -eq 1 ] || [ "$RUN_SERVE" -eq 0 ]; then
   # Everything except the daemon integration suite. simd's own unit tests still run
   # (--bins, 34 tests), and so does tests/bench.rs (13.1's scenario replay, ~2s):
   # --bins alone skipped it, so its four tests ran only at the full gate. Only
@@ -252,7 +283,13 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 if [ "$FAST" -eq 1 ]; then
+  # A run that skipped the tests vouches for its tree only on top of a tree that passed them.
+  parent_tree=$(git rev-parse -q --verify 'HEAD^{tree}' || true)
+  if [ "$RUN_TESTS" -eq 1 ] || rg -qFx --no-messages "$parent_tree" "$STAMP_DIR/.gate-green-fast" "$STAMP_DIR/.gate-green-full"; then
+    [ -n "$stamp_tree" ] && printf '%s\n' "$stamp_tree" > "$STAMP_DIR/.gate-green-fast"
+  fi
   echo "GATE GREEN (FAST) -- NOT the full gate.  $((SECONDS - START))s"
+  [ "$RUN_TESTS" -eq 0 ] && echo "  SKIPPED: every cargo test -- only .md/.yaml files are staged, and no Rust test reads one."
   echo "  SKIPPED: crates/simd/tests/serve.rs (61 daemon integration tests)."
   echo "  SKIPPED: crates/gui/tests/pixel_guard.rs (2 rendered-frame guards)."
   echo "  SKIPPED: the release real-work scenario (scenarios/two-hundred-on-256.json)."
@@ -274,4 +311,5 @@ if [ "$RUN_SERVE" -eq 0 ] || [ "$RUN_PIXEL" -eq 0 ]; then
   echo "  Before calling any story done, run scripts/gate.sh with no arguments."
   exit 0
 fi
+[ -n "$stamp_tree" ] && printf '%s\n' "$stamp_tree" > "$STAMP_DIR/.gate-green-full"
 echo "GATE GREEN  $((SECONDS - START))s"

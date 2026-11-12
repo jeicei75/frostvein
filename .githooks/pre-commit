@@ -21,4 +21,7 @@
 #
 # serve.rs runs at push instead — see .githooks/pre-push. It is not weakened, only moved.
 
-exec "$(git rev-parse --show-toplevel)/scripts/gate.sh" --fast
+# TIMING, re-measured 2026-11-12: the fast tier had grown to ~1,100 s; ~370 s after sim-core was
+# built optimised for tests. `--staged` skips the cargo tests when only .md/.yaml files are
+# staged (see scripts/gate.sh), which takes a record-only commit to well under a minute.
+exec "$(git rev-parse --show-toplevel)/scripts/gate.sh" --fast --staged
