@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-11-11
+last_updated: 2026-11-12
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2875,6 +2875,11 @@ development_status:
   # 13.8 -> review 2026-11-09: seat run 3 passes (stutter before the big dig gone; stops after it = #231). Wolf ruled
   # "ok then 1": 13.8 closes as is, #231 (failing claim searches + execute_jobs after a big dig) is the next story.
   # 13.8 MERGED 2026-11-11 as PR #233 (ac4d3b7e), closed no issue; #232 open. -> done.
+  13-8b-after-the-big-dig: ready-for-dev
+  # 13.8b CREATED 2026-11-12 (claude-fable-5-2) on branch story-13-8b-after-the-big-dig (off main 5f83e82e) for #231.
+  # Probes on seat-like: execute_jobs' stone-map rebuild is 3-11 ms (not 22-41); resolve_blocked_step 4-29 ms;
+  # claim_jobs floods the ~63k-cell main component most ticks (24-45k cells/tick). Prototype (kept failed components):
+  # state same, floods -67..-82%. Task 0 Q1-Q3 await Wolf (scope: three neutral cuts; slot; haul-failure finding).
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog

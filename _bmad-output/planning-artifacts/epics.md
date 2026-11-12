@@ -2961,7 +2961,7 @@ The M4 epic opens with the instrument and the spike that the M3-close retro put 
 17. **NFR13** for any story that adds rendering: the frame-rate bars hold at 200 dwarves on 256² on the vehicle, or the miss is measured and ruled by Wolf.
 18. **Constants are hardcoded** and tuned in the story: need rates and thresholds, regrowth, catch rate, burn rate, arrival cadence.
 
-**M4 story order (approved 2026-10-28):** 13.6 scale → 13.7 #159 → 13.8 arrivals → 13.9 forage → 13.10 hunger and misery (seat) → 13.11 idle at the fire (seat) → 13.12 fuel → 13.13 cold → 13.14 sleep → 13.15 place a fire → 13.16 ice fishing → 13.17 #203 → 13.18 #204 → 13.19 animals and hunting → 13.20 cooking → 13.21 stupid things. **16 new stories, at the top of the 12–16 cap.** Cut order (Wolf): 13.21 first, then 13.19 and 13.20 together, then regrowth inside 13.9. 13.5 is dropped and #187 is closed on evidence (both below), so neither counts. **AMENDED 2026-10-30 (Wolf, 13.6 Q1 (c)):** #187 still reproduces on `main`, so it was not closed. It folds into 13.18, and the count stays 16.
+**M4 story order (approved 2026-10-28):** 13.6 scale → 13.7 #159 → 13.8 arrivals → 13.9 forage → 13.10 hunger and misery (seat) → 13.11 idle at the fire (seat) → 13.12 fuel → 13.13 cold → 13.14 sleep → 13.15 place a fire → 13.16 ice fishing → 13.17 #203 → 13.18 #204 → 13.19 animals and hunting → 13.20 cooking → 13.21 stupid things. **16 new stories, at the top of the 12–16 cap.** Cut order (Wolf): 13.21 first, then 13.19 and 13.20 together, then regrowth inside 13.9. 13.5 is dropped and #187 is closed on evidence (both below), so neither counts. **AMENDED 2026-10-30 (Wolf, 13.6 Q1 (c)):** #187 still reproduces on `main`, so it was not closed. It folds into 13.18, and the count stays 16. **AMENDED 2026-11-12:** 13.8b (#231, the tick after a big dig) is added between 13.8 and 13.9 on Wolf's 2026-11-09 ruling; the count is 17 pending his answer to 13.8b Task 0 Q2.
 
 ### Story 13.1: Scripted Runs and the Tick Bench
 
@@ -3160,6 +3160,28 @@ So that the fortress grows while I watch.
 
 **Given** the seat,
 **Then** Wolf watches the crew grow and rules whether 200 dwarves need a crew list (FR57). The answer is recorded; a "yes" becomes a story or an issue, not part of this one.
+
+### Story 13.8b: After the Big Dig
+
+*(Added 2026-11-12 at its creation. Wolf ruled on 2026-11-09 that #231 is the next story after 13.8.)*
+
+As the boss,
+I want the fortress to keep ticking smoothly after I order a big dig with two hundred dwarves,
+So that the game does not stop and start while they work.
+
+**Acceptance Criteria:**
+
+**Given** any committed scenario and the 13.8 seat-like probe,
+**Then** the end state is identical to before the story: this is a cost story, and nothing a dwarf does changes (NFR9).
+
+**Given** a job no dwarf can reach, on ground that has not changed,
+**Then** it is not searched for again, and it is claimed once the ground opens (#231, part 1).
+
+**Given** a tick with many dwarves at work,
+**Then** the map of loose stones is built once for the tick, and the pile's free cells once per claiming pass (#231, part 2).
+
+**Given** the seat-like run past tick 17,000,
+**Then** the measured cost of each of those three falls, the figures are recorded against `main`, and Wolf rules on the stops at the seat. What remains (dwarves blocking each other, the re-plan burst after a dig) is filed as its own issue (NFR12).
 
 ### Story 13.9: Forage
 

@@ -2707,6 +2707,32 @@
     "schema": 2,
     "turns": 390
   },
+  "9b831a03-4af1-4b80-ba80-1c8157d62d8f.jsonl": {
+    "by_model": {
+      "claude-fable-5-2": {
+        "cache_creation": 893498,
+        "cache_read": 27750935,
+        "input": 398,
+        "output": 173461
+      },
+      "claude-opus-5-5": {
+        "cache_creation": 107307,
+        "cache_read": 1930420,
+        "input": 72,
+        "output": 13228
+      }
+    },
+    "cache_creation": 1000805,
+    "cache_read": 29681355,
+    "input": 470,
+    "last_ts": "2026-11-12T17:45:21.110Z",
+    "marked_at": null,
+    "output": 186689,
+    "primary_only": false,
+    "quota_last": null,
+    "schema": 2,
+    "turns": 211
+  },
   "9e391552-d4b5-47ce-99d7-4a3eb48a85a3.jsonl": {
     "by_model": {
       "claude-opus-5-5": {
