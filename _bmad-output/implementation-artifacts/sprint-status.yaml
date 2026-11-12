@@ -2849,7 +2849,7 @@ development_status:
   # the allow-list, not 9 (12-12 row 18 is a loop row). Full gate GREEN on af3c19bf (4607 s). Unpushed. Next: PR on
   # Wolf's yes (Closes #159 only); run 2 ruled no round 3.
   # 13.7 MERGED 2026-11-03 as PR #229 (f9e33e34), closed #159 only. -> done.
-  13-8-they-keep-coming: review
+  13-8-they-keep-coming: done
   # 13.8 REVIEW PATCH PASS 2 2026-11-11 (Opus 5.5, fresh session, $4.86): 2/2 landed (3576d68f validator refuses
   # arriving.waited >= ARRIVAL_PATIENCE_TICKS, live u32::MAX refused by name; cd821a51 row 16, 16/16 KILLED; record
   # over-claims struck + stale text amended, REWORK of P3). Full gate GREEN on cd821a51 (4460 s). No round 3
@@ -2874,6 +2874,7 @@ development_status:
   # 13.8 DEV STARTED 2026-11-03 (baseline e2e1882d) -> in-progress.
   # 13.8 -> review 2026-11-09: seat run 3 passes (stutter before the big dig gone; stops after it = #231). Wolf ruled
   # "ok then 1": 13.8 closes as is, #231 (failing claim searches + execute_jobs after a big dig) is the next story.
+  # 13.8 MERGED 2026-11-11 as PR #233 (ac4d3b7e), closed no issue; #232 open. -> done.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
