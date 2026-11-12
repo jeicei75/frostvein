@@ -5,7 +5,7 @@ baseline_commit: e2e1882d
 
 # Story 13.8: They Keep Coming
 
-Status: review
+Status: done
 
 ## Story
 
@@ -595,3 +595,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (2026-11-03). Opus 5.5 o
 | 2026-11-11 | Review patch pass 1 (Opus 5.5): 3/3 landed. `b0c0009c` the load validator range-checks `arriving.to`; `65b85a0f` `check_crew` refuses a crew past 256, naming the full-name limit; story text amended (header, Task 2, guardrails, AC 6). Mutation rows 14-15 added, 15/15 KILLED. |
 | 2026-11-11 | Code review round 2 (`c330c9ed..805a0be9`): NEW 3 (0 HIGH/1 MED/2 LOW), REWORK 1 (P3). P1 and P2 closed, run live. 2 patches left as action items (Wolf "2"): validator range-checks `arriving.waited`; record over-claims and stale text. 1 deferred, 2 dismissed. No round 3 (stopping rule). Status → in-progress. |
 | 2026-11-11 | Review patch pass 2 (Opus 5.5): 2/2 landed. `3576d68f` the load validator refuses `arriving.waited >= ARRIVAL_PATIENCE_TICKS` (now `pub`); `cd821a51` mutation row 16, 16/16 KILLED; record over-claims struck and stale text amended (REWORK of P3). Full gate GREEN on `cd821a51` (4460 s). No round 3 (stopping rule). Status → review, for the PR. |
+| 2026-11-11 | Merged as PR #233 (`ac4d3b7e`, head `1a91e21f`), closing no issue (`closingIssuesReferences` []); #232 stays open. Status → done. |

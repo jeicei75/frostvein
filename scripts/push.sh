@@ -50,12 +50,24 @@ if [ "$branch" = "HEAD" ]; then
 fi
 local_sha=$(git rev-parse HEAD)
 
-if [ "$run_gate" -eq 1 ]; then
+# A tree the gate already passed is not gated again (2026-11-12): gate.sh records the tree of
+# every green run, and the commit hook has usually just judged this exact content. A full-gate
+# record satisfies --fast; a fast record never satisfies the full gate.
+head_tree=$(git rev-parse 'HEAD^{tree}')
+stamps=(target/.gate-green-full)
+[ "${gate_args[*]:-}" = "--fast" ] && stamps+=(target/.gate-green-fast)
+already_green=0
+if [ "$run_gate" -eq 1 ] && rg -qFx --no-messages "$head_tree" "${stamps[@]}"; then
+  already_green=1
+  echo "push.sh: the gate already passed on this tree (${head_tree:0:8}); not running it again."
+fi
+
+if [ "$run_gate" -eq 1 ] && [ "$already_green" -eq 0 ]; then
   if ! scripts/gate.sh "${gate_args[@]}"; then
     echo "push.sh: gate is RED — nothing pushed" >&2
     exit 1
   fi
-else
+elif [ "$run_gate" -eq 0 ]; then
   # Named rather than silent. `--no-gate` is honest only when the gate has demonstrably passed on
   # THIS commit already; it is not a way to push something unproven.
   echo "push.sh: --no-gate: the gate did NOT run here. It must already be green on $(git rev-parse --short HEAD)."

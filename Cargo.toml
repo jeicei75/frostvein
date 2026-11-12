@@ -48,3 +48,10 @@ rand_chacha = { version = "0.10.0", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 thiserror = "2.0.19"
+
+# The sim is the only crate optimised in dev and test builds. Measured 2026-11-12: `cargo test`
+# spent 844 s of 1,224 s in sim-core's tests/scenario.rs at opt-level 0 (602 s in one 34-world
+# test), and 62 s with this line. Overflow checks and debug assertions stay on -- `opt-level`
+# does not touch them -- so the tests still check what they checked.
+[profile.dev.package.sim-core]
+opt-level = 3

@@ -30,6 +30,12 @@ use std::time::Duration;
 /// health floor panics if too few ticks are observed, and software rendering observes roughly a
 /// third of them.
 const FRAMES: &str = "160";
+/// A `--static-world` capture has no ticks to wait for: the world is paused before the countdown
+/// starts and the motion floor does not apply. Measured 2026-11-12 on lavapipe, fresh daemon per
+/// capture: every static flag set this file uses gave the same PNG, byte for byte, at 160, 20 and
+/// 10 frames (the two noon `--select` close-ups vary run to run, equally at 160 and at 10). A
+/// frame is ~0.58 s here, so 160 of them cost ~95 s per capture against ~20 s for 10.
+const STATIC_FRAMES: &str = "10";
 const DAEMON_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// The luminance the story's `lumstats.py` computes, integer arithmetic and all, so a figure printed
@@ -204,10 +210,15 @@ impl Daemon {
             "frostvein-pixel-guard-{}-{label}.png",
             std::process::id()
         ));
+        let frames = if extra.contains(&"--static-world") {
+            STATIC_FRAMES
+        } else {
+            FRAMES
+        };
         let mut command = Command::new(env!("CARGO_BIN_EXE_gui"));
         command
             .arg(self.port.to_string())
-            .args(["--headless", "--frames", FRAMES])
+            .args(["--headless", "--frames", frames])
             .args(["--capture", out.to_str().expect("a utf-8 scratch path")])
             .args(extra)
             .stdout(Stdio::null())
