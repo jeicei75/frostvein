@@ -2881,6 +2881,9 @@ development_status:
   # claim_jobs floods the ~63k-cell main component most ticks (24-45k cells/tick). Prototype (kept failed components):
   # state same, floods -67..-82%. Task 0 RULED 2026-11-13 (Wolf): Q1 (a) three neutral cuts, Q2 slot accepted (epic 17),
   # Q3 haul failures filed as #235. Implementer: Sonnet 5.5 subagents, claude-fable-5-2 orchestrates.
+  # DEV 2026-11-13: Tasks 1-7 done at 89be48c7 (state= identical on 13 files; seat-like mean 20.3 -> 11.8 ms, floods
+  # 24-45k -> 6-10k cells/tick; 12/12 mutation rows KILLED; tick-bench no regression). Follow-up #236. AWAITING THE SEAT
+  # (13-8b-signoff/vehicle-card.md); full gate owed at PR.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog

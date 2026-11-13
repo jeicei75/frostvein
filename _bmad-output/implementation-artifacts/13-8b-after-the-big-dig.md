@@ -69,17 +69,17 @@ Mean per tick over each 500-tick window, crew 200:
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1 — baseline and RED (AC 1, 7).** Record `main`'s `state=` and end line for the 12 committed scenarios (the AC 1 loop) before changing code. Rebase `split-probe.patch` onto the branch head in a scratch worktree with its own `CARGO_TARGET_DIR` (build from inside the worktree). Run seat-like twice on an idle machine (`uptime` load under 1 before each run) and confirm the creation figures. This is the instrument's RED: the three costs are present.
-- [ ] **Task 2 — kept failed components (AC 2, 3, 4).**
-  - [ ] Add the `#[cfg(test)]` flood counter in `astar_with_budget`'s failure path (`lib.rs:1317`), then write AC 2's test and see it RED (more than one flood).
-  - [ ] Keep the failed components between calls. They live with the terrain, as `pile_ground` does (`lib.rs:808`), and `set_tile` drops them (`lib.rs:848-853`). They are also dropped when any cell that was in `blocked` at the last call is not in it now. A cell entering `blocked` keeps them: closing a cell cannot make anything reachable.
-  - [ ] Never keep an empty set (`astar_with_budget` returns one for empty goals, `lib.rs:1278`).
-  - [ ] AC 3's two tests. Run each RED first with the drop removed.
-- [ ] **Task 3 — one stone map per `execute_jobs` call (AC 5).** Build `stones` and `blocked` once before the loop (`lib.rs:2186-2219`) and keep both current at every item change inside it: the miner's lift (`:2457`) and set-down (`:2461-2462`), the haul pick-up and delivery arms, a dig's or cut's spawned items (`:1446`, `:2659`), and every `release_claim` / `retry_claim` that drops a carried item (`:1613`). Add the debug assert at the top of each dwarf's turn, and the counter test.
-- [ ] **Task 4 — pile cells once per claim call (AC 6).** `terrain`, `blocked` and `zones` are fixed for the whole of one `claim_jobs` call, so compute `pile_targets` at most once per call and hand it to both haul sets (`lib.rs:688-704`, `work_positions` `lib.rs:1454`). `execute_jobs` keeps its per-dwarf call: items move inside its loop.
-- [ ] **Task 5 — measure (AC 1, 4, 7, 8).** `state=` on the 12 files and seat-like against `main`. Seat-like with the probe, two idle runs per build, table pasted beside the creation table. `tick-bench.sh`, table pasted. Save the outputs under `13-8b-signoff/`.
-- [ ] **Task 6 — mutation rows (AC 10).** One per decision: kept components survive `set_tile`; kept components survive a cell leaving `blocked`; the kept stone map misses a lift; misses a set-down; misses a spawned stone; `claim_jobs` reuses pile cells from the previous call. Run `scripts/audit-mutations.py` before the first code commit and after.
-- [ ] **Task 7 — the instrument (observability rule).** The human instrument is `simd --bench <file> --runs 1`: its run line carries mean, p99, max, `over10` and `state=`. It is already tested against the real binary (`crates/simd/tests/bench.rs:110`, `:137`). Nothing new is built; the probe patch stays a prototype and is not merged.
+- [x] **Task 1 — baseline and RED (AC 1, 7).** Record `main`'s `state=` and end line for the 12 committed scenarios (the AC 1 loop) before changing code. Rebase `split-probe.patch` onto the branch head in a scratch worktree with its own `CARGO_TARGET_DIR` (build from inside the worktree). Run seat-like twice on an idle machine (`uptime` load under 1 before each run) and confirm the creation figures. This is the instrument's RED: the three costs are present.
+- [x] **Task 2 — kept failed components (AC 2, 3, 4).**
+  - [x] Add the `#[cfg(test)]` flood counter in `astar_with_budget`'s failure path (`lib.rs:1317`), then write AC 2's test and see it RED (more than one flood).
+  - [x] Keep the failed components between calls. They live with the terrain, as `pile_ground` does (`lib.rs:808`), and `set_tile` drops them (`lib.rs:848-853`). They are also dropped when any cell that was in `blocked` at the last call is not in it now. A cell entering `blocked` keeps them: closing a cell cannot make anything reachable.
+  - [x] Never keep an empty set (`astar_with_budget` returns one for empty goals, `lib.rs:1278`).
+  - [x] AC 3's two tests. Run each RED first with the drop removed.
+- [x] **Task 3 — one stone map per `execute_jobs` call (AC 5).** Build `stones` and `blocked` once before the loop (`lib.rs:2186-2219`) and keep both current at every item change inside it: the miner's lift (`:2457`) and set-down (`:2461-2462`), the haul pick-up and delivery arms, a dig's or cut's spawned items (`:1446`, `:2659`), and every `release_claim` / `retry_claim` that drops a carried item (`:1613`). Add the debug assert at the top of each dwarf's turn, and the counter test.
+- [x] **Task 4 — pile cells once per claim call (AC 6).** `terrain`, `blocked` and `zones` are fixed for the whole of one `claim_jobs` call, so compute `pile_targets` at most once per call and hand it to both haul sets (`lib.rs:688-704`, `work_positions` `lib.rs:1454`). `execute_jobs` keeps its per-dwarf call: items move inside its loop.
+- [x] **Task 5 — measure (AC 1, 4, 7, 8).** `state=` on the 12 files and seat-like against `main`. Seat-like with the probe, two idle runs per build, table pasted beside the creation table. `tick-bench.sh`, table pasted. Save the outputs under `13-8b-signoff/`.
+- [x] **Task 6 — mutation rows (AC 10).** One per decision: kept components survive `set_tile`; kept components survive a cell leaving `blocked`; the kept stone map misses a lift; misses a set-down; misses a spawned stone; `claim_jobs` reuses pile cells from the previous call. Run `scripts/audit-mutations.py` before the first code commit and after.
+- [x] **Task 7 — the instrument (observability rule).** The human instrument is `simd --bench <file> --runs 1`: its run line carries mean, p99, max, `over10` and `state=`. It is already tested against the real binary (`crates/simd/tests/bench.rs:110`, `:137`). Nothing new is built; the probe patch stays a prototype and is not merged.
 - [ ] **Task 8 — the seat (AC 11).** Write `13-8b-signoff/vehicle-card.md`; Wolf runs it.
 - [ ] **Task 9 — record.** File the Q1 follow-up issue (and Q3's, if ruled) with the figures. One full gate at PR.
 
@@ -177,9 +177,60 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-13). clau
 
 ### Debug Log References
 
+All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
+
+- **Task 1, baseline.** `state-main-5f83e82e.txt`: `state=` and end line of the 12 committed scenarios and seat-like on `main`'s code (seat-like `5511268fb5faf97f`, end line as in the Verification block). The probe applied cleanly on that code and reproduced the creation counts exactly (`cells_goal_fail` 24,036 / 35,467 / 45,147 / 30,414 / 28,850). That first run was on a loaded machine (load 2.7 to 5.4), so its ms are not quoted; the idle ms for `main` are the two Task 5 runs.
+- **REDs (Sonnet agent, before each fix).** AC 2: `one flood of the plate, however many cooldowns  left: 1200  right: 400` (three floods in 61 ticks). AC 6: `left: 6  right: 1` (2K for K = 3). AC 5: `left: 3  right: 1` (one build per job-holding dwarf). AC 3 (i) with `set_tile`'s drop removed: `the opened route must be claimed within 50 ticks`. AC 3 (ii) with the subset test always true: `the dig must be claimed within 50 ticks of the stone leaving`.
+- **AC 1.** `state-head-89be48c7.txt` against the baseline: `state=` and end line IDENTICAL on all 13 files.
+- **AC 4, AC 7.** Probe rebased by hand onto the head (4 rejected hunks; `prototypes/split-probe-on-89be48c7.patch`). Two runs per build, alternating, load average under 1 before each (0.83 to 0.91; the runs themselves raise it). Files `split-30k-{main,head}-run{1,2}.txt`. Both runs of a build agree.
+
+  | | `main` | head |
+  |---|---|---|
+  | mean ms | 20.23 / 20.35 | 11.78 / 11.88 |
+  | p99 ms | 130.7 / 132.2 | 105.5 / 106.9 |
+  | max ms | 403 / 397 | 404 / 406 |
+  | `over10` | 11,456 / 11,375 | 5,970 / 6,018 |
+  | `state=` | `5511268fb5faf97f` | `5511268fb5faf97f` |
+
+  Run 1 of each build, mean per tick over each 500-tick window:
+
+  | tick | step ms `main` → head | `cells_goal_fail` | `claim_jobs` ms | `ej_stones_blocked` ms | `cj_goals` ms | `execute_jobs` ms |
+  |---|---|---|---|---|---|---|
+  | 19,000 | 43.4 → 39.1 | 2,046 → 2,046 | 1.5 → 1.5 | 3.25 → 0.04 | 0.02 → 0.01 | 41.5 → 37.2 |
+  | 22,000 | 44.7 → 27.9 | 24,036 → 8,010 | 15.6 → 5.3 | 5.22 → 0.07 | 0.23 → 0.19 | 28.5 → 22.0 |
+  | 24,000 | 54.2 → 29.5 | 35,467 → 10,005 | 23.0 → 6.6 | 6.85 → 0.09 | 0.28 → 0.20 | 30.5 → 22.1 |
+  | 26,000 | 53.6 → 19.6 | 45,147 → 8,195 | 29.4 → 5.6 | 8.20 → 0.10 | 0.28 → 0.18 | 23.3 → 13.1 |
+  | 28,000 | 54.4 → 24.9 | 30,414 → 8,287 | 23.9 → 6.0 | 9.97 → 0.12 | 4.22 → 0.54 | 29.5 → 17.8 |
+  | 30,000 | 54.5 → 22.5 | 28,850 → 6,135 | 24.0 → 4.7 | 10.76 → 0.12 | 5.28 → 0.54 | 29.2 → 16.5 |
+
+  AC 4: the largest head window is 10,005, under 12,000; the head counts equal the prototype's. AC 7: `ej_stones_blocked` at most 0.13 and `cj_goals` at most 0.55 in every window. The stone map is built about 1.2 to 1.3 times a tick (`n_stone_map_build`) for 123 to 155 job holders. What is left is `resolve_blocked_step` (4.5 to 30 ms) and the re-plan (2.6 to 7 ms): #236.
+- **The instrument can still fail.** With the keep disabled in the probed scratch build (`if false && was_blocked.is_subset(..)`), `cells_goal_fail` reads 24,036 / 35,467 / 45,147 / 30,414 / 28,850 again, `state=` unchanged (`split-30k-head-keep-disabled.txt`; loaded machine, counts only).
+- **AC 8.** `RUNS=5 scripts/tick-bench.sh main HEAD` (`tick-bench-main-89be48c7.txt`; load 4.8 at the start, runs interleaved, control within ±1.8%). `state` is `same` on all 12. No regression: big-pile -35.7%, seat-slow -15.7%, two-hundred-on-256 -11.9% (23.46 → 20.68 ms), plan-compact-piles -11.8%, plan -9.6%, deep-pit -3.8%, all BEYOND FLOOR; the other six -0.8% to -8.0%, within floor.
+- **AC 9.** `cargo test -p sim-core` green with `save_load` unchanged (24 tests); `SaveState` is untouched.
+- **AC 10.** `mutations/13-8b.sh`, 12 rows, 12/12 KILLED, each panic line read. Rows 1-3 die at the AC 2 / AC 3 asserts (`lib.rs:6013`, `:6040`, `:6087`), rows 10-11 at the counter asserts (`:6164`, `:6136`), rows 4-9 and 12 at the debug assert `the kept stone map is current` (`lib.rs:2318`). Before writing the table each stale-mark removal was run against the whole of `cargo test -p sim-core` in a scratch worktree: the lift, the set-down and the cut pass all 117 unit tests and are caught only by `tests/scenario.rs` (8, 8 and 3 tests). `audit-mutations.py`: 1006 rows match.
+
 ### Completion Notes List
 
+- **Task 2** (`f3fa3f8b`): `Terrain::kept_failures: Mutex<(BTreeSet<Pos>, Vec<BTreeSet<Pos>>)>` holds the last call's `blocked` and its failed components. `set_tile` clears the components; `claim_jobs` uses them only when the stored `blocked` is a subset of its own, and stores back with empty sets removed. Tests: `an_unreachable_dig_is_flooded_once_not_once_per_cooldown`, `a_tile_that_opens_the_route_drops_the_kept_failure`, `a_stone_hauled_off_the_only_route_drops_the_kept_failure` (the stone leaves by the sim's own haul job).
+- **Task 4** (`d253f491`): `work_positions` is a wrapper over `work_positions_with(.., pile: &mut Option<..>)`; `claim_jobs` holds one `pile` per call. Test: `claim_jobs_finds_the_pile_cells_once_per_call`.
+- **Task 3** (`89be48c7`): `execute_jobs` keeps one stone map and a `stale` flag. Every item change sets the flag and the next dwarf's turn rebuilds. Test: `execute_jobs_builds_the_stone_map_once_when_no_stone_moves`. Debug assertions are on in the test profile (shown: removing one stale mark fails `cargo test`).
+- **Deviations, for the review.**
+  1. Task 3 says "keep both current at every item change"; the code rebuilds after a change instead of editing the map in place. Measured cost: about 1.25 builds a tick, 0.04 to 0.13 ms. AC 5 as written is met.
+  2. The AC 2 counter sits at the end of `claim_jobs`, not in `astar_with_budget`: other systems' failed searches cannot reach it, and two older mutation anchors stay intact.
+  3. `#[allow(clippy::needless_borrow)]` on `execute_jobs`, with a NOTE: `stones` and `blocked` are borrows now, and the old `&blocked` / `&stones` spellings are anchors of older mutation rows (12-9, 13-7 and others). The alternative is to re-point those rows.
+  4. Five test fixtures that build a `Terrain` literal gained the line `kept_failures: Default::default()`. No test logic changed.
+  5. The story's mutation row "`claim_jobs` reuses pile cells from the previous call" cannot be written: `pile` is a local of one call. Row 11 pins the other side (the delivery set finding them again). Rows 7-9 and 12 are extra: every stale site has a row.
+  6. Task 1's probe run was on a loaded machine (the agent was building); counts only. The idle `main` ms come from Task 5's two runs.
+- **Task 7:** nothing built, as written. The probe stays a prototype.
+- **Task 8:** `13-8b-signoff/vehicle-card.md` is written. **The sitting is Wolf's and is not yet run**, so Task 8 and AC 11 are open.
+- **Task 9:** Q1 follow-up filed as **#236** (`bug`, `route:story`); Q3 is #235. The full gate is owed at PR and has not been run.
+
 ### File List
+
+- `crates/sim-core/src/lib.rs` (modified)
+- `_bmad-output/implementation-artifacts/mutations/13-8b.sh` (new)
+- `_bmad-output/implementation-artifacts/13-8b-signoff/` (new): `vehicle-card.md`, `state-main-5f83e82e.txt`, `state-head-89be48c7.txt`, `split-30k-main-run1.txt`, `split-30k-main-run2.txt`, `split-30k-head-run1.txt`, `split-30k-head-run2.txt`, `split-30k-head-keep-disabled.txt`, `tick-bench-main-89be48c7.txt`, `prototypes/split-probe-on-89be48c7.patch`
+- `_bmad-output/implementation-artifacts/13-8b-after-the-big-dig.md`, `sprint-status.yaml` (record)
 
 ## Change Log
 
@@ -187,3 +238,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-13). clau
 |---|---|
 | 2026-11-12 | Created (claude-fable-5-2) on `story-13-8b-after-the-big-dig` off `main` `5f83e82e`. Four creation probes on seat-like; Task 0 Q1–Q3 await Wolf. |
 | 2026-11-13 | Task 0 ruled (Wolf): Q1 (a) three neutral cuts, blocked-step and re-plan burst to a follow-up issue at Task 9; Q2 slot 13.8b accepted, epic count 17; Q3 haul failures filed as #235. Implementer: Sonnet 5.5 subagents, claude-fable-5-2 orchestrates. |
+| 2026-11-13 | Dev, Tasks 1-7 (Sonnet 5.5 agent wrote Tasks 2-4, `f3fa3f8b` `d253f491` `89be48c7`; claude-fable-5-2 measured and ran the mutation table). `state=` identical on all 13 files; seat-like mean 20.3 → 11.8 ms; 12/12 mutation rows KILLED; tick-bench no regression. Q1 follow-up filed as #236. Open: the seat (Task 8, AC 11) and the full gate at PR. |
