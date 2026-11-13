@@ -5,7 +5,7 @@ baseline_commit: 5f83e82e
 
 # Story 13.8b: After the Big Dig
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
