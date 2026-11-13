@@ -25,13 +25,13 @@ Closes the three measured parts of #231 that can be cut without changing what an
 
 ## Task 0 — Wolf rules before dev
 
-Each question has a recommendation; the ACs and Tasks are written for it.
+Each question has a recommendation; the ACs and Tasks are written for it. **RULED 2026-11-13 (Wolf): Q1 (a), Q2 accept, Q3 file the issue (filed as #235).**
 
 - **Q1. Which of the five measured costs does this story cut?** (Figures under "Found at creation".)
-  - (a) **Recommended:** the three that are provably the same rule done less often: failed claim searches repeated on unchanged ground (AC 2–4), the stone map rebuilt for every dwarf (AC 5), and the pile cells recomputed for every haul job (AC 6). Dwarves blocking each other (`resolve_blocked_step`, 4–29 ms a tick) and the re-plan burst after every dig (about 130 searches in one tick) go to one follow-up issue with these figures. Both are movement rules: a cheaper version is a different rule and needs its own A/B.
+  - (a) **Recommended (← RULED 2026-11-13):** the three that are provably the same rule done less often: failed claim searches repeated on unchanged ground (AC 2–4), the stone map rebuilt for every dwarf (AC 5), and the pile cells recomputed for every haul job (AC 6). Dwarves blocking each other (`resolve_blocked_step`, 4–29 ms a tick) and the re-plan burst after every dig (about 130 searches in one tick) go to one follow-up issue with these figures. Both are movement rules: a cheaper version is a different rule and needs its own A/B.
   - (b) All five in this story. It is then two sessions, and the last two cannot promise an unchanged `state=`.
-- **Q2. Slot.** This story is `13.8b`, before 13.9, as 12.10b was. The epic's count goes from 16 to 17. Recommended: accept; the alternative is to renumber or to drop a later story under the cut order.
-- **Q3. A finding outside this story.** From about tick 28,000 on seat-like, about 710 haul jobs fail together every 20 ticks while only 497 of 1,530 stones are stored. Why they fail is not investigated. Recommended: I file it as its own issue; this story does not touch it.
+- **Q2. Slot.** This story is `13.8b`, before 13.9, as 12.10b was. The epic's count goes from 16 to 17. Recommended (← RULED 2026-11-13): accept; the alternative is to renumber or to drop a later story under the cut order.
+- **Q3. A finding outside this story.** From about tick 28,000 on seat-like, about 710 haul jobs fail together every 20 ticks while only 497 of 1,530 stones are stored. Why they fail is not investigated. Recommended (← RULED 2026-11-13): I file it as its own issue; this story does not touch it. Filed as **#235** (`bug`, `route:undecided`).
 
 ## Found at creation (2026-11-12, `main` `5f83e82e`)
 
@@ -173,6 +173,8 @@ simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototyp
 
 ### Agent Model Used
 
+Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-13). claude-fable-5-2 orchestrates and verifies, and keeps the REDs, the mutation run, the bench and the full gate.
+
 ### Debug Log References
 
 ### Completion Notes List
@@ -184,3 +186,4 @@ simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototyp
 | Date | Change |
 |---|---|
 | 2026-11-12 | Created (claude-fable-5-2) on `story-13-8b-after-the-big-dig` off `main` `5f83e82e`. Four creation probes on seat-like; Task 0 Q1–Q3 await Wolf. |
+| 2026-11-13 | Task 0 ruled (Wolf): Q1 (a) three neutral cuts, blocked-step and re-plan burst to a follow-up issue at Task 9; Q2 slot 13.8b accepted, epic count 17; Q3 haul failures filed as #235. Implementer: Sonnet 5.5 subagents, claude-fable-5-2 orchestrates. |
