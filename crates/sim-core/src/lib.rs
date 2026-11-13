@@ -655,12 +655,27 @@ fn claim_jobs(
         .collect();
     // Emitters plus every uncarried item (#162): items block claim-time reachability like fires.
     let blocked = blocked_cells(emitters.iter().chain(items.values()));
-    // Walkable components that a COMPLETED failed search has already flooded this call (#132).
-    // Per call only: terrain can change between ticks, so nothing is cached across them.
+    // Walkable components that a COMPLETED failed search has already flooded (#132), kept from the
+    // last call (13.8b) while they still hold: `set_tile` drops them, and so does a cell that was
+    // in the last call's `blocked` and is not in this one (a lifted stone). A cell entering
+    // `blocked` keeps them: closing a cell cannot make anything reachable.
     // NOTE: a search expands each cell at most once (the heuristic is consistent), so a budget of
-    // the world's cell count cannot run out. An unreachable job costs one flood of its component
-    // per call, cached here.
+    // the world's cell count cannot run out. An unreachable job costs one flood of its component,
+    // cached here until the ground opens.
     let mut components: Vec<BTreeSet<Pos>> = Vec::new();
+    {
+        let (was_blocked, kept) = std::mem::take(
+            &mut *terrain
+                .kept_failures
+                .lock()
+                .expect("nothing panics holding the kept failures"),
+        );
+        if was_blocked.is_subset(&blocked) {
+            components = kept;
+        }
+    }
+    #[cfg(test)]
+    let kept_components = components.len();
 
     // The one test of whether a dwarf tries a job this tick: his trade, no job, past his reaction
     // delay. It gates both the early skip below and `attempted`, so the two cannot drift.
@@ -761,6 +776,22 @@ fn claim_jobs(
                 .retry_after = tick.0.saturating_add(RETRY_COOLDOWN);
         }
     }
+    #[cfg(test)]
+    CLAIM_FAILED_FLOODED.with(|n| {
+        n.set(
+            n.get()
+                + components[kept_components..]
+                    .iter()
+                    .map(BTreeSet::len)
+                    .sum::<usize>(),
+        )
+    });
+    // An empty set (no goals to search for) skips nobody, and is never kept.
+    components.retain(|component| !component.is_empty());
+    *terrain
+        .kept_failures
+        .lock()
+        .expect("nothing panics holding the kept failures") = (blocked, components);
 }
 
 #[derive(Component)]
@@ -806,6 +837,11 @@ struct Terrain {
     tiles: Vec<Tile>,
     dirty: BTreeSet<Pos>,
     pile_ground: Mutex<PileGround>,
+    /// 13.8b: what `claim_jobs` keeps between calls: the `blocked` set of its last call and the
+    /// walkable components its completed failed searches flooded then. Derived, never saved.
+    /// `set_tile` drops it; a call keeps it only while every cell of that `blocked` is still in
+    /// its own (a cell entering `blocked` cannot make anything reachable, one leaving can).
+    kept_failures: Mutex<(BTreeSet<Pos>, Vec<BTreeSet<Pos>>)>,
 }
 
 /// What `pile_targets` keeps, for the zones it was found for. `open`: the ground its entrance
@@ -851,6 +887,11 @@ impl Terrain {
             .expect("nothing panics holding the pile ground");
         kept.open.clear();
         kept.memo = None;
+        self.kept_failures
+            .get_mut()
+            .expect("nothing panics holding the kept failures")
+            .1
+            .clear();
         true
     }
 
@@ -930,6 +971,8 @@ thread_local! {
     static MEMO_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Goal and delivery sets `claim_jobs` has built: the skip test's count.
     static CLAIM_SET_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Cells flooded by `claim_jobs`' failed searches: the kept-failure test's count.
+    static CLAIM_FAILED_FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -3001,6 +3044,7 @@ fn assemble(
         tiles,
         dirty: BTreeSet::new(),
         pile_ground: Mutex::default(),
+        kept_failures: Mutex::default(),
     });
     let mut schedule = Schedule::default();
     schedule.add_systems(
@@ -4139,6 +4183,7 @@ mod tests {
             tiles,
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         }
     }
 
@@ -4154,6 +4199,7 @@ mod tests {
             ],
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
 
         assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
@@ -4810,6 +4856,7 @@ mod tests {
             tiles,
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
         let stone = Pos { x: 1, y: 0, z: 2 };
         let pit = Pos { x: 2, y: 0, z: 1 };
@@ -5805,6 +5852,159 @@ mod tests {
         assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
     }
 
+    /// A 20 x 20 plate at z = 1 in solid stone, five miners on it, and one dig no miner can reach:
+    /// its only open side is a one-cell pocket at x = 21, walled off from the plate by the cell at
+    /// `(20, 10, 1)`, which is returned as `wall` (solid, or open when `corridor`). The dig is
+    /// queued by one step. Returns the world, a plate cell, and `wall`.
+    fn pocket_world(corridor: bool) -> (World, Pos, Pos) {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let at = |x: i32, y: i32| Pos { x, y, z: 1 };
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+        for y in 0..20 {
+            for x in 0..20 {
+                tiles[idx(at(x, y))] = Tile::Empty;
+            }
+        }
+        let wall = at(20, 10);
+        if corridor {
+            tiles[idx(wall)] = Tile::Empty;
+        }
+        tiles[idx(at(21, 10))] = Tile::Empty;
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(&mut world, std::array::from_fn(|i| at(2 + 2 * i as i32, 2)));
+        world.apply_command(super::SimCommand::Designate {
+            kind: super::DesignationKind::Dig,
+            rect: super::Rect {
+                min: at(22, 10),
+                max: at(22, 10),
+            },
+        });
+        world.step();
+        assert_eq!(world.jobs().len(), 1, "the dig is queued");
+        (world, at(2, 2), wall)
+    }
+
+    /// Failed floods `claim_jobs` has kept on the terrain.
+    fn kept_floods(world: &World) -> usize {
+        world
+            .ecs
+            .resource::<Terrain>()
+            .kept_failures
+            .lock()
+            .unwrap()
+            .1
+            .len()
+    }
+
+    fn anyone_holds_a_job(world: &World) -> bool {
+        world.claims().iter().any(|(_, job)| job.is_some())
+    }
+
+    // 13.8b AC 2. One dig no miner can reach, nothing else changing: its cooldown comes round
+    // every 20 ticks, and each time the miners' component (the plate) was flooded again on `main`.
+    // `claim_jobs` alone runs in a single-threaded executor: the counter is thread-local.
+    #[test]
+    fn an_unreachable_dig_is_flooded_once_not_once_per_cooldown() {
+        let (mut world, spot, _) = pocket_world(false);
+        let plate = walkable_area(&world, spot).len();
+        assert_eq!(plate, 400, "the plate is the miners' whole component");
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+        schedule.add_systems(super::claim_jobs);
+        super::CLAIM_FAILED_FLOODED.with(|n| n.set(0));
+        let start = world.tick();
+        for tick in start..=start + 60 {
+            world.ecs.resource_mut::<super::Tick>().0 = tick;
+            schedule.run(&mut world.ecs);
+        }
+        let flooded = super::CLAIM_FAILED_FLOODED.with(|n| n.get());
+        assert!(
+            world.jobs()[0].retry_after > 0,
+            "the dig was tried (and failed) at least once"
+        );
+        assert!(!anyone_holds_a_job(&world), "no miner can reach the dig");
+        assert_eq!(
+            flooded, plate,
+            "one flood of the plate, however many cooldowns"
+        );
+    }
+
+    // 13.8b AC 3 (i). A tile change that opens the route drops the kept failure: the dig is
+    // claimed within a cooldown plus the longest reaction delay.
+    #[test]
+    fn a_tile_that_opens_the_route_drops_the_kept_failure() {
+        let (mut world, _, wall) = pocket_world(false);
+        for _ in 0..61 {
+            world.step();
+        }
+        assert!(!anyone_holds_a_job(&world), "the dig is unreachable");
+        assert!(kept_floods(&world) > 0, "a failed flood is kept");
+        assert!(
+            world
+                .ecs
+                .resource_mut::<Terrain>()
+                .set_tile(wall, Tile::Empty)
+        );
+        let mut claimed = false;
+        for _ in 0..50 {
+            world.step();
+            claimed |= anyone_holds_a_job(&world) || world.jobs().is_empty();
+        }
+        assert!(claimed, "the opened route must be claimed within 50 ticks");
+    }
+
+    // 13.8b AC 3 (ii). A stone alone walls the corridor; a hauler carries it away through the
+    // sim's own haul job, which takes it out of `blocked` and drops the kept failure.
+    #[test]
+    fn a_stone_hauled_off_the_only_route_drops_the_kept_failure() {
+        let (mut world, _, wall) = pocket_world(true);
+        set_profession(&mut world, 4, super::Profession::Hauler);
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(50), wall));
+        for _ in 0..61 {
+            world.step();
+        }
+        assert!(!anyone_holds_a_job(&world), "the stone walls the corridor");
+        assert!(kept_floods(&world) > 0, "a failed flood is kept");
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        let stone_gone = |world: &mut World| {
+            let mut carrying = world.ecs.query::<&super::Carrying>();
+            carrying.iter(&world.ecs).any(|c| c.0 == Some(50))
+                || world
+                    .ecs
+                    .query::<(&super::Id, &Pos)>()
+                    .iter(&world.ecs)
+                    .any(|(id, pos)| id.0 == 50 && *pos != wall)
+        };
+        let mut waited = 0;
+        while !stone_gone(&mut world) {
+            assert!(waited < 400, "the hauler never took the stone");
+            assert!(
+                !anyone_holds_a_job(&world) || world.claims()[4].1.is_some(),
+                "only the hauler holds a job while the stone walls the corridor"
+            );
+            world.step();
+            waited += 1;
+        }
+        let mut claimed = false;
+        for _ in 0..50 {
+            world.step();
+            claimed |= world.claims()[..4].iter().any(|(_, job)| job.is_some())
+                || world.jobs().iter().all(|job| job.kind != JobKind::Dig);
+        }
+        assert!(
+            claimed,
+            "the dig must be claimed within 50 ticks of the stone leaving"
+        );
+    }
+
     /// All five dwarves are miners, one per entry of `spots`, in ascending id order.
     fn stand_miners_at(world: &mut World, spots: [Pos; 5]) {
         for (id, spot) in spots.into_iter().enumerate() {
@@ -6475,6 +6675,7 @@ mod tests {
             tiles: vec![Tile::Empty; 6],
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
         terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         terrain.tiles[super::worldgen::index(dims, 1, 0, 1)] = Tile::Solid(Material::Stone);
@@ -6501,6 +6702,7 @@ mod tests {
             tiles: vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize],
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
         let heights = [
             ((0, 0), 3),
