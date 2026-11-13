@@ -979,6 +979,8 @@ thread_local! {
     static CLAIM_FAILED_FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// `pile_targets` calls: the once-per-claim test's count.
     static PILE_TARGETS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Stone maps `execute_jobs` has built: the once-per-call test's count.
+    static STONE_MAP_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -2248,10 +2250,38 @@ fn clearing_set_down(
 }
 
 /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
+/// `execute_jobs`' stone positions and the `blocked` set they make with the emitters.
+type StoneMap = (BTreeMap<u32, Pos>, BTreeSet<Pos>);
+
+fn stone_map(ecs: &EcsWorld, emitters: &[Pos]) -> StoneMap {
+    #[cfg(test)]
+    STONE_MAP_BUILDS.with(|n| n.set(n.get() + 1));
+    let stones = uncarried_stones(ecs);
+    let blocked = blocked_cells(emitters.iter().chain(stones.values()));
+    (stones, blocked)
+}
+
+/// A dwarf that carries a stone sets it down when its claim is released: the kept stone map is
+/// stale after one.
+fn forget_if_carrying(ecs: &EcsWorld, entity: Entity, stale: &mut bool) {
+    if ecs
+        .get::<Carrying>(entity)
+        .is_some_and(|carrying| carrying.0.is_some())
+    {
+        *stale = true;
+    }
+}
+
+// NOTE: `stones` and `blocked` are borrows of `kept` now; the `&blocked` / `&stones` below are the
+// old owned-value spelling, which older mutation rows anchor on.
+#[allow(clippy::needless_borrow)]
 fn execute_jobs(ecs: &mut EcsWorld) {
-    // Built once, before the loop borrows the world for terrain. Emitters are static; the items
-    // are not (a pick-up, a drop or a spawn changes them mid-loop), so `blocked` is rebuilt from
-    // them for every dwarf.
+    // Emitters are static; the items are not (a lift, a set-down, a pick-up, a delivery, a spawn
+    // or a released carrier changes them mid-loop). `kept` is the stone map of the last dwarf's
+    // turn; `stale` marks every such change (a flag, because `kept` stays borrowed for the rest
+    // of the turn that made it) and the next turn drops `kept`, building it again if it needs it.
+    let mut kept: Option<StoneMap> = None;
+    let mut stale = false;
     let emitters: Vec<Pos> = ecs
         .query_filtered::<&Pos, With<Emitter>>()
         .iter(ecs)
@@ -2266,10 +2296,14 @@ fn execute_jobs(ecs: &mut EcsWorld) {
     dwarves.sort_by_key(|(id, _)| *id);
 
     for (holder_id, entity) in dwarves {
+        if std::mem::take(&mut stale) {
+            kept = None;
+        }
         let Some(job_id) = ecs.get::<CurrentJob>(entity).and_then(|current| current.0) else {
             continue;
         };
         let Some(job) = ecs.resource::<Jobs>().by_id.get(&job_id).copied() else {
+            forget_if_carrying(ecs, entity, &mut stale);
             release_claim(ecs, entity);
             continue;
         };
@@ -2280,8 +2314,19 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             continue;
         }
         let carrying = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0);
-        let stones = uncarried_stones(ecs);
-        let blocked = blocked_cells(emitters.iter().chain(stones.values()));
+        if let Some((kept_stones, kept_blocked)) = &kept {
+            debug_assert_eq!(
+                *kept_stones,
+                uncarried_stones(ecs),
+                "the kept stone map is current"
+            );
+            debug_assert_eq!(
+                *kept_blocked,
+                blocked_cells(emitters.iter().chain(uncarried_stones(ecs).values())),
+                "the kept blocked set is current"
+            );
+        }
+        let (stones, blocked) = &*kept.get_or_insert_with(|| stone_map(ecs, &emitters));
         // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
         // designation and claim stay his own job through lift, carry and set-down.
         let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {
@@ -2392,6 +2437,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     .expect("every dwarf has a job state") = JobState::Walk;
                 continue;
             }
+            forget_if_carrying(ecs, entity, &mut stale);
             retry_claim(ecs, entity, job.id);
             continue;
         }
@@ -2415,6 +2461,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     &work_positions,
                     &mut terrain.tiles.len(),
                 );
+                if computed.is_none() {
+                    forget_if_carrying(ecs, entity, &mut stale);
+                }
                 let Some(computed) = computed else {
                     retry_claim(ecs, entity, job.id);
                     continue;
@@ -2499,9 +2548,12 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 let mut lifted = blocked.clone();
                 lifted.remove(&stones[&item]);
                 if clearing_set_down(ecs, entity, job, pos, &lifted, &occupied).is_none() {
+                    forget_if_carrying(ecs, entity, &mut stale);
                     retry_claim(ecs, entity, job.id);
                     continue;
                 }
+                // The lift, and any hauler losing custody below, change the stones.
+                stale = true;
                 // A hauler may hold the item's haul claim; the miner takes custody at lift.
                 let haulers: Vec<_> = ecs
                     .iter_entities()
@@ -2524,6 +2576,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 ecs.entity_mut(entity).remove::<Path>();
             } else if let (Some((landing, _)), Some(stone)) = (set_down, item_entity(ecs, item)) {
                 *ecs.get_mut::<Pos>(stone).expect("item position") = landing;
+                stale = true;
                 ecs.get_mut::<Carrying>(entity).expect("carrying slot").0 = None;
                 ecs.entity_mut(entity).remove::<Clearing>();
                 // Walking, as after a haul's pick-up: left in `Work`, the next delta read his own
@@ -2544,6 +2597,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 // Pick up. The job stays claimed and the same dwarf now walks to the pile, so
                 // the work counter restarts and the path to the stone is spent.
                 None => {
+                    stale = true;
                     ecs.get_mut::<Carrying>(entity)
                         .expect("every dwarf has a carrying slot")
                         .0 = Some(item);
@@ -2563,6 +2617,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                             || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)
                             || closes_last_level_exit(terrain, &blocked, &occupied, cell)
                     });
+                    // Delivered, retried or dropped below, the stone ends up somewhere else.
+                    stale = true;
                     // Every pile cell beside the hauler is refused (#182): it lets go and the job
                     // retries after the cooldown, as a refused channel does. Holding deadlocked
                     // when the hauler stood on the occupant's only way out. No claim-time change
@@ -2592,9 +2648,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         }
 
         if job.kind == JobKind::Cut {
+            stale = true;
             fell_tree(ecs, job.target);
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
+            forget_if_carrying(ecs, entity, &mut stale);
             release_claim(ecs, entity);
             continue;
         }
@@ -2633,6 +2691,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         let Some((changed_pos, tile, yielded)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
+            forget_if_carrying(ecs, entity, &mut stale);
             release_claim(ecs, entity);
             continue;
         };
@@ -2641,6 +2700,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         if job.kind != JobKind::Channel
             && walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target)
         {
+            forget_if_carrying(ecs, entity, &mut stale);
             retry_claim(ecs, entity, job.id);
             continue;
         }
@@ -2705,11 +2765,13 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     let old = old.expect("a changed cell was in bounds");
                     ecs.resource_mut::<Terrain>().set_tile(cell, old);
                 }
+                forget_if_carrying(ecs, entity, &mut stale);
                 retry_claim(ecs, entity, job.id);
                 continue;
             };
             landing = found;
         }
+        stale = true;
         clear_paths(ecs);
         if job.kind == JobKind::Dig {
             let above = Pos {
@@ -2724,6 +2786,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         ecs.spawn((Item(yielded), item_id, landing));
         ecs.resource_mut::<Jobs>().remove(job.id);
         ecs.resource_mut::<Designations>().0.remove(&job.target);
+        forget_if_carrying(ecs, entity, &mut stale);
         release_claim(ecs, entity);
     }
 }
@@ -6071,6 +6134,34 @@ mod tests {
             "three hauls build a goal set and a delivery set each, and the dig one goal set"
         );
         assert_eq!(super::PILE_TARGETS_CALLS.with(|n| n.get()), 1);
+    }
+
+    // 13.8b AC 5. Three miners hold digs and walk toward them: no stone is lifted, set down,
+    // dropped or spawned, so `execute_jobs` builds the stone map once, not once per miner.
+    #[test]
+    fn execute_jobs_builds_the_stone_map_once_when_no_stone_moves() {
+        let (mut world, _, _) = pocket_world(false);
+        let dwarves: Vec<_> = world
+            .ecs
+            .query_filtered::<(bevy_ecs::entity::Entity, &super::Id), bevy_ecs::query::With<super::Dwarf>>()
+            .iter(&world.ecs)
+            .map(|(entity, id)| (id.0, entity))
+            .collect();
+        for (n, y) in [3, 5, 7].into_iter().enumerate() {
+            let job = Job {
+                id: JobId(20 + n as u32),
+                kind: JobKind::Dig,
+                target: Pos { x: 20, y, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            };
+            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+            let (_, entity) = dwarves.iter().find(|(id, _)| *id == n as u32).unwrap();
+            world.ecs.get_mut::<super::CurrentJob>(*entity).unwrap().0 = Some(job.id);
+        }
+        super::STONE_MAP_BUILDS.with(|n| n.set(0));
+        super::execute_jobs(&mut world.ecs);
+        assert_eq!(super::STONE_MAP_BUILDS.with(|n| n.get()), 1);
     }
 
     /// All five dwarves are miners, one per entry of `spots`, in ascending id order.
