@@ -688,6 +688,9 @@ fn claim_jobs(
                     .saturating_add(reaction_delay(seed.0, id, job.id))
     };
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
+    // The pile's free cells read only terrain, `blocked` and zones, all fixed for this call: found
+    // by the first haul job, shared by every other.
+    let mut pile = None;
     for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
@@ -700,7 +703,7 @@ fn claim_jobs(
         }
         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
         // set serves every candidate.
-        let goals = work_positions(&terrain, &blocked, &zones.0, &items, job, None);
+        let goals = work_positions_with(&terrain, &blocked, &zones.0, &items, job, None, &mut pile);
         #[cfg(test)]
         CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
         // A haul's delivery leg: the stone must also have somewhere reachable to go (#132).
@@ -708,13 +711,14 @@ fn claim_jobs(
             JobKind::Haul { item } => {
                 #[cfg(test)]
                 CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
-                Some(work_positions(
+                Some(work_positions_with(
                     &terrain,
                     &blocked,
                     &zones.0,
                     &items,
                     job,
                     Some(item),
+                    &mut pile,
                 ))
             }
             _ => None,
@@ -973,6 +977,8 @@ thread_local! {
     static CLAIM_SET_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Cells flooded by `claim_jobs`' failed searches: the kept-failure test's count.
     static CLAIM_FAILED_FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// `pile_targets` calls: the once-per-claim test's count.
+    static PILE_TARGETS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -1014,6 +1020,8 @@ fn pile_targets(
     blocked: &BTreeSet<Pos>,
     zones: &BTreeSet<Pos>,
 ) -> BTreeMap<Pos, u32> {
+    #[cfg(test)]
+    PILE_TARGETS_CALLS.with(|n| n.set(n.get() + 1));
     let cap = 4 * zones.len() + 16;
     // The zones' x/y bounding box (empty with no zones).
     let xs = || zones.iter().map(|p| p.x);
@@ -1502,6 +1510,20 @@ fn work_positions(
     job: Job,
     carrying: Option<u32>,
 ) -> BTreeSet<Pos> {
+    work_positions_with(terrain, blocked, zones, items, job, carrying, &mut None)
+}
+
+/// `work_positions` with the pile's free cells shared: a haul job fills `pile` on first need, so a
+/// caller whose `blocked` and zones hold still (one `claim_jobs` call) finds them once.
+fn work_positions_with(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    zones: &BTreeSet<Pos>,
+    items: &BTreeMap<u32, Pos>,
+    job: Job,
+    carrying: Option<u32>,
+    pile: &mut Option<BTreeMap<Pos, u32>>,
+) -> BTreeSet<Pos> {
     match job.kind {
         JobKind::Dig | JobKind::Cut => {
             let goals: BTreeSet<_> = side_neighbours(job.target)
@@ -1554,7 +1576,7 @@ fn work_positions(
             // and `release_claim` drops it off the pile.
             // NOTE: `claim_jobs` checks delivery reachability at claim time, so a sealed cell never
             // starts a pick-up; one sealed off mid-walk can still cost a pick-up/drop per retry (#132).
-            let targets = pile_targets(terrain, blocked, zones);
+            let targets = &*pile.get_or_insert_with(|| pile_targets(terrain, blocked, zones));
             if carrying.is_some() {
                 // The neighbours of the DEEPEST free cells; `drop_cell` then lands on one of them.
                 let deepest = targets.values().copied().max();
@@ -6003,6 +6025,52 @@ mod tests {
             claimed,
             "the dig must be claimed within 50 ticks of the stone leaving"
         );
+    }
+
+    // 13.8b AC 6. Three haul jobs no hauler can start (their stones are walled into a pocket) and
+    // one free hauler: each job builds a goal set and a delivery set, and the pile's free cells
+    // are the same for all six. One `claim_jobs` call finds them once.
+    #[test]
+    fn claim_jobs_finds_the_pile_cells_once_per_call() {
+        let (mut world, _, _) = pocket_world(false);
+        set_profession(&mut world, 4, super::Profession::Hauler);
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        for (item, y) in [(50, 9), (51, 10), (52, 11)] {
+            let stone = Pos { x: 21, y, z: 1 };
+            assert!(
+                world
+                    .ecs
+                    .resource_mut::<Terrain>()
+                    .set_tile(stone, Tile::Empty)
+            );
+            world
+                .ecs
+                .spawn((super::Item(super::ItemKind::Stone), super::Id(item), stone));
+            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+                id: JobId(item),
+                kind: JobKind::Haul { item },
+                target: stone,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+        schedule.add_systems(super::claim_jobs);
+        super::PILE_TARGETS_CALLS.with(|n| n.set(0));
+        super::CLAIM_SET_BUILDS.with(|n| n.set(0));
+        schedule.run(&mut world.ecs);
+        assert_eq!(
+            super::CLAIM_SET_BUILDS.with(|n| n.get()),
+            7,
+            "three hauls build a goal set and a delivery set each, and the dig one goal set"
+        );
+        assert_eq!(super::PILE_TARGETS_CALLS.with(|n| n.get()), 1);
     }
 
     /// All five dwarves are miners, one per entry of `spots`, in ascending id order.
