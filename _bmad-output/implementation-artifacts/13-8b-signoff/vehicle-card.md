@@ -50,4 +50,62 @@ the follow-up issue.
 
 ## Sitting
 
+**Run 1, 2026-11-13, build `6b6a041f` (Wolf).** His words: "we still have issue"; asked gone, less or
+the same as 13.8's run 3: "less but still visible". On closing: "I don't thik we are done with the story".
+
+Perf log: `13-8b-seat-like-first-hour.csv` (the first 3,600 s of a 13,311 s log; the digs end at
+3,299 s; the full 27 MB log stays untracked in `13-8-signoff/13-8b-seat-like.csv`, its only mark is
+at 13,307 s). Against 13.8's run 3 (`13-8-signoff/13-8-seat-like-run3.csv`), up to 2,689 s where run 3 ends:
+
+| | run 3 (13.8) | this run |
+|---|---|---|
+| arrivals | every 100.1 to 100.5 s, crew 200 at 1,701 s | every 100.1 to 101.5 s, crew 200 at 1,704 s |
+| frames over 250 ms after startup | 0 | 0 (worst 172 ms) |
+| tiles dug after the big dig | 894 | 912 |
+| pauses over 3 s / over 5 s between digs landing | 56 / 8 | 53 / 7 |
+| longest such pause | 8.0 s | 8.0 s |
+
+So the gui does not freeze, and the log cannot show the improvement Wolf saw: it has no tick number,
+and "pauses between digs landing" is only a stand-in for the world stopping.
+
+**Devpod wire tap, 2026-11-14, same build** (`scripts/bench/wire_tap.py`, one client, Normal, idle
+machine; `wire-tap-devpod-6b6a041f.csv`). The daemon does NOT stop and start here: every tick 0 to
+24,500 arrives in order, and the longest silence between two ticks is 0.38 s.
+
+| ticks | median gap | p99 | longest | over 0.5 s |
+|---|---|---|---|---|
+| 0 to 17,000 | 100 ms | 107 to 117 ms | 175 ms | 0 |
+| 17,000 to 18,000 | 100 ms | 138 ms | 164 ms | 0 |
+| 18,000 to 20,000 | 101 ms | 197 ms | 382 ms | 0 |
+| 20,000 to 22,000 | 100 ms | 217 ms | 377 ms | 0 |
+| 22,000 to 24,500 | 101 ms | 217 ms | 376 ms | 0 |
+
+The daemon falls 10 s behind real time over the 7,500 ticks after the dig, in steps of at most 0.4 s.
+The message per tick grows from about 81 KB to 133 to 144 KB at tick 17,000 and stays there (not yet
+looked into). Not known: whether the seat's daemon (WSL, the gui beside it) is as even. Run 2 asks that.
+
+## Run 2: where do the seconds go
+
+Same run, with the tap as a second client on the Windows side. Start it AFTER the gui is up (the
+scenario's clock starts at the first client).
+
+```bash
+# WSL, from the repo, at the branch HEAD
+target/release/simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototypes/seat-like.json
+```
+
+```powershell
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-8b-seat-like-run2.csv')
+# a second PowerShell window, once the gui shows the world
+python scripts\bench\wire_tap.py D:\Workspace\frostvein\.bin\13-8b-wire-tap-seat.csv
+```
+
+Run at Normal to about tick 20,000 (about 35 minutes), or until you have seen it stop and start a few
+times after the big dig. When you see a stop, press the mark key so the perf log has the moment. Ctrl+C
+the tap at the end. Both files, please.
+
+**Reading it:** ticks arriving evenly while the world visibly stops means the cause is in the gui;
+ticks arriving in clumps of seconds means the connection or the seat's sim.
+
 (not yet run)

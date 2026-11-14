@@ -222,7 +222,7 @@ All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
   5. The story's mutation row "`claim_jobs` reuses pile cells from the previous call" cannot be written: `pile` is a local of one call. Row 11 pins the other side (the delivery set finding them again). Rows 7-9 and 12 are extra: every stale site has a row.
   6. Task 1's probe run was on a loaded machine (the agent was building); counts only. The idle `main` ms come from Task 5's two runs.
 - **Task 7:** nothing built, as written. The probe stays a prototype.
-- **Task 8:** `13-8b-signoff/vehicle-card.md` is written. **The sitting is Wolf's and is not yet run**, so Task 8 and AC 11 are open.
+- **Task 8:** `13-8b-signoff/vehicle-card.md` is written. **Sat 2026-11-13 on `6b6a041f` (Wolf): "we still have issue"; against 13.8's run 3, "less but still visible"; and "I don't thik we are done with the story".** Task 8 and AC 11 stay open. The seat perf log shows no gui freeze (no frame over 250 ms after startup) and the same dig cadence as run 3 (53 against 56 pauses over 3 s between digs landing, longest 8.0 s in both). A devpod wire tap on 2026-11-14 (`scripts/bench/wire_tap.py`, `13-8b-signoff/wire-tap-devpod-6b6a041f.csv`) shows the daemon itself does not stop: longest silence between two ticks 0.38 s to tick 24,500, 10 s lost to real time after the dig; the per-tick message grows from about 81 KB to 133 to 144 KB at the dig. So the multi-second stops are not in the devpod's sim; the card's Run 2 puts the same tap on the seat to tell the gui from the connection and the seat's sim. Figures: the card's Sitting. #237 (drawn dwarves snapping) waits behind this by Wolf's word: "let's focus on fixing perfomnace first".
 - **Task 9:** Q1 follow-up filed as **#236** (`bug`, `route:story`); Q3 is #235. The full gate is owed at PR and has not been run.
 
 ### File List
@@ -230,6 +230,8 @@ All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
 - `crates/sim-core/src/lib.rs` (modified)
 - `_bmad-output/implementation-artifacts/mutations/13-8b.sh` (new)
 - `_bmad-output/implementation-artifacts/13-8b-signoff/` (new): `vehicle-card.md`, `state-main-5f83e82e.txt`, `state-head-89be48c7.txt`, `split-30k-main-run1.txt`, `split-30k-main-run2.txt`, `split-30k-head-run1.txt`, `split-30k-head-run2.txt`, `split-30k-head-keep-disabled.txt`, `tick-bench-main-89be48c7.txt`, `prototypes/split-probe-on-89be48c7.patch`
+- `scripts/bench/wire_tap.py` (new, 2026-11-14)
+- `_bmad-output/implementation-artifacts/13-8b-signoff/`: `13-8b-seat-like-first-hour.csv`, `wire-tap-devpod-6b6a041f.csv` (new, 2026-11-14)
 - `_bmad-output/implementation-artifacts/13-8b-after-the-big-dig.md`, `sprint-status.yaml` (record)
 
 ## Change Log
@@ -239,3 +241,4 @@ All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
 | 2026-11-12 | Created (claude-fable-5-2) on `story-13-8b-after-the-big-dig` off `main` `5f83e82e`. Four creation probes on seat-like; Task 0 Q1–Q3 await Wolf. |
 | 2026-11-13 | Task 0 ruled (Wolf): Q1 (a) three neutral cuts, blocked-step and re-plan burst to a follow-up issue at Task 9; Q2 slot 13.8b accepted, epic count 17; Q3 haul failures filed as #235. Implementer: Sonnet 5.5 subagents, claude-fable-5-2 orchestrates. |
 | 2026-11-13 | Dev, Tasks 1-7 (Sonnet 5.5 agent wrote Tasks 2-4, `f3fa3f8b` `d253f491` `89be48c7`; claude-fable-5-2 measured and ran the mutation table). `state=` identical on all 13 files; seat-like mean 20.3 → 11.8 ms; 12/12 mutation rows KILLED; tick-bench no regression. Q1 follow-up filed as #236. Open: the seat (Task 8, AC 11) and the full gate at PR. |
+| 2026-11-14 | Seat run 1 recorded (Wolf: "less but still visible"; story not done). Seat log read against 13.8's run 3; devpod wire tap added (`scripts/bench/wire_tap.py`): the daemon does not stop and start. Card gains Run 2 (the tap on the seat). |
