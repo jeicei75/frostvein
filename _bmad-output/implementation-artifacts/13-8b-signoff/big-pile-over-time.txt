@@ -1,0 +1,13 @@
+# big-pile.json run to longer lengths (ticks field only changed), end lines. old = 89be48c7, new = a28a5523. 2026-11-15
+old tick=5006 marks=12 items=34 zones=518 goals=0/1/0 done=dig:34,cut:0 stored=16 cells=34 crew=5 arriving=0
+new tick=5006 marks=14 items=32 zones=518 goals=0/3/0 done=dig:32,cut:0 stored=27 cells=32 crew=5 arriving=0
+old tick=6000 marks=11 items=35 zones=518 goals=0/1/0 done=dig:35,cut:0 stored=16 cells=35 crew=5 arriving=0
+new tick=6000 marks=10 items=36 zones=518 goals=0/5/1 done=dig:36,cut:0 stored=35 cells=36 crew=5 arriving=0
+old tick=7000 marks=11 items=35 zones=518 goals=0/1/0 done=dig:35,cut:0 stored=16 cells=35 crew=5 arriving=0
+new tick=7000 marks=2 items=44 zones=518 goals=0/7/1 done=dig:44,cut:0 stored=42 cells=44 crew=5 arriving=0
+old tick=8000 marks=11 items=35 zones=518 goals=0/1/0 done=dig:35,cut:0 stored=16 cells=35 crew=5 arriving=0
+new tick=8000 marks=0 items=46 zones=518 goals=0/9/1 done=dig:46,cut:0 stored=45 cells=46 crew=5 arriving=0
+old tick=12000 marks=11 items=35 zones=518 goals=0/1/0 done=dig:35,cut:0 stored=16 cells=35 crew=5 arriving=0
+new tick=12000 marks=0 items=46 zones=518 goals=0/10/1 done=dig:46,cut:0 stored=46 cells=46 crew=5 arriving=0
+old tick=20000 marks=11 items=35 zones=518 goals=0/1/0 done=dig:35,cut:0 stored=16 cells=35 crew=5 arriving=0
+new tick=20000 marks=0 items=46 zones=518 goals=0/10/1 done=dig:46,cut:0 stored=46 cells=46 crew=5 arriving=0
