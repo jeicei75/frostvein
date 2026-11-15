@@ -108,4 +108,55 @@ the tap at the end. Both files, please.
 **Reading it:** ticks arriving evenly while the world visibly stops means the cause is in the gui;
 ticks arriving in clumps of seconds means the connection or the seat's sim.
 
-(not yet run)
+### Sitting, Run 2
+
+**2026-11-15, build `19bab45a` (Wolf).** His words: "it's better but after 21 elapsed dwarwes started
+to stop briefly (not all at once).. so I just wonder is it actually perf issue or more like decision
+what next takes longer when more dwarves around.. it does not look smooth enough still". Asked whether
+to close the story on its perf result or widen it: "I think we will continue until we are happy".
+
+Files: `13-8b-seat-like-run2.csv` (gui, 3,115 s, one mark at 3,111 s) and `13-8b-wire-tap-seat.csv`
+(the tap, tick 227 to 30,000).
+
+**The gui does not freeze.** Arrivals land every 100.1 to 100.5 s up to crew 200 at 1,700 s. Minutes
+15 to 27 have no frame over 100 ms (median 21 ms). After the big dig the median frame is 27 to 38 ms,
+25 frames over 100 ms in 24 minutes, the worst 124 ms.
+
+**The seat's daemon, by the tap** (gap between two ticks, 3-minute windows):
+
+| minutes | ticks | median | p99 | longest | over 0.25 s | over 0.5 s | ticks/s | KB/tick |
+|---|---|---|---|---|---|---|---|---|
+| 0 to 27 | 227 to 16,400 | 100 ms | 103 to 168 ms | 308 ms | 3 | 0 | 9.97 to 9.99 | 46 to 79 |
+| 27 to 30 | to 18,197 | 100 ms | 154 ms | 228 ms | 0 | 0 | 9.98 | 116 |
+| 30 to 33 | to 19,954 | 100 ms | 222 ms | 433 ms | 9 | 0 | 9.76 | 137 |
+| 33 to 36 | to 21,625 | 100 ms | 335 ms | 774 ms | 44 | 1 | 9.29 | 139 |
+| 36 to 39 | to 23,119 | 101 ms | 476 ms | 967 ms | 99 | 12 | 8.30 | 141 |
+| 39 to 45 | to 26,609 | 100 ms | 229 to 253 ms | 530 ms | 33 | 2 | 9.61 to 9.78 | 143 to 145 |
+| 45 to 51 | to 29,764 | 101 ms | 320 to 348 ms | 774 ms | 139 | 4 | 8.62 to 8.91 | 147 to 149 |
+
+So at minute 21, where Wolf saw the brief stops begin, the daemon is even (no gap over 227 ms) and the
+gui is at its best: those stops are not a performance problem. After the big dig there IS a smaller
+performance part: single ticks of up to 0.97 s (the devpod's worst was 0.38 s), with the world running
+at 83 to 98% of real time. No multi-second silence anywhere.
+
+**What the stops are: dwarves standing still inside the sim** (headless, `prototypes/stall-probe.patch`
+on `19bab45a`, output `prototypes/stall-probe-30k.txt`). A stall is a dwarf that holds a job, is in
+`Walk`, and stays on one tile for more than 12 ticks (a step is 11). Counted in ticks, so the same on
+any machine. Per 1,000 ticks (100 s):
+
+| ticks | crew | stalls | 13 to 23 ticks | 24 to 60 | over 60 | longest | dwarves stalled |
+|---|---|---|---|---|---|---|---|
+| 3,000 to 4,000 | 40 to 53 | 21 | 18 | 3 | 0 | 3.2 s | 17 |
+| 7,000 to 8,000 | 96 to 112 | 105 | 104 | 1 | 0 | 3.1 s | 28 |
+| 11,000 to 12,000 | 140 to 148 | 266 | 265 | 1 | 0 | 3.2 s | 48 |
+| 12,000 to 13,000 | 148 to 164 | 267 | 256 | 9 | 2 | 15.2 s | 53 |
+| 16,000 to 17,000 | 200 | 21 | 19 | 2 | 0 | 4.3 s | 4 |
+| 18,000 to 19,000 | 200 | 1,456 | 1,149 | 229 | 78 | 23 s | 146 |
+| 20,000 to 21,000 | 200 | 1,529 | 1,187 | 211 | 131 | 138 s | 151 |
+| 29,000 to 30,000 | 200 | 1,184 | 964 | 170 | 50 | 41.5 s | 121 |
+
+After the dig a walking dwarf stands for 10 to 25% of his walking time. Most stalls are as long as one
+`SQUEEZE_WAIT_TICKS` wait (13.4: a blocked dwarf looks again one step later, then swaps). NOT yet
+shown: which rule each stall comes from, and whether the blocker is idle (#227's camp crowd) or
+working. That attribution is the next probe.
+
