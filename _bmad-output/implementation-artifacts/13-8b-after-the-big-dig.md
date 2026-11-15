@@ -83,6 +83,36 @@ Mean per tick over each 500-tick window, crew 200:
 - [ ] **Task 8 — the seat (AC 11).** Write `13-8b-signoff/vehicle-card.md`; Wolf runs it.
 - [ ] **Task 9 — record.** File the Q1 follow-up issue (and Q3's, if ruled) with the figures. One full gate at PR.
 
+## Amendment 2026-11-15: the stops (Wolf's rulings)
+
+Seat run 2 (card, Sitting Run 2): "it's better but after 21 elapsed dwarwes started to stop briefly (not all at once) ... it does not look smooth enough still". Asked close or widen: **"I think we will continue until we are happy"**. On the head-on finding: **"I think we should include 236 also to this fix?"** So the story now changes what dwarves do, and #236 is in scope. **AC 1 is AMENDED:** it holds for Tasks 1-7 (`89be48c7`: `state=` identical); the tasks below change `state=` on purpose.
+
+### Found (headless, seat-like, probes in `13-8b-signoff/prototypes/`)
+
+- **Who makes a job-walking dwarf wait** (`why-probe.patch`, `why-probe-30k.txt`; probe is neutral, `state=5511268fb5faf97f`). Per 1,000 ticks: two job-holders head-on 415 at t12,000 and 1,394-2,339 after the dig; a job-holding blocker not head-on with no way round 5 and 571-2,911; an idle blocker under 40 throughout. So #227's camp crowd is NOT the cause. The head-on rule (`resolve_blocked_step`, `if !idle { try_squeeze(..) }`) never tries anything but the `SQUEEZE_WAIT_TICKS` wait.
+- **Prototype: head-on job-holders swap on the first look** (`why-probe-swap-now.patch`, `why-probe-swap-now-30k.txt`). Stalls per 1,000 ticks 266 → 8 at t12,000; 1,127-1,641 → 190-515 after the dig. End: `done=dig:1430` (was 1370), `stored=552` (was 497), mean 10.2 ms (was 11.6), `state=fca7c3e18fa333c1`.
+- **The slowest ticks are the re-plan burst** (`swap-now-slow-ticks-30k.txt`): of 61 ticks over 150 ms, 56 are dominated by the `execute_jobs` re-plan after `clear_paths` (74% of their time; 80-138 searches in the tick), 4 by `resolve_blocked_step` (10%). #236's guess holds.
+- **Prototype: keep a path across a dig unless it passes within 2 cells of the target** (`swap-keep-paths-probe.patch`, `KEEP_PATHS=1`, `swap-keep-paths-30k.txt`). Re-plans fall 80-95%, but from t23,000 "no way round" waits climb to 9,000 per 1,000 ticks and the dig stalls: `done=dig:1027`, mean 19.4 ms. **It jams; the cause is not found.** Not a fix as built.
+- **One miner waits for good** from about t24,000: he carries a cleared stone and `clearing_set_down` finds nowhere to put it (`carry_wait_ticks` about 1,000 per 1,000 ticks). Its own bug.
+
+### Acceptance Criteria (added)
+
+12. **Two job-holders who meet head-on trade tiles on the first look.** A holder whose next tile holds a job-holder whose path starts on the holder's tile swaps with him in that call; neither waits `SQUEEZE_WAIT_TICKS`. An idle blocker's wait is unchanged. Test first, RED on `19bab45a` (the swap comes one step period later).
+13. **On seat-like the stalls fall** (`stall-probe.patch` re-applied; a stall is a job-holder in `Walk` on one tile for more than 12 ticks). Per 1,000 ticks: at most 30 in every window from t7,000 to t13,000 (now 105-267), at most 600 in every window from t19,000 (now 1,127-1,641).
+14. **The re-plan burst is cut without losing work.** On seat-like, idle machine, two runs: no tick over 250 ms (now 369-446), and `done=dig` at t30,000 is not below AC 12's build alone (1,430). The rule is the dev's to find; the keep-paths prototype's jam is diagnosed first (Task 11) and the diagnosis recorded.
+15. **Blocking, measured after 12 and 14.** `resolve_blocked_step` ms per tick and the "no way round" waits per window, pasted beside today's (3-11 ms; 189-1,285). Whether it needs its own cut is Wolf's ruling on those figures.
+16. **Outcomes are re-read, not assumed** (standing AC 11). Every committed scenario's end line is re-run on the new build and listed beside the old; none does less work (`done=`, `stored=`). Re-pinned tests and 13.4's mutation rows that name the head-on wait are re-pointed or retired in the same commit as the code, each re-run (KILLED, or retired with the reason). Saves still load (`Squeeze` keeps its fields).
+17. **Mutation rows** for each new decision, and **seat run 3**: Wolf runs seat-like with the tap and rules on what he sees.
+
+### Tasks (added)
+
+- [ ] **Task 10 — head-on swap at once (AC 12, 13, 16).** Test first. Then the audit (`scripts/audit-mutations.py`) before the first code commit, because rows against 13.4's wait go RED with it.
+- [ ] **Task 11 — the re-plan burst (AC 14).** Diagnose the keep-paths jam on the prototype (which dwarf first waits for good, on what, and why a re-plan would have freed him). Then the rule, test first.
+- [ ] **Task 12 — measure (AC 13, 14, 15, 16).** Stall probe, slow-tick split, end lines of every committed scenario, `tick-bench.sh`.
+- [ ] **Task 13 — mutation rows (AC 17).**
+- [ ] **Task 14 — seat run 3 (AC 17).** Card section, pushed build, Wolf's words recorded.
+- [ ] **Task 15 — record.** File the stuck stone-carrying miner as its own issue; comment on #236 with what this story closed of it; #219 (swap animation) gets a note that swaps are now more frequent.
+
 ## Verification
 
 ```bash
@@ -234,6 +264,7 @@ All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
 - `scripts/bench/wire_tap.py` (new, 2026-11-14)
 - `_bmad-output/implementation-artifacts/13-8b-signoff/`: `13-8b-seat-like-first-hour.csv`, `wire-tap-devpod-6b6a041f.csv` (new, 2026-11-14)
 - `_bmad-output/implementation-artifacts/13-8b-signoff/`: `13-8b-seat-like-run2.csv`, `13-8b-wire-tap-seat.csv`, `prototypes/stall-probe.patch`, `prototypes/stall-probe-30k.txt` (new, 2026-11-15)
+- `_bmad-output/implementation-artifacts/13-8b-signoff/prototypes/`: `why-probe.patch`, `why-probe-30k.txt`, `why-probe-swap-now.patch`, `why-probe-swap-now-30k.txt`, `swap-keep-paths-probe.patch`, `swap-keep-paths-30k.txt`, `swap-now-slow-ticks-30k.txt` (new, 2026-11-15)
 - `_bmad-output/implementation-artifacts/13-8b-after-the-big-dig.md`, `sprint-status.yaml` (record)
 
 ## Change Log
@@ -245,3 +276,4 @@ All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
 | 2026-11-13 | Dev, Tasks 1-7 (Sonnet 5.5 agent wrote Tasks 2-4, `f3fa3f8b` `d253f491` `89be48c7`; claude-fable-5-2 measured and ran the mutation table). `state=` identical on all 13 files; seat-like mean 20.3 → 11.8 ms; 12/12 mutation rows KILLED; tick-bench no regression. Q1 follow-up filed as #236. Open: the seat (Task 8, AC 11) and the full gate at PR. |
 | 2026-11-14 | Seat run 1 recorded (Wolf: "less but still visible"; story not done). Seat log read against 13.8's run 3; devpod wire tap added (`scripts/bench/wire_tap.py`): the daemon does not stop and start. Card gains Run 2 (the tap on the seat). |
 | 2026-11-15 | Seat run 2 recorded (Wolf: "it's better but ... dwarwes started to stop briefly (not all at once) ... it does not look smooth enough still"). Seat tap: daemon even at minute 21, ticks up to 0.97 s after the big dig. Headless stall probe: job-walking dwarves stand still inside the sim, most for one squeeze wait. **Wolf ruled the story continues past its perf scope: "I think we will continue until we are happy".** New ACs follow the attribution probe. |
+| 2026-11-15 | **Amended on Wolf's rulings** ("continue until we are happy"; "include 236 also to this fix"): ACs 12-17 and Tasks 10-15 added, AC 1 limited to Tasks 1-7. Probes: head-on job-holders are the stops Wolf saw (not #227's crowd); a first-look swap cuts stalls 266 → 8 per 1,000 ticks at t12,000; the slowest ticks are the re-plan burst; a keep-paths prototype jams. Implementer for Tasks 10-13 not yet named. |
