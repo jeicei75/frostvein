@@ -82,9 +82,9 @@ PY
 mutation "10 the stone map is built again for every dwarf (AC 5)" sim-core execute_jobs_builds_the_stone_map_once_when_no_stone_moves <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if std::mem::take(&mut stale) {\n            kept = None;\n        }\n'
+old = '        if std::mem::take(&mut stale) {\n            kept = None;\n            failed.clear();\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if std::mem::take(&mut stale) || true {\n            kept = None;\n        }\n'))
+p.write_text(s.replace(old, '        if std::mem::take(&mut stale) || true {\n            kept = None;\n            failed.clear();\n'))
 PY
 
 mutation "11 the delivery set finds the pile cells again (AC 6)" sim-core claim_jobs_finds_the_pile_cells_once_per_call <<'PY'

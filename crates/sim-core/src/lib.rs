@@ -983,6 +983,8 @@ thread_local! {
     static PILE_TARGETS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Stone maps `execute_jobs` has built: the once-per-call test's count.
     static STONE_MAP_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Cells flooded by `execute_jobs`' failed re-plans: the once-per-component test's count.
+    static REPLAN_FAILED_FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -2292,6 +2294,10 @@ fn execute_jobs(ecs: &mut EcsWorld) {
     // of the turn that made it) and the next turn drops `kept`, building it again if it needs it.
     let mut kept: Option<StoneMap> = None;
     let mut stale = false;
+    // The walkable components this call's completed failed re-plans flooded, under `kept`'s
+    // `blocked` and today's tiles. Dropped with `kept`: every tile set in this loop sets `stale` too
+    // (a refused channel cut restores its tiles before anyone searches).
+    let mut failed: Vec<BTreeSet<Pos>> = Vec::new();
     let emitters: Vec<Pos> = ecs
         .query_filtered::<&Pos, With<Emitter>>()
         .iter(ecs)
@@ -2308,6 +2314,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
     for (holder_id, entity) in dwarves {
         if std::mem::take(&mut stale) {
             kept = None;
+            failed.clear();
         }
         let Some(job_id) = ecs.get::<CurrentJob>(entity).and_then(|current| current.0) else {
             continue;
@@ -2464,13 +2471,28 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 // The world's cell count, as at claim time (13.7 review, decision 1): every dig or
                 // cut clears every path, and a re-plan capped at `MAX_ASTAR_NODES` released a far
                 // claim that `claim_jobs` then re-claimed, in a loop that never reached the job.
-                let (computed, _, _) = astar_with_budget(
-                    terrain,
-                    &blocked,
-                    pos,
-                    &work_positions,
-                    &mut terrain.tiles.len(),
-                );
+                // A start in a component a failed re-plan flooded, holding none of his goals,
+                // fails the same way: one flood per component, however many fail in it.
+                let computed = if failed.iter().any(|component| {
+                    component.contains(&pos) && work_positions.is_disjoint(component)
+                }) {
+                    None
+                } else {
+                    let (computed, _, explored) = astar_with_budget(
+                        terrain,
+                        &blocked,
+                        pos,
+                        &work_positions,
+                        &mut terrain.tiles.len(),
+                    );
+                    #[cfg(test)]
+                    REPLAN_FAILED_FLOODED.with(|n| n.set(n.get() + explored.len()));
+                    // Empty after a success or for no goals: nothing was flooded.
+                    if !explored.is_empty() {
+                        failed.push(explored);
+                    }
+                    computed
+                };
                 if computed.is_none() {
                     forget_if_carrying(ecs, entity, &mut stale);
                 }
@@ -6172,6 +6194,99 @@ mod tests {
         super::STONE_MAP_BUILDS.with(|n| n.set(0));
         super::execute_jobs(&mut world.ecs);
         assert_eq!(super::STONE_MAP_BUILDS.with(|n| n.get()), 1);
+    }
+
+    /// Gives dwarf `id` the job `job` with no path, as after a `clear_paths`.
+    fn hold_job(world: &mut World, id: u32, job: JobId) -> super::Entity {
+        let entity = dwarf_entity(world, id);
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job);
+        world.ecs.entity_mut(entity).remove::<super::Path>();
+        entity
+    }
+
+    // 13.8b Task 11 (AC 14). Two miners on the plate hold digs whose only face is the sealed
+    // pocket, with no path: both re-plans fail in one `execute_jobs` call. The plate is flooded
+    // once, not once per miner (on `55cc430b`: 800 cells, two floods).
+    #[test]
+    fn failed_re_plans_in_one_component_flood_it_once() {
+        let (mut world, spot, _) = pocket_world(false);
+        let plate = walkable_area(&world, spot).len();
+        assert_eq!(plate, 400, "the plate is the miners' whole component");
+        let pocket_dig = world.jobs()[0].id;
+        insert_dig(&mut world, 900, Pos { x: 21, y: 11, z: 1 });
+        let first = hold_job(&mut world, 0, pocket_dig);
+        let second = hold_job(&mut world, 1, JobId(900));
+        super::REPLAN_FAILED_FLOODED.with(|n| n.set(0));
+        super::execute_jobs(&mut world.ecs);
+        for entity in [first, second] {
+            assert_eq!(
+                world.ecs.get::<super::CurrentJob>(entity).unwrap().0,
+                None,
+                "an unreachable re-plan lets the job go"
+            );
+        }
+        assert_eq!(
+            super::REPLAN_FAILED_FLOODED.with(|n| n.get()),
+            plate,
+            "one flood of the plate for both failed re-plans"
+        );
+    }
+
+    // 13.8b Task 11. A failure remembered in one call is not used once `blocked` loses a cell in
+    // it: miner 0's re-plan fails while a stone walls the corridor, hauler 1 then lifts the stone,
+    // and miner 2's re-plan through the corridor must still find its path.
+    #[test]
+    fn a_stone_lifted_mid_call_lets_a_later_re_plan_through() {
+        let (mut world, _, wall) = pocket_world(true);
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(50), wall));
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        let pocket_dig = world.jobs()[0].id;
+        insert_dig(&mut world, 900, Pos { x: 21, y: 11, z: 1 });
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(901),
+            kind: JobKind::Haul { item: 50 },
+            target: wall,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        let failing = hold_job(&mut world, 0, pocket_dig);
+        let hauler = hold_job(&mut world, 1, JobId(901));
+        *world.ecs.get_mut::<Pos>(hauler).unwrap() = Pos { x: 19, y: 10, z: 1 };
+        world
+            .ecs
+            .entity_mut(hauler)
+            .insert(super::WorkProgress(super::WORK_TICKS));
+        let later = hold_job(&mut world, 2, JobId(900));
+        super::execute_jobs(&mut world.ecs);
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(failing).unwrap().0,
+            None,
+            "miner 0 re-planned while the stone walled the corridor"
+        );
+        assert_eq!(
+            world.ecs.get::<super::Carrying>(hauler).unwrap().0,
+            Some(50),
+            "the hauler lifted the stone"
+        );
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(later).unwrap().0,
+            Some(JobId(900)),
+            "miner 2 still holds his dig"
+        );
+        assert_eq!(
+            world
+                .ecs
+                .get::<super::Path>(later)
+                .and_then(|path| path.0.last().copied()),
+            Some(Pos { x: 21, y: 10, z: 1 }),
+            "miner 2's re-plan reaches the pocket through the opened corridor"
+        );
     }
 
     /// All five dwarves are miners, one per entry of `spots`, in ascending id order.

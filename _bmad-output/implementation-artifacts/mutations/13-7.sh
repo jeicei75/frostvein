@@ -94,16 +94,16 @@ PY
 mutation "4 the execute_jobs re-plan is capped at MAX_ASTAR_NODES again (decision 1)" sim-core a_far_claim_is_kept_through_terrain_churn_past_the_node_cap <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                let (computed, _, _) = astar_with_budget(
-                    terrain,
-                    &blocked,
-                    pos,
-                    &work_positions,
-                    &mut terrain.tiles.len(),
-                );
+old = '''                    let (computed, _, explored) = astar_with_budget(
+                        terrain,
+                        &blocked,
+                        pos,
+                        &work_positions,
+                        &mut terrain.tiles.len(),
+                    );
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                let computed = astar(terrain, &blocked, pos, &work_positions);\n'))
+p.write_text(s.replace(old, old.replace('&mut terrain.tiles.len()', '&mut { MAX_ASTAR_NODES }')))
 PY
 
 # A designate filter that drops the pocket digs: without the 25-queued assert the test passes
