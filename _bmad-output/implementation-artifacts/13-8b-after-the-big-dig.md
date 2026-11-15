@@ -205,6 +205,8 @@ simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototyp
 
 Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-13). claude-fable-5-2 orchestrates and verifies, and keeps the REDs, the mutation run, the bench and the full gate.
 
+Amendment tasks 10-13 (asked 2026-11-15): Wolf picked **Opus 5.5** subagents. claude-fable-5-2 orchestrates and verifies as before, and ran the probes behind the amendment.
+
 ### Debug Log References
 
 All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
@@ -276,4 +278,4 @@ All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
 | 2026-11-13 | Dev, Tasks 1-7 (Sonnet 5.5 agent wrote Tasks 2-4, `f3fa3f8b` `d253f491` `89be48c7`; claude-fable-5-2 measured and ran the mutation table). `state=` identical on all 13 files; seat-like mean 20.3 → 11.8 ms; 12/12 mutation rows KILLED; tick-bench no regression. Q1 follow-up filed as #236. Open: the seat (Task 8, AC 11) and the full gate at PR. |
 | 2026-11-14 | Seat run 1 recorded (Wolf: "less but still visible"; story not done). Seat log read against 13.8's run 3; devpod wire tap added (`scripts/bench/wire_tap.py`): the daemon does not stop and start. Card gains Run 2 (the tap on the seat). |
 | 2026-11-15 | Seat run 2 recorded (Wolf: "it's better but ... dwarwes started to stop briefly (not all at once) ... it does not look smooth enough still"). Seat tap: daemon even at minute 21, ticks up to 0.97 s after the big dig. Headless stall probe: job-walking dwarves stand still inside the sim, most for one squeeze wait. **Wolf ruled the story continues past its perf scope: "I think we will continue until we are happy".** New ACs follow the attribution probe. |
-| 2026-11-15 | **Amended on Wolf's rulings** ("continue until we are happy"; "include 236 also to this fix"): ACs 12-17 and Tasks 10-15 added, AC 1 limited to Tasks 1-7. Probes: head-on job-holders are the stops Wolf saw (not #227's crowd); a first-look swap cuts stalls 266 → 8 per 1,000 ticks at t12,000; the slowest ticks are the re-plan burst; a keep-paths prototype jams. Implementer for Tasks 10-13 not yet named. |
+| 2026-11-15 | **Amended on Wolf's rulings** ("continue until we are happy"; "include 236 also to this fix"): ACs 12-17 and Tasks 10-15 added, AC 1 limited to Tasks 1-7. Probes: head-on job-holders are the stops Wolf saw (not #227's crowd); a first-look swap cuts stalls 266 → 8 per 1,000 ticks at t12,000; the slowest ticks are the re-plan burst; a keep-paths prototype jams. Implementer for Tasks 10-13: Opus 5.5 subagents (Wolf, 2026-11-15), claude-fable-5-2 orchestrating. |
