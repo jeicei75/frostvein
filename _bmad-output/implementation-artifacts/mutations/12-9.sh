@@ -28,7 +28,12 @@ PY
 
 # The per-step rule FR49 read literally: an "escape" is any free cell, so the lower id backs off
 # whenever it has one. The story hand-traced this to a livelock in fixture (b).
-mutation "4 the per-step flip rule" sim-core head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_dead_end <<'PY'
+# 13.8b Task 13: re-pointed. Fixture (b) is two head-on job-holders, which now swap on the first
+# look before the escape rule is reached (it SURVIVED on 55cc430b); the rule is live only for an
+# IDLE head-on blocker, row 5's fixture, which this livelocks ("not done by tick 1000"). That kill
+# comes from the blocker's half (`!holder_tiles`); the holder's half alone does not move this test
+# and is killed only by scenario tests (the pile-ring pair and the cage sweep).
+mutation "4 the per-step flip rule" sim-core a_higher_id_miner_yields_to_an_idle_dwarf_at_the_dead_end_when_only_it_has_an_escape <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 for old in ('                |tile| !blocker_tiles.contains(&tile),\n',
