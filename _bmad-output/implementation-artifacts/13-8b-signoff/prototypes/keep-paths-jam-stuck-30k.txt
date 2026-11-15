@@ -1,0 +1,905 @@
+STALL t=1000 crew=18 idle%=2 walk%=24 work%=2 stalls=0 (<=23:0 <=60:0 >60:0) max=0 dwarves=0 lost_ticks=0 mean_ms=0.12 marks=124
+WHY t=1000 blocked_looks=3 idle_boxed=0 idle_exit_ahead=0 reroute_fail=0 head_on_job=2 head_on_idle=0 swaps=2 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.00 replan_ms=0.00 replans=20 max_ms=36 over100=0
+STALL t=2000 crew=29 idle%=0 walk%=58 work%=4 stalls=7 (<=23:6 <=60:1 >60:0) max=54 dwarves=5 lost_ticks=85 mean_ms=0.58 marks=101
+WHY t=2000 blocked_looks=47 idle_boxed=0 idle_exit_ahead=0 reroute_fail=11 head_on_job=1 head_on_idle=0 swaps=1 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.18 replan_ms=0.03 replans=170 max_ms=39 over100=0
+STALL t=3000 crew=40 idle%=0 walk%=70 work%=3 stalls=4 (<=23:3 <=60:1 >60:0) max=54 dwarves=3 lost_ticks=67 mean_ms=0.89 marks=82
+WHY t=3000 blocked_looks=249 idle_boxed=0 idle_exit_ahead=0 reroute_fail=7 head_on_job=1 head_on_idle=0 swaps=1 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.21 replan_ms=0.04 replans=122 max_ms=41 over100=0
+STALL t=4000 crew=53 idle%=0 walk%=72 work%=4 stalls=7 (<=23:4 <=60:2 >60:1) max=65 dwarves=7 lost_ticks=145 mean_ms=1.34 marks=46
+WHY t=4000 blocked_looks=106 idle_boxed=0 idle_exit_ahead=0 reroute_fail=15 head_on_job=10 head_on_idle=0 swaps=10 carry_wait_ticks=0 reroute_fail_behind_worker=9 resolve_ms=0.39 replan_ms=0.06 replans=398 max_ms=42 over100=0
+STALL t=5000 crew=67 idle%=12 walk%=65 work%=3 stalls=10 (<=23:10 <=60:0 >60:0) max=21 dwarves=10 lost_ticks=88 mean_ms=1.65 marks=11
+WHY t=5000 blocked_looks=162 idle_boxed=0 idle_exit_ahead=0 reroute_fail=11 head_on_job=33 head_on_idle=0 swaps=33 carry_wait_ticks=0 reroute_fail_behind_worker=1 resolve_ms=0.21 replan_ms=0.19 replans=481 max_ms=47 over100=0
+STALL t=6000 crew=85 idle%=29 walk%=49 work%=1 stalls=3 (<=23:2 <=60:1 >60:0) max=49 dwarves=3 lost_ticks=52 mean_ms=1.40 marks=3
+WHY t=6000 blocked_looks=57 idle_boxed=1 idle_exit_ahead=0 reroute_fail=6 head_on_job=21 head_on_idle=0 swaps=21 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.04 replan_ms=0.02 replans=122 max_ms=49 over100=0
+STALL t=7000 crew=96 idle%=44 walk%=44 work%=0 stalls=7 (<=23:5 <=60:2 >60:0) max=54 dwarves=7 lost_ticks=124 mean_ms=2.04 marks=0
+WHY t=7000 blocked_looks=142 idle_boxed=1 idle_exit_ahead=1 reroute_fail=11 head_on_job=13 head_on_idle=0 swaps=13 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.06 replan_ms=0.13 replans=77 max_ms=86 over100=0
+STALL t=8000 crew=112 idle%=43 walk%=43 work%=0 stalls=4 (<=23:3 <=60:1 >60:0) max=31 dwarves=3 lost_ticks=48 mean_ms=2.05 marks=0
+WHY t=8000 blocked_looks=201 idle_boxed=0 idle_exit_ahead=1 reroute_fail=4 head_on_job=78 head_on_idle=0 swaps=78 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.07 replan_ms=0.01 replans=41 max_ms=50 over100=0
+STALL t=9000 crew=120 idle%=48 walk%=45 work%=0 stalls=6 (<=23:6 <=60:0 >60:0) max=21 dwarves=5 lost_ticks=38 mean_ms=2.23 marks=0
+WHY t=9000 blocked_looks=145 idle_boxed=0 idle_exit_ahead=2 reroute_fail=4 head_on_job=49 head_on_idle=0 swaps=49 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.05 replan_ms=0.02 replans=47 max_ms=48 over100=0
+STALL t=10000 crew=128 idle%=48 walk%=46 work%=0 stalls=3 (<=23:3 <=60:0 >60:0) max=21 dwarves=3 lost_ticks=29 mean_ms=2.29 marks=0
+WHY t=10000 blocked_looks=244 idle_boxed=0 idle_exit_ahead=0 reroute_fail=3 head_on_job=92 head_on_idle=0 swaps=92 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.04 replan_ms=0.01 replans=46 max_ms=55 over100=0
+STALL t=11000 crew=140 idle%=48 walk%=43 work%=0 stalls=5 (<=23:5 <=60:0 >60:0) max=22 dwarves=5 lost_ticks=51 mean_ms=2.53 marks=0
+WHY t=11000 blocked_looks=338 idle_boxed=0 idle_exit_ahead=0 reroute_fail=5 head_on_job=148 head_on_idle=0 swaps=148 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.18 replan_ms=0.02 replans=65 max_ms=44 over100=0
+STALL t=12000 crew=148 idle%=50 walk%=44 work%=0 stalls=17 (<=23:17 <=60:0 >60:0) max=21 dwarves=16 lost_ticks=160 mean_ms=2.80 marks=0
+WHY t=12000 blocked_looks=383 idle_boxed=3 idle_exit_ahead=2 reroute_fail=13 head_on_job=140 head_on_idle=1 swaps=140 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.26 replan_ms=0.03 replans=98 max_ms=94 over100=0
+STALL t=13000 crew=164 idle%=47 walk%=43 work%=0 stalls=23 (<=23:19 <=60:4 >60:0) max=43 dwarves=17 lost_ticks=285 mean_ms=3.32 marks=0
+WHY t=13000 blocked_looks=363 idle_boxed=1 idle_exit_ahead=2 reroute_fail=26 head_on_job=118 head_on_idle=0 swaps=118 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.33 replan_ms=0.01 replans=119 max_ms=66 over100=0
+STALL t=14000 crew=177 idle%=58 walk%=35 work%=0 stalls=260 (<=23:137 <=60:64 >60:59) max=208 dwarves=43 lost_ticks=10386 mean_ms=19.29 marks=0
+WHY t=14000 blocked_looks=1451 idle_boxed=261 idle_exit_ahead=3 reroute_fail=978 head_on_job=26 head_on_idle=15 swaps=143 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=16.78 replan_ms=0.01 replans=107 max_ms=150 over100=19
+STALL t=15000 crew=185 idle%=75 walk%=20 work%=0 stalls=182 (<=23:118 <=60:36 >60:28) max=384 dwarves=33 lost_ticks=7463 mean_ms=8.16 marks=0
+WHY t=15000 blocked_looks=815 idle_boxed=194 idle_exit_ahead=5 reroute_fail=410 head_on_job=38 head_on_idle=8 swaps=131 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=6.70 replan_ms=0.01 replans=88 max_ms=126 over100=9
+STALL t=16000 crew=198 idle%=85 walk%=9 work%=0 stalls=8 (<=23:7 <=60:1 >60:0) max=32 dwarves=4 lost_ticks=91 mean_ms=0.44 marks=0
+WHY t=16000 blocked_looks=44 idle_boxed=7 idle_exit_ahead=1 reroute_fail=2 head_on_job=3 head_on_idle=2 swaps=6 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.00 replan_ms=0.00 replans=23 max_ms=45 over100=0
+STALL t=17000 crew=200 idle%=91 walk%=8 work%=0 stalls=0 (<=23:0 <=60:0 >60:0) max=0 dwarves=0 lost_ticks=0 mean_ms=0.35 marks=0
+WHY t=17000 blocked_looks=0 idle_boxed=0 idle_exit_ahead=0 reroute_fail=0 head_on_job=0 head_on_idle=0 swaps=0 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.00 replan_ms=0.00 replans=0 max_ms=41 over100=0
+STALL t=18000 crew=200 idle%=49 walk%=49 work%=2 stalls=85 (<=23:75 <=60:9 >60:1) max=64 dwarves=57 lost_ticks=957 mean_ms=4.42 marks=1430
+WHY t=18000 blocked_looks=598 idle_boxed=2 idle_exit_ahead=16 reroute_fail=94 head_on_job=113 head_on_idle=0 swaps=113 carry_wait_ticks=0 reroute_fail_behind_worker=24 resolve_ms=1.70 replan_ms=0.30 replans=1850 max_ms=122 over100=2
+SLOW t=18571 ms=176 resolve_ms=119 replan_ms=4 replans=19 reroute_fail=4 blocked_looks=4
+SLOW t=18613 ms=157 resolve_ms=44 replan_ms=53 replans=7 reroute_fail=2 blocked_looks=5
+SLOW t=18619 ms=159 resolve_ms=60 replan_ms=1 replans=7 reroute_fail=1 blocked_looks=2
+SLOW t=18625 ms=150 resolve_ms=144 replan_ms=0 replans=0 reroute_fail=5 blocked_looks=7
+SLOW t=18648 ms=173 resolve_ms=100 replan_ms=0 replans=2 reroute_fail=5 blocked_looks=9
+SLOW t=18655 ms=162 resolve_ms=0 replan_ms=149 replans=6 reroute_fail=1 blocked_looks=3
+SLOW t=18657 ms=167 resolve_ms=72 replan_ms=0 replans=1 reroute_fail=4 blocked_looks=5
+SLOW t=18659 ms=197 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=12
+SLOW t=18670 ms=152 resolve_ms=143 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=12
+SLOW t=18766 ms=154 resolve_ms=94 replan_ms=2 replans=8 reroute_fail=4 blocked_looks=5
+SLOW t=18780 ms=154 resolve_ms=91 replan_ms=0 replans=0 reroute_fail=6 blocked_looks=8
+SLOW t=18835 ms=259 resolve_ms=162 replan_ms=4 replans=4 reroute_fail=5 blocked_looks=6
+SLOW t=18846 ms=224 resolve_ms=214 replan_ms=0 replans=0 reroute_fail=5 blocked_looks=8
+SLOW t=18875 ms=182 resolve_ms=106 replan_ms=1 replans=11 reroute_fail=2 blocked_looks=7
+SLOW t=18886 ms=172 resolve_ms=159 replan_ms=4 replans=7 reroute_fail=3 blocked_looks=5
+SLOW t=18887 ms=169 resolve_ms=149 replan_ms=9 replans=29 reroute_fail=2 blocked_looks=5
+SLOW t=18890 ms=161 resolve_ms=141 replan_ms=0 replans=0 reroute_fail=2 blocked_looks=6
+SLOW t=18901 ms=218 resolve_ms=207 replan_ms=1 replans=1 reroute_fail=3 blocked_looks=6
+SLOW t=18908 ms=153 resolve_ms=140 replan_ms=0 replans=1 reroute_fail=2 blocked_looks=2
+STALL t=19000 crew=200 idle%=21 walk%=75 work%=4 stalls=592 (<=23:368 <=60:177 >60:47) max=120 dwarves=127 lost_ticks=11846 mean_ms=28.42 marks=1291
+WHY t=19000 blocked_looks=2471 idle_boxed=7 idle_exit_ahead=2 reroute_fail=1151 head_on_job=817 head_on_idle=0 swaps=819 carry_wait_ticks=11 reroute_fail_behind_worker=178 resolve_ms=16.96 replan_ms=1.49 replans=3607 max_ms=259 over100=46
+SLOW t=19174 ms=465 resolve_ms=2 replan_ms=371 replans=15 reroute_fail=0 blocked_looks=2
+SLOW t=19186 ms=199 resolve_ms=115 replan_ms=0 replans=0 reroute_fail=2 blocked_looks=2
+SLOW t=19317 ms=173 resolve_ms=0 replan_ms=77 replans=8 reroute_fail=1 blocked_looks=3
+SLOW t=19332 ms=203 resolve_ms=0 replan_ms=194 replans=13 reroute_fail=0 blocked_looks=2
+SLOW t=19345 ms=158 resolve_ms=72 replan_ms=0 replans=1 reroute_fail=2 blocked_looks=5
+SLOW t=19399 ms=201 resolve_ms=49 replan_ms=140 replans=28 reroute_fail=1 blocked_looks=3
+SLOW t=19413 ms=228 resolve_ms=0 replan_ms=163 replans=26 reroute_fail=0 blocked_looks=0
+SLOW t=19422 ms=161 resolve_ms=151 replan_ms=1 replans=10 reroute_fail=3 blocked_looks=5
+SLOW t=19433 ms=221 resolve_ms=121 replan_ms=4 replans=14 reroute_fail=2 blocked_looks=3
+SLOW t=19499 ms=185 resolve_ms=176 replan_ms=1 replans=4 reroute_fail=4 blocked_looks=4
+SLOW t=19850 ms=392 resolve_ms=1 replan_ms=331 replans=13 reroute_fail=0 blocked_looks=1
+STALL t=20000 crew=200 idle%=22 walk%=75 work%=4 stalls=341 (<=23:224 <=60:101 >60:16) max=120 dwarves=109 lost_ticks=5919 mean_ms=30.42 marks=1165
+WHY t=20000 blocked_looks=1984 idle_boxed=3 idle_exit_ahead=4 reroute_fail=572 head_on_job=876 head_on_idle=4 swaps=876 carry_wait_ticks=100 reroute_fail_behind_worker=100 resolve_ms=9.98 replan_ms=4.18 replans=2386 max_ms=465 over100=61
+SLOW t=20112 ms=261 resolve_ms=45 replan_ms=206 replans=6 reroute_fail=1 blocked_looks=2
+SLOW t=20113 ms=154 resolve_ms=0 replan_ms=68 replans=1 reroute_fail=0 blocked_looks=1
+SLOW t=20401 ms=230 resolve_ms=0 replan_ms=224 replans=9 reroute_fail=0 blocked_looks=0
+SLOW t=20506 ms=176 resolve_ms=0 replan_ms=168 replans=13 reroute_fail=0 blocked_looks=1
+STALL t=21000 crew=200 idle%=23 walk%=74 work%=3 stalls=178 (<=23:136 <=60:37 >60:5) max=65 dwarves=90 lost_ticks=2587 mean_ms=20.60 marks=1050
+WHY t=21000 blocked_looks=1286 idle_boxed=3 idle_exit_ahead=3 reroute_fail=260 head_on_job=746 head_on_idle=0 swaps=747 carry_wait_ticks=275 reroute_fail_behind_worker=80 resolve_ms=5.30 replan_ms=3.93 replans=1995 max_ms=261 over100=21
+SLOW t=21022 ms=172 resolve_ms=0 replan_ms=166 replans=16 reroute_fail=0 blocked_looks=0
+SLOW t=21192 ms=252 resolve_ms=41 replan_ms=203 replans=14 reroute_fail=1 blocked_looks=2
+SLOW t=21335 ms=260 resolve_ms=0 replan_ms=207 replans=20 reroute_fail=0 blocked_looks=1
+SLOW t=21569 ms=206 resolve_ms=33 replan_ms=166 replans=8 reroute_fail=1 blocked_looks=2
+SLOW t=21597 ms=156 resolve_ms=108 replan_ms=0 replans=0 reroute_fail=3 blocked_looks=4
+SLOW t=21605 ms=182 resolve_ms=76 replan_ms=51 replans=30 reroute_fail=2 blocked_looks=3
+SLOW t=21707 ms=157 resolve_ms=150 replan_ms=0 replans=1 reroute_fail=4 blocked_looks=6
+SLOW t=21715 ms=183 resolve_ms=49 replan_ms=123 replans=43 reroute_fail=1 blocked_looks=2
+SLOW t=21718 ms=173 resolve_ms=166 replan_ms=0 replans=1 reroute_fail=6 blocked_looks=10
+SLOW t=21780 ms=401 resolve_ms=0 replan_ms=333 replans=15 reroute_fail=0 blocked_looks=2
+SLOW t=21781 ms=480 resolve_ms=43 replan_ms=376 replans=13 reroute_fail=1 blocked_looks=2
+SLOW t=21803 ms=363 resolve_ms=42 replan_ms=313 replans=13 reroute_fail=1 blocked_looks=3
+STUCK t=22000 still=1269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCKN t=22000 n=1
+STALL t=22000 crew=200 idle%=25 walk%=72 work%=3 stalls=304 (<=23:186 <=60:101 >60:17) max=142 dwarves=96 lost_ticks=5597 mean_ms=25.23 marks=940
+WHY t=22000 blocked_looks=1845 idle_boxed=5 idle_exit_ahead=3 reroute_fail=572 head_on_job=957 head_on_idle=8 swaps=957 carry_wait_ticks=1001 reroute_fail_behind_worker=148 resolve_ms=9.37 replan_ms=3.63 replans=2595 max_ms=480 over100=23
+SLOW t=22185 ms=179 resolve_ms=109 replan_ms=2 replans=11 reroute_fail=4 blocked_looks=6
+SLOW t=22274 ms=161 resolve_ms=35 replan_ms=82 replans=10 reroute_fail=3 blocked_looks=7
+SLOW t=22306 ms=223 resolve_ms=92 replan_ms=45 replans=13 reroute_fail=3 blocked_looks=4
+SLOW t=22777 ms=157 resolve_ms=31 replan_ms=80 replans=12 reroute_fail=3 blocked_looks=4
+STUCK t=23000 still=2269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=23000 still=560 id=38 pos=Pos { x: 91, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=0 path_len=27 standable=true next=Pos { x: 92, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=12 bnext=Some(Pos { x: 93, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=463 id=43 pos=Pos { x: 100, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=9 path_len=14 standable=true next=Pos { x: 100, y: 127, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 98, y: 130, z: 7 })) carrying=None path_len=4 bnext=Some(Pos { x: 100, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=564 id=84 pos=Pos { x: 98, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=7 path_len=6 standable=true next=Pos { x: 97, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=406 state=Walk job=Some((Dig, Pos { x: 96, y: 124, z: 7 })) carrying=None path_len=5 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=618 id=86 pos=Pos { x: 96, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 126, z: 7 })) carrying=None clearing=true cooldown=8 path_len=8 standable=true next=Pos { x: 95, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=417 state=Walk job=Some((Dig, Pos { x: 90, y: 129, z: 7 })) carrying=None path_len=6 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=398 id=87 pos=Pos { x: 99, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=8 path_len=11 standable=true next=Pos { x: 98, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=389 state=Walk job=Some((Dig, Pos { x: 95, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 97, y: 132, z: 8 }) head_on=false
+STUCK t=23000 still=422 id=90 pos=Pos { x: 97, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 87, z: 18 })) carrying=None clearing=true cooldown=6 path_len=68 standable=true next=Pos { x: 97, y: 131, z: 8 } next_standable=true adjacent=true BLOCKER id=394 state=Walk job=Some((Dig, Pos { x: 101, y: 106, z: 15 })) carrying=None path_len=46 bnext=Some(Pos { x: 97, y: 130, z: 8 }) head_on=false
+STUCK t=23000 still=616 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 100, y: 88, z: 18 })) carrying=None clearing=true cooldown=10 path_len=67 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=401 state=Walk job=Some((Dig, Pos { x: 100, y: 112, z: 12 })) carrying=None path_len=25 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=468 id=131 pos=Pos { x: 100, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=4 path_len=6 standable=true next=Pos { x: 99, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=387 state=Walk job=Some((Dig, Pos { x: 97, y: 130, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 98, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=565 id=133 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=6 path_len=12 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=339 state=Walk job=Some((Dig, Pos { x: 100, y: 105, z: 15 })) carrying=None path_len=50 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=318 id=201 pos=Pos { x: 100, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=0 path_len=13 standable=true next=Pos { x: 100, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=369 state=Walk job=Some((Dig, Pos { x: 99, y: 133, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 100, y: 126, z: 7 }) head_on=false
+STUCK t=23000 still=687 id=269 pos=Pos { x: 97, y: 130, z: 8 } state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None clearing=true cooldown=5 path_len=3 standable=true next=Pos { x: 97, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=406 state=Walk job=Some((Dig, Pos { x: 96, y: 124, z: 7 })) carrying=None path_len=5 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=465 id=279 pos=Pos { x: 100, y: 127, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 130, z: 7 })) carrying=None clearing=false cooldown=7 path_len=4 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=131 state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None path_len=6 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=611 id=294 pos=Pos { x: 94, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 91, y: 126, z: 7 })) carrying=Some(965) clearing=true cooldown=4 path_len=10 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 100, y: 88, z: 18 })) carrying=None path_len=67 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=629 id=318 pos=Pos { x: 96, y: 127, z: 7 } state=Walk job=Some((Dig, Pos { x: 95, y: 131, z: 7 })) carrying=Some(1052) clearing=true cooldown=8 path_len=9 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=401 state=Walk job=Some((Dig, Pos { x: 100, y: 112, z: 12 })) carrying=None path_len=25 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=539 id=328 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 94, y: 125, z: 7 })) carrying=None clearing=true cooldown=10 path_len=7 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=84 state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None path_len=6 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=568 id=330 pos=Pos { x: 93, y: 127, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 98, z: 17 })) carrying=None clearing=true cooldown=5 path_len=60 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=339 state=Walk job=Some((Dig, Pos { x: 100, y: 105, z: 15 })) carrying=None path_len=50 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=397 id=369 pos=Pos { x: 100, y: 125, z: 8 } state=Walk job=Some((Dig, Pos { x: 99, y: 133, z: 8 })) carrying=None clearing=false cooldown=9 path_len=10 standable=true next=Pos { x: 100, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=14 bnext=Some(Pos { x: 100, y: 127, z: 7 }) head_on=false
+STUCK t=23000 still=622 id=370 pos=Pos { x: 96, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 78, y: 117, z: 10 })) carrying=None clearing=true cooldown=4 path_len=45 standable=true next=Pos { x: 96, y: 127, z: 7 } next_standable=true adjacent=true BLOCKER id=318 state=Walk job=Some((Dig, Pos { x: 95, y: 131, z: 7 })) carrying=Some(1052) path_len=9 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=529 id=387 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 130, z: 7 })) carrying=None clearing=false cooldown=9 path_len=3 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=328 state=Walk job=Some((Dig, Pos { x: 94, y: 125, z: 7 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=470 id=389 pos=Pos { x: 98, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 95, y: 124, z: 7 })) carrying=None clearing=true cooldown=2 path_len=9 standable=true next=Pos { x: 97, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=90 state=Walk job=Some((Dig, Pos { x: 98, y: 87, z: 18 })) carrying=None path_len=68 bnext=Some(Pos { x: 97, y: 131, z: 8 }) head_on=false
+STUCK t=23000 still=423 id=394 pos=Pos { x: 97, y: 131, z: 8 } state=Walk job=Some((Dig, Pos { x: 101, y: 106, z: 15 })) carrying=None clearing=false cooldown=5 path_len=46 standable=true next=Pos { x: 97, y: 130, z: 8 } next_standable=true adjacent=true BLOCKER id=269 state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=675 id=401 pos=Pos { x: 96, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 100, y: 112, z: 12 })) carrying=None clearing=false cooldown=6 path_len=25 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=86 state=Walk job=Some((Dig, Pos { x: 89, y: 126, z: 7 })) carrying=None path_len=8 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=609 id=406 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 96, y: 124, z: 7 })) carrying=None clearing=false cooldown=6 path_len=5 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=86 state=Walk job=Some((Dig, Pos { x: 89, y: 126, z: 7 })) carrying=None path_len=8 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=23000 still=619 id=417 pos=Pos { x: 95, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 129, z: 7 })) carrying=None clearing=false cooldown=7 path_len=6 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 100, y: 88, z: 18 })) carrying=None path_len=67 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=23000 still=647 id=423 pos=Pos { x: 96, y: 130, z: 7 } state=Walk job=Some((Dig, Pos { x: 79, y: 116, z: 10 })) carrying=None clearing=true cooldown=4 path_len=43 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=86 state=Walk job=Some((Dig, Pos { x: 89, y: 126, z: 7 })) carrying=None path_len=8 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCKN t=23000 n=26
+STALL t=23000 crew=200 idle%=27 walk%=69 work%=3 stalls=297 (<=23:171 <=60:96 >60:30) max=352 dwarves=104 lost_ticks=7093 mean_ms=29.22 marks=830
+WHY t=23000 blocked_looks=2929 idle_boxed=18 idle_exit_ahead=1 reroute_fail=1956 head_on_job=622 head_on_idle=8 swaps=627 carry_wait_ticks=1201 reroute_fail_behind_worker=114 resolve_ms=15.32 replan_ms=2.07 replans=1825 max_ms=223 over100=27
+SLOW t=23922 ms=204 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=23923 ms=150 resolve_ms=142 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=23933 ms=258 resolve_ms=179 replan_ms=1 replans=2 reroute_fail=7 blocked_looks=7
+SLOW t=23934 ms=172 resolve_ms=162 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+STUCK t=24000 still=966 id=3 pos=Pos { x: 101, y: 129, z: 7 } state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None clearing=false cooldown=1 path_len=4 standable=true next=Pos { x: 100, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=320 state=Walk job=Some((Haul { item: 1016 }, Pos { x: 98, y: 112, z: 12 })) carrying=None path_len=26 bnext=Some(Pos { x: 100, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=3269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=24000 still=1560 id=38 pos=Pos { x: 91, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=1 path_len=27 standable=true next=Pos { x: 92, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=13 bnext=Some(Pos { x: 93, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=338 id=41 pos=Pos { x: 100, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None clearing=false cooldown=2 path_len=9 standable=true next=Pos { x: 99, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=129 state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 99, y: 124, z: 8 }) head_on=false
+STUCK t=24000 still=506 id=43 pos=Pos { x: 100, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=10 path_len=12 standable=true next=Pos { x: 99, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 98, y: 130, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 98, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=530 id=84 pos=Pos { x: 96, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=8 path_len=4 standable=true next=Pos { x: 95, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=417 state=Walk job=Some((Dig, Pos { x: 90, y: 129, z: 7 })) carrying=None path_len=6 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=549 id=85 pos=Pos { x: 98, y: 125, z: 8 } state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) clearing=false cooldown=0 path_len=49 standable=true next=Pos { x: 99, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=346 state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) path_len=48 bnext=Some(Pos { x: 100, y: 125, z: 8 }) head_on=false
+STUCK t=24000 still=936 id=87 pos=Pos { x: 98, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=9 path_len=10 standable=true next=Pos { x: 97, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=389 state=Walk job=Some((Dig, Pos { x: 95, y: 124, z: 7 })) carrying=None path_len=8 bnext=Some(Pos { x: 97, y: 131, z: 8 }) head_on=false
+STUCK t=24000 still=948 id=90 pos=Pos { x: 96, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None clearing=true cooldown=7 path_len=12 standable=true next=Pos { x: 97, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=389 state=Walk job=Some((Dig, Pos { x: 95, y: 124, z: 7 })) carrying=None path_len=8 bnext=Some(Pos { x: 97, y: 131, z: 8 }) head_on=false
+STUCK t=24000 still=1616 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 100, y: 88, z: 18 })) carrying=None clearing=false cooldown=0 path_len=68 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=318 state=Walk job=Some((Dig, Pos { x: 95, y: 131, z: 7 })) carrying=Some(1052) path_len=9 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=24000 still=392 id=125 pos=Pos { x: 102, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 102, y: 124, z: 7 })) carrying=None clearing=true cooldown=3 path_len=2 standable=true next=Pos { x: 101, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=365 state=Walk job=Some((Dig, Pos { x: 100, y: 125, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 100, y: 126, z: 7 }) head_on=false
+STUCK t=24000 still=446 id=129 pos=Pos { x: 99, y: 123, z: 8 } state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None clearing=false cooldown=4 path_len=10 standable=true next=Pos { x: 99, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=361 state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 124, z: 8 }) head_on=false
+STUCK t=24000 still=511 id=131 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=5 path_len=4 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=387 state=Walk job=Some((Dig, Pos { x: 97, y: 130, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=24000 still=475 id=132 pos=Pos { x: 98, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None clearing=true cooldown=8 path_len=2 standable=true next=Pos { x: 98, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=85 state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) path_len=49 bnext=Some(Pos { x: 99, y: 125, z: 8 }) head_on=false
+STUCK t=24000 still=1565 id=133 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=7 path_len=13 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=339 state=Walk job=Some((Dig, Pos { x: 100, y: 98, z: 17 })) carrying=None path_len=58 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=504 id=201 pos=Pos { x: 100, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=1 path_len=11 standable=true next=Pos { x: 100, y: 127, z: 7 } next_standable=true adjacent=true BLOCKER id=369 state=Walk job=Some((Dig, Pos { x: 99, y: 133, z: 8 })) carrying=None path_len=8 bnext=Some(Pos { x: 100, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=1033 id=267 pos=Pos { x: 101, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 99, y: 130, z: 7 })) carrying=None clearing=true cooldown=0 path_len=2 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=1687 id=269 pos=Pos { x: 97, y: 130, z: 8 } state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None clearing=true cooldown=6 path_len=3 standable=true next=Pos { x: 97, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=328 state=Walk job=Some((Dig, Pos { x: 94, y: 125, z: 7 })) carrying=None path_len=5 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=24000 still=508 id=279 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 130, z: 7 })) carrying=None clearing=false cooldown=8 path_len=2 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=131 state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None path_len=4 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCK t=24000 still=1611 id=294 pos=Pos { x: 94, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 91, y: 126, z: 7 })) carrying=Some(965) clearing=true cooldown=5 path_len=11 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 100, y: 88, z: 18 })) carrying=None path_len=68 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=529 id=318 pos=Pos { x: 96, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 95, y: 131, z: 7 })) carrying=Some(1052) clearing=true cooldown=9 path_len=9 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=84 state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None path_len=4 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=24000 still=388 id=320 pos=Pos { x: 100, y: 129, z: 7 } state=Walk job=Some((Haul { item: 1016 }, Pos { x: 98, y: 112, z: 12 })) carrying=None clearing=false cooldown=3 path_len=26 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=922 id=325 pos=Pos { x: 97, y: 92, z: 17 } state=Walk job=Some((Dig, Pos { x: 98, y: 91, z: 17 })) carrying=Some(1113) clearing=true cooldown=5 path_len=0 standable=true
+STUCK t=24000 still=527 id=328 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 94, y: 125, z: 7 })) carrying=None clearing=true cooldown=0 path_len=5 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=84 state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None path_len=4 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=24000 still=808 id=330 pos=Pos { x: 93, y: 127, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None clearing=false cooldown=6 path_len=114 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=339 state=Walk job=Some((Dig, Pos { x: 100, y: 98, z: 17 })) carrying=None path_len=58 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=24000 still=385 id=343 pos=Pos { x: 102, y: 125, z: 8 } state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None clearing=true cooldown=10 path_len=3 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=125 state=Walk job=Some((Dig, Pos { x: 102, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=24000 still=545 id=346 pos=Pos { x: 99, y: 125, z: 8 } state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) clearing=false cooldown=4 path_len=48 standable=true next=Pos { x: 100, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 100, y: 126, z: 7 }) head_on=false
+STUCK t=24000 still=469 id=361 pos=Pos { x: 99, y: 124, z: 8 } state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None clearing=false cooldown=3 path_len=7 standable=true next=Pos { x: 98, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=132 state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 98, y: 125, z: 8 }) head_on=false
+STUCK t=24000 still=990 id=365 pos=Pos { x: 101, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 100, y: 125, z: 7 })) carrying=None clearing=false cooldown=4 path_len=1 standable=true next=Pos { x: 100, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=201 state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 100, y: 127, z: 7 }) head_on=false
+STUCK t=24000 still=506 id=369 pos=Pos { x: 100, y: 127, z: 7 } state=Walk job=Some((Dig, Pos { x: 99, y: 133, z: 8 })) carrying=None clearing=false cooldown=10 path_len=8 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCKN t=24000 n=39
+STALL t=24000 crew=200 idle%=28 walk%=70 work%=2 stalls=165 (<=23:90 <=60:25 >60:50) max=1143 dwarves=95 lost_ticks=28931 mean_ms=38.98 marks=764
+WHY t=24000 blocked_looks=4713 idle_boxed=10 idle_exit_ahead=0 reroute_fail=4151 head_on_job=333 head_on_idle=1 swaps=336 carry_wait_ticks=1922 reroute_fail_behind_worker=43 resolve_ms=28.00 replan_ms=0.87 replans=1321 max_ms=258 over100=46
+SLOW t=24076 ms=159 resolve_ms=151 replan_ms=0 replans=1 reroute_fail=8 blocked_looks=9
+SLOW t=24077 ms=179 resolve_ms=123 replan_ms=48 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=24120 ms=156 resolve_ms=147 replan_ms=1 replans=5 reroute_fail=8 blocked_looks=8
+SLOW t=24121 ms=222 resolve_ms=118 replan_ms=54 replans=15 reroute_fail=9 blocked_looks=10
+SLOW t=24131 ms=170 resolve_ms=163 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=24132 ms=185 resolve_ms=128 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=10
+SLOW t=24153 ms=264 resolve_ms=190 replan_ms=1 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=24155 ms=157 resolve_ms=148 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=8
+SLOW t=24164 ms=199 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=24166 ms=158 resolve_ms=124 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=24175 ms=201 resolve_ms=193 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24176 ms=166 resolve_ms=95 replan_ms=63 replans=1 reroute_fail=8 blocked_looks=8
+SLOW t=24177 ms=214 resolve_ms=144 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=24186 ms=212 resolve_ms=201 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24188 ms=162 resolve_ms=154 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=24197 ms=287 resolve_ms=219 replan_ms=61 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=24208 ms=165 resolve_ms=158 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=10
+SLOW t=24219 ms=175 resolve_ms=167 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=10
+SLOW t=24230 ms=241 resolve_ms=231 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24241 ms=165 resolve_ms=158 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=10
+SLOW t=24252 ms=239 resolve_ms=229 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24263 ms=150 resolve_ms=142 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=24264 ms=158 resolve_ms=108 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=24296 ms=158 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=24298 ms=154 resolve_ms=104 replan_ms=1 replans=2 reroute_fail=8 blocked_looks=8
+SLOW t=24329 ms=167 resolve_ms=122 replan_ms=1 replans=2 reroute_fail=10 blocked_looks=10
+SLOW t=24340 ms=205 resolve_ms=124 replan_ms=38 replans=4 reroute_fail=8 blocked_looks=9
+SLOW t=24351 ms=171 resolve_ms=126 replan_ms=0 replans=1 reroute_fail=8 blocked_looks=8
+SLOW t=24439 ms=163 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=24450 ms=167 resolve_ms=160 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24461 ms=162 resolve_ms=155 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24472 ms=160 resolve_ms=154 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=12
+SLOW t=24483 ms=164 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24494 ms=157 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24516 ms=158 resolve_ms=152 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=24571 ms=155 resolve_ms=149 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24577 ms=228 resolve_ms=31 replan_ms=190 replans=9 reroute_fail=7 blocked_looks=8
+SLOW t=24582 ms=159 resolve_ms=153 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24593 ms=207 resolve_ms=156 replan_ms=1 replans=2 reroute_fail=9 blocked_looks=9
+SLOW t=24595 ms=170 resolve_ms=124 replan_ms=39 replans=1 reroute_fail=8 blocked_looks=9
+SLOW t=24604 ms=158 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=24615 ms=161 resolve_ms=153 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=24626 ms=161 resolve_ms=154 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=8
+SLOW t=24637 ms=162 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=8
+SLOW t=24705 ms=171 resolve_ms=124 replan_ms=0 replans=1 reroute_fail=6 blocked_looks=6
+STUCK t=25000 still=349 id=3 pos=Pos { x: 100, y: 129, z: 7 } state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None clearing=false cooldown=2 path_len=3 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=4269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=25000 still=329 id=32 pos=Pos { x: 101, y: 130, z: 8 } state=Walk job=Some((Haul { item: 906 }, Pos { x: 90, y: 121, z: 8 })) carrying=None clearing=false cooldown=0 path_len=19 standable=true next=Pos { x: 101, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=362 state=Walk job=Some((Haul { item: 979 }, Pos { x: 96, y: 126, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 100, y: 129, z: 7 }) head_on=false
+STUCK t=25000 still=393 id=38 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=2 path_len=26 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=13 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=1338 id=41 pos=Pos { x: 100, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None clearing=false cooldown=3 path_len=9 standable=true next=Pos { x: 99, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=129 state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 99, y: 124, z: 8 }) head_on=false
+STUCK t=25000 still=308 id=42 pos=Pos { x: 100, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None clearing=false cooldown=10 path_len=12 standable=true next=Pos { x: 101, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=296 state=Walk job=Some((Haul { item: 929 }, Pos { x: 92, y: 122, z: 8 })) carrying=None path_len=13 bnext=Some(Pos { x: 101, y: 131, z: 8 }) head_on=false
+STUCK t=25000 still=307 id=43 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=0 path_len=10 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 95, y: 123, z: 7 })) carrying=None path_len=7 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=25000 still=397 id=84 pos=Pos { x: 95, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=9 path_len=3 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None path_len=96 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=1549 id=85 pos=Pos { x: 98, y: 125, z: 8 } state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) clearing=false cooldown=1 path_len=70 standable=true next=Pos { x: 99, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=346 state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) path_len=69 bnext=Some(Pos { x: 100, y: 125, z: 8 }) head_on=false
+STUCK t=25000 still=319 id=87 pos=Pos { x: 97, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=10 path_len=19 standable=true next=Pos { x: 98, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=205 state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None path_len=17 bnext=Some(Pos { x: 99, y: 132, z: 8 }) head_on=false
+STUCK t=25000 still=401 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None clearing=false cooldown=5 path_len=96 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=370 state=Walk job=Some((Dig, Pos { x: 78, y: 117, z: 10 })) carrying=None path_len=45 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=25000 still=614 id=126 pos=Pos { x: 102, y: 127, z: 7 } state=Walk job=Some((Haul { item: 1120 }, Pos { x: 100, y: 120, z: 8 })) carrying=None clearing=false cooldown=1 path_len=10 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=25000 still=1446 id=129 pos=Pos { x: 99, y: 123, z: 8 } state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None clearing=false cooldown=5 path_len=10 standable=true next=Pos { x: 99, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=361 state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 124, z: 8 }) head_on=false
+STUCK t=25000 still=312 id=131 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=6 path_len=2 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=269 state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=25000 still=1475 id=132 pos=Pos { x: 98, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None clearing=false cooldown=9 path_len=2 standable=true next=Pos { x: 98, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=85 state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) path_len=70 bnext=Some(Pos { x: 99, y: 125, z: 8 }) head_on=false
+STUCK t=25000 still=398 id=133 pos=Pos { x: 93, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=8 path_len=13 standable=true next=Pos { x: 94, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=330 state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None path_len=114 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=1276 id=200 pos=Pos { x: 100, y: 122, z: 8 } state=Walk job=Some((Dig, Pos { x: 96, y: 123, z: 7 })) carrying=None clearing=true cooldown=10 path_len=15 standable=true next=Pos { x: 100, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=41 state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 123, z: 8 }) head_on=false
+STUCK t=25000 still=305 id=201 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=2 path_len=8 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCK t=25000 still=2033 id=267 pos=Pos { x: 101, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 99, y: 130, z: 7 })) carrying=None clearing=true cooldown=1 path_len=2 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=377 id=269 pos=Pos { x: 96, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None clearing=true cooldown=7 path_len=1 standable=true next=Pos { x: 95, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=84 state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=313 id=296 pos=Pos { x: 101, y: 132, z: 8 } state=Walk job=Some((Haul { item: 929 }, Pos { x: 92, y: 122, z: 8 })) carrying=None clearing=false cooldown=5 path_len=13 standable=true next=Pos { x: 101, y: 131, z: 8 } next_standable=true adjacent=true BLOCKER id=374 state=Walk job=Some((Haul { item: 926 }, Pos { x: 93, y: 124, z: 8 })) carrying=None path_len=16 bnext=Some(Pos { x: 101, y: 130, z: 8 }) head_on=false
+STUCK t=25000 still=335 id=320 pos=Pos { x: 100, y: 125, z: 8 } state=Walk job=Some((Haul { item: 1016 }, Pos { x: 98, y: 112, z: 12 })) carrying=None clearing=false cooldown=5 path_len=24 standable=true next=Pos { x: 100, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=394 state=Walk job=Some((Dig, Pos { x: 105, y: 85, z: 18 })) carrying=None path_len=68 bnext=Some(Pos { x: 100, y: 123, z: 8 }) head_on=false
+STUCK t=25000 still=352 id=324 pos=Pos { x: 101, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1040 }, Pos { x: 95, y: 126, z: 7 })) carrying=None clearing=false cooldown=10 path_len=15 standable=true next=Pos { x: 100, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=200 state=Walk job=Some((Dig, Pos { x: 96, y: 123, z: 7 })) carrying=None path_len=15 bnext=Some(Pos { x: 100, y: 123, z: 8 }) head_on=false
+STUCK t=25000 still=1922 id=325 pos=Pos { x: 97, y: 92, z: 17 } state=Walk job=Some((Dig, Pos { x: 98, y: 91, z: 17 })) carrying=Some(1113) clearing=true cooldown=5 path_len=0 standable=true
+STUCK t=25000 still=345 id=328 pos=Pos { x: 96, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 94, y: 125, z: 7 })) carrying=Some(905) clearing=true cooldown=6 path_len=11 standable=true next=Pos { x: 96, y: 127, z: 7 } next_standable=true adjacent=true BLOCKER id=406 state=Walk job=Some((Dig, Pos { x: 103, y: 118, z: 9 })) carrying=None path_len=19 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=399 id=330 pos=Pos { x: 94, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None clearing=false cooldown=7 path_len=114 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None path_len=96 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=25000 still=339 id=345 pos=Pos { x: 96, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1019 }, Pos { x: 95, y: 125, z: 7 })) carrying=Some(1019) clearing=false cooldown=2 path_len=45 standable=true next=Pos { x: 97, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=87 state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None path_len=19 bnext=Some(Pos { x: 98, y: 132, z: 8 }) head_on=false
+STUCK t=25000 still=1545 id=346 pos=Pos { x: 99, y: 125, z: 8 } state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) clearing=false cooldown=5 path_len=69 standable=true next=Pos { x: 100, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=320 state=Walk job=Some((Haul { item: 1016 }, Pos { x: 98, y: 112, z: 12 })) carrying=None path_len=24 bnext=Some(Pos { x: 100, y: 124, z: 8 }) head_on=false
+STUCK t=25000 still=1469 id=361 pos=Pos { x: 99, y: 124, z: 8 } state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None clearing=false cooldown=4 path_len=7 standable=true next=Pos { x: 98, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=132 state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 98, y: 125, z: 8 }) head_on=false
+STUCK t=25000 still=339 id=362 pos=Pos { x: 101, y: 129, z: 7 } state=Walk job=Some((Haul { item: 979 }, Pos { x: 96, y: 126, z: 7 })) carrying=None clearing=false cooldown=1 path_len=3 standable=true next=Pos { x: 100, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=3 state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 100, y: 128, z: 7 }) head_on=false
+STUCKN t=25000 n=42
+STALL t=25000 crew=200 idle%=28 walk%=70 work%=2 stalls=181 (<=23:78 <=60:37 >60:66) max=2298 dwarves=93 lost_ticks=56964 mean_ms=48.29 marks=712
+WHY t=25000 blocked_looks=5940 idle_boxed=36 idle_exit_ahead=1 reroute_fail=5347 head_on_job=357 head_on_idle=2 swaps=371 carry_wait_ticks=2000 reroute_fail_behind_worker=60 resolve_ms=37.32 replan_ms=1.01 replans=819 max_ms=287 over100=145
+SLOW t=25227 ms=159 resolve_ms=0 replan_ms=151 replans=6 reroute_fail=7 blocked_looks=7
+SLOW t=25312 ms=165 resolve_ms=156 replan_ms=1 replans=3 reroute_fail=7 blocked_looks=7
+SLOW t=25532 ms=168 resolve_ms=123 replan_ms=1 replans=5 reroute_fail=6 blocked_looks=6
+STUCK t=26000 still=1349 id=3 pos=Pos { x: 100, y: 129, z: 7 } state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None clearing=false cooldown=3 path_len=3 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=26000 still=5269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=26000 still=1329 id=32 pos=Pos { x: 101, y: 130, z: 8 } state=Walk job=Some((Haul { item: 906 }, Pos { x: 90, y: 121, z: 8 })) carrying=None clearing=false cooldown=1 path_len=19 standable=true next=Pos { x: 101, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=362 state=Walk job=Some((Haul { item: 979 }, Pos { x: 96, y: 126, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 100, y: 129, z: 7 }) head_on=false
+STUCK t=26000 still=674 id=35 pos=Pos { x: 103, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 103, y: 92, z: 18 })) carrying=None clearing=false cooldown=5 path_len=63 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=26000 still=1393 id=38 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=3 path_len=26 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=13 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=26000 still=2338 id=41 pos=Pos { x: 100, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None clearing=false cooldown=4 path_len=9 standable=true next=Pos { x: 99, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=129 state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 99, y: 124, z: 8 }) head_on=false
+STUCK t=26000 still=1308 id=42 pos=Pos { x: 100, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None clearing=false cooldown=0 path_len=12 standable=true next=Pos { x: 101, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=296 state=Walk job=Some((Haul { item: 929 }, Pos { x: 92, y: 122, z: 8 })) carrying=None path_len=13 bnext=Some(Pos { x: 101, y: 131, z: 8 }) head_on=false
+STUCK t=26000 still=1307 id=43 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=1 path_len=10 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 95, y: 123, z: 7 })) carrying=None path_len=7 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=26000 still=1397 id=84 pos=Pos { x: 95, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=10 path_len=3 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None path_len=98 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=26000 still=2549 id=85 pos=Pos { x: 98, y: 125, z: 8 } state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) clearing=false cooldown=2 path_len=70 standable=true next=Pos { x: 99, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=346 state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) path_len=69 bnext=Some(Pos { x: 100, y: 125, z: 8 }) head_on=false
+STUCK t=26000 still=662 id=86 pos=Pos { x: 103, y: 118, z: 10 } state=Walk job=Some((Dig, Pos { x: 94, y: 124, z: 7 })) carrying=None clearing=true cooldown=8 path_len=23 standable=true next=Pos { x: 103, y: 119, z: 9 } next_standable=true adjacent=true BLOCKER id=401 state=Walk job=Some((Dig, Pos { x: 104, y: 125, z: 7 })) carrying=None path_len=14 bnext=Some(Pos { x: 103, y: 120, z: 9 }) head_on=false
+STUCK t=26000 still=1319 id=87 pos=Pos { x: 97, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=0 path_len=19 standable=true next=Pos { x: 98, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=205 state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None path_len=17 bnext=Some(Pos { x: 99, y: 132, z: 8 }) head_on=false
+STUCK t=26000 still=1007 id=88 pos=Pos { x: 103, y: 136, z: 10 } state=Walk job=Some((Haul { item: 1064 }, Pos { x: 97, y: 125, z: 7 })) carrying=None clearing=false cooldown=4 path_len=20 standable=true next=Pos { x: 103, y: 135, z: 10 } next_standable=true adjacent=true BLOCKER id=379 state=Walk job=Some((Haul { item: 1128 }, Pos { x: 101, y: 124, z: 7 })) carrying=None path_len=14 bnext=Some(Pos { x: 103, y: 134, z: 9 }) head_on=false
+STUCK t=26000 still=1255 id=90 pos=Pos { x: 99, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None clearing=true cooldown=9 path_len=11 standable=true next=Pos { x: 100, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=42 state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 101, y: 132, z: 8 }) head_on=false
+STUCK t=26000 still=1401 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None clearing=false cooldown=6 path_len=98 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=370 state=Walk job=Some((Dig, Pos { x: 78, y: 117, z: 10 })) carrying=None path_len=45 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=26000 still=1108 id=125 pos=Pos { x: 103, y: 125, z: 7 } state=Walk job=Some((Dig, Pos { x: 104, y: 120, z: 8 })) carrying=None clearing=true cooldown=0 path_len=12 standable=true next=Pos { x: 103, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=35 state=Walk job=Some((Dig, Pos { x: 103, y: 92, z: 18 })) carrying=None path_len=63 bnext=Some(Pos { x: 102, y: 126, z: 7 }) head_on=false
+STUCK t=26000 still=1614 id=126 pos=Pos { x: 102, y: 127, z: 7 } state=Walk job=Some((Haul { item: 1120 }, Pos { x: 100, y: 120, z: 8 })) carrying=None clearing=false cooldown=2 path_len=10 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=26000 still=2446 id=129 pos=Pos { x: 99, y: 123, z: 8 } state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None clearing=false cooldown=6 path_len=10 standable=true next=Pos { x: 99, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=361 state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 124, z: 8 }) head_on=false
+STUCK t=26000 still=1312 id=131 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=7 path_len=2 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=269 state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=26000 still=2475 id=132 pos=Pos { x: 98, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None clearing=false cooldown=10 path_len=2 standable=true next=Pos { x: 98, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=85 state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) path_len=70 bnext=Some(Pos { x: 99, y: 125, z: 8 }) head_on=false
+STUCK t=26000 still=1398 id=133 pos=Pos { x: 93, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=9 path_len=13 standable=true next=Pos { x: 94, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=330 state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None path_len=116 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=26000 still=423 id=197 pos=Pos { x: 103, y: 138, z: 12 } state=Walk job=Some((Haul { item: 1036 }, Pos { x: 99, y: 121, z: 8 })) carrying=None clearing=false cooldown=5 path_len=26 standable=true next=Pos { x: 103, y: 137, z: 11 } next_standable=true adjacent=true BLOCKER id=206 state=Walk job=Some((Haul { item: 820 }, Pos { x: 89, y: 132, z: 8 })) carrying=None path_len=20 bnext=Some(Pos { x: 103, y: 136, z: 10 }) head_on=false
+STUCK t=26000 still=2276 id=200 pos=Pos { x: 100, y: 122, z: 8 } state=Walk job=Some((Dig, Pos { x: 96, y: 123, z: 7 })) carrying=None clearing=true cooldown=0 path_len=15 standable=true next=Pos { x: 100, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=41 state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 123, z: 8 }) head_on=false
+STUCK t=26000 still=1305 id=201 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=3 path_len=8 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCK t=26000 still=1243 id=202 pos=Pos { x: 103, y: 133, z: 9 } state=Walk job=Some((Haul { item: 1053 }, Pos { x: 96, y: 121, z: 8 })) carrying=None clearing=false cooldown=10 path_len=20 standable=true next=Pos { x: 103, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=298 state=Walk job=Some((Haul { item: 919 }, Pos { x: 86, y: 127, z: 8 })) carrying=None path_len=29 bnext=Some(Pos { x: 102, y: 132, z: 8 }) head_on=false
+STUCK t=26000 still=1254 id=205 pos=Pos { x: 98, y: 132, z: 8 } state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None clearing=false cooldown=10 path_len=17 standable=true next=Pos { x: 99, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=90 state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 100, y: 132, z: 8 }) head_on=false
+STUCK t=26000 still=892 id=206 pos=Pos { x: 103, y: 137, z: 11 } state=Walk job=Some((Haul { item: 820 }, Pos { x: 89, y: 132, z: 8 })) carrying=None clearing=false cooldown=9 path_len=20 standable=true next=Pos { x: 103, y: 136, z: 10 } next_standable=true adjacent=true BLOCKER id=88 state=Walk job=Some((Haul { item: 1064 }, Pos { x: 97, y: 125, z: 7 })) carrying=None path_len=20 bnext=Some(Pos { x: 103, y: 135, z: 10 }) head_on=false
+STUCK t=26000 still=3033 id=267 pos=Pos { x: 101, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 99, y: 130, z: 7 })) carrying=None clearing=true cooldown=2 path_len=2 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=26000 still=1246 id=268 pos=Pos { x: 97, y: 131, z: 8 } state=Walk job=Some((Haul { item: 1003 }, Pos { x: 89, y: 128, z: 7 })) carrying=Some(1003) clearing=false cooldown=7 path_len=65 standable=true next=Pos { x: 97, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=87 state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None path_len=19 bnext=Some(Pos { x: 98, y: 132, z: 8 }) head_on=false
+STUCK t=26000 still=1377 id=269 pos=Pos { x: 96, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None clearing=true cooldown=8 path_len=1 standable=true next=Pos { x: 95, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=84 state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCKN t=26000 n=73
+STALL t=26000 crew=200 idle%=29 walk%=70 work%=1 stalls=55 (<=23:41 <=60:10 >60:4) max=951 dwarves=33 lost_ticks=2395 mean_ms=41.78 marks=687
+WHY t=26000 blocked_looks=6722 idle_boxed=24 idle_exit_ahead=1 reroute_fail=6349 head_on_job=255 head_on_idle=0 swaps=267 carry_wait_ticks=2000 reroute_fail_behind_worker=13 resolve_ms=33.17 replan_ms=0.70 replans=452 max_ms=168 over100=72
+SLOW t=26027 ms=227 resolve_ms=97 replan_ms=84 replans=8 reroute_fail=5 blocked_looks=5
+SLOW t=26057 ms=275 resolve_ms=67 replan_ms=162 replans=17 reroute_fail=8 blocked_looks=8
+SLOW t=26115 ms=173 resolve_ms=166 replan_ms=0 replans=1 reroute_fail=7 blocked_looks=7
+SLOW t=26137 ms=167 resolve_ms=161 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26148 ms=167 resolve_ms=161 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26159 ms=168 resolve_ms=162 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26161 ms=167 resolve_ms=0 replan_ms=159 replans=13 reroute_fail=7 blocked_looks=7
+SLOW t=26170 ms=172 resolve_ms=164 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=8
+SLOW t=26181 ms=165 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26192 ms=165 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26203 ms=167 resolve_ms=160 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26214 ms=159 resolve_ms=153 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=8
+SLOW t=26225 ms=156 resolve_ms=148 replan_ms=0 replans=1 reroute_fail=7 blocked_looks=7
+SLOW t=26236 ms=157 resolve_ms=152 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26247 ms=159 resolve_ms=153 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=9
+SLOW t=26258 ms=192 resolve_ms=150 replan_ms=0 replans=1 reroute_fail=7 blocked_looks=7
+SLOW t=26269 ms=164 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26280 ms=163 resolve_ms=157 replan_ms=0 replans=1 reroute_fail=7 blocked_looks=9
+SLOW t=26291 ms=161 resolve_ms=155 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26302 ms=158 resolve_ms=152 replan_ms=0 replans=1 reroute_fail=7 blocked_looks=7
+SLOW t=26313 ms=161 resolve_ms=152 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=7
+SLOW t=26324 ms=188 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26335 ms=188 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=26346 ms=190 resolve_ms=183 replan_ms=0 replans=1 reroute_fail=8 blocked_looks=8
+SLOW t=26357 ms=195 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26368 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26379 ms=157 resolve_ms=151 replan_ms=0 replans=1 reroute_fail=8 blocked_looks=9
+SLOW t=26390 ms=187 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26401 ms=185 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26412 ms=163 resolve_ms=148 replan_ms=8 replans=13 reroute_fail=8 blocked_looks=8
+SLOW t=26423 ms=157 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26434 ms=158 resolve_ms=152 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26445 ms=188 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26456 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=26467 ms=163 resolve_ms=152 replan_ms=3 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=26478 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=26489 ms=194 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26500 ms=231 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26511 ms=228 resolve_ms=218 replan_ms=1 replans=4 reroute_fail=9 blocked_looks=9
+SLOW t=26522 ms=216 resolve_ms=210 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=26533 ms=230 resolve_ms=220 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26544 ms=217 resolve_ms=211 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=26555 ms=218 resolve_ms=211 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26566 ms=230 resolve_ms=224 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26577 ms=193 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=26588 ms=218 resolve_ms=212 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26599 ms=221 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=26610 ms=229 resolve_ms=222 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26621 ms=224 resolve_ms=217 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26632 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26643 ms=230 resolve_ms=223 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26654 ms=222 resolve_ms=216 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26665 ms=195 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26676 ms=219 resolve_ms=213 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26687 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26698 ms=191 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26709 ms=222 resolve_ms=179 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26720 ms=195 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26731 ms=207 resolve_ms=191 replan_ms=8 replans=10 reroute_fail=9 blocked_looks=9
+SLOW t=26742 ms=212 resolve_ms=164 replan_ms=1 replans=5 reroute_fail=9 blocked_looks=9
+SLOW t=26753 ms=273 resolve_ms=225 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=26764 ms=227 resolve_ms=220 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26775 ms=247 resolve_ms=241 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26786 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26797 ms=220 resolve_ms=214 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=10
+SLOW t=26808 ms=284 resolve_ms=278 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=26819 ms=226 resolve_ms=220 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26830 ms=221 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26841 ms=235 resolve_ms=228 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26852 ms=218 resolve_ms=210 replan_ms=0 replans=3 reroute_fail=9 blocked_looks=9
+SLOW t=26863 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26867 ms=182 resolve_ms=92 replan_ms=46 replans=16 reroute_fail=9 blocked_looks=9
+SLOW t=26874 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26984 ms=165 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=26995 ms=154 resolve_ms=148 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=11
+STUCK t=27000 still=2349 id=3 pos=Pos { x: 100, y: 129, z: 7 } state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None clearing=false cooldown=4 path_len=3 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=27000 still=6269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=27000 still=2329 id=32 pos=Pos { x: 101, y: 130, z: 8 } state=Walk job=Some((Haul { item: 906 }, Pos { x: 90, y: 121, z: 8 })) carrying=None clearing=false cooldown=2 path_len=19 standable=true next=Pos { x: 101, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=362 state=Walk job=Some((Haul { item: 979 }, Pos { x: 96, y: 126, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 100, y: 129, z: 7 }) head_on=false
+STUCK t=27000 still=687 id=33 pos=Pos { x: 105, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1134 }, Pos { x: 101, y: 116, z: 10 })) carrying=None clearing=false cooldown=5 path_len=9 standable=true next=Pos { x: 104, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=295 state=Walk job=Some((Dig, Pos { x: 104, y: 123, z: 7 })) carrying=None path_len=13 bnext=Some(Pos { x: 103, y: 122, z: 8 }) head_on=false
+STUCK t=27000 still=968 id=35 pos=Pos { x: 103, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 106, y: 116, z: 10 })) carrying=None clearing=false cooldown=6 path_len=18 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=27000 still=2393 id=38 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=4 path_len=26 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=13 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=27000 still=3338 id=41 pos=Pos { x: 100, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None clearing=false cooldown=5 path_len=9 standable=true next=Pos { x: 99, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=129 state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 99, y: 124, z: 8 }) head_on=false
+STUCK t=27000 still=2308 id=42 pos=Pos { x: 100, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None clearing=false cooldown=1 path_len=12 standable=true next=Pos { x: 101, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=296 state=Walk job=Some((Haul { item: 929 }, Pos { x: 92, y: 122, z: 8 })) carrying=None path_len=13 bnext=Some(Pos { x: 101, y: 131, z: 8 }) head_on=false
+STUCK t=27000 still=2307 id=43 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=2 path_len=10 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 95, y: 123, z: 7 })) carrying=None path_len=7 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=27000 still=2397 id=84 pos=Pos { x: 95, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=0 path_len=3 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None path_len=100 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=27000 still=3549 id=85 pos=Pos { x: 98, y: 125, z: 8 } state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) clearing=false cooldown=3 path_len=49 standable=true next=Pos { x: 99, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=346 state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) path_len=48 bnext=Some(Pos { x: 100, y: 125, z: 8 }) head_on=false
+STUCK t=27000 still=826 id=86 pos=Pos { x: 103, y: 119, z: 9 } state=Walk job=Some((Dig, Pos { x: 94, y: 124, z: 7 })) carrying=None clearing=true cooldown=9 path_len=22 standable=true next=Pos { x: 103, y: 120, z: 9 } next_standable=true adjacent=true BLOCKER id=411 state=Walk job=Some((Dig, Pos { x: 102, y: 125, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 103, y: 121, z: 9 }) head_on=false
+STUCK t=27000 still=2319 id=87 pos=Pos { x: 97, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=1 path_len=19 standable=true next=Pos { x: 98, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=205 state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None path_len=17 bnext=Some(Pos { x: 99, y: 132, z: 8 }) head_on=false
+STUCK t=27000 still=2255 id=90 pos=Pos { x: 99, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None clearing=true cooldown=10 path_len=11 standable=true next=Pos { x: 100, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=42 state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 101, y: 132, z: 8 }) head_on=false
+STUCK t=27000 still=2401 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None clearing=false cooldown=7 path_len=100 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=370 state=Walk job=Some((Dig, Pos { x: 78, y: 117, z: 10 })) carrying=None path_len=45 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=27000 still=2108 id=125 pos=Pos { x: 103, y: 125, z: 7 } state=Walk job=Some((Dig, Pos { x: 104, y: 120, z: 8 })) carrying=None clearing=true cooldown=1 path_len=12 standable=true next=Pos { x: 103, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=35 state=Walk job=Some((Dig, Pos { x: 106, y: 116, z: 10 })) carrying=None path_len=18 bnext=Some(Pos { x: 102, y: 126, z: 7 }) head_on=false
+STUCK t=27000 still=2614 id=126 pos=Pos { x: 102, y: 127, z: 7 } state=Walk job=Some((Haul { item: 1120 }, Pos { x: 100, y: 120, z: 8 })) carrying=None clearing=false cooldown=3 path_len=10 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=27000 still=3446 id=129 pos=Pos { x: 99, y: 123, z: 8 } state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None clearing=false cooldown=7 path_len=10 standable=true next=Pos { x: 99, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=361 state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 124, z: 8 }) head_on=false
+STUCK t=27000 still=2312 id=131 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=8 path_len=2 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=269 state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=27000 still=3475 id=132 pos=Pos { x: 98, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None clearing=false cooldown=0 path_len=2 standable=true next=Pos { x: 98, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=85 state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) path_len=49 bnext=Some(Pos { x: 99, y: 125, z: 8 }) head_on=false
+STUCK t=27000 still=2398 id=133 pos=Pos { x: 93, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=10 path_len=13 standable=true next=Pos { x: 94, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=330 state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None path_len=116 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=27000 still=3276 id=200 pos=Pos { x: 100, y: 122, z: 8 } state=Walk job=Some((Dig, Pos { x: 96, y: 123, z: 7 })) carrying=None clearing=true cooldown=1 path_len=15 standable=true next=Pos { x: 100, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=41 state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 123, z: 8 }) head_on=false
+STUCK t=27000 still=2305 id=201 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=4 path_len=8 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCK t=27000 still=704 id=203 pos=Pos { x: 104, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 105, y: 120, z: 8 })) carrying=None clearing=false cooldown=0 path_len=3 standable=true next=Pos { x: 104, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=295 state=Walk job=Some((Dig, Pos { x: 104, y: 123, z: 7 })) carrying=None path_len=13 bnext=Some(Pos { x: 103, y: 122, z: 8 }) head_on=false
+STUCK t=27000 still=2254 id=205 pos=Pos { x: 98, y: 132, z: 8 } state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None clearing=false cooldown=0 path_len=17 standable=true next=Pos { x: 99, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=90 state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 100, y: 132, z: 8 }) head_on=false
+STUCK t=27000 still=4033 id=267 pos=Pos { x: 101, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 99, y: 130, z: 7 })) carrying=None clearing=true cooldown=3 path_len=2 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=27000 still=2246 id=268 pos=Pos { x: 97, y: 131, z: 8 } state=Walk job=Some((Haul { item: 1003 }, Pos { x: 89, y: 128, z: 7 })) carrying=Some(1003) clearing=false cooldown=8 path_len=46 standable=true next=Pos { x: 97, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=87 state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None path_len=19 bnext=Some(Pos { x: 98, y: 132, z: 8 }) head_on=false
+STUCK t=27000 still=2377 id=269 pos=Pos { x: 96, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None clearing=true cooldown=9 path_len=1 standable=true next=Pos { x: 95, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=84 state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=27000 still=2248 id=279 pos=Pos { x: 98, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 95, y: 123, z: 7 })) carrying=None clearing=true cooldown=6 path_len=7 standable=true next=Pos { x: 97, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=131 state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=27000 still=2088 id=295 pos=Pos { x: 104, y: 122, z: 8 } state=Walk job=Some((Dig, Pos { x: 104, y: 123, z: 7 })) carrying=None clearing=true cooldown=1 path_len=13 standable=true next=Pos { x: 103, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=421 state=Walk job=Some((Haul { item: 986 }, Pos { x: 92, y: 121, z: 8 })) carrying=None path_len=15 bnext=Some(Pos { x: 102, y: 122, z: 8 }) head_on=false
+STUCKN t=27000 n=64
+STALL t=27000 crew=200 idle%=29 walk%=70 work%=1 stalls=56 (<=23:26 <=60:2 >60:28) max=2122 dwarves=41 lost_ticks=32771 mean_ms=53.94 marks=645
+WHY t=27000 blocked_looks=7243 idle_boxed=0 idle_exit_ahead=0 reroute_fail=6959 head_on_job=241 head_on_idle=0 swaps=241 carry_wait_ticks=2000 reroute_fail_behind_worker=6 resolve_ms=44.70 replan_ms=1.00 replans=690 max_ms=284 over100=131
+SLOW t=27006 ms=165 resolve_ms=159 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27017 ms=165 resolve_ms=159 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27026 ms=244 resolve_ms=123 replan_ms=78 replans=8 reroute_fail=7 blocked_looks=8
+SLOW t=27028 ms=188 resolve_ms=180 replan_ms=1 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=27039 ms=197 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27050 ms=210 resolve_ms=203 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27061 ms=187 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27072 ms=194 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27083 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27094 ms=160 resolve_ms=154 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27105 ms=160 resolve_ms=152 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27116 ms=186 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27125 ms=172 resolve_ms=124 replan_ms=3 replans=13 reroute_fail=7 blocked_looks=7
+SLOW t=27127 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27138 ms=196 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27140 ms=177 resolve_ms=0 replan_ms=133 replans=134 reroute_fail=7 blocked_looks=7
+SLOW t=27147 ms=161 resolve_ms=154 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27149 ms=201 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27160 ms=211 resolve_ms=205 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27171 ms=201 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27182 ms=196 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27193 ms=206 resolve_ms=196 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27204 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27215 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27226 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27237 ms=168 resolve_ms=162 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27248 ms=163 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27259 ms=197 resolve_ms=191 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27270 ms=189 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27281 ms=199 resolve_ms=193 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27292 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27303 ms=229 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27314 ms=197 resolve_ms=191 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27325 ms=188 resolve_ms=179 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27336 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27345 ms=153 resolve_ms=125 replan_ms=0 replans=0 reroute_fail=7 blocked_looks=8
+SLOW t=27347 ms=188 resolve_ms=182 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=27358 ms=182 resolve_ms=176 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27369 ms=188 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27380 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27391 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27402 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27413 ms=192 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27424 ms=161 resolve_ms=153 replan_ms=1 replans=7 reroute_fail=9 blocked_looks=9
+SLOW t=27435 ms=189 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27446 ms=308 resolve_ms=185 replan_ms=80 replans=18 reroute_fail=9 blocked_looks=9
+SLOW t=27457 ms=162 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27468 ms=158 resolve_ms=153 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27477 ms=173 resolve_ms=128 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=27479 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27490 ms=196 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27501 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27512 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27523 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27532 ms=163 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27534 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27545 ms=185 resolve_ms=177 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27556 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27567 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27578 ms=182 resolve_ms=177 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27589 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27600 ms=184 resolve_ms=178 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27609 ms=155 resolve_ms=149 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27611 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27620 ms=164 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27622 ms=234 resolve_ms=190 replan_ms=1 replans=2 reroute_fail=9 blocked_looks=9
+SLOW t=27631 ms=159 resolve_ms=152 replan_ms=1 replans=1 reroute_fail=8 blocked_looks=10
+SLOW t=27633 ms=188 resolve_ms=179 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27642 ms=163 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=27644 ms=194 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27653 ms=167 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=27655 ms=223 resolve_ms=216 replan_ms=1 replans=1 reroute_fail=9 blocked_looks=11
+SLOW t=27659 ms=163 resolve_ms=152 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=27664 ms=208 resolve_ms=161 replan_ms=2 replans=2 reroute_fail=8 blocked_looks=9
+SLOW t=27666 ms=296 resolve_ms=259 replan_ms=2 replans=3 reroute_fail=9 blocked_looks=9
+SLOW t=27670 ms=169 resolve_ms=161 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27675 ms=207 resolve_ms=199 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=27677 ms=246 resolve_ms=239 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27686 ms=163 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=27688 ms=222 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27697 ms=164 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=8
+SLOW t=27699 ms=235 resolve_ms=227 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27703 ms=163 resolve_ms=155 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27708 ms=182 resolve_ms=176 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27710 ms=200 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27719 ms=154 resolve_ms=148 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=27721 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27730 ms=166 resolve_ms=160 replan_ms=0 replans=0 reroute_fail=8 blocked_looks=9
+SLOW t=27732 ms=197 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27741 ms=174 resolve_ms=125 replan_ms=40 replans=6 reroute_fail=8 blocked_looks=8
+SLOW t=27743 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27752 ms=165 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27754 ms=195 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27763 ms=164 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27765 ms=195 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27774 ms=157 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27776 ms=182 resolve_ms=176 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27785 ms=163 resolve_ms=154 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=27787 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27796 ms=192 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27798 ms=189 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27807 ms=167 resolve_ms=161 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27809 ms=200 resolve_ms=192 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27818 ms=171 resolve_ms=164 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27820 ms=196 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27829 ms=163 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27831 ms=197 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27840 ms=221 resolve_ms=214 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27842 ms=259 resolve_ms=252 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27846 ms=166 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27851 ms=217 resolve_ms=210 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=27853 ms=252 resolve_ms=238 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27857 ms=167 resolve_ms=160 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=27862 ms=253 resolve_ms=245 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27864 ms=313 resolve_ms=305 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27868 ms=191 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27873 ms=307 resolve_ms=294 replan_ms=0 replans=3 reroute_fail=10 blocked_looks=10
+SLOW t=27875 ms=299 resolve_ms=289 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27879 ms=194 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=12
+SLOW t=27884 ms=194 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27886 ms=206 resolve_ms=200 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27890 ms=188 resolve_ms=178 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=27895 ms=218 resolve_ms=212 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27897 ms=200 resolve_ms=193 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27906 ms=189 resolve_ms=182 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=27908 ms=192 resolve_ms=186 replan_ms=0 replans=1 reroute_fail=9 blocked_looks=9
+SLOW t=27917 ms=209 resolve_ms=202 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27919 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27928 ms=190 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27930 ms=187 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27939 ms=197 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=27941 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27950 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=12
+SLOW t=27952 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27961 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27963 ms=189 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27972 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=27974 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=27983 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27985 ms=189 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=27994 ms=193 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=27996 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+STUCK t=28000 still=3349 id=3 pos=Pos { x: 100, y: 129, z: 7 } state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None clearing=false cooldown=5 path_len=3 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=28000 still=7269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=28000 still=3329 id=32 pos=Pos { x: 101, y: 130, z: 8 } state=Walk job=Some((Haul { item: 906 }, Pos { x: 90, y: 121, z: 8 })) carrying=None clearing=false cooldown=3 path_len=19 standable=true next=Pos { x: 101, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=362 state=Walk job=Some((Haul { item: 979 }, Pos { x: 96, y: 126, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 100, y: 129, z: 7 }) head_on=false
+STUCK t=28000 still=1687 id=33 pos=Pos { x: 105, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1134 }, Pos { x: 101, y: 116, z: 10 })) carrying=None clearing=false cooldown=6 path_len=9 standable=true next=Pos { x: 104, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=295 state=Walk job=Some((Dig, Pos { x: 104, y: 123, z: 7 })) carrying=None path_len=13 bnext=Some(Pos { x: 103, y: 122, z: 8 }) head_on=false
+STUCK t=28000 still=1027 id=34 pos=Pos { x: 103, y: 136, z: 10 } state=Walk job=Some((Haul { item: 1235 }, Pos { x: 99, y: 133, z: 8 })) carrying=None clearing=false cooldown=6 path_len=14 standable=true next=Pos { x: 103, y: 135, z: 10 } next_standable=true adjacent=true BLOCKER id=319 state=Walk job=Some((Haul { item: 867 }, Pos { x: 88, y: 131, z: 8 })) carrying=None path_len=24 bnext=Some(Pos { x: 103, y: 134, z: 9 }) head_on=false
+STUCK t=28000 still=3393 id=38 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=5 path_len=26 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=17 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=28000 still=4338 id=41 pos=Pos { x: 100, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None clearing=false cooldown=6 path_len=9 standable=true next=Pos { x: 99, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=129 state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 99, y: 124, z: 8 }) head_on=false
+STUCK t=28000 still=3308 id=42 pos=Pos { x: 100, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None clearing=false cooldown=2 path_len=12 standable=true next=Pos { x: 101, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=296 state=Walk job=Some((Haul { item: 929 }, Pos { x: 92, y: 122, z: 8 })) carrying=None path_len=13 bnext=Some(Pos { x: 101, y: 131, z: 8 }) head_on=false
+STUCK t=28000 still=3307 id=43 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=3 path_len=10 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 95, y: 123, z: 7 })) carrying=None path_len=7 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=28000 still=3397 id=84 pos=Pos { x: 95, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=1 path_len=3 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None path_len=110 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=28000 still=4549 id=85 pos=Pos { x: 98, y: 125, z: 8 } state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) clearing=false cooldown=4 path_len=49 standable=true next=Pos { x: 99, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=346 state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) path_len=48 bnext=Some(Pos { x: 100, y: 125, z: 8 }) head_on=false
+STUCK t=28000 still=1826 id=86 pos=Pos { x: 103, y: 119, z: 9 } state=Walk job=Some((Dig, Pos { x: 94, y: 124, z: 7 })) carrying=None clearing=true cooldown=10 path_len=22 standable=true next=Pos { x: 103, y: 120, z: 9 } next_standable=true adjacent=true BLOCKER id=411 state=Walk job=Some((Dig, Pos { x: 102, y: 125, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 103, y: 121, z: 9 }) head_on=false
+STUCK t=28000 still=3319 id=87 pos=Pos { x: 97, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=2 path_len=19 standable=true next=Pos { x: 98, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=205 state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None path_len=17 bnext=Some(Pos { x: 99, y: 132, z: 8 }) head_on=false
+STUCK t=28000 still=1060 id=88 pos=Pos { x: 105, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1064 }, Pos { x: 97, y: 125, z: 7 })) carrying=None clearing=false cooldown=6 path_len=18 standable=true next=Pos { x: 105, y: 131, z: 8 } next_standable=true adjacent=true BLOCKER id=379 state=Walk job=Some((Haul { item: 1128 }, Pos { x: 101, y: 124, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 104, y: 131, z: 8 }) head_on=false
+STUCK t=28000 still=3255 id=90 pos=Pos { x: 99, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None clearing=true cooldown=0 path_len=11 standable=true next=Pos { x: 100, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=42 state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 101, y: 132, z: 8 }) head_on=false
+STUCK t=28000 still=3401 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None clearing=false cooldown=8 path_len=110 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=370 state=Walk job=Some((Dig, Pos { x: 78, y: 117, z: 10 })) carrying=None path_len=45 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=28000 still=1109 id=124 pos=Pos { x: 106, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1114 }, Pos { x: 100, y: 121, z: 8 })) carrying=None clearing=false cooldown=1 path_len=6 standable=true next=Pos { x: 105, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=33 state=Walk job=Some((Haul { item: 1134 }, Pos { x: 101, y: 116, z: 10 })) carrying=None path_len=9 bnext=Some(Pos { x: 104, y: 122, z: 8 }) head_on=false
+STUCK t=28000 still=635 id=125 pos=Pos { x: 103, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 104, y: 120, z: 8 })) carrying=None clearing=true cooldown=2 path_len=11 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=28000 still=3614 id=126 pos=Pos { x: 102, y: 127, z: 7 } state=Walk job=Some((Haul { item: 1120 }, Pos { x: 100, y: 120, z: 8 })) carrying=None clearing=false cooldown=4 path_len=10 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=28000 still=1177 id=128 pos=Pos { x: 105, y: 120, z: 9 } state=Walk job=Some((Haul { item: 1048 }, Pos { x: 91, y: 129, z: 7 })) carrying=None clearing=false cooldown=10 path_len=23 standable=true next=Pos { x: 104, y: 120, z: 9 } next_standable=true adjacent=true BLOCKER id=350 state=Walk job=Some((Haul { item: 955 }, Pos { x: 96, y: 118, z: 9 })) carrying=None path_len=9 bnext=Some(Pos { x: 103, y: 120, z: 9 }) head_on=false
+STUCK t=28000 still=4446 id=129 pos=Pos { x: 99, y: 123, z: 8 } state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None clearing=false cooldown=8 path_len=10 standable=true next=Pos { x: 99, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=361 state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 124, z: 8 }) head_on=false
+STUCK t=28000 still=3312 id=131 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=9 path_len=2 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=269 state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=28000 still=4475 id=132 pos=Pos { x: 98, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None clearing=false cooldown=1 path_len=5 standable=true next=Pos { x: 98, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=85 state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) path_len=49 bnext=Some(Pos { x: 99, y: 125, z: 8 }) head_on=false
+STUCK t=28000 still=3398 id=133 pos=Pos { x: 93, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=0 path_len=17 standable=true next=Pos { x: 94, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=330 state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None path_len=120 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=28000 still=1000 id=196 pos=Pos { x: 105, y: 135, z: 9 } state=Walk job=Some((Haul { item: 1084 }, Pos { x: 92, y: 133, z: 8 })) carrying=None clearing=false cooldown=0 path_len=20 standable=true next=Pos { x: 105, y: 134, z: 9 } next_standable=true adjacent=true BLOCKER id=304 state=Walk job=Some((Haul { item: 1001 }, Pos { x: 94, y: 133, z: 8 })) carrying=None path_len=15 bnext=Some(Pos { x: 105, y: 133, z: 8 }) head_on=false
+STUCK t=28000 still=1048 id=197 pos=Pos { x: 104, y: 134, z: 9 } state=Walk job=Some((Haul { item: 1036 }, Pos { x: 99, y: 121, z: 8 })) carrying=None clearing=false cooldown=7 path_len=25 standable=true next=Pos { x: 104, y: 133, z: 8 } next_standable=true adjacent=true BLOCKER id=206 state=Walk job=Some((Haul { item: 820 }, Pos { x: 89, y: 132, z: 8 })) carrying=None path_len=21 bnext=Some(Pos { x: 105, y: 133, z: 8 }) head_on=false
+STUCK t=28000 still=4276 id=200 pos=Pos { x: 100, y: 122, z: 8 } state=Walk job=Some((Dig, Pos { x: 96, y: 123, z: 7 })) carrying=None clearing=true cooldown=2 path_len=15 standable=true next=Pos { x: 100, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=41 state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 123, z: 8 }) head_on=false
+STUCK t=28000 still=3305 id=201 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=5 path_len=8 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCK t=28000 still=1087 id=202 pos=Pos { x: 103, y: 131, z: 8 } state=Walk job=Some((Haul { item: 1053 }, Pos { x: 96, y: 121, z: 8 })) carrying=None clearing=false cooldown=1 path_len=18 standable=true next=Pos { x: 103, y: 130, z: 8 } next_standable=true adjacent=true BLOCKER id=318 state=Walk job=Some((Dig, Pos { x: 95, y: 131, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 102, y: 130, z: 8 }) head_on=false
+STUCK t=28000 still=1704 id=203 pos=Pos { x: 104, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 105, y: 120, z: 8 })) carrying=None clearing=false cooldown=1 path_len=3 standable=true next=Pos { x: 104, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=295 state=Walk job=Some((Dig, Pos { x: 104, y: 123, z: 7 })) carrying=None path_len=13 bnext=Some(Pos { x: 103, y: 122, z: 8 }) head_on=false
+STUCKN t=28000 n=89
+STALL t=28000 crew=200 idle%=29 walk%=70 work%=1 stalls=43 (<=23:24 <=60:13 >60:6) max=2472 dwarves=21 lost_ticks=5371 mean_ms=74.37 marks=618
+WHY t=28000 blocked_looks=8165 idle_boxed=2 idle_exit_ahead=0 reroute_fail=7981 head_on_job=127 head_on_idle=2 swaps=127 carry_wait_ticks=2105 reroute_fail_behind_worker=36 resolve_ms=66.52 replan_ms=0.52 replans=471 max_ms=313 over100=300
+SLOW t=28005 ms=194 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28007 ms=189 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28016 ms=212 resolve_ms=205 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28018 ms=244 resolve_ms=236 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28027 ms=266 resolve_ms=257 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28029 ms=337 resolve_ms=277 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=28033 ms=219 resolve_ms=204 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=11
+SLOW t=28038 ms=345 resolve_ms=333 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28040 ms=301 resolve_ms=290 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=28049 ms=236 resolve_ms=190 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=11
+SLOW t=28051 ms=201 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28055 ms=198 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28060 ms=241 resolve_ms=233 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28062 ms=301 resolve_ms=290 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=28066 ms=226 resolve_ms=160 replan_ms=4 replans=8 reroute_fail=10 blocked_looks=10
+SLOW t=28071 ms=226 resolve_ms=219 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28073 ms=251 resolve_ms=200 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28082 ms=276 resolve_ms=267 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28084 ms=215 resolve_ms=208 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=28088 ms=188 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28093 ms=303 resolve_ms=288 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28095 ms=309 resolve_ms=297 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28099 ms=194 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28104 ms=201 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28106 ms=236 resolve_ms=226 replan_ms=1 replans=2 reroute_fail=10 blocked_looks=10
+SLOW t=28115 ms=247 resolve_ms=200 replan_ms=40 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28117 ms=241 resolve_ms=234 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28126 ms=165 resolve_ms=158 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28128 ms=260 resolve_ms=252 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28137 ms=193 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28139 ms=259 resolve_ms=248 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28148 ms=166 resolve_ms=160 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28150 ms=224 resolve_ms=218 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28159 ms=163 resolve_ms=157 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28161 ms=223 resolve_ms=216 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28170 ms=154 resolve_ms=148 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28172 ms=184 resolve_ms=178 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=11
+SLOW t=28181 ms=163 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28183 ms=189 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28192 ms=162 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28194 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28203 ms=171 resolve_ms=165 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28205 ms=189 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28214 ms=164 resolve_ms=158 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28216 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28225 ms=164 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28227 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28236 ms=167 resolve_ms=160 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28238 ms=196 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=28247 ms=156 resolve_ms=150 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28249 ms=186 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=28258 ms=162 resolve_ms=157 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28260 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=10
+SLOW t=28269 ms=163 resolve_ms=155 replan_ms=2 replans=1 reroute_fail=10 blocked_looks=11
+SLOW t=28271 ms=188 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28280 ms=157 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28282 ms=189 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28291 ms=162 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28293 ms=193 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28302 ms=160 resolve_ms=153 replan_ms=0 replans=1 reroute_fail=11 blocked_looks=11
+SLOW t=28304 ms=188 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=9 blocked_looks=9
+SLOW t=28315 ms=222 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28326 ms=260 resolve_ms=216 replan_ms=0 replans=11 reroute_fail=10 blocked_looks=10
+SLOW t=28337 ms=223 resolve_ms=216 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28348 ms=221 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28359 ms=220 resolve_ms=213 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28370 ms=221 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28381 ms=236 resolve_ms=229 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28392 ms=226 resolve_ms=219 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28403 ms=230 resolve_ms=223 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28414 ms=224 resolve_ms=217 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28425 ms=235 resolve_ms=227 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28436 ms=232 resolve_ms=226 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28447 ms=218 resolve_ms=212 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28458 ms=222 resolve_ms=216 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28469 ms=216 resolve_ms=210 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28480 ms=227 resolve_ms=220 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28491 ms=227 resolve_ms=221 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28502 ms=221 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28513 ms=208 resolve_ms=198 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28520 ms=164 resolve_ms=153 replan_ms=0 replans=0 reroute_fail=14 blocked_looks=14
+SLOW t=28522 ms=185 resolve_ms=176 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28524 ms=229 resolve_ms=221 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28535 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28546 ms=192 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28557 ms=190 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28568 ms=196 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28579 ms=186 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28590 ms=231 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28601 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28612 ms=199 resolve_ms=193 replan_ms=0 replans=2 reroute_fail=10 blocked_looks=10
+SLOW t=28623 ms=198 resolve_ms=191 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28634 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28645 ms=197 resolve_ms=189 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28656 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28667 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28678 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28685 ms=165 resolve_ms=122 replan_ms=0 replans=1 reroute_fail=15 blocked_looks=15
+SLOW t=28689 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28700 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28711 ms=196 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28720 ms=166 resolve_ms=159 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28722 ms=200 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28733 ms=198 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28744 ms=202 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28755 ms=193 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28766 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28769 ms=154 resolve_ms=108 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28777 ms=205 resolve_ms=199 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28788 ms=203 resolve_ms=196 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28799 ms=205 resolve_ms=198 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28806 ms=167 resolve_ms=160 replan_ms=0 replans=1 reroute_fail=15 blocked_looks=15
+SLOW t=28810 ms=208 resolve_ms=201 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28821 ms=204 resolve_ms=198 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28824 ms=154 resolve_ms=105 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=11
+SLOW t=28832 ms=198 resolve_ms=192 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28843 ms=206 resolve_ms=199 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28854 ms=212 resolve_ms=205 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28865 ms=200 resolve_ms=191 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28876 ms=203 resolve_ms=197 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28887 ms=231 resolve_ms=187 replan_ms=1 replans=3 reroute_fail=10 blocked_looks=10
+SLOW t=28898 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28909 ms=224 resolve_ms=180 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28920 ms=211 resolve_ms=205 replan_ms=0 replans=1 reroute_fail=11 blocked_looks=11
+SLOW t=28929 ms=162 resolve_ms=154 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28931 ms=233 resolve_ms=225 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=11
+SLOW t=28938 ms=165 resolve_ms=121 replan_ms=1 replans=6 reroute_fail=15 blocked_looks=15
+SLOW t=28942 ms=187 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28951 ms=155 resolve_ms=147 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28953 ms=275 resolve_ms=263 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28960 ms=183 resolve_ms=175 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=28962 ms=222 resolve_ms=209 replan_ms=2 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28964 ms=296 resolve_ms=287 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28967 ms=153 resolve_ms=144 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28968 ms=157 resolve_ms=148 replan_ms=0 replans=0 reroute_fail=12 blocked_looks=12
+SLOW t=28971 ms=207 resolve_ms=198 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=28973 ms=226 resolve_ms=213 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28975 ms=346 resolve_ms=335 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=28978 ms=172 resolve_ms=162 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28982 ms=247 resolve_ms=237 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=16
+SLOW t=28984 ms=227 resolve_ms=217 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=28986 ms=296 resolve_ms=288 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28989 ms=158 resolve_ms=149 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=28993 ms=206 resolve_ms=193 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=16
+SLOW t=28995 ms=206 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=28997 ms=326 resolve_ms=315 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29000 ms=154 resolve_ms=144 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+STUCK t=29000 still=4349 id=3 pos=Pos { x: 100, y: 129, z: 7 } state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None clearing=false cooldown=6 path_len=3 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=29000 still=8269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=29000 still=4329 id=32 pos=Pos { x: 101, y: 130, z: 8 } state=Walk job=Some((Haul { item: 906 }, Pos { x: 90, y: 121, z: 8 })) carrying=None clearing=false cooldown=4 path_len=19 standable=true next=Pos { x: 101, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=362 state=Walk job=Some((Haul { item: 979 }, Pos { x: 96, y: 126, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 100, y: 129, z: 7 }) head_on=false
+STUCK t=29000 still=2687 id=33 pos=Pos { x: 105, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1134 }, Pos { x: 101, y: 116, z: 10 })) carrying=None clearing=false cooldown=7 path_len=9 standable=true next=Pos { x: 104, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=295 state=Walk job=Some((Dig, Pos { x: 104, y: 123, z: 7 })) carrying=None path_len=13 bnext=Some(Pos { x: 103, y: 122, z: 8 }) head_on=false
+STUCK t=29000 still=2027 id=34 pos=Pos { x: 103, y: 136, z: 10 } state=Walk job=Some((Haul { item: 1235 }, Pos { x: 99, y: 133, z: 8 })) carrying=None clearing=false cooldown=7 path_len=14 standable=true next=Pos { x: 103, y: 135, z: 10 } next_standable=true adjacent=true BLOCKER id=319 state=Walk job=Some((Haul { item: 867 }, Pos { x: 88, y: 131, z: 8 })) carrying=None path_len=24 bnext=Some(Pos { x: 103, y: 134, z: 9 }) head_on=false
+STUCK t=29000 still=4393 id=38 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=6 path_len=26 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=17 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=29000 still=5338 id=41 pos=Pos { x: 100, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None clearing=false cooldown=7 path_len=9 standable=true next=Pos { x: 99, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=129 state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 99, y: 124, z: 8 }) head_on=false
+STUCK t=29000 still=4308 id=42 pos=Pos { x: 100, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None clearing=false cooldown=3 path_len=12 standable=true next=Pos { x: 101, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=296 state=Walk job=Some((Haul { item: 929 }, Pos { x: 92, y: 122, z: 8 })) carrying=None path_len=13 bnext=Some(Pos { x: 101, y: 131, z: 8 }) head_on=false
+STUCK t=29000 still=4307 id=43 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=4 path_len=10 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 95, y: 123, z: 7 })) carrying=None path_len=7 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=29000 still=4397 id=84 pos=Pos { x: 95, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=2 path_len=3 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None path_len=110 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=29000 still=5549 id=85 pos=Pos { x: 98, y: 125, z: 8 } state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) clearing=false cooldown=5 path_len=49 standable=true next=Pos { x: 99, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=346 state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) path_len=48 bnext=Some(Pos { x: 100, y: 125, z: 8 }) head_on=false
+STUCK t=29000 still=2826 id=86 pos=Pos { x: 103, y: 119, z: 9 } state=Walk job=Some((Dig, Pos { x: 94, y: 124, z: 7 })) carrying=None clearing=true cooldown=0 path_len=22 standable=true next=Pos { x: 103, y: 120, z: 9 } next_standable=true adjacent=true BLOCKER id=411 state=Walk job=Some((Dig, Pos { x: 102, y: 125, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 103, y: 121, z: 9 }) head_on=false
+STUCK t=29000 still=4319 id=87 pos=Pos { x: 97, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=3 path_len=19 standable=true next=Pos { x: 98, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=205 state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None path_len=17 bnext=Some(Pos { x: 99, y: 132, z: 8 }) head_on=false
+STUCK t=29000 still=2060 id=88 pos=Pos { x: 105, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1064 }, Pos { x: 97, y: 125, z: 7 })) carrying=None clearing=false cooldown=7 path_len=18 standable=true next=Pos { x: 105, y: 131, z: 8 } next_standable=true adjacent=true BLOCKER id=379 state=Walk job=Some((Haul { item: 1128 }, Pos { x: 101, y: 124, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 104, y: 131, z: 8 }) head_on=false
+STUCK t=29000 still=4255 id=90 pos=Pos { x: 99, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None clearing=true cooldown=1 path_len=11 standable=true next=Pos { x: 100, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=42 state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 101, y: 132, z: 8 }) head_on=false
+STUCK t=29000 still=4401 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None clearing=false cooldown=9 path_len=110 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=370 state=Walk job=Some((Dig, Pos { x: 78, y: 117, z: 10 })) carrying=None path_len=45 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=29000 still=2109 id=124 pos=Pos { x: 106, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1114 }, Pos { x: 100, y: 121, z: 8 })) carrying=None clearing=false cooldown=2 path_len=6 standable=true next=Pos { x: 105, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=33 state=Walk job=Some((Haul { item: 1134 }, Pos { x: 101, y: 116, z: 10 })) carrying=None path_len=9 bnext=Some(Pos { x: 104, y: 122, z: 8 }) head_on=false
+STUCK t=29000 still=1635 id=125 pos=Pos { x: 103, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 104, y: 120, z: 8 })) carrying=None clearing=true cooldown=3 path_len=11 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=29000 still=4614 id=126 pos=Pos { x: 102, y: 127, z: 7 } state=Walk job=Some((Haul { item: 1120 }, Pos { x: 100, y: 120, z: 8 })) carrying=None clearing=false cooldown=5 path_len=10 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=29000 still=2177 id=128 pos=Pos { x: 105, y: 120, z: 9 } state=Walk job=Some((Haul { item: 1048 }, Pos { x: 91, y: 129, z: 7 })) carrying=None clearing=false cooldown=0 path_len=23 standable=true next=Pos { x: 104, y: 120, z: 9 } next_standable=true adjacent=true BLOCKER id=350 state=Walk job=Some((Haul { item: 955 }, Pos { x: 96, y: 118, z: 9 })) carrying=None path_len=9 bnext=Some(Pos { x: 103, y: 120, z: 9 }) head_on=false
+STUCK t=29000 still=5446 id=129 pos=Pos { x: 99, y: 123, z: 8 } state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None clearing=false cooldown=9 path_len=10 standable=true next=Pos { x: 99, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=361 state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 124, z: 8 }) head_on=false
+STUCK t=29000 still=4312 id=131 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=10 path_len=2 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=269 state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=29000 still=5475 id=132 pos=Pos { x: 98, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None clearing=false cooldown=2 path_len=5 standable=true next=Pos { x: 98, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=85 state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) path_len=49 bnext=Some(Pos { x: 99, y: 125, z: 8 }) head_on=false
+STUCK t=29000 still=4398 id=133 pos=Pos { x: 93, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=1 path_len=17 standable=true next=Pos { x: 94, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=330 state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None path_len=120 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=29000 still=726 id=195 pos=Pos { x: 106, y: 135, z: 9 } state=Walk job=Some((Haul { item: 1110 }, Pos { x: 101, y: 121, z: 8 })) carrying=None clearing=false cooldown=10 path_len=18 standable=true next=Pos { x: 105, y: 135, z: 9 } next_standable=true adjacent=true BLOCKER id=196 state=Walk job=Some((Haul { item: 1084 }, Pos { x: 92, y: 133, z: 8 })) carrying=None path_len=20 bnext=Some(Pos { x: 105, y: 134, z: 9 }) head_on=false
+STUCK t=29000 still=2000 id=196 pos=Pos { x: 105, y: 135, z: 9 } state=Walk job=Some((Haul { item: 1084 }, Pos { x: 92, y: 133, z: 8 })) carrying=None clearing=false cooldown=1 path_len=20 standable=true next=Pos { x: 105, y: 134, z: 9 } next_standable=true adjacent=true BLOCKER id=304 state=Walk job=Some((Haul { item: 1001 }, Pos { x: 94, y: 133, z: 8 })) carrying=None path_len=15 bnext=Some(Pos { x: 105, y: 133, z: 8 }) head_on=false
+STUCK t=29000 still=2048 id=197 pos=Pos { x: 104, y: 134, z: 9 } state=Walk job=Some((Haul { item: 1036 }, Pos { x: 99, y: 121, z: 8 })) carrying=None clearing=false cooldown=8 path_len=25 standable=true next=Pos { x: 104, y: 133, z: 8 } next_standable=true adjacent=true BLOCKER id=206 state=Walk job=Some((Haul { item: 820 }, Pos { x: 89, y: 132, z: 8 })) carrying=None path_len=21 bnext=Some(Pos { x: 105, y: 133, z: 8 }) head_on=false
+STUCK t=29000 still=876 id=199 pos=Pos { x: 106, y: 136, z: 10 } state=Walk job=Some((Haul { item: 1239 }, Pos { x: 103, y: 123, z: 7 })) carrying=None clearing=false cooldown=3 path_len=15 standable=true next=Pos { x: 105, y: 136, z: 10 } next_standable=true adjacent=true BLOCKER id=382 state=Walk job=Some((Haul { item: 997 }, Pos { x: 96, y: 125, z: 7 })) carrying=None path_len=20 bnext=Some(Pos { x: 105, y: 135, z: 9 }) head_on=false
+STUCK t=29000 still=5276 id=200 pos=Pos { x: 100, y: 122, z: 8 } state=Walk job=Some((Dig, Pos { x: 96, y: 123, z: 7 })) carrying=None clearing=true cooldown=3 path_len=15 standable=true next=Pos { x: 100, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=41 state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 123, z: 8 }) head_on=false
+STUCK t=29000 still=4305 id=201 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=6 path_len=8 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCKN t=29000 n=101
+STALL t=29000 crew=200 idle%=30 walk%=69 work%=1 stalls=39 (<=23:16 <=60:12 >60:11) max=1061 dwarves=15 lost_ticks=3465 mean_ms=80.79 marks=596
+WHY t=29000 blocked_looks=8855 idle_boxed=31 idle_exit_ahead=2 reroute_fail=8672 head_on_job=79 head_on_idle=16 swaps=91 carry_wait_ticks=2945 reroute_fail_behind_worker=29 resolve_ms=73.20 replan_ms=0.10 replans=276 max_ms=346 over100=347
+SLOW t=29001 ms=161 resolve_ms=151 replan_ms=0 replans=0 reroute_fail=12 blocked_looks=12
+SLOW t=29004 ms=265 resolve_ms=199 replan_ms=0 replans=1 reroute_fail=15 blocked_looks=16
+SLOW t=29006 ms=224 resolve_ms=215 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29008 ms=272 resolve_ms=262 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29019 ms=308 resolve_ms=298 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29026 ms=153 resolve_ms=147 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29028 ms=154 resolve_ms=147 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29030 ms=297 resolve_ms=286 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29039 ms=178 resolve_ms=132 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29041 ms=208 resolve_ms=201 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29052 ms=200 resolve_ms=193 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29059 ms=261 resolve_ms=249 replan_ms=0 replans=1 reroute_fail=15 blocked_looks=16
+SLOW t=29061 ms=249 resolve_ms=236 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29063 ms=277 resolve_ms=268 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29070 ms=224 resolve_ms=164 replan_ms=0 replans=0 reroute_fail=16 blocked_looks=16
+SLOW t=29072 ms=174 resolve_ms=167 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29074 ms=258 resolve_ms=250 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29081 ms=179 resolve_ms=170 replan_ms=0 replans=1 reroute_fail=15 blocked_looks=16
+SLOW t=29083 ms=172 resolve_ms=164 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29085 ms=252 resolve_ms=242 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29092 ms=176 resolve_ms=168 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=17
+SLOW t=29094 ms=163 resolve_ms=155 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29096 ms=263 resolve_ms=255 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29103 ms=178 resolve_ms=170 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=16
+SLOW t=29105 ms=177 resolve_ms=166 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29107 ms=259 resolve_ms=250 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29114 ms=150 resolve_ms=143 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29118 ms=205 resolve_ms=199 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29129 ms=218 resolve_ms=211 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29136 ms=155 resolve_ms=148 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29140 ms=198 resolve_ms=192 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29147 ms=192 resolve_ms=146 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29151 ms=219 resolve_ms=212 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29158 ms=152 resolve_ms=144 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29160 ms=161 resolve_ms=152 replan_ms=1 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29162 ms=223 resolve_ms=216 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29173 ms=239 resolve_ms=230 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=29184 ms=201 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29193 ms=184 resolve_ms=134 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29195 ms=204 resolve_ms=197 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29206 ms=213 resolve_ms=207 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29217 ms=196 resolve_ms=190 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29228 ms=204 resolve_ms=197 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29239 ms=208 resolve_ms=202 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29250 ms=214 resolve_ms=207 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29261 ms=201 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29272 ms=201 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29283 ms=207 resolve_ms=200 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29294 ms=202 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29305 ms=208 resolve_ms=200 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29316 ms=223 resolve_ms=212 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29327 ms=204 resolve_ms=198 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=29338 ms=204 resolve_ms=197 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29349 ms=209 resolve_ms=203 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29360 ms=206 resolve_ms=199 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29371 ms=219 resolve_ms=212 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29382 ms=199 resolve_ms=193 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29393 ms=209 resolve_ms=199 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29404 ms=175 resolve_ms=169 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29415 ms=174 resolve_ms=168 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29426 ms=204 resolve_ms=198 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29437 ms=176 resolve_ms=169 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29448 ms=167 resolve_ms=161 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29452 ms=154 resolve_ms=148 replan_ms=0 replans=0 reroute_fail=13 blocked_looks=13
+SLOW t=29457 ms=191 resolve_ms=142 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29459 ms=215 resolve_ms=205 replan_ms=3 replans=7 reroute_fail=10 blocked_looks=10
+SLOW t=29470 ms=172 resolve_ms=165 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29481 ms=169 resolve_ms=163 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29492 ms=201 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29503 ms=201 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29514 ms=198 resolve_ms=190 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29523 ms=153 resolve_ms=127 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29525 ms=210 resolve_ms=202 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29536 ms=263 resolve_ms=254 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29547 ms=212 resolve_ms=205 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29558 ms=190 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29569 ms=193 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29578 ms=167 resolve_ms=123 replan_ms=0 replans=3 reroute_fail=10 blocked_looks=10
+SLOW t=29580 ms=195 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29591 ms=193 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29602 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29613 ms=197 resolve_ms=188 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29624 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29635 ms=192 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29646 ms=189 resolve_ms=180 replan_ms=1 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29657 ms=195 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29668 ms=192 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29679 ms=187 resolve_ms=179 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29690 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29701 ms=208 resolve_ms=197 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29712 ms=266 resolve_ms=258 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29719 ms=196 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29723 ms=231 resolve_ms=223 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29730 ms=206 resolve_ms=196 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29732 ms=200 resolve_ms=191 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=12
+SLOW t=29734 ms=289 resolve_ms=280 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29738 ms=154 resolve_ms=145 replan_ms=0 replans=0 reroute_fail=12 blocked_looks=12
+SLOW t=29741 ms=202 resolve_ms=194 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29743 ms=156 resolve_ms=148 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29745 ms=212 resolve_ms=204 replan_ms=0 replans=0 reroute_fail=11 blocked_looks=11
+SLOW t=29756 ms=266 resolve_ms=257 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29760 ms=189 resolve_ms=177 replan_ms=0 replans=0 reroute_fail=12 blocked_looks=12
+SLOW t=29763 ms=213 resolve_ms=203 replan_ms=0 replans=0 reroute_fail=15 blocked_looks=15
+SLOW t=29765 ms=205 resolve_ms=193 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29767 ms=246 resolve_ms=238 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29778 ms=183 resolve_ms=177 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29789 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29800 ms=187 resolve_ms=181 replan_ms=0 replans=1 reroute_fail=10 blocked_looks=10
+SLOW t=29811 ms=194 resolve_ms=188 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29822 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29833 ms=195 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29844 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29855 ms=191 resolve_ms=184 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29866 ms=190 resolve_ms=183 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29877 ms=192 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=11
+SLOW t=29888 ms=188 resolve_ms=181 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29899 ms=194 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29910 ms=193 resolve_ms=186 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29917 ms=163 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=16 blocked_looks=17
+SLOW t=29921 ms=196 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29928 ms=165 resolve_ms=159 replan_ms=0 replans=0 reroute_fail=16 blocked_looks=16
+SLOW t=29932 ms=194 resolve_ms=187 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29939 ms=161 resolve_ms=155 replan_ms=0 replans=0 reroute_fail=16 blocked_looks=16
+SLOW t=29943 ms=195 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29954 ms=202 resolve_ms=195 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29961 ms=163 resolve_ms=156 replan_ms=0 replans=0 reroute_fail=16 blocked_looks=16
+SLOW t=29965 ms=198 resolve_ms=189 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29976 ms=188 resolve_ms=182 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29987 ms=185 resolve_ms=178 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+SLOW t=29998 ms=191 resolve_ms=185 replan_ms=0 replans=0 reroute_fail=10 blocked_looks=10
+STUCK t=30000 still=5349 id=3 pos=Pos { x: 100, y: 129, z: 7 } state=Walk job=Some((Haul { item: 946 }, Pos { x: 90, y: 128, z: 7 })) carrying=None clearing=false cooldown=7 path_len=3 standable=true next=Pos { x: 100, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=398 state=Walk job=Some((Dig, Pos { x: 97, y: 124, z: 7 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 128, z: 7 }) head_on=false
+STUCK t=30000 still=9269 id=4 pos=Pos { x: 88, y: 93, z: 16 } state=Walk job=Some((Dig, Pos { x: 90, y: 93, z: 16 })) carrying=Some(821) clearing=true cooldown=0 path_len=0 standable=true
+STUCK t=30000 still=5329 id=32 pos=Pos { x: 101, y: 130, z: 8 } state=Walk job=Some((Haul { item: 906 }, Pos { x: 90, y: 121, z: 8 })) carrying=None clearing=false cooldown=5 path_len=19 standable=true next=Pos { x: 101, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=362 state=Walk job=Some((Haul { item: 979 }, Pos { x: 96, y: 126, z: 7 })) carrying=None path_len=3 bnext=Some(Pos { x: 100, y: 129, z: 7 }) head_on=false
+STUCK t=30000 still=3687 id=33 pos=Pos { x: 105, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1134 }, Pos { x: 101, y: 116, z: 10 })) carrying=None clearing=false cooldown=8 path_len=9 standable=true next=Pos { x: 104, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=295 state=Walk job=Some((Dig, Pos { x: 104, y: 123, z: 7 })) carrying=None path_len=13 bnext=Some(Pos { x: 103, y: 122, z: 8 }) head_on=false
+STUCK t=30000 still=3027 id=34 pos=Pos { x: 103, y: 136, z: 10 } state=Walk job=Some((Haul { item: 1235 }, Pos { x: 99, y: 133, z: 8 })) carrying=None clearing=false cooldown=8 path_len=14 standable=true next=Pos { x: 103, y: 135, z: 10 } next_standable=true adjacent=true BLOCKER id=319 state=Walk job=Some((Haul { item: 867 }, Pos { x: 88, y: 131, z: 8 })) carrying=None path_len=24 bnext=Some(Pos { x: 103, y: 134, z: 9 }) head_on=false
+STUCK t=30000 still=5393 id=38 pos=Pos { x: 92, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 89, y: 122, z: 8 })) carrying=None clearing=false cooldown=7 path_len=26 standable=true next=Pos { x: 93, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=133 state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) path_len=17 bnext=Some(Pos { x: 94, y: 128, z: 7 }) head_on=false
+STUCK t=30000 still=6338 id=41 pos=Pos { x: 100, y: 123, z: 8 } state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None clearing=false cooldown=8 path_len=9 standable=true next=Pos { x: 99, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=129 state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None path_len=10 bnext=Some(Pos { x: 99, y: 124, z: 8 }) head_on=false
+STUCK t=30000 still=5308 id=42 pos=Pos { x: 100, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None clearing=false cooldown=4 path_len=12 standable=true next=Pos { x: 101, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=296 state=Walk job=Some((Haul { item: 929 }, Pos { x: 92, y: 122, z: 8 })) carrying=None path_len=13 bnext=Some(Pos { x: 101, y: 131, z: 8 }) head_on=false
+STUCK t=30000 still=5307 id=43 pos=Pos { x: 98, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None clearing=true cooldown=5 path_len=10 standable=true next=Pos { x: 98, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=279 state=Walk job=Some((Dig, Pos { x: 95, y: 123, z: 7 })) carrying=None path_len=7 bnext=Some(Pos { x: 97, y: 129, z: 7 }) head_on=false
+STUCK t=30000 still=5397 id=84 pos=Pos { x: 95, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 130, z: 7 })) carrying=None clearing=true cooldown=3 path_len=3 standable=true next=Pos { x: 95, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=123 state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None path_len=112 bnext=Some(Pos { x: 96, y: 128, z: 7 }) head_on=false
+STUCK t=30000 still=6549 id=85 pos=Pos { x: 98, y: 125, z: 8 } state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) clearing=false cooldown=6 path_len=49 standable=true next=Pos { x: 99, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=346 state=Walk job=Some((Haul { item: 928 }, Pos { x: 95, y: 123, z: 8 })) carrying=Some(928) path_len=48 bnext=Some(Pos { x: 100, y: 125, z: 8 }) head_on=false
+STUCK t=30000 still=3826 id=86 pos=Pos { x: 103, y: 119, z: 9 } state=Walk job=Some((Dig, Pos { x: 94, y: 124, z: 7 })) carrying=None clearing=true cooldown=1 path_len=22 standable=true next=Pos { x: 103, y: 120, z: 9 } next_standable=true adjacent=true BLOCKER id=411 state=Walk job=Some((Dig, Pos { x: 102, y: 125, z: 7 })) carrying=None path_len=11 bnext=Some(Pos { x: 103, y: 121, z: 9 }) head_on=false
+STUCK t=30000 still=5319 id=87 pos=Pos { x: 97, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 92, y: 130, z: 7 })) carrying=None clearing=true cooldown=4 path_len=19 standable=true next=Pos { x: 98, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=205 state=Walk job=Some((Haul { item: 998 }, Pos { x: 92, y: 129, z: 7 })) carrying=None path_len=17 bnext=Some(Pos { x: 99, y: 132, z: 8 }) head_on=false
+STUCK t=30000 still=3060 id=88 pos=Pos { x: 105, y: 132, z: 8 } state=Walk job=Some((Haul { item: 1064 }, Pos { x: 97, y: 125, z: 7 })) carrying=None clearing=false cooldown=8 path_len=18 standable=true next=Pos { x: 105, y: 131, z: 8 } next_standable=true adjacent=true BLOCKER id=379 state=Walk job=Some((Haul { item: 1128 }, Pos { x: 101, y: 124, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 104, y: 131, z: 8 }) head_on=false
+STUCK t=30000 still=5255 id=90 pos=Pos { x: 99, y: 132, z: 8 } state=Walk job=Some((Dig, Pos { x: 101, y: 123, z: 7 })) carrying=None clearing=true cooldown=2 path_len=11 standable=true next=Pos { x: 100, y: 132, z: 8 } next_standable=true adjacent=true BLOCKER id=42 state=Walk job=Some((Haul { item: 1046 }, Pos { x: 94, y: 129, z: 7 })) carrying=None path_len=12 bnext=Some(Pos { x: 101, y: 132, z: 8 }) head_on=false
+STUCK t=30000 still=5401 id=123 pos=Pos { x: 95, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 105, y: 55, z: 18 })) carrying=None clearing=false cooldown=10 path_len=112 standable=true next=Pos { x: 96, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=370 state=Walk job=Some((Dig, Pos { x: 78, y: 117, z: 10 })) carrying=None path_len=45 bnext=Some(Pos { x: 96, y: 129, z: 7 }) head_on=false
+STUCK t=30000 still=3109 id=124 pos=Pos { x: 106, y: 122, z: 8 } state=Walk job=Some((Haul { item: 1114 }, Pos { x: 100, y: 121, z: 8 })) carrying=None clearing=false cooldown=3 path_len=6 standable=true next=Pos { x: 105, y: 122, z: 8 } next_standable=true adjacent=true BLOCKER id=33 state=Walk job=Some((Haul { item: 1134 }, Pos { x: 101, y: 116, z: 10 })) carrying=None path_len=9 bnext=Some(Pos { x: 104, y: 122, z: 8 }) head_on=false
+STUCK t=30000 still=2635 id=125 pos=Pos { x: 103, y: 126, z: 7 } state=Walk job=Some((Dig, Pos { x: 104, y: 120, z: 8 })) carrying=None clearing=true cooldown=4 path_len=11 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=30000 still=5614 id=126 pos=Pos { x: 102, y: 127, z: 7 } state=Walk job=Some((Haul { item: 1120 }, Pos { x: 100, y: 120, z: 8 })) carrying=None clearing=false cooldown=6 path_len=10 standable=true next=Pos { x: 102, y: 126, z: 7 } next_standable=true adjacent=true BLOCKER id=343 state=Walk job=Some((Dig, Pos { x: 100, y: 124, z: 7 })) carrying=None path_len=2 bnext=Some(Pos { x: 101, y: 126, z: 7 }) head_on=false
+STUCK t=30000 still=3177 id=128 pos=Pos { x: 105, y: 120, z: 9 } state=Walk job=Some((Haul { item: 1048 }, Pos { x: 91, y: 129, z: 7 })) carrying=None clearing=false cooldown=1 path_len=23 standable=true next=Pos { x: 104, y: 120, z: 9 } next_standable=true adjacent=true BLOCKER id=350 state=Walk job=Some((Haul { item: 955 }, Pos { x: 96, y: 118, z: 9 })) carrying=None path_len=9 bnext=Some(Pos { x: 103, y: 120, z: 9 }) head_on=false
+STUCK t=30000 still=6446 id=129 pos=Pos { x: 99, y: 123, z: 8 } state=Walk job=Some((Haul { item: 886 }, Pos { x: 85, y: 126, z: 8 })) carrying=None clearing=false cooldown=10 path_len=10 standable=true next=Pos { x: 99, y: 124, z: 8 } next_standable=true adjacent=true BLOCKER id=361 state=Walk job=Some((Haul { item: 942 }, Pos { x: 94, y: 121, z: 8 })) carrying=None path_len=7 bnext=Some(Pos { x: 98, y: 124, z: 8 }) head_on=false
+STUCK t=30000 still=5312 id=131 pos=Pos { x: 97, y: 129, z: 7 } state=Walk job=Some((Dig, Pos { x: 97, y: 131, z: 7 })) carrying=None clearing=true cooldown=0 path_len=2 standable=true next=Pos { x: 96, y: 129, z: 7 } next_standable=true adjacent=true BLOCKER id=269 state=Walk job=Some((Dig, Pos { x: 94, y: 130, z: 7 })) carrying=None path_len=1 bnext=Some(Pos { x: 95, y: 129, z: 7 }) head_on=false
+STUCK t=30000 still=6475 id=132 pos=Pos { x: 98, y: 124, z: 8 } state=Walk job=Some((Dig, Pos { x: 98, y: 126, z: 7 })) carrying=None clearing=false cooldown=3 path_len=5 standable=true next=Pos { x: 98, y: 125, z: 8 } next_standable=true adjacent=true BLOCKER id=85 state=Walk job=Some((Haul { item: 951 }, Pos { x: 95, y: 121, z: 8 })) carrying=Some(951) path_len=49 bnext=Some(Pos { x: 99, y: 125, z: 8 }) head_on=false
+STUCK t=30000 still=5398 id=133 pos=Pos { x: 93, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 93, y: 126, z: 7 })) carrying=Some(1031) clearing=true cooldown=2 path_len=17 standable=true next=Pos { x: 94, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=330 state=Walk job=Some((Dig, Pos { x: 97, y: 86, z: 18 })) carrying=None path_len=120 bnext=Some(Pos { x: 95, y: 128, z: 7 }) head_on=false
+STUCK t=30000 still=1726 id=195 pos=Pos { x: 106, y: 135, z: 9 } state=Walk job=Some((Haul { item: 1110 }, Pos { x: 101, y: 121, z: 8 })) carrying=None clearing=false cooldown=0 path_len=18 standable=true next=Pos { x: 105, y: 135, z: 9 } next_standable=true adjacent=true BLOCKER id=196 state=Walk job=Some((Haul { item: 1084 }, Pos { x: 92, y: 133, z: 8 })) carrying=None path_len=20 bnext=Some(Pos { x: 105, y: 134, z: 9 }) head_on=false
+STUCK t=30000 still=3000 id=196 pos=Pos { x: 105, y: 135, z: 9 } state=Walk job=Some((Haul { item: 1084 }, Pos { x: 92, y: 133, z: 8 })) carrying=None clearing=false cooldown=2 path_len=20 standable=true next=Pos { x: 105, y: 134, z: 9 } next_standable=true adjacent=true BLOCKER id=304 state=Walk job=Some((Haul { item: 1001 }, Pos { x: 94, y: 133, z: 8 })) carrying=None path_len=15 bnext=Some(Pos { x: 105, y: 133, z: 8 }) head_on=false
+STUCK t=30000 still=3048 id=197 pos=Pos { x: 104, y: 134, z: 9 } state=Walk job=Some((Haul { item: 1036 }, Pos { x: 99, y: 121, z: 8 })) carrying=None clearing=false cooldown=9 path_len=25 standable=true next=Pos { x: 104, y: 133, z: 8 } next_standable=true adjacent=true BLOCKER id=206 state=Walk job=Some((Haul { item: 820 }, Pos { x: 89, y: 132, z: 8 })) carrying=None path_len=21 bnext=Some(Pos { x: 105, y: 133, z: 8 }) head_on=false
+STUCK t=30000 still=1876 id=199 pos=Pos { x: 106, y: 136, z: 10 } state=Walk job=Some((Haul { item: 1239 }, Pos { x: 103, y: 123, z: 7 })) carrying=None clearing=false cooldown=4 path_len=15 standable=true next=Pos { x: 105, y: 136, z: 10 } next_standable=true adjacent=true BLOCKER id=382 state=Walk job=Some((Haul { item: 997 }, Pos { x: 96, y: 125, z: 7 })) carrying=None path_len=20 bnext=Some(Pos { x: 105, y: 135, z: 9 }) head_on=false
+STUCK t=30000 still=6276 id=200 pos=Pos { x: 100, y: 122, z: 8 } state=Walk job=Some((Dig, Pos { x: 96, y: 123, z: 7 })) carrying=None clearing=true cooldown=4 path_len=15 standable=true next=Pos { x: 100, y: 123, z: 8 } next_standable=true adjacent=true BLOCKER id=41 state=Walk job=Some((Dig, Pos { x: 97, y: 120, z: 8 })) carrying=None path_len=9 bnext=Some(Pos { x: 99, y: 123, z: 8 }) head_on=false
+STUCK t=30000 still=5305 id=201 pos=Pos { x: 99, y: 128, z: 7 } state=Walk job=Some((Dig, Pos { x: 98, y: 125, z: 7 })) carrying=None clearing=true cooldown=7 path_len=8 standable=true next=Pos { x: 98, y: 128, z: 7 } next_standable=true adjacent=true BLOCKER id=43 state=Walk job=Some((Dig, Pos { x: 90, y: 130, z: 7 })) carrying=None path_len=10 bnext=Some(Pos { x: 98, y: 129, z: 7 }) head_on=false
+STUCKN t=30000 n=102
+STALL t=30000 crew=200 idle%=30 walk%=69 work%=1 stalls=36 (<=23:6 <=60:28 >60:2) max=109 dwarves=9 lost_ticks=935 mean_ms=82.09 marks=573
+WHY t=30000 blocked_looks=9187 idle_boxed=67 idle_exit_ahead=1 reroute_fail=9044 head_on_job=30 head_on_idle=2 swaps=57 carry_wait_ticks=3000 reroute_fail_behind_worker=36 resolve_ms=74.11 replan_ms=0.11 replans=197 max_ms=308 over100=371
+bench seat-like run 1/1: ticks=30000 commands=1631/1631 mean=20.3351 p99=192.1646 max=480.383 over10=7984 state=9ce78f52678b9603
+bench seat-like end tick=30000 marks=573 items=1187 zones=1800 goals=140/0/0 done=dig:1027,cut:30 stored=465 cells=1833 crew=200 arriving=0
+bench seat-like: 1 run, mean 20.3351 ms (1 run: no floor)
