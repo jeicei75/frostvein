@@ -160,3 +160,36 @@ After the dig a walking dwarf stands for 10 to 25% of his walking time. Most sta
 shown: which rule each stall comes from, and whether the blocker is idle (#227's camp crowd) or
 working. That attribution is the next probe.
 
+## Run 3: after the head-on swap and the ring step (AC 17)
+
+Build `a28a5523` or later (pull the branch on both sides first). What changed since Run 2:
+
+- Two working dwarves who meet head-on trade tiles at once; they no longer both stand for a second first.
+- A ring of working dwarves each waiting for the next one's tile all step at once.
+- A group of failed route searches in one tick floods the ground once, not once per dwarf.
+
+Headless on the devpod (`stall-probe-a28a5523.txt`): stops per 100 s at crew 150 fell from 266 to 26, after
+the big dig from 1,100-1,600 to 100-560; the worst tick from 369-446 ms to 188 ms.
+
+```bash
+# WSL, from the repo, at the branch HEAD
+target/release/simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototypes/seat-like.json
+```
+
+```powershell
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-8b-seat-like-run3.csv')
+# a second PowerShell window, once the gui shows the world
+python scripts\bench\wire_tap.py D:\Workspace\frostvein\.bin\13-8b-wire-tap-seat-run3.csv
+```
+
+Run at Normal past tick 20,000 (about 35 minutes). Press the mark key when you see a stop. Ctrl+C the tap
+at the end. Both files, please.
+
+**Questions**
+
+1. Around minute 21 (crew about 150, before the big dig): do dwarves still stop briefly?
+2. After the big dig: does it still stop and start? Gone, less, or the same as Run 2?
+3. Dwarves now pass through each other more often (#219). Does that bother you?
+
+(not yet run)
