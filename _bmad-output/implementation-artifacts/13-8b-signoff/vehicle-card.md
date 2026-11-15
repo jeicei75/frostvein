@@ -192,4 +192,9 @@ at the end. Both files, please.
 2. After the big dig: does it still stop and start? Gone, less, or the same as Run 2?
 3. Dwarves now pass through each other more often (#219). Does that bother you?
 
-(not yet run)
+### Sitting, Run 3 (2026-11-15)
+
+Wolf: "still the same issue after the big designation target is assigned.."
+
+- Question 2: the same after the big dig. Questions 1 and 3: not answered.
+- The two files (`13-8b-seat-like-run3.csv`, `13-8b-wire-tap-seat-run3.csv`) have not arrived yet.
