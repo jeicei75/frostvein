@@ -197,4 +197,22 @@ at the end. Both files, please.
 Wolf: "still the same issue after the big designation target is assigned.."
 
 - Question 2: the same after the big dig. Questions 1 and 3: not answered.
-- The two files (`13-8b-seat-like-run3.csv`, `13-8b-wire-tap-seat-run3.csv`) have not arrived yet.
+- Later the same day, Wolf: "between 16-17 it started to struggle but then it recovered later on in the end when I came back to watch.. csv is in signoff folder". He did not watch the whole run.
+- File: `13-8b-wire-tap-seat-run3.csv` (the tap; 3,158 s to tick 30,000). No gui log arrived.
+
+Tap, seconds of wall clock per 1,000 ticks (100 s is real time) and ticks arriving more than 150 ms after the one before:
+
+| ticks | Run 2 wall | Run 2 late ticks | Run 3 wall | Run 3 late ticks |
+|---|---|---|---|---|
+| to 17,000 | 100.1-100.5 | 0-43 | 100.1-101.1 | 1-31 |
+| 18,000 | 100.1 | 7 | 100.9 | 71 |
+| 19,000 | 103.7 | 99 | 114.7 | 294 |
+| 20,000-21,000 | 100.8-102.2 | 80-95 | 101.6-103.9 | 97-139 |
+| 22,000-23,000 | 119.8-120.8 | 247-268 | 121.2-125.4 | 285-327 |
+| 24,000-27,000 | 101.9-105.4 | 86-150 | 117.3-128.1 | 250-301 |
+| 28,000-29,000 | 113.6-113.7 | 246-247 | 106.7-108.0 | 152-153 |
+| 30,000 | 117.3 | 265 | 100.8 | 63 |
+
+Longest single gap: Run 2 967 ms, Run 3 581 ms. So at the seat the world still falls behind real time after the big dig
+(up to 28% slow in Run 3), and recovers by tick 30,000, which matches what Wolf saw. The devpod bench does not show
+this: there the tick averages 20-30 ms in the same windows.
