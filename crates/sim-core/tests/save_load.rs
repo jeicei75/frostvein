@@ -938,9 +938,11 @@ fn a_world_saved_at_every_tick_of_a_clear_loads_and_steps_identically() {
     );
 }
 
-// 13.4 AC4: a save taken at ANY tick of a stand-off (two head-on miners in a one-wide tunnel, held
-// until the wait has run and they trade tiles) steps exactly like the never-saved world. A load
-// that drops the stand-off timer restarts the wait, so the swap lands later and the worlds part.
+// 13.4 AC4: a save taken at ANY tick of a stand-off (a miner held by an idle woodcutter in a sealed
+// two-cell pocket, until the wait has run and they trade tiles) steps exactly like the never-saved
+// world. A load that drops the stand-off timer restarts the wait, so the swap lands later and the
+// worlds part. 13.8b: was two head-on miners in a one-wide tunnel; head-on job-holders now swap on
+// the first look, with no timer, so only an idle blocker leaves one to save.
 #[test]
 fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
     let dims = Dims::DEFAULT;
@@ -952,17 +954,14 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
     let (z, row) = (5, 20);
     let at = |x: i32, y: i32| Pos { x, y, z };
     let mut tiles = vec![Tile::Solid(Material::Stone); (dims.x * dims.y * dims.z) as usize];
-    for x in 6..=10 {
-        for y in row - 3..=row + 3 {
-            tiles[index(at(x, y))] = Tile::Empty;
-        }
-    }
-    for x in 11..=16 {
+    for x in 15..=16 {
         tiles[index(at(x, row))] = Tile::Empty;
     }
-    // Dwarf 0 digs the tunnel's east end, dwarf 1 a wall of the room: each walks through the other.
-    let (east_end, room_wall) = (at(17, row), at(8, row + 4));
-    let dwarf = |id: u32, pos: Pos, name: DwarfName, colour: DwarfColour| SavedDwarf {
+    // Miner 1 digs the pocket's east wall from its east cell, where idle woodcutter 0 stands with
+    // no way out. The holder's id is 1 and the blocker's 0, so a timer written or read as blocker 1
+    // is wrong.
+    let east_end = at(17, row);
+    let dwarf = |id: u32, pos: Pos, name: DwarfName, colour: DwarfColour, profession| SavedDwarf {
         id,
         pos,
         state: JobState::Walk,
@@ -976,7 +975,7 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
             epithet: Epithet::Ironhand,
             colour,
         },
-        profession: Profession::Miner,
+        profession,
         path: Vec::new(),
         clearing: None,
         squeeze: None,
@@ -988,27 +987,32 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
         save.tiles = tiles.clone();
         save.next_id = 2;
         save.dwarves = vec![
-            dwarf(0, at(12, row), DwarfName::Durin, DwarfColour::Red),
-            dwarf(1, at(14, row), DwarfName::Nori, DwarfColour::Blue),
+            dwarf(
+                0,
+                at(16, row),
+                DwarfName::Durin,
+                DwarfColour::Red,
+                Profession::Woodcutter,
+            ),
+            dwarf(
+                1,
+                at(15, row),
+                DwarfName::Nori,
+                DwarfColour::Blue,
+                Profession::Miner,
+            ),
         ];
-        save.designations = vec![
-            (east_end, DesignationKind::Dig),
-            (room_wall, DesignationKind::Dig),
-        ];
+        save.designations = vec![(east_end, DesignationKind::Dig)];
         save.zones.clear();
         save.items.clear();
-        save.jobs = [east_end, room_wall]
-            .into_iter()
-            .enumerate()
-            .map(|(id, target)| Job {
-                id: JobId(id as u32),
-                kind: JobKind::Dig,
-                target,
-                created_tick: 0,
-                retry_after: 0,
-            })
-            .collect();
-        save.next_job_id = 2;
+        save.jobs = vec![Job {
+            id: JobId(0),
+            kind: JobKind::Dig,
+            target: east_end,
+            created_tick: 0,
+            retry_after: 0,
+        }];
+        save.next_job_id = 1;
         World::from_save(save)
     };
     let paths = |world: &World| -> Vec<Vec<Pos>> {
@@ -1047,15 +1051,13 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
         }
         let saved = control.to_save();
         saved_a_timer |= saved.dwarves.iter().any(|d| d.squeeze.is_some());
-        // A saved timer must name the other dwarf (the fixture has ids 0 and 1). Only dwarf 1 times
-        // this stand-off (ticks 101-111, blocker 0); dwarf 0's timer appears on the swap tick, from
-        // his own look earlier that tick, and is a leftover. So this assert must see a wrong id on
-        // dwarf 1's real timer, not only on dwarf 0's leftover.
+        // Only the miner (dwarf 1) times this stand-off, and his blocker is the woodcutter (0): the
+        // idle woodcutter never holds a path to be blocked on.
         for d in &saved.dwarves {
             if let Some(squeeze) = &d.squeeze {
                 assert_eq!(
-                    squeeze.blocker,
-                    1 - d.id,
+                    (d.id, squeeze.blocker),
+                    (1, 0),
                     "dwarf {} saved a stand-off timer naming the wrong blocker at tick {save_tick}",
                     d.id
                 );

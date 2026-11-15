@@ -3063,8 +3063,19 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // and south (37).
     // (12,6,3) [63,68,9] idle since t2130, home [63,67,9]: south soil rock, east and north a loose
     // block (28, 37), west a ramp up that `wander` does not take.
-    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 5] =
-        [(2, 6, 1), (7, 6, 3), (8, 6, 4), (12, 4, 4), (12, 6, 3)];
+    // 13.8b re-pin (head-on job-holders swap on the first look, and an idle dwarf moved out of the
+    // way never lands on a free pile cell, so the crews' order moves again). Was [(2,6,1),
+    // (7,6,3), (8,6,4), (12,4,4), (12,6,3)]: all five GONE, three new, fewer than before. Each read
+    // by probe; all three are the #186 shape.
+    // (13,6,0) [98,61,22] idle and still t2866-t3415, home there: west a drop into the channel pit,
+    // a loose block on each other side (items 31, 38, 47). Stone 38 is taken away and he walks on
+    // at t3416; the crew finishes at t4,260. A #186 cage that opened, not one for good: 549 ticks
+    // is over `STILL_BOUND`, so the test lists it.
+    // (15,4,1) [65,94,9] idle since t817, home [66,95,9]: west snow rock, a loose block on the
+    // other three sides (items 12, 22, 25). No mark left: the crew finished at t1,605.
+    // (15,4,4) [69,94,10] idle since t1602, home [69,95,10]: west a drop, east snow rock, north a
+    // tree trunk, south a loose block (item 37). No mark left.
+    const ONE_LEVEL_ISLANDS: [(u64, i32, usize); 3] = [(13, 6, 0), (15, 4, 1), (15, 4, 4)];
     // (seed, channel width, marks left) after `TICKS` (12.9 review run 2: the sweep pins marks, so
     // a new refusal loop goes red). Every one of these ends with the pile full. Two shapes are
     // known: a mark whose miner is refused at completion over and over (#187), and a mark walled in
@@ -3086,8 +3097,12 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // 4,000, two miners walking, finished at t4,439. The other four do not finish by 16,000: they
     // are `UNFINISHED_LATE`, traced there. (13,6,8) is slow first, 8 marks at 4,000 with two miners
     // at work, down to 1 at 16,000.
-    const UNFINISHED: [(u64, i32, usize); 5] =
-        [(0, 4, 1), (6, 6, 1), (9, 6, 1), (12, 6, 6), (13, 6, 8)];
+    // 13.8b re-pin (was [(0,4,1), (6,6,1), (9,6,1), (12,6,6), (13,6,8)]: three gone, (12,6,6) and
+    // (13,6,8) now fewer marks, (4,6,1) and (11,6,7) new), each run read by probe to 16,000.
+    // (0,4,1), (6,6,1) and (9,6,1) finish inside the 4,000. (11,6,7) and (13,6,5) are SLOW, not
+    // stuck: finished at t4,688 and t4,260. (12,6,3) is slow, then stuck on its last mark, and
+    // (4,6,1) is stuck already: both are `UNFINISHED_LATE`, traced there.
+    const UNFINISHED: [(u64, i32, usize); 4] = [(4, 6, 1), (11, 6, 7), (12, 6, 3), (13, 6, 5)];
     // (seed, channel width, marks left) after `LATE_TICKS`. 13.4 (Wolf, 2026-10-26: land the
     // squeeze, pin these; the shapes are on #218): each was traced over its last 1,000 ticks at
     // 16,000 (`13-4-signoff/diag-traces-waits-10-20-30.txt`). In every one the pile has no delivery
@@ -3107,7 +3122,18 @@ fn no_dwarf_is_caged_by_stones_over_the_probe_seeds() {
     // empty, so `work_positions`' fallback never fires (#182 mode ii, with the cells free).
     // (13,6,1) mark (98,60,22): the same, its only goal (97,60,21) in a 4-cell piece walled by 9
     // stones.
-    const UNFINISHED_LATE: [(u64, i32, usize); 4] = [(0, 4, 1), (6, 6, 1), (9, 6, 1), (13, 6, 1)];
+    // 13.8b re-pin (was [(0,4,1), (6,6,1), (9,6,1), (13,6,1)]: all four gone, two new, fewer than
+    // before), each read by probe over the last ticks to 16,000. Both are #218's shapes.
+    // (4,6,1) mark (67,60,14), channel: nobody ever claims it (a cooldown stamped every 20 ticks
+    // by `claim_jobs`). Its only goal (66,60,13) is in a 7-cell piece, the one-wide strip x66
+    // y60-65 at z13 and the mark, walled by 8 stones; every dwarf is outside and the pile is full
+    // (0 of 9 free). #182 mode ii, as (9,6,1) was.
+    // (12,6,1) mark (68,66,10), channel: claim, refusal 52 ticks later, a 20-tick cooldown, over
+    // and over (the miner, dwarf 0, works it from [69,66,11]). The wall-in check refuses it for one
+    // dwarf only: idle dwarf 4 stands ON the mark, is counted where he would fall ([68,66,9],
+    // #195/#197), and the cut walls him in among the pit's stones. The pile lies inside the
+    // channel rect, every cell's floor cut away, so no stone is hauled (as (13,6,1)'s was).
+    const UNFINISHED_LATE: [(u64, i32, usize); 2] = [(4, 6, 1), (12, 6, 1)];
     let mut runs = 0;
     let mut frozen = Vec::new();
     let mut unfinished = Vec::new();
@@ -4720,6 +4746,8 @@ fn a_channel_opens_a_step_down_and_a_dwarf_walks_down_and_back() {
 // miner lifted a stone, found no way to a set-down side, retried, and `release_claim` dropped it on
 // the nearest free cell at any distance, up to five cells off and three levels up, on the pit rim.
 // Green on main (56bfbe5): every carrier there, haulers included, sets its stone down beside it.
+// NOTE: not enforced for a hauler whose delivery is refused (`release_claim` drops at any
+// distance); it passes by timing. 13.8b's head-on rule threw one 4 cells at delay 9 (#238).
 #[test]
 fn a_carried_stone_is_always_set_down_beside_its_carrier() {
     let mut thrown = Vec::new();
