@@ -1929,6 +1929,81 @@ fn make_room_down_the_idle_chain(
     }
 }
 
+/// 13.8b: case 2 of `resolve_blocked_step` found no way round a job-holding blocker. Follows the
+/// chain: the blocker, the dwarf on the blocker's next tile, and on. Every link must hold a job,
+/// be walking (`JobState::Walk`) and have a `Path` whose first tile is still a legal step from
+/// where he stands. A chain that comes back to the holder's tile is a ring: every dwarf in it, the
+/// holder included, steps onto the next one's tile in this one call, as the squeeze swap does for
+/// two. Each link's path is advanced (an emptied one removed) and each rests a step period, one
+/// that has already had his turn this tick included, as the swap's blocker does; the holder's
+/// `path` is advanced and his `Pos` set, so the caller reports "wait" and `occupied` stays as it is
+/// (the same tiles stay taken). A chain that ends anywhere else (a free tile, an idle dwarf, one
+/// working in place, no path) or loops without reaching the holder moves nobody.
+/// NOTE: each link is a dwarf not seen before in the chain, so it is never longer than the crew.
+/// The smallest ring is four: every step changes x + y by one, so a ring is even, and a ring of
+/// two is head-on (case 3).
+fn step_the_ring(
+    ecs: &mut EcsWorld,
+    blocked: &BTreeSet<Pos>,
+    pos: Pos,
+    path: &mut Vec<Pos>,
+    blocker: Entity,
+) {
+    let at: BTreeMap<Pos, Entity> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| Some((*entity.get::<Pos>()?, entity.id())))
+        .collect();
+    let terrain = ecs.resource::<Terrain>();
+    let legal = |from: Pos, to: Pos| astar_neighbours(terrain, blocked, from).contains(&to);
+    if !legal(pos, path[0]) {
+        return;
+    }
+    let mut ring: Vec<(Entity, Vec<Pos>)> = Vec::new();
+    let mut link = blocker;
+    loop {
+        if ring.iter().any(|(member, _)| *member == link) {
+            return;
+        }
+        let from = *ecs.get::<Pos>(link).expect("every dwarf has a position");
+        let steps = ecs
+            .get::<Path>(link)
+            .map(|path| path.0.clone())
+            .unwrap_or_default();
+        if ecs
+            .get::<CurrentJob>(link)
+            .is_none_or(|current| current.0.is_none())
+            || ecs.get::<JobState>(link) != Some(&JobState::Walk)
+            || steps.first().is_none_or(|next| !legal(from, *next))
+        {
+            return;
+        }
+        let next = steps[0];
+        ring.push((link, steps));
+        if next == pos {
+            break;
+        }
+        let Some(&following) = at.get(&next) else {
+            return;
+        };
+        link = following;
+    }
+    for (member, mut steps) in ring {
+        *ecs.get_mut::<Pos>(member)
+            .expect("every dwarf has a position") = steps.remove(0);
+        ecs.get_mut::<Wander>(member)
+            .expect("every dwarf wanders")
+            .cooldown = STEP_REST_TICKS;
+        if steps.is_empty() {
+            ecs.entity_mut(member).remove::<Path>();
+        } else {
+            ecs.entity_mut(member).insert(Path(steps));
+        }
+    }
+    *ecs.get_mut::<Pos>(at[&pos])
+        .expect("every dwarf has a position") = path.remove(0);
+}
+
 /// The next tile of a holder's `path` holds another dwarf (FR49). Returns `true` when `path` now
 /// starts on a free tile and the holder should step, `false` when it waits. May move the blocker
 /// (it steps aside, or yields) or replace `path` (a re-route, or the holder yields).
@@ -1944,7 +2019,9 @@ fn make_room_down_the_idle_chain(
 ///    does that work. 13.8b (#189's loop): neither the step aside nor the exit ends on a free pile
 ///    cell, where he would stand on a hauler's next delivery and call it home. NOTE: case 3's
 ///    escape, #185's shift and the swap can still leave an idle dwarf on one.
-/// 2. The blocker holds a job and is not coming the other way: re-route around every dwarf.
+/// 2. The blocker holds a job and is not coming the other way: re-route around every dwarf. With
+///    no way round, a ring of waiting job-holders (each one's next tile held by the next, back
+///    to the holder) steps at once, the holder with it (`step_the_ring`, 13.8b); otherwise wait.
 /// 3. Head-on (the blocker's path starts on the holder's tile): each side's ESCAPE is the nearest
 ///    tile, reached without passing the other dwarf, that is off the other's remaining path. The
 ///    lower id yields if it has one, else the other does. The yield IS the yielder's `Path`.
@@ -1962,8 +2039,9 @@ fn make_room_down_the_idle_chain(
 /// path would no longer start next to him). The wait is counted per blocker while the holder looks
 /// again within `2 * STEP_REST_TICKS`, whatever way the two meet: a timer carried across a change
 /// of case is kept (#220). A job-holder who is not coming the other way is never swapped; he
-/// re-routes. Two dwarves sealed in one pocket both wait, and a ring of dwarves each waiting on the
-/// next waits too; neither is detected.
+/// re-routes. Two dwarves sealed in one pocket both wait, undetected. A ring of job-holders each
+/// waiting on the next steps round at once (case 2); a ring with an idle or working dwarf in it
+/// waits.
 fn resolve_blocked_step(
     ecs: &mut EcsWorld,
     blocked: &BTreeSet<Pos>,
@@ -2044,6 +2122,9 @@ fn resolve_blocked_step(
         }
         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
         let Some(rerouted) = astar(ecs.resource::<Terrain>(), &closed, pos, goals) else {
+            // A ring steps at once, the holder with it; either way he reports "wait", as after a
+            // swap.
+            step_the_ring(ecs, blocked, pos, path, blocker);
             return false;
         };
         *path = rerouted;
@@ -8466,6 +8547,127 @@ mod tests {
                 .is_none(),
             "the swap left a stand-off timer"
         );
+    }
+
+    /// A world of solid stone with one enclosed 2 x 2 room at z = 1 (cells `a`, `b`, `c`, `d`,
+    /// round the block in order) and a one-cell pocket for the fifth dwarf. Dwarves 0-3 stand on
+    /// `a`, `b`, `c`, `d`, each holding a job and walking, each `Path` starting on the next one's
+    /// tile; dwarf 3's `Path` is that one step. Returns the world and the four cells.
+    fn ring_room() -> (World, [Pos; 4]) {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let at = |x: i32, y: i32| Pos { x, y, z: 1 };
+        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        let room = [at(5, 5), at(6, 5), at(6, 6), at(5, 6)];
+        for cell in room.into_iter().chain([at(10, 10)]) {
+            tiles[idx(cell)] = Tile::Empty;
+        }
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(&mut world, [room[0], room[1], room[2], room[3], at(10, 10)]);
+        for (i, cell) in room.into_iter().enumerate() {
+            let entity = dwarf_entity(&world, i as u32);
+            let path = if i == 3 {
+                vec![room[0]]
+            } else {
+                vec![room[(i + 1) % 4], room[(i + 2) % 4]]
+            };
+            assert_eq!(*world.ecs.get::<Pos>(entity).unwrap(), cell);
+            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(JobId(900 + i as u32));
+            *world.ecs.get_mut::<super::JobState>(entity).unwrap() = super::JobState::Walk;
+            world.ecs.entity_mut(entity).insert(super::Path(path));
+        }
+        (world, room)
+    }
+
+    /// Dwarf 0's blocked look on `b`, as `execute_jobs` makes it. Returns its answer and his path.
+    fn holder_looks(world: &mut World, room: [Pos; 4]) -> (bool, Vec<Pos>) {
+        let blocked = super::world_blocked(&mut world.ecs);
+        let mut occupied = super::dwarf_tiles(
+            world
+                .ecs
+                .query_filtered::<&Pos, bevy_ecs::query::With<super::Dwarf>>()
+                .iter(&world.ecs),
+        );
+        let before = occupied.clone();
+        let mut path = vec![room[1], room[2]];
+        let step = super::resolve_blocked_step(
+            &mut world.ecs,
+            &blocked,
+            &mut occupied,
+            (super::Id(0), room[0]),
+            &mut path,
+            &BTreeSet::from([room[2]]),
+        );
+        assert_eq!(occupied, before, "the same tiles stay taken");
+        (step, path)
+    }
+
+    fn path_of(world: &World, id: u32) -> Option<Vec<Pos>> {
+        world
+            .ecs
+            .get::<super::Path>(dwarf_entity(world, id))
+            .map(|path| path.0.clone())
+    }
+
+    fn pos_of(world: &World, id: u32) -> Pos {
+        *world.ecs.get::<Pos>(dwarf_entity(world, id)).unwrap()
+    }
+
+    // 13.8b Task 11. Four job-holders round a 2 x 2 block, each one's next tile held by the next,
+    // none head-on, no way round: the holder's blocked look steps all four at once (on change A's
+    // commit nobody moves and all wait).
+    #[test]
+    fn a_ring_of_waiting_job_holders_steps_at_once() {
+        let (mut world, room) = ring_room();
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder reports a wait, as after a swap");
+        assert_eq!(pos_of(&world, 0), room[1], "the holder stepped onto b");
+        assert_eq!(path, vec![room[2]], "the holder's path is advanced");
+        for (id, (at, rest)) in [
+            (1, (room[2], Some(vec![room[3]]))),
+            (2, (room[3], Some(vec![room[0]]))),
+            (3, (room[0], None)),
+        ] {
+            assert_eq!(pos_of(&world, id), at, "dwarf {id} stepped round the ring");
+            assert_eq!(path_of(&world, id), rest, "dwarf {id}'s path is advanced");
+            assert_eq!(
+                world
+                    .ecs
+                    .get::<super::Wander>(dwarf_entity(&world, id))
+                    .unwrap()
+                    .cooldown,
+                super::STEP_REST_TICKS,
+                "dwarf {id} rests a step period"
+            );
+        }
+    }
+
+    // 13.8b Task 11. The same chain, but the last link works in place (his stale `Path` still
+    // points at the holder's tile): the chain does not close and nobody moves.
+    #[test]
+    fn a_chain_ending_on_a_dwarf_working_in_place_moves_nobody() {
+        let (mut world, room) = ring_room();
+        *world
+            .ecs
+            .get_mut::<super::JobState>(dwarf_entity(&world, 3))
+            .unwrap() = super::JobState::Work;
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder waits");
+        assert_eq!(
+            path,
+            vec![room[1], room[2]],
+            "the holder's path is unchanged"
+        );
+        for id in 0..4 {
+            assert_eq!(
+                pos_of(&world, id),
+                room[id as usize],
+                "dwarf {id} did not move"
+            );
+        }
+        assert_eq!(path_of(&world, 1), Some(vec![room[2], room[3]]));
+        assert_eq!(path_of(&world, 3), Some(vec![room[0]]));
     }
 
     // 13.4 AC3: the wait is real. A holder stuck behind the same IDLE blocker does not swap on his
