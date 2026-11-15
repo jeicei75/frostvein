@@ -6370,6 +6370,37 @@ mod tests {
         );
     }
 
+    // 13.8b Task 13. A failed re-plan's flood is skipped only for a start whose goals are not in
+    // it: miner 0's re-plan to the sealed pocket fails and floods the plate, and miner 1, on the
+    // same plate, re-plans to a dig whose face is on the plate and must still find his path.
+    #[test]
+    fn a_failed_re_plan_leaves_a_reachable_dig_in_its_component_to_the_next_miner() {
+        let (mut world, _, _) = pocket_world(false);
+        let pocket_dig = world.jobs()[0].id;
+        insert_dig(&mut world, 900, Pos { x: 20, y: 5, z: 1 });
+        let failing = hold_job(&mut world, 0, pocket_dig);
+        let later = hold_job(&mut world, 1, JobId(900));
+        super::execute_jobs(&mut world.ecs);
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(failing).unwrap().0,
+            None,
+            "miner 0's re-plan to the pocket failed first"
+        );
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(later).unwrap().0,
+            Some(JobId(900)),
+            "miner 1 still holds his dig"
+        );
+        assert_eq!(
+            world
+                .ecs
+                .get::<super::Path>(later)
+                .and_then(|path| path.0.last().copied()),
+            Some(Pos { x: 19, y: 5, z: 1 }),
+            "miner 1's re-plan reaches the dig's face on the plate"
+        );
+    }
+
     /// All five dwarves are miners, one per entry of `spots`, in ascending id order.
     fn stand_miners_at(world: &mut World, spots: [Pos; 5]) {
         for (id, spot) in spots.into_iter().enumerate() {
@@ -8668,6 +8699,58 @@ mod tests {
         }
         assert_eq!(path_of(&world, 1), Some(vec![room[2], room[3]]));
         assert_eq!(path_of(&world, 3), Some(vec![room[0]]));
+    }
+
+    // 13.8b Task 13. The same ring, but dwarf 2 holds no job: an idle dwarf walking his exit
+    // `Path` (a blocker's escape leaves him in `Walk`). The chain is not all job-holders, so
+    // nobody moves.
+    #[test]
+    fn a_chain_through_an_idle_dwarf_with_an_exit_moves_nobody() {
+        let (mut world, room) = ring_room();
+        let idle = dwarf_entity(&world, 2);
+        world.ecs.get_mut::<super::CurrentJob>(idle).unwrap().0 = None;
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder waits");
+        for id in 0..4 {
+            assert_eq!(
+                pos_of(&world, id),
+                room[id as usize],
+                "dwarf {id} did not move"
+            );
+        }
+        assert_eq!(
+            path,
+            vec![room[1], room[2]],
+            "the holder's path is unchanged"
+        );
+        assert_eq!(path_of(&world, 2), Some(vec![room[3], room[0]]));
+    }
+
+    // 13.8b Task 13. Dwarf 1's next tile is `d`, across the block's diagonal from `b`: not a step
+    // `astar_neighbours` allows. The chain a -> b -> d -> a would close as a ring of three, but a
+    // link with an illegal next step ends it, so nobody moves.
+    #[test]
+    fn a_chain_with_a_step_that_is_not_a_legal_move_moves_nobody() {
+        let (mut world, room) = ring_room();
+        world
+            .ecs
+            .entity_mut(dwarf_entity(&world, 1))
+            .insert(super::Path(vec![room[3]]));
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder waits");
+        for id in 0..4 {
+            assert_eq!(
+                pos_of(&world, id),
+                room[id as usize],
+                "dwarf {id} did not move"
+            );
+        }
+        assert_eq!(
+            path,
+            vec![room[1], room[2]],
+            "the holder's path is unchanged"
+        );
+        assert_eq!(path_of(&world, 1), Some(vec![room[3]]));
     }
 
     // 13.4 AC3: the wait is real. A holder stuck behind the same IDLE blocker does not swap on his

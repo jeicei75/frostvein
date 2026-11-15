@@ -102,3 +102,110 @@ old = '    {\n        *stale = true;\n    }\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    {\n        let _ = stale;\n    }\n'))
 PY
+
+# Amendment 2026-11-15 (Tasks 10 and 11; Task 13's rows). 13-4.sh row 1 pins the idle blocker's
+# wait (`0 * SQUEEZE_WAIT_TICKS`); this row pins the other side, that a head-on job-holder does not
+# wait. Dies at the holder's position assert, the first after the call.
+mutation "13 head-on job-holders wait SQUEEZE_WAIT_TICKS again (AC 12)" sim-core two_job_holders_head_on_trade_tiles_on_the_first_look <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    if idle && now - since < SQUEEZE_WAIT_TICKS {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if now - since < SQUEEZE_WAIT_TICKS {\n'))
+PY
+
+# Dies at the first fixture's `south` assert (he steps aside onto the north pile cell).
+mutation "14 the step aside lands on a free pile cell (Task 10, #189's loop)" sim-core an_idle_dwarf_moved_out_of_the_way_never_lands_on_a_free_pile_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                !occupied.contains(tile) && !holder_tiles.contains(tile) && !piles.contains(tile)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                !occupied.contains(tile) && !holder_tiles.contains(tile)\n'))
+PY
+
+# Dies at the second fixture's "the exit ends on" (both sides are pile cells; the exit takes one).
+mutation "15 the exit ends on a free pile cell (Task 10, #189's loop)" sim-core an_idle_dwarf_moved_out_of_the_way_never_lands_on_a_free_pile_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            tile != pos && !holder_tiles.contains(&tile) && !piles.contains(&tile)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            tile != pos && !holder_tiles.contains(&tile)\n'))
+PY
+
+# The failed re-plan list is kept but never consulted: the plate is flooded once per miner.
+mutation "16 a failed re-plan's component is flooded again (AC 14)" sim-core failed_re_plans_in_one_component_flood_it_once <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                let computed = if failed.iter().any(|component| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let computed = if false && failed.iter().any(|component| {\n'))
+PY
+
+# The list outlives the stone map: a component flooded behind a stone is skipped after the lift.
+mutation "17 the failed re-plans survive a stone moving (AC 14)" sim-core a_stone_lifted_mid_call_lets_a_later_re_plan_through <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            kept = None;\n            failed.clear();\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            kept = None;\n'))
+PY
+
+# The skip ignores the goals: a later miner whose dig faces the flooded plate is denied his path.
+mutation "18 a failed re-plan's skip ignores the goals (AC 14)" sim-core a_failed_re_plan_leaves_a_reachable_dig_in_its_component_to_the_next_miner <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    component.contains(&pos) && work_positions.is_disjoint(component)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    component.contains(&pos) && true\n'))
+PY
+
+mutation "19 a ring of job-holders is never stepped (AC 13)" sim-core a_ring_of_waiting_job_holders_steps_at_once <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            step_the_ring(ecs, blocked, pos, path, blocker);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+# Dies at "the holder's path is unchanged" (the test's first assert after `step`, which the ring
+# also answers `false`).
+mutation "20 the ring takes a link that is not walking (AC 13)" sim-core a_chain_ending_on_a_dwarf_working_in_place_moves_nobody <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            || ecs.get::<JobState>(link) != Some(&JobState::Walk)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+mutation "21 the ring takes an idle link (AC 13)" sim-core a_chain_through_an_idle_dwarf_with_an_exit_moves_nobody <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        if ecs\n            .get::<CurrentJob>(link)\n            .is_none_or(|current| current.0.is_none())\n            || ecs.get::<JobState>(link) != Some(&JobState::Walk)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if ecs.get::<JobState>(link) != Some(&JobState::Walk)\n'))
+PY
+
+mutation "22 the ring takes a link whose next step is not legal (AC 13)" sim-core a_chain_with_a_step_that_is_not_a_legal_move_moves_nobody <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            || steps.first().is_none_or(|next| !legal(from, *next))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            || steps.first().is_none()\n'))
+PY
+
+mutation "23 the ring steps its links but not the holder (AC 13)" sim-core a_ring_of_waiting_job_holders_steps_at_once <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    *ecs.get_mut::<Pos>(at[&pos])\n        .expect("every dwarf has a position") = path.remove(0);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY
+
+# Dies at "dwarf 1 stepped round the ring": the holder's own asserts pass.
+mutation "24 the ring steps the holder but not its links (AC 13)" sim-core a_ring_of_waiting_job_holders_steps_at_once <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        *ecs.get_mut::<Pos>(member)\n            .expect("every dwarf has a position") = steps.remove(0);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        steps.remove(0);\n'))
+PY
