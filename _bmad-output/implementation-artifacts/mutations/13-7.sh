@@ -126,6 +126,9 @@ PY
 # dig was never dug, so the older `must be dug within 300 ticks` assert killed the row and the id
 # assert stayed unpinned. Now only miner Id(0) keeps one. Miners 1-4 still claim and dig the late
 # dig, and `claims()` lists Id(0) first, so only `assert_eq!(job, late)` can see it.
+# 13.8b Task 13: SURVIVED on 3126c999. Miner 0 never reached the sabotaged arm: claim_jobs' skip
+# (a start inside a failed component holding none of the goals) caught him first, now that failed
+# components are kept across calls (13.8b AC 2). A third edit exempts Id(0) from that skip.
 mutation "6 miner 0 keeps an unreachable dig with an empty path while the others dig on" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
@@ -146,6 +149,13 @@ old_release = '''                let Some(computed) = computed else {
 '''
 assert s.count(old_release) == 1
 s = s.replace(old_release, '''                let Some(computed) = computed else {
+''')
+old_skip = '''                if components.iter().any(|component| {
+                    component.contains(*pos)
+'''
+assert s.count(old_skip) == 1
+s = s.replace(old_skip, '''                if id.0 != 0 && components.iter().any(|component| {
+                    component.contains(*pos)
 ''')
 p.write_text(s)
 PY
