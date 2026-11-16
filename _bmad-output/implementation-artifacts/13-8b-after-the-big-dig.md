@@ -113,6 +113,24 @@ Seat run 2 (card, Sitting Run 2): "it's better but after 21 elapsed dwarwes star
 - [ ] **Task 14 — seat run 3 (AC 17).** Card section, pushed build, Wolf's words recorded.
 - [x] **Task 15 — record.** File the stuck stone-carrying miner as its own issue; comment on #236 with what this story closed of it; #219 (swap animation) gets a note that swaps are now more frequent.
 
+## Amendment 2026-11-16: the seat falls behind (Wolf's rulings)
+
+Seat run 3's tap: after the big dig the seat's daemon falls behind real time (115-128 s per 1,000 ticks, up to 327 ticks per 1,000 over 150 ms late, longest gap 581 ms). The same build on the devpod keeps real time, but with almost no headroom (100.1-101.1 s). The daemon logs no tick times, so it is not known whether the seat's time goes to the step, to encoding the ~150 KB delta, or to the machine (gui, WSL, CPU). Two lines were put to Wolf. He ruled **"Both, timer first"**: the daemon gets its own per-tick timer, and then the tick after the dig gets cheaper. Implementer: **Opus 5.5 agents**, claude-fable-5-2 orchestrating.
+
+### Acceptance Criteria (added)
+
+18. **The daemon times its own ticks.** Every 1,000 stepped ticks, `simd` writes one line to stderr. The line gives the tick range, the wall seconds those ticks took, mean and max ms of `world.step()`, mean and max ms of delta encoding plus broadcast, and how many iterations overran their period. Paused iterations are not counted. A serve test reads the line from the real binary, pins its fields, and checks that `step` is non-zero.
+19. **Baseline before the cut.** The AC 18 line is recorded on seat-like at `8c864b93`'s sim on an idle devpod: release live daemon at Fast4x, the tap as its only client, to t30,000. Two runs, saved under `13-8b-signoff/`. This is the "before" for AC 20, and it splits step from encoding.
+20. **The tick after the dig is at least twice as cheap.** Same run as AC 19, two runs on the new build. In every 1,000-tick window from t19,000 to t30,000, the mean of step plus encoding is at most half of AC 19's for that window. The max tick is no worse. If AC 19 shows encoding is the larger part, the cut goes there first (a wire change: stop and ask Wolf). Outcomes come under AC 16: `done=dig` at t30,000 is not below 1,486, and every committed scenario's end line is re-read.
+21. **Seat run 4.** Wolf runs seat-like with the gui, the tap and the daemon's stderr saved to a file. If he has time, he does a second run with the tap only (no gui), to learn the gui's share. He rules on what he sees.
+
+### Tasks (added)
+
+- [ ] **Task 16 — the daemon's tick timer (AC 18, 19).** Test first. Write AC 19's two baseline runs before any Task 17 code.
+- [ ] **Task 17 — cut the post-dig tick (AC 20).** The rule is the dev's to find. Profile before choosing. The leads are the wait-cause probe (`prototypes/wait-cause-30k.txt`: a walker with a free tile ahead that still stands, 15-20%; rings that do not step, 16%; clearers with no path, 17%), the blocking cost (0.5-15 ms a tick, `blocking-a28a5523.txt`) and the re-plans. Neutral cuts come first (`state=` unchanged). A behaviour change goes through AC 16.
+- [ ] **Task 18 — mutation rows** for each decision of Tasks 16-17.
+- [ ] **Task 19 — seat run 4 (AC 21).** Card section, pushed build, Wolf's words recorded.
+
 ## Verification
 
 ```bash
@@ -310,3 +328,4 @@ All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
 | 2026-11-15 | Seat run 3: Wolf sees the same stops after the big designation. The story continues on the blocking after the dig. |
 | 2026-11-15 | Seat run 3's tap: the seat's daemon runs up to 28% behind real time after the big dig and recovers by t30,000. Wait-cause probe added. Open: where the seat's time goes, and the rule gaps the probe names. |
 | 2026-11-15 | Live devpod tap: the devpod keeps real time after the dig (at most 101.1 s per 1,000 ticks), the seat does not (up to 128 s). The gap is the seat machine, cause not known. |
+| 2026-11-16 | **Amended on Wolf's rulings** ("Both, timer first"; implementer Opus 5.5 agents): ACs 18-21 and Tasks 16-19 cover a per-tick timer in the daemon's log, a baseline, a 2x cheaper tick after the dig, and seat run 4. |
