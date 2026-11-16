@@ -216,3 +216,41 @@ Tap, seconds of wall clock per 1,000 ticks (100 s is real time) and ticks arrivi
 Longest single gap: Run 2 967 ms, Run 3 581 ms. So at the seat the world still falls behind real time after the big dig
 (up to 28% slow in Run 3), and recovers by tick 30,000, which matches what Wolf saw. The devpod bench does not show
 this: there the tick averages 20-30 ms in the same windows.
+
+## Run 4: a cheaper tick after the big dig (AC 21)
+
+Build `b351ece5` or later (pull the branch on both sides first). What changed since Run 3:
+
+- The daemon writes one line to its own error output every 1,000 ticks: how long the ticks took in the sim
+  (`step_ms_mean`, `step_ms_max`) and in sending (`send_ms_mean`).
+- The sim no longer searches the whole map for a dig that is shut in a small pocket nobody can reach. That
+  search was most of the tick after the big dig.
+- The pile's free cells are found once per change instead of once per hauler.
+
+Nothing the dwarves do is different: the same seed gives the same world at tick 30,000. Only the time changes.
+On the devpod the tick after the big dig is now 25-42% of what it was (mean 4.5-11.2 ms, worst 83 ms, was
+11-30 ms and 196 ms).
+
+```bash
+# WSL, from the repo, at the branch HEAD. 2> keeps the timer's lines.
+target/release/simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototypes/seat-like.json 2> /mnt/d/Workspace/frostvein/.bin/13-8b-simd-stderr-seat-run4.txt
+```
+
+```powershell
+# PowerShell, from the Windows checkout
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-8b-seat-like-run4.csv')
+# a second PowerShell window, once the gui shows the world
+python scripts\bench\wire_tap.py D:\Workspace\frostvein\.bin\13-8b-wire-tap-seat-run4.csv
+```
+
+Run at Normal to tick 30,000 (about 50 minutes). Press the mark key when you see a stop. Ctrl+C the tap and the
+daemon at the end. All three files, please.
+
+**If you have time, a second run with no gui:** the same daemon line (stderr to `...-seat-run4-nogui.txt`) and
+the tap (to `...-wire-tap-seat-run4-nogui.csv`), no launcher. Comparing the two tells how much of the seat's
+slowness is the gui sharing the machine.
+
+**Questions**
+
+1. After the big dig: does it still stop and start? Gone, less, or the same as Run 3?
+2. Around minute 16-21: does it still struggle?
