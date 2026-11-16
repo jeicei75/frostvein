@@ -217,3 +217,21 @@ old = '            step = Some(at.elapsed());\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            step = Some(Duration::ZERO);\n'))
 PY
+
+# Task 17 (AC 20). Dies at the debug assert "the kept pile cells are current" in `execute_jobs`:
+# a delivery fills a pile cell and the next hauler's turn would read the old free cells.
+mutation "26 the kept pile cells survive a stone change (AC 20)" sim-core a_reassigned_hauler_puts_the_stone_down_and_another_hauler_delivers_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            failed.clear();\n            pile = None;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            failed.clear();\n'))
+PY
+
+mutation "27 every haul turn finds the pile cells again (AC 20)" sim-core execute_jobs_finds_the_pile_cells_once_when_no_stone_moves <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                carrying,\n                &mut pile,\n            )\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                carrying,\n                &mut None,\n            )\n'))
+PY

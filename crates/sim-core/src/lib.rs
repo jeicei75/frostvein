@@ -985,6 +985,8 @@ thread_local! {
     static STONE_MAP_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Cells flooded by `execute_jobs`' failed re-plans: the once-per-component test's count.
     static REPLAN_FAILED_FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Pile cells `work_positions_with` has found to fill its `pile`: the shared-pile test's count.
+    static PILE_FILLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -1508,6 +1510,8 @@ fn fell_tree(ecs: &mut EcsWorld, at: Pos) {
 /// crossing the pile never blocks a tile for anyone else. `blocked` holds those same tiles
 /// (`blocked_cells`), so an item is never a work position and never stood on (#162): a dwarf works
 /// from the next tile.
+/// NOTE: the sim's callers share a `pile` (`work_positions_with`); this one-shot form is the tests'.
+#[cfg(test)]
 fn work_positions(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -1582,7 +1586,11 @@ fn work_positions_with(
             // and `release_claim` drops it off the pile.
             // NOTE: `claim_jobs` checks delivery reachability at claim time, so a sealed cell never
             // starts a pick-up; one sealed off mid-walk can still cost a pick-up/drop per retry (#132).
-            let targets = &*pile.get_or_insert_with(|| pile_targets(terrain, blocked, zones));
+            let targets = &*pile.get_or_insert_with(|| {
+                #[cfg(test)]
+                PILE_FILLS.with(|n| n.set(n.get() + 1));
+                pile_targets(terrain, blocked, zones)
+            });
             if carrying.is_some() {
                 // The neighbours of the DEEPEST free cells; `drop_cell` then lands on one of them.
                 let deepest = targets.values().copied().max();
@@ -2379,6 +2387,10 @@ fn execute_jobs(ecs: &mut EcsWorld) {
     // `blocked` and today's tiles. Dropped with `kept`: every tile set in this loop sets `stale` too
     // (a refused channel cut restores its tiles before anyone searches).
     let mut failed: Vec<BTreeSet<Pos>> = Vec::new();
+    // The pile's free cells under `kept`'s `blocked` and today's tiles (zones do not change here),
+    // found by the first haul turn that needs them and dropped with `kept` (13.8b Task 17: found
+    // again on every haul turn they were about 3 ms a tick after seat-like's big dig).
+    let mut pile: Option<BTreeMap<Pos, u32>> = None;
     let emitters: Vec<Pos> = ecs
         .query_filtered::<&Pos, With<Emitter>>()
         .iter(ecs)
@@ -2396,6 +2408,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         if std::mem::take(&mut stale) {
             kept = None;
             failed.clear();
+            pile = None;
         }
         let Some(job_id) = ecs.get::<CurrentJob>(entity).and_then(|current| current.0) else {
             continue;
@@ -2423,6 +2436,17 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 blocked_cells(emitters.iter().chain(uncarried_stones(ecs).values())),
                 "the kept blocked set is current"
             );
+            if let Some(cells) = &pile {
+                debug_assert_eq!(
+                    *cells,
+                    pile_targets(
+                        ecs.resource::<Terrain>(),
+                        kept_blocked,
+                        &ecs.resource::<Zones>().0
+                    ),
+                    "the kept pile cells are current"
+                );
+            }
         }
         let (stones, blocked) = &*kept.get_or_insert_with(|| stone_map(ecs, &emitters));
         // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
@@ -2511,13 +2535,14 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     .collect()
             }
         } else {
-            work_positions(
+            work_positions_with(
                 ecs.resource::<Terrain>(),
                 &blocked,
                 &ecs.resource::<Zones>().0,
                 &stones,
                 job,
                 carrying,
+                &mut pile,
             )
         };
         if let Some((landing, from)) = set_down {
@@ -6275,6 +6300,46 @@ mod tests {
         super::STONE_MAP_BUILDS.with(|n| n.set(0));
         super::execute_jobs(&mut world.ecs);
         assert_eq!(super::STONE_MAP_BUILDS.with(|n| n.get()), 1);
+    }
+
+    // 13.8b Task 17 (AC 20). Three haulers walk to three loose stones: no stone is lifted, set
+    // down, dropped or spawned, so `execute_jobs` finds the pile's free cells once, not once per
+    // hauler (on `646fa2c0`: three times, about 3 ms a tick on seat-like after the big dig).
+    #[test]
+    fn execute_jobs_finds_the_pile_cells_once_when_no_stone_moves() {
+        let (mut world, _, _) = pocket_world(false);
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        let mut haulers = Vec::new();
+        for (id, x) in [(0, 12), (1, 14), (2, 16)] {
+            set_profession(&mut world, id, super::Profession::Hauler);
+            let item = 50 + id;
+            world.ecs.spawn((
+                super::Item(super::ItemKind::Stone),
+                super::Id(item),
+                Pos { x, y: 8, z: 1 },
+            ));
+            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+                id: JobId(item),
+                kind: JobKind::Haul { item },
+                target: Pos { x, y: 8, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            }));
+            haulers.push(hold_job(&mut world, id, JobId(item)));
+        }
+        super::PILE_FILLS.with(|n| n.set(0));
+        super::execute_jobs(&mut world.ecs);
+        for entity in haulers {
+            assert!(
+                world.ecs.get::<super::Path>(entity).is_some(),
+                "every hauler has planned his walk to his stone"
+            );
+        }
+        assert_eq!(super::PILE_FILLS.with(|n| n.get()), 1);
     }
 
     /// Gives dwarf `id` the job `job` with no path, as after a `clear_paths`.
