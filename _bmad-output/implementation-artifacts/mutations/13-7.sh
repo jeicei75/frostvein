@@ -36,6 +36,11 @@ s = s.replace(arm_g, '                    (None, true, _) => continue,\n        
 old_stamp = '        if attempted && !assigned {\n'
 assert s.count(old_stamp) == 1
 s = s.replace(old_stamp, '        if attempted && !assigned && !sat_out {\n')
+# 13.8b Task 17: the goal pocket (`astar_with_budget`) answers this test's one-cell pockets before
+# any search, so the row also turns it off to reach the seam it pins (SURVIVED without, 2026-11-16).
+old_pocket = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old_pocket) == 1
+s = s.replace(old_pocket, '    if false\n        && !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n')
 p.write_text(s)
 PY
 
@@ -69,6 +74,11 @@ s = s.replace(arm_g, '                    (None, true, _) => continue,\n        
 old_stamp = '        if attempted && !assigned {\n'
 assert s.count(old_stamp) == 1
 s = s.replace(old_stamp, '        if attempted && !assigned && !sat_out {\n')
+# 13.8b Task 17: the goal pocket (`astar_with_budget`) answers this test's one-cell pockets before
+# any search, so the row also turns it off to reach the seam it pins (SURVIVED without, 2026-11-16).
+old_pocket = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old_pocket) == 1
+s = s.replace(old_pocket, '    if false\n        && !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n')
 p.write_text(s)
 PY
 
