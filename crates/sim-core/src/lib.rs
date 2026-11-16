@@ -78,6 +78,10 @@ pub const MAX_DESIGNATIONS: usize = 4096;
 // same `None`, cheaper. A reachable reroute past it (`resolve_blocked_step`) gives up and waits,
 // keeping the claim.
 const MAX_ASTAR_NODES: usize = 50_000;
+/// 13.8b Task 17: the most cells `goal_pocket` floods before it gives up. On seat-like after the
+/// big dig nearly every failed claim search and blocked re-route had its goals shut in at most 64
+/// cells; a few dozen per 1,000 ticks had up to 512.
+const POCKET_CELLS: usize = 64;
 /// Ticks of work a hauler spends picking a stone up, and again putting it down.
 pub const WORK_TICKS: u32 = 5;
 /// Ticks of work one dig or channel takes: 10 swings of the pick at the client's 5 ticks per swing
@@ -1327,6 +1331,42 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
         .unwrap_or(0)
 }
 
+/// The walkable cells joined to the walkable `goals` under `blocked`, if there are at most
+/// `POCKET_CELLS` of them. A move needs its destination walkable and, across a level, a ramp under
+/// the lower of the two cells, so every move can be walked back: a search can end on a goal only by
+/// stepping into this set.
+fn goal_pocket(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    goals: &BTreeSet<Pos>,
+) -> Option<BTreeSet<Pos>> {
+    let mut pocket: BTreeSet<Pos> = goals
+        .iter()
+        .copied()
+        .filter(|goal| is_walkable(terrain, blocked, *goal))
+        .collect();
+    if pocket.len() > POCKET_CELLS {
+        return None;
+    }
+    let mut queue: VecDeque<Pos> = pocket.iter().copied().collect();
+    while let Some(cell) = queue.pop_front() {
+        for next in astar_neighbours(terrain, blocked, cell) {
+            if pocket.insert(next) {
+                if pocket.len() > POCKET_CELLS {
+                    return None;
+                }
+                queue.push_back(next);
+            }
+        }
+    }
+    Some(pocket)
+}
+
+/// 13.8b Task 17: goals shut in a small pocket that `from` cannot step into are out of reach, and
+/// the answer is the search's own `None` without the flood of `from`'s side that found it (on
+/// seat-like after the big dig, 11 ms a tick of blocked re-routes and 6 ms of claim searches). It
+/// spends no budget and gives back no component, so nothing is kept for it: a later search pays
+/// the pocket again, never the flood.
 fn astar_with_budget(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -1337,6 +1377,31 @@ fn astar_with_budget(
     if goals.is_empty() {
         return (None, false, BTreeSet::new());
     }
+    if !goals.contains(&from)
+        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {
+            astar_neighbours(terrain, blocked, from)
+                .iter()
+                .all(|cell| !pocket.contains(cell))
+        })
+    {
+        debug_assert!(
+            astar_search(terrain, blocked, from, goals, &mut terrain.tiles.len())
+                .0
+                .is_none(),
+            "a start that cannot step into the goals' pocket never reaches them"
+        );
+        return (None, false, BTreeSet::new());
+    }
+    astar_search(terrain, blocked, from, goals, nodes_remaining)
+}
+
+fn astar_search(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    from: Pos,
+    goals: &BTreeSet<Pos>,
+    nodes_remaining: &mut usize,
+) -> (Option<Vec<Pos>>, bool, BTreeSet<Pos>) {
     let mut open = BinaryHeap::from([Reverse((astar_heuristic(from, goals), from))]);
     let mut came_from = BTreeMap::new();
     let mut costs = BTreeMap::from([(from, 0_u32)]);
@@ -6109,6 +6174,23 @@ mod tests {
         (world, at(2, 2), wall)
     }
 
+    /// 13.8b Task 17: opens a room of 81 cells onto the sealed pocket, from (21, 1) to (29, 9), so the
+    /// dig's faces lie in a pocket past `POCKET_CELLS` and a search for them from the plate floods
+    /// the plate as before. Without it `astar_with_budget` answers from the one-cell pocket and the
+    /// kept failures these tests pin are never made.
+    fn open_a_room_behind_the_pocket(world: &mut World) {
+        for y in 1..=9 {
+            for x in 21..=29 {
+                assert!(
+                    world
+                        .ecs
+                        .resource_mut::<Terrain>()
+                        .set_tile(Pos { x, y, z: 1 }, Tile::Empty)
+                );
+            }
+        }
+    }
+
     /// Failed floods `claim_jobs` has kept on the terrain.
     fn kept_floods(world: &World) -> usize {
         world
@@ -6131,6 +6213,7 @@ mod tests {
     #[test]
     fn an_unreachable_dig_is_flooded_once_not_once_per_cooldown() {
         let (mut world, spot, _) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
         let plate = walkable_area(&world, spot).len();
         assert_eq!(plate, 400, "the plate is the miners' whole component");
         let mut schedule = bevy_ecs::schedule::Schedule::default();
@@ -6159,6 +6242,7 @@ mod tests {
     #[test]
     fn a_tile_that_opens_the_route_drops_the_kept_failure() {
         let (mut world, _, wall) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
         for _ in 0..61 {
             world.step();
         }
@@ -6183,6 +6267,7 @@ mod tests {
     #[test]
     fn a_stone_hauled_off_the_only_route_drops_the_kept_failure() {
         let (mut world, _, wall) = pocket_world(true);
+        open_a_room_behind_the_pocket(&mut world);
         set_profession(&mut world, 4, super::Profession::Hauler);
         world
             .ecs
@@ -6302,6 +6387,58 @@ mod tests {
         assert_eq!(super::STONE_MAP_BUILDS.with(|n| n.get()), 1);
     }
 
+    // 13.8b Task 17 (AC 20). The dig's only face is the one-cell pocket behind the wall: a search
+    // from the plate cannot reach it, and on `646fa2c0` it flooded the whole plate (400 cells) to
+    // say so. Seat-like after the big dig: 11 ms a tick of blocked re-routes and 6 ms of claim
+    // searches did this, nearly all for goals shut in under 64 cells.
+    #[test]
+    fn a_search_for_goals_shut_in_a_small_pocket_floods_nothing() {
+        let (world, spot, wall) = pocket_world(false);
+        let blocked = super::blocked_cells(world.emitters().iter().map(|(_, pos, _)| pos));
+        let terrain = world.ecs.resource::<Terrain>();
+        let goals = BTreeSet::from([Pos {
+            x: wall.x + 1,
+            ..wall
+        }]);
+        let budget = terrain.tiles.len();
+        let mut left = budget;
+        let (path, ran_out, explored) =
+            super::astar_with_budget(terrain, &blocked, spot, &goals, &mut left);
+        assert_eq!((path, ran_out), (None, false), "the pocket is out of reach");
+        assert!(explored.is_empty(), "nothing flooded, so nothing to keep");
+        assert_eq!(left, budget, "no cell was expanded");
+    }
+
+    // 13.8b Task 17. The pocket test asks whether the start can STEP into the pocket, not whether it
+    // stands in it: a dwarf on a stone's cell (not walkable) beside the pocket still reaches it.
+    #[test]
+    fn a_start_on_a_blocked_cell_beside_a_small_pocket_still_reaches_it() {
+        let (world, _, wall) = pocket_world(true);
+        let blocked = BTreeSet::from([wall]);
+        let terrain = world.ecs.resource::<Terrain>();
+        let goal = Pos {
+            x: wall.x + 1,
+            ..wall
+        };
+        assert_eq!(
+            super::astar(terrain, &blocked, wall, &BTreeSet::from([goal])),
+            Some(vec![goal])
+        );
+    }
+
+    // 13.8b Task 17. A start on its own goal is there, even where that cell is not walkable and so
+    // in no pocket.
+    #[test]
+    fn a_start_on_its_own_blocked_goal_is_already_there() {
+        let (world, _, wall) = pocket_world(true);
+        let blocked = BTreeSet::from([wall]);
+        let terrain = world.ecs.resource::<Terrain>();
+        assert_eq!(
+            super::astar(terrain, &blocked, wall, &BTreeSet::from([wall])),
+            Some(Vec::new())
+        );
+    }
+
     // 13.8b Task 17 (AC 20). Three haulers walk to three loose stones: no stone is lifted, set
     // down, dropped or spawned, so `execute_jobs` finds the pile's free cells once, not once per
     // hauler (on `646fa2c0`: three times, about 3 ms a tick on seat-like after the big dig).
@@ -6356,6 +6493,7 @@ mod tests {
     #[test]
     fn failed_re_plans_in_one_component_flood_it_once() {
         let (mut world, spot, _) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
         let plate = walkable_area(&world, spot).len();
         assert_eq!(plate, 400, "the plate is the miners' whole component");
         let pocket_dig = world.jobs()[0].id;
@@ -6384,6 +6522,7 @@ mod tests {
     #[test]
     fn a_stone_lifted_mid_call_lets_a_later_re_plan_through() {
         let (mut world, _, wall) = pocket_world(true);
+        open_a_room_behind_the_pocket(&mut world);
         world
             .ecs
             .spawn((super::Item(super::ItemKind::Stone), super::Id(50), wall));
@@ -6441,6 +6580,7 @@ mod tests {
     #[test]
     fn a_failed_re_plan_leaves_a_reachable_dig_in_its_component_to_the_next_miner() {
         let (mut world, _, _) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
         let pocket_dig = world.jobs()[0].id;
         insert_dig(&mut world, 900, Pos { x: 20, y: 5, z: 1 });
         let failing = hold_job(&mut world, 0, pocket_dig);

@@ -235,3 +235,31 @@ old = '                carrying,\n                &mut pile,\n            )\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                carrying,\n                &mut None,\n            )\n'))
 PY
+
+# Rows 28-30: Task 17's goal pocket in `astar_with_budget` (AC 20). Rows 29 and 30 die at the debug
+# assert "a start that cannot step into the goals' pocket never reaches them" (the full search
+# finds the path the skip denied); the named test walks it. No row for `POCKET_CELLS`: the cap
+# bounds only the cost of the pocket flood, never its answer.
+mutation "28 the goal pocket is never asked (AC 20)" sim-core a_search_for_goals_shut_in_a_small_pocket_floods_nothing <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if false\n        && !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'))
+PY
+
+mutation "29 the pocket test asks where the start stands, not where he can step (AC 20)" sim-core a_start_on_a_blocked_cell_beside_a_small_pocket_still_reaches_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            astar_neighbours(terrain, blocked, from)\n                .iter()\n                .all(|cell| !pocket.contains(cell))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            !pocket.contains(&from)\n'))
+PY
+
+mutation "30 a start on its own goal is skipped when the goal is not walkable (AC 20)" sim-core a_start_on_its_own_blocked_goal_is_already_there <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    if goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'))
+PY
