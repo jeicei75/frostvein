@@ -5,11 +5,10 @@ mutation "pause no longer skips world.step" simd paused_daemon_freezes_tick_and_
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = """        if speed != protocol::Speed::Paused {
-            world.step();
-        }
+            let at = Instant::now();
 """
 assert old in s
-p.write_text(s.replace(old, "        world.step();\n"))
+p.write_text(s.replace(old, "        if true {\n            let at = Instant::now();\n"))
 PY
 
 mutation "parsed speed command is dropped before the loop" simd speed_change_from_either_client_reaches_both_on_the_same_delta <<'PY'

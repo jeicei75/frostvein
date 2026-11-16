@@ -351,7 +351,9 @@ fn tick(
     // `protocol::Command::SetSpeed::at_tick`: applying one on arrival makes the freeze point
     // latency-bound, which is issue #111.
     let mut scheduled_speed: Option<(u64, protocol::Speed)> = None;
+    let mut timer = TickTimer::default();
     loop {
+        let started = Instant::now();
         let mut refusals = Vec::new();
         for command in command_rx.try_iter() {
             match command {
@@ -483,16 +485,27 @@ fn tick(
 
         // NOTE: commands apply above while paused. The schedule remains entirely
         // world-advancing; Story 3.2's job conversion and reaction delays belong there.
+        let mut step = None;
         if speed != protocol::Speed::Paused {
+            let at = Instant::now();
             world.step();
+            step = Some(at.elapsed());
         }
+        let send = Instant::now();
         let delta_line = Arc::new(format!(
             "{}\n",
             serde_json::to_string(&bridge::delta(&mut world, speed, refusals))?
         ));
         broadcast(&mut clients, &delta_line);
+        let send = send.elapsed();
+        let overran = started.elapsed() > period(speed);
 
         thread::sleep(deadline.saturating_duration_since(Instant::now()));
+        if let Some(step) = step
+            && let Some(line) = timer.record(started, world.tick(), step, send, overran)
+        {
+            eprintln!("{line}");
+        }
     }
 }
 
@@ -977,6 +990,61 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
         }
         Ok(sim_core::World::from_save(save))
     })()
+}
+
+/// 13.8b AC 18: what each 1,000 stepped ticks cost, so a daemon that falls behind real time shows
+/// whether the time went to `world.step()`, to the delta's encoding and broadcast (`send`), or to
+/// the machine (`wall_s` far above the ticks' periods with both small). `wall_s` spans whole
+/// iterations, sleeps included; `over` counts iterations whose work outran their period. Paused
+/// iterations are not counted.
+// NOTE: a pause inside a window stays in its `wall_s`, and a client's load restarts nothing: the
+// window spans whatever ticks it saw.
+#[derive(Default)]
+struct TickTimer {
+    /// The first counted iteration's start and the tick it stepped from.
+    start: Option<(Instant, u64)>,
+    ticks: u32,
+    /// (sum, max) of each part.
+    step: (Duration, Duration),
+    send: (Duration, Duration),
+    over: u32,
+}
+
+const TIMER_WINDOW: u32 = 1000;
+
+impl TickTimer {
+    /// One stepped iteration, recorded after its sleep. Returns the line every `TIMER_WINDOW`.
+    fn record(
+        &mut self,
+        started: Instant,
+        tick: u64,
+        step: Duration,
+        send: Duration,
+        overran: bool,
+    ) -> Option<String> {
+        let (start, from) = *self.start.get_or_insert((started, tick - 1));
+        self.ticks += 1;
+        self.step = (self.step.0 + step, self.step.1.max(step));
+        self.send = (self.send.0 + send, self.send.1.max(send));
+        self.over += u32::from(overran);
+        if self.ticks < TIMER_WINDOW {
+            return None;
+        }
+        let ms = |time: Duration| time.as_secs_f64() * 1000.0;
+        let n = f64::from(self.ticks);
+        let line = format!(
+            "tick-timer ticks={from}-{tick} wall_s={:.3} step_ms_mean={:.4} step_ms_max={:.4} \
+             send_ms_mean={:.4} send_ms_max={:.4} over={}",
+            start.elapsed().as_secs_f64(),
+            ms(self.step.0) / n,
+            ms(self.step.1),
+            ms(self.send.0) / n,
+            ms(self.send.1),
+            self.over
+        );
+        *self = Self::default();
+        Some(line)
+    }
 }
 
 fn period(speed: protocol::Speed) -> Duration {

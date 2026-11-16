@@ -209,3 +209,11 @@ old = '        *ecs.get_mut::<Pos>(member)\n            .expect("every dwarf has
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        steps.remove(0);\n'))
 PY
+
+mutation "25 the tick timer's step measures nothing (AC 18)" simd the_daemon_logs_its_tick_times_every_thousand_stepped_ticks <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            step = Some(at.elapsed());\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            step = Some(Duration::ZERO);\n'))
+PY
