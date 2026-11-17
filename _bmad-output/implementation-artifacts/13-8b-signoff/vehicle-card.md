@@ -254,3 +254,39 @@ slowness is the gui sharing the machine.
 
 1. After the big dig: does it still stop and start? Gone, less, or the same as Run 3?
 2. Around minute 16-21: does it still struggle?
+
+### Sitting, Run 4 (2026-11-17)
+
+Wolf: "files are in folder but was busy with other things so forgot to watch". So questions 1 and 2 are not
+answered by eye. No second run without the gui.
+
+- Files: `13-8b-simd-stderr-seat-run4.txt` (the daemon's timer), `13-8b-seat-like-run4.csv` (the gui log),
+  `13-8b-wire-tap-seat-run4.csv` (the tap; tick 30,000 at 2,989 s, Run 3 took 3,158 s).
+- Build: the daemon log has no build stamp; its timer lines prove it is `cde6e93f` or later. The gui log names
+  `fa2259b8`; no client or protocol code changed between that and `e6eb06d5`, so it is the same gui.
+
+Tap, the same measure as Run 3:
+
+| ticks | Run 3 wall | Run 3 late ticks | Run 4 wall | Run 4 late ticks |
+|---|---|---|---|---|
+| to 17,000 | 100.1-101.1 | 1-31 | 100.1-100.3 | 0-24 |
+| 18,000 | 100.9 | 71 | 100.1 | 0 |
+| 19,000 | 114.7 | 294 | 100.1 | 0 |
+| 20,000-21,000 | 101.6-103.9 | 97-139 | 100.1 | 0 |
+| 22,000-23,000 | 121.2-125.4 | 285-327 | 100.1-100.2 | 1-23 |
+| 24,000-27,000 | 117.3-128.1 | 250-301 | 100.1-100.2 | 2-32 |
+| 28,000-29,000 | 106.7-108.0 | 152-153 | 100.2 | 14-27 |
+| 30,000 | 100.8 | 63 | 100.1 | 13 |
+
+Longest single gap: Run 3 581 ms, Run 4 292 ms (at tick 7,000, before the dig; 226 ms after it).
+
+The daemon's own line, after the big dig (t17,000-30,000): step mean 3.2-16.6 ms a tick, worst 31-144 ms,
+sending 0.4-1.3 ms; 0-4 ticks per 1,000 ran over the 100 ms tick. Before the dig: mean 0.3-3.8 ms, worst
+41-193 ms, 0-3 over.
+
+The gui log (frame times) matches Run 2's: steady p50 22.2 ms (Run 2 23.3), p99 69.0 ms (65.2), worst 369 ms
+(335). This story did not touch the gui. One mark, at the end of the log, after tick 30,000.
+
+So at the seat the daemon now keeps real time through the whole run, after the big dig too: Run 3 fell up to
+28% behind there. Whether the dwarves still look as if they stop and start is not answered: the files measure
+the clock, not the blocking the stall probe counts, and Task 17 changed no behaviour.
