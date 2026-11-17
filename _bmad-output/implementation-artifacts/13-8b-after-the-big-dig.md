@@ -80,8 +80,8 @@ Mean per tick over each 500-tick window, crew 200:
 - [x] **Task 5 — measure (AC 1, 4, 7, 8).** `state=` on the 12 files and seat-like against `main`. Seat-like with the probe, two idle runs per build, table pasted beside the creation table. `tick-bench.sh`, table pasted. Save the outputs under `13-8b-signoff/`.
 - [x] **Task 6 — mutation rows (AC 10).** One per decision: kept components survive `set_tile`; kept components survive a cell leaving `blocked`; the kept stone map misses a lift; misses a set-down; misses a spawned stone; `claim_jobs` reuses pile cells from the previous call. Run `scripts/audit-mutations.py` before the first code commit and after.
 - [x] **Task 7 — the instrument (observability rule).** The human instrument is `simd --bench <file> --runs 1`: its run line carries mean, p99, max, `over10` and `state=`. It is already tested against the real binary (`crates/simd/tests/bench.rs:110`, `:137`). Nothing new is built; the probe patch stays a prototype and is not merged.
-- [ ] **Task 8 — the seat (AC 11).** Write `13-8b-signoff/vehicle-card.md`; Wolf runs it.
-- [ ] **Task 9 — record.** File the Q1 follow-up issue (and Q3's, if ruled) with the figures. One full gate at PR.
+- [x] **Task 8 — the seat (AC 11).** Write `13-8b-signoff/vehicle-card.md`; Wolf runs it.
+- [x] **Task 9 — record.** File the Q1 follow-up issue (and Q3's, if ruled) with the figures. One full gate at PR.
 
 ## Amendment 2026-11-15: the stops (Wolf's rulings)
 
@@ -106,11 +106,11 @@ Seat run 2 (card, Sitting Run 2): "it's better but after 21 elapsed dwarwes star
 
 ### Tasks (added)
 
-- [ ] **Task 10 — head-on swap at once (AC 12, 13, 16).** Test first. Then the audit (`scripts/audit-mutations.py`) before the first code commit, because rows against 13.4's wait go RED with it.
+- [x] **Task 10 — head-on swap at once (AC 12, 13, 16).** Test first. Then the audit (`scripts/audit-mutations.py`) before the first code commit, because rows against 13.4's wait go RED with it.
 - [x] **Task 11 — the re-plan burst (AC 14).** Diagnose the keep-paths jam on the prototype (which dwarf first waits for good, on what, and why a re-plan would have freed him). Then the rule, test first.
 - [x] **Task 12 — measure (AC 13, 14, 15, 16).** Stall probe, slow-tick split, end lines of every committed scenario, `tick-bench.sh`.
 - [x] **Task 13 — mutation rows (AC 17).**
-- [ ] **Task 14 — seat run 3 (AC 17).** Card section, pushed build, Wolf's words recorded.
+- [x] **Task 14 — seat run 3 (AC 17).** Card section, pushed build, Wolf's words recorded.
 - [x] **Task 15 — record.** File the stuck stone-carrying miner as its own issue; comment on #236 with what this story closed of it; #219 (swap animation) gets a note that swaps are now more frequent.
 
 ## Amendment 2026-11-16: the seat falls behind (Wolf's rulings)
