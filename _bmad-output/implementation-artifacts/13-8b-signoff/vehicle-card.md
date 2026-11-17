@@ -290,3 +290,11 @@ The gui log (frame times) matches Run 2's: steady p50 22.2 ms (Run 2 23.3), p99 
 So at the seat the daemon now keeps real time through the whole run, after the big dig too: Run 3 fell up to
 28% behind there. Whether the dwarves still look as if they stop and start is not answered: the files measure
 the clock, not the blocking the stall probe counts, and Task 17 changed no behaviour.
+
+### Sitting, Run 5 (2026-11-17): Run 4's build, watched
+
+Wolf re-ran the Run 4 commands (files named `run5`) and watched from minute 25, just before the big dig, to the
+end: "1 gone I would say .. i did not see hickups this time and watched it from 25 till the stop".
+
+- Question 1 (after the big dig): **gone**.
+- Question 2 (minutes 16-21): not watched this time.
