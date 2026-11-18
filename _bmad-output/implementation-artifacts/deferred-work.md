@@ -2832,3 +2832,9 @@ story) and #194 (`route:undecided`); they are not repeated here.
 ## Deferred from: code review round 2 of 13-8-they-keep-coming (2026-11-11)
 
 - **`a_crew_too_big_for_the_camp_is_an_error_naming_the_crew` pins an unreachable panic** (`crates/simd/src/main.rs:1263`, feature, measured). Crew 1,000,000 hits the epithet `expect` (`lib.rs:3099`), which the new `check_crew` ceiling makes unreachable for users. No test exercises a camp that is really too small; on DEFAULT_SEED 256 dwarves fit even at 128², so the "does not fit the camp's ground" message has no shown trigger.
+
+## Deferred from: code review of 13-8b-after-the-big-dig (2026-11-18)
+
+- **The daemon's log names no build** (`crates/simd/src/main.rs`, startup; feature, read). Seat run 4's build had to be inferred from its step means ("`cde6e93f` or later"). One line at startup giving the build SHA would close this for every future seat run. The gui already stamps its build; simd does not.
+- **`wire_tap.py` fails ungracefully on a dropped connection** (`scripts/bench/wire_tap.py`; edge, RAN). It gives an uncaught `ConnectionResetError` traceback when the daemon dies. `create_connection` has no timeout or retry, so it dies if the daemon is not up yet. A truncated final line is written as a short row with `tick=-1`. The CSV stays intact, because it is line-buffered.
+- **The pile-cell exclusion in `resolve_blocked_step` covers every zoned cell, occupied or not** (`crates/sim-core/src/lib.rs:2151-2166`; blind, read). In a one-wide corridor that is zoned end to end, case 1's step-aside and exit never fire, so the idle blocker waits for the squeeze after `SQUEEZE_WAIT_TICKS`. This is slower, not a deadlock. `make_room_down_the_idle_chain` still does not apply the exclusion (its NOTE says so).

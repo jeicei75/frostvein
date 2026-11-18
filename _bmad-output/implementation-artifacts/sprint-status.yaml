@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-11-13
+last_updated: 2026-11-18
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2885,6 +2885,9 @@ development_status:
   # 24-45k -> 6-10k cells/tick; 12/12 mutation rows KILLED; tick-bench no regression). Follow-up #236. AWAITING THE SEAT
   # (13-8b-signoff/vehicle-card.md); full gate owed at PR.
   # AMENDED 2026-11-15 (Wolf: "continue until we are happy"; "include 236 also to this fix"): seat run 2 = brief stops, not all at once. ACs 12-17, Tasks 10-15: head-on swap at once, #236's re-plan burst, blocking measured. Implementer: Opus 5.5 subagents (Wolf), claude-fable-5-2 orchestrates.
+  # REVIEW run 1 2026-11-18 (Opus 5.5, fresh session): 4 layers OK, no code defect; 6 patches LEFT AS ACTION ITEMS (Wolf):
+  # timer pause/load window, unpinned timer fields, re-run 13-8b.sh whole + tick-bench at HEAD, stale runbook text, PR Refs #236.
+  # Open decision: did run 5 produce files? PR #241 stays draft.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
