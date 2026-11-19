@@ -263,3 +263,72 @@ old = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, g
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    if goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'))
 PY
+
+# Rows 31-38: the review's P1 and P2 on `TickTimer::record` (AC 18). Unit tests in simd's main.rs
+# feed `record` known values; `over`, `send`, `from` and the max reset were unpinned before.
+mutation "31 a pause keeps its window (review P1)" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '        let Some(step) = step else {\n            *self = Self::default();\n            return None;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let Some(step) = step else {\n            return None;\n'))
+PY
+
+mutation "32 a load's tick jump keeps its window (review P1)" simd a_load_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            && tick != from + u64::from(self.ticks) + 1\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            && false\n'))
+PY
+
+mutation "33 over counts nothing (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '        self.over += u32::from(overran);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        self.over += u32::from(overran && false);\n'))
+PY
+
+mutation "34 over counts the iterations that kept their period (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '        self.over += u32::from(overran);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        self.over += u32::from(!overran);\n'))
+PY
+
+mutation "35 a window's maxes carry into the next (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '        *self = Self::default();\n        Some(line)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        *self = Self {\n            step: (Duration::ZERO, self.step.1),\n            send: (Duration::ZERO, self.send.1),\n            ..Self::default()\n        };\n        Some(line)\n'))
+PY
+
+mutation "36 from is the first stepped tick, not the one it stepped from (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+# Shifted in both places, so the jump check stays consistent and the line, not a reset, shows it.
+old = '.get_or_insert((started, tick - 1));\n'
+jump = '            && tick != from + u64::from(self.ticks) + 1\n'
+assert s.count(old) == 1 and s.count(jump) == 1
+s = s.replace(old, '.get_or_insert((started, tick));\n')
+p.write_text(s.replace(jump, '            && tick != from + u64::from(self.ticks)\n'))
+PY
+
+mutation "37 send's max never moves (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '        self.send = (self.send.0 + send, self.send.1.max(send));\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        self.send = (self.send.0 + send, self.send.1);\n'))
+PY
+
+mutation "38 send's mean sums the step (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '        self.send = (self.send.0 + send, self.send.1.max(send));\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        self.send = (self.send.0 + step, self.send.1.max(send));\n'))
+PY
