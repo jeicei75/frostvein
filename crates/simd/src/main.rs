@@ -501,9 +501,7 @@ fn tick(
         let overran = started.elapsed() > period(speed);
 
         thread::sleep(deadline.saturating_duration_since(Instant::now()));
-        if let Some(step) = step
-            && let Some(line) = timer.record(started, world.tick(), step, send, overran)
-        {
+        if let Some(line) = timer.record(started, world.tick(), step, send, overran) {
             eprintln!("{line}");
         }
     }
@@ -995,10 +993,10 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
 /// 13.8b AC 18: what each 1,000 stepped ticks cost, so a daemon that falls behind real time shows
 /// whether the time went to `world.step()`, to the delta's encoding and broadcast (`send`), or to
 /// the machine (`wall_s` far above the ticks' periods with both small). `wall_s` spans whole
-/// iterations, sleeps included; `over` counts iterations whose work outran their period. Paused
-/// iterations are not counted.
-// NOTE: a pause inside a window stays in its `wall_s`, and a client's load restarts nothing: the
-// window spans whatever ticks it saw.
+/// iterations, sleeps included; `over` counts iterations whose work outran their period. A paused
+/// iteration or a jump in the tick (a client's Load) discards the window so far and starts a new one.
+// NOTE: a discarded part-window is not logged. A Load of a save one tick ahead is not seen as a
+// jump, so that window keeps the load's stall, which the daemon did spend.
 #[derive(Default)]
 struct TickTimer {
     /// The first counted iteration's start and the tick it stepped from.
@@ -1013,15 +1011,27 @@ struct TickTimer {
 const TIMER_WINDOW: u32 = 1000;
 
 impl TickTimer {
-    /// One stepped iteration, recorded after its sleep. Returns the line every `TIMER_WINDOW`.
+    /// One iteration, recorded after its sleep; `step` is `None` when paused. Returns the line
+    /// every `TIMER_WINDOW` stepped ticks.
     fn record(
         &mut self,
         started: Instant,
         tick: u64,
-        step: Duration,
+        step: Option<Duration>,
         send: Duration,
         overran: bool,
     ) -> Option<String> {
+        // A pause or a client's Load (the tick does not follow the window's last) throws the
+        // window away: its `wall_s` would carry the pause, its `ticks=` would jump.
+        let Some(step) = step else {
+            *self = Self::default();
+            return None;
+        };
+        if let Some((_, from)) = self.start
+            && tick != from + u64::from(self.ticks) + 1
+        {
+            *self = Self::default();
+        }
         let (start, from) = *self.start.get_or_insert((started, tick - 1));
         self.ticks += 1;
         self.step = (self.step.0 + step, self.step.1.max(step));
@@ -1223,6 +1233,130 @@ fn excerpt(line: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::time::{Duration, Instant};
+
+    /// The value of each `key=value` field of a tick-timer line, in order.
+    fn timer_fields(line: &str) -> Vec<(String, String)> {
+        line.strip_prefix("tick-timer ")
+            .expect("a tick-timer line")
+            .split(' ')
+            .map(|field| {
+                let (key, value) = field.split_once('=').expect("key=value");
+                (key.to_owned(), value.to_owned())
+            })
+            .collect()
+    }
+
+    fn timer_line_without_wall(line: &str) -> Vec<(String, String)> {
+        let mut fields = timer_fields(line);
+        fields.retain(|(key, _)| key != "wall_s");
+        fields
+    }
+
+    fn expected(fields: [(&str, &str); 6]) -> Vec<(String, String)> {
+        fields
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect()
+    }
+
+    /// 13.8b review P2: `over`, `send`, `from` and the per-window max reset, from known inputs.
+    #[test]
+    fn the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh() {
+        let mut timer = super::TickTimer::default();
+        let now = Instant::now();
+        let ms = |n: u64| Duration::from_millis(n);
+        let mut lines = Vec::new();
+        for tick in 501..=2500u64 {
+            let (step, send, overran) = if tick <= 1500 {
+                // One slow step, one slow send, an overrun on every hundredth tick.
+                let step = if tick == 700 { ms(12) } else { ms(2) };
+                let send = if tick == 800 { ms(5) } else { ms(1) };
+                (step, send, tick % 100 == 0)
+            } else {
+                (ms(1), ms(1), false)
+            };
+            lines.extend(timer.record(now, tick, Some(step), send, overran));
+        }
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert_eq!(
+            timer_line_without_wall(&lines[0]),
+            expected([
+                ("ticks", "500-1500"),
+                ("step_ms_mean", "2.0100"),
+                ("step_ms_max", "12.0000"),
+                ("send_ms_mean", "1.0040"),
+                ("send_ms_max", "5.0000"),
+                ("over", "10"),
+            ])
+        );
+        // The second window's maxes are its own: the first window's 12 ms and 5 ms are gone.
+        assert_eq!(
+            timer_line_without_wall(&lines[1]),
+            expected([
+                ("ticks", "1500-2500"),
+                ("step_ms_mean", "1.0000"),
+                ("step_ms_max", "1.0000"),
+                ("send_ms_mean", "1.0000"),
+                ("send_ms_max", "1.0000"),
+                ("over", "0"),
+            ])
+        );
+    }
+
+    /// 13.8b review P1: a client's Load moves the tick (forward or back). The window that saw it
+    /// is thrown away, so `ticks=FROM-TO` always spans 1,000 consecutive ticks.
+    #[test]
+    fn a_load_inside_a_tick_timer_window_starts_a_new_one() {
+        for loaded in [9001u64, 101] {
+            let mut timer = super::TickTimer::default();
+            let now = Instant::now();
+            let step = Some(Duration::from_millis(1));
+            let mut lines = Vec::new();
+            for tick in (1..=400).chain(loaded..loaded + 1000) {
+                lines.extend(timer.record(now, tick, step, Duration::ZERO, false));
+            }
+            assert_eq!(lines.len(), 1, "{lines:?}");
+            assert_eq!(
+                timer_fields(&lines[0])[0],
+                (
+                    "ticks".to_owned(),
+                    format!("{}-{}", loaded - 1, loaded + 999)
+                ),
+                "a load to tick {loaded}"
+            );
+        }
+    }
+
+    /// 13.8b review P1: a paused iteration throws the window away, so `wall_s` never carries
+    /// paused seconds (measured before the fix: an 8 s pause read `wall_s=13.278`).
+    #[test]
+    fn a_pause_inside_a_tick_timer_window_starts_a_new_one() {
+        let mut timer = super::TickTimer::default();
+        let step = Some(Duration::from_millis(1));
+        // 400 ticks stepped "a second ago", then a pause, then 1,000 ticks now.
+        let before = Instant::now()
+            .checked_sub(Duration::from_secs(1))
+            .expect("the clock has run a second");
+        let mut lines = Vec::new();
+        for tick in 1..=400 {
+            lines.extend(timer.record(before, tick, step, Duration::ZERO, false));
+        }
+        lines.extend(timer.record(Instant::now(), 400, None, Duration::ZERO, false));
+        let now = Instant::now();
+        for tick in 401..=1400 {
+            lines.extend(timer.record(now, tick, step, Duration::ZERO, false));
+        }
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        let fields = timer_fields(&lines[0]);
+        assert_eq!(fields[0].1, "400-1400", "{lines:?}");
+        let wall_s: f64 = fields[1].1.parse().expect("a number");
+        assert!(
+            wall_s < 1.0,
+            "the paused second stayed in the window: {lines:?}"
+        );
+    }
+
     #[test]
     fn pause_at_is_parsed_beside_the_port_and_rejects_garbage() {
         let parse = |args: &[&str]| {
