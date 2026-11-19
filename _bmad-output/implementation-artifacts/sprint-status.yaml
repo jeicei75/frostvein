@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-11-18
+last_updated: 2026-11-19
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2890,6 +2890,9 @@ development_status:
   # Run 5 RULED 2026-11-19 (Wolf): done again after the patches, files saved. PR #241 stays draft.
   # PATCH PASS 2026-11-19 (Opus 5.5): all 6 landed (26cb47ac, df7da46c, 33b4361c); 13-8b.sh 38/38 KILLED; tick-bench
   # nothing slower; full gate GREEN at 33b4361c. Stays in-progress: seat run 5 (live) unrun. Next: round-2 review, run 5.
+  # REVIEW run 2 2026-11-19 (Opus 5.5, fresh): P0-P5 audited CLOSED; no HIGH, so the static audit ENDS. 5 patches LEFT AS
+  # ACTION ITEMS (Wolf): log the cut part-window (D1 (b)), a speed change cuts the window, NOTE wording, P3/P4 record text.
+  # Next: fresh /bmad-review-patch, then seat run 5 on the pushed build.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog

@@ -174,7 +174,68 @@ Deferred:
 - [x] [Review][Defer] **`wire_tap.py` dies with a traceback on a connection reset or a refused connect, and writes a truncated last line** [scripts/bench/wire_tap.py] — deferred, a bench tool; the CSV stays intact.
 - [x] [Review][Defer] **The pile-cell exclusion covers every zoned cell** [crates/sim-core/src/lib.rs:2151-2166] — deferred. In a one-wide corridor that is zoned end to end, an idle blocker waits for the squeeze instead of stepping aside: slower, not stuck.
 
-Dismissed (10): `step_the_ring` rests a link that has already had his turn, as the swap's blocker already does (documented). The debug-only `pile_targets` call in the assert does not change outcomes. Memory kept between ticks. The pocket against the "do not replace the A*" guardrail (AC 20 gave the rule to the dev, and the pocket adds a check, not a replacement). AC 16's same-commit letter was missed twice (both recorded). Task 10's pile rule has no AC of its own (it is tested, rows 14-15). `12-9` row 4 tests half its sabotage (noted in the row). `over` mixes periods across a speed change (a reading note). The tap exits early when `--stop-tick` is below the snapshot. Minutes 16-21 not watched (already ruled under AC 13).
+#### Code review run 2 (2026-11-19, a fresh session, Opus 5.5 orchestrating)
+
+Round 2 of the patch-pass diff `a586fb90..ac9d1bb3`: 8 files, +520/−24, of which `crates/simd/src/main.rs` is +152 and rows 31-38 are +69. Three layers ran `cargo 1.97.1` in their own `/tmp/review-<layer>`, and none timed out or failed: Edge Case Hunter (Sonnet), whose territory was `crates/simd` and rows 31-38, and the Acceptance and Feature Auditors (Opus), who took the whole diff. Blind Hunter did not run. Its territory (sim-core, client-core, gui pure files) has no diff in this range, so this is no territory, not a coverage hole. Nothing in the repo was modified. Mutants ran on private `git archive HEAD` copies.
+
+**Delta against run 1.**
+- NEW: 1 MED, 1 decision (MED), 4 LOW.
+- REWORK: 1 LOW. P1's "replace the NOTE" was done, but the new NOTE is wrong.
+- HIGH: none.
+- **Stopping rule:** every new finding is below HIGH, so **the static audit ends here**. The next spend goes to the live gate, seat run 5, not to a round 3.
+
+**Closure-table audit (acceptance, RAN).**
+- **P0:** CLOSED. `closingIssuesReferences=[231]`, #236 is open with the comment.
+- **P1:** CLOSED. It goes RED on the old rule as the table says (`0-1000 wall_s=1.000`, `0-9600`). Live: an 8 s pause gave `wall_s=5.150`, `5.171` and `5.610` (acceptance, feature, edge). A Load back mid-window gave `ticks=2598-3598` and `4544-5544`.
+- **P2:** CLOSED. The test passes on `a586fb90`'s TickTimer.
+- **P3:** CLOSED. Rows 31-38 were re-applied, all eight of them by edge and 33/35/36/38 by acceptance. Each died in its named test at the intended field.
+- **P4:** CLOSED, verdicts hold.
+- **P5:** CLOSED. Verification equals `state-head-67be6aef.txt:25-26`, and `crates/sim-core` and `scenarios` are unchanged since.
+- **Hop trace (feature):** `main` → `tick()` → `started` → `step` (None when paused) → `send` → `overran` → `TickTimer::record` on every iteration → `eprintln!`. Every hop is WIRED.
+
+Decisions:
+- [x] [Review][Decision] **RESOLVED 2026-11-19, Wolf: (b), flush the part-window; now the first patch below.** **A discarded part-window is silent, and AC 18's text still says "every 1,000 stepped ticks"** (acceptance + feature, RAN; MED).
+  - The P1 rule throws away any window a pause or a Load interrupts, and logs nothing.
+  - Live at Normal, a 2 s pause at tick ~1528 meant no line from 101 s to 256 s. Ticks 1000-1528 were never reported, and later windows run `1528-2528`, off the round thousands that run 4's card compares against the tap.
+  - Pausing at least once every 100 s at Normal means no line at all.
+  - At the seat, a pause taken to look at a hiccup discards the window that holds it. The tap still records the gap independently.
+  - Options:
+    - (a) Text only. AC 18 gets a superseded note, and the card a reading note: a gap between consecutive `ticks=` ranges is a dropped window, and one `over` with small step/send maxes where the tap joined is its connect snapshot.
+    - (b) Also flush the part-window as a short line, ending at the last stepped iteration, on a pause, Load or speed change.
+  - Recommended: (a). The tap already covers the dropped stretch, and (b) adds an end-instant field and a second line shape.
+
+Patches:
+- [ ] [Review][Patch] **Log the part-window when a pause, a Load or a speed change cuts it (D1 (b), Wolf 2026-11-19)** [crates/simd/src/main.rs `TickTimer::record`; AC 18 text; run 4/5 card].
+  - The cut window is written as a line with the same fields, plus a `cut=pause|load|speed` field. Its `ticks=` range is under 1,000.
+  - Its `wall_s` ends at the last stepped iteration, which needs an end instant. It must not end at the cutting iteration, so no paused seconds and no load stall get in.
+  - A window of 0 stepped ticks writes nothing.
+  - Unit tests pin each cut's line (fields, range, `wall_s` excluding the pause), plus mutation rows.
+  - AC 18 gets a superseded note: a line every 1,000 stepped ticks or at a cut. The card gets the reading note: one `over` with small maxes where the tap joined is its connect snapshot.
+  - Serve's test must still read the full-window line.
+- [ ] [Review][Patch] **A speed change inside a window stays in `wall_s`, and the line does not name the speed** (feature, RAN; MED, latent silent failure in an instrument, the same class as P1) [crates/simd/src/main.rs:1030-1034, :504].
+  - Live: 3 s at Normal inside a Fast4x window logged `ticks=7544-8544 wall_s=8.009 step_ms_mean=0.61 send_ms_mean=0.19 over=2`. By the doc comment's own rule that reads as "the machine fell 60% behind", and nothing did. Normal-then-Fast gives a falsely healthy window.
+  - It bites the seat's first window every run: seat-like releases at Normal on the gui's connect, and the speed is raised afterwards.
+  - Run 1 dismissed only `over` mixing periods, never `wall_s`.
+  - Fix: a speed change starts a new window, as a pause does (`record` learns the speed). Add a unit test and mutation rows. Add one more row that kills at P1's `wall_s < 1.0` assert, which no row reaches today (row 31 dies at `ticks=`).
+- [ ] [Review][Patch] **The new NOTE is wrong in both halves** (edge + acceptance + feature, RAN; LOW, REWORK of P1; in the function the patch above edits) [crates/simd/src/main.rs:998-999].
+  - A save **one tick ahead** IS caught (probe `ticks=401-1401`, or no line).
+  - The Load that goes unseen is a save **of the tick the world is on**, for example Save then Load in one batch (live `saved tick 6733`, window `6544-7544` intact).
+  - A **caught** Load keeps its stall too: the new window starts at that iteration's `started`, taken before the command drain (probe `ticks=101-1101 wall_s=2.000 over=1`).
+  - Fix: reword the NOTE to say both. Counting the stall is defensible, since the daemon spent it.
+- [ ] [Review][Patch] **P3's row line numbers are the mutated file's, not HEAD's** (acceptance, RAN; LOW, record) [this file, closure table P3]. The asserts are at HEAD `main.rs:1282/1294/1320/1352`, not `1282/1298/1320/1351`.
+- [ ] [Review][Patch] **P4 blames the bench's own builds for the load; the load was the patch pass's background `mutate.sh`** (acceptance, READ the transcript; LOW, record) [this file, closure table P4].
+  - The file's first line reads `load average: 6.75` before the bench built anything.
+  - `mutate.sh` ran 05:59-06:04 and the bench started at 06:04:20, so "on an idle machine" was not met.
+  - The verdicts hold: every BEYOND FLOOR row is 13.9-75.8% faster, and the controls are −3.8 to +1.9%. Fix the sentence.
+
+Deferred:
+- [x] [Review][Defer] **A client's connect snapshot is timed as neither step nor send** [crates/simd/src/main.rs:463-484] — deferred, pre-existing. One `over` with small maxes reads as "the machine". Run 2's connect stalled 152 ms. The D1 patch's card reading note covers it.
+
+Cost and cleanup: review row $10.66, 185 turns (the three layers were 65% of the tokens). `reap-build-caches.sh --tmp-only --force` reaped 6 directories (9.7 GB; 6.5 GB of free space reclaimed). No layer daemon was left running. Patches LEFT AS ACTION ITEMS (Wolf, 2026-11-19).
+
+Dismissed (2): `from + ticks + 1` is unchecked `u64` (unreachable). A commit, `33b4361c`, landed while the patch pass's background `mutate.sh` had mutants in the tree. Only the story `.md` was committed, so no artefact is wrong. This is the shape of [mutation-run-poisons-concurrent-builds]: next time, keep mutate.sh and commits apart.
+
+Dismissed (10, run 1): `step_the_ring` rests a link that has already had his turn, as the swap's blocker already does (documented). The debug-only `pile_targets` call in the assert does not change outcomes. Memory kept between ticks. The pocket against the "do not replace the A*" guardrail (AC 20 gave the rule to the dev, and the pocket adds a check, not a replacement). AC 16's same-commit letter was missed twice (both recorded). Task 10's pile rule has no AC of its own (it is tested, rows 14-15). `12-9` row 4 tests half its sabotage (noted in the row). `over` mixes periods across a speed change (a reading note). The tap exits early when `--stop-tick` is below the snapshot. Minutes 16-21 not watched (already ruled under AC 13).
 
 ## Verification
 
