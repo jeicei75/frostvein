@@ -19,7 +19,7 @@ Closes the three measured parts of #231 that can be cut without changing what an
 
 `story-13-8b-after-the-big-dig`, cut from `main` `5f83e82e` (PR #234 merged; local `main` equals `origin/main`). Commits authored `Völundr <jeicei75@gmail.com>`, no attribution trailer.
 
-**Standing ACs that bind:** Epic 13's M3 ACs 1–8 (one full gate, at PR), and M4 standing ACs 10 and 12. AC 11 binds as "nothing moves": this story changes no outcome, so no scenario is re-pinned. ACs 13–18 do not apply (no need, stock, trade, look, rendering or new constant).
+**Standing ACs that bind:** Epic 13's M3 ACs 1–8 (one full gate, at PR), and M4 standing ACs 10 and 12. AC 11 binds as "nothing moves": this story changes no outcome, so no scenario is re-pinned. *(Superseded 2026-11-15: Tasks 10-17 change outcomes on purpose; AC 16 governs, and `scenario.rs` and `save_load.rs` were re-pinned.)* ACs 13–18 do not apply (no need, stock, trade, look, rendering or new constant).
 
 **Wire diff:** none. **Saved fields:** none. Anything this story keeps between ticks is derived data and is never written to a save.
 
@@ -63,7 +63,7 @@ Mean per tick over each 500-tick window, crew 200:
 6. **Pile cells are computed once per `claim_jobs` call.** With K unclaimed hauls and one free hauler, one call computes the pile's free cells once, not 2K times (a `#[cfg(test)]` counter in `pile_targets`, `lib.rs:969`; RED on `main` reads 2K).
 7. **Seat-like, measured.** On an idle machine, two runs each of `main` and the story's head: mean, p99, max, `over10`, and the per-window table above with the probe. `ej_stones_blocked` and `cj_goals` are each under 1 ms a tick in every window (`main`: up to 10.6 and 5.0).
 8. **Bench delta (standing AC 10).** `RUNS=5 scripts/tick-bench.sh main HEAD` on the committed scenarios; the table is pasted. A regression BEYOND FLOOR needs Wolf's ruling.
-9. **Saves are unaffected (standing AC 12).** `cargo test -p sim-core --test save_load` passes unchanged; no kept data is in `SaveState`.
+9. **Saves are unaffected (standing AC 12).** `cargo test -p sim-core --test save_load` passes unchanged; no kept data is in `SaveState`. *(From Task 10 on, 13.4's stand-off save test is re-pinned to an idle blocker, `55cc430b`: head-on job-holders no longer leave a timer to save.)*
 10. **Mutation table.** `mutations/13-8b.sh` has one row per decision (Task 6), each KILLED by the named test at its intended assert.
 11. **The seat.** Wolf runs seat-like at Normal past tick 17,000 with a perf log and rules on the stops. The answer is recorded; what remains goes to the Q1 follow-up issue.
 
@@ -173,9 +173,13 @@ cargo build --release -p simd
 for f in $(git ls-files 'scenarios/*.json') _bmad-output/implementation-artifacts/13-8-signoff/prototypes/seat-like.json; do
   target/release/simd --bench "$f" --runs 1 | rg -o 'bench \S+ run.*state=\S+|bench \S+ end.*'
 done
-#   seat-like must print: state=5511268fb5faf97f
-#   and: end tick=30000 marks=230 items=1530 zones=1800 goals=136/0/0 done=dig:1370,cut:30 stored=497 cells=2176 crew=200 arriving=0
-# AC 4, 7: the probe, in a scratch worktree (never in this tree), idle machine
+#   seat-like must print (the story's head; `main` 5f83e82e printed 5511268fb5faf97f … done=dig:1370 … stored=497):
+#   state=250b5bbeee340ff9
+#   and: end tick=30000 marks=114 items=1655 zones=1800 goals=135/0/0 done=dig:1486,cut:30 stored=538 cells=2335 crew=200 arriving=0
+#   the 12 committed files: compare with 13-8b-signoff/state-head-67be6aef.txt
+# AC 4, 7: the probe, in a scratch worktree (never in this tree), idle machine.
+#   NOTE: measured at 89be48c7 only (Tasks 1-7). AC 20's runs (Task 17) on the later build
+#   supersede them for the tick after the dig; the probe needs rebasing to run on the head.
 git worktree add --detach "$SCRATCH/wt" HEAD && cd "$SCRATCH/wt"
 git apply --reject <repo>/_bmad-output/implementation-artifacts/13-8b-signoff/prototypes/split-probe.patch   # fix rejects by hand
 CARGO_TARGET_DIR="$SCRATCH/tgt" cargo build --release -p simd
@@ -240,7 +244,7 @@ simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototyp
 - UPDATE `crates/sim-core/src/lib.rs` (`Terrain`, `set_tile`, `claim_jobs`, `execute_jobs`, `work_positions` / `pile_targets` call sites, tests).
 - NEW `_bmad-output/implementation-artifacts/mutations/13-8b.sh`.
 - NEW under `_bmad-output/implementation-artifacts/13-8b-signoff/`: the Task 5 outputs, `vehicle-card.md`.
-- No change to `protocol`, `simd`, `tui`, `client-core` or `gui`.
+- No change to `protocol`, `simd`, `tui`, `client-core` or `gui`. *(Superseded by the amendments: `crates/simd/src/main.rs` and `tests/serve.rs` gained the tick timer (AC 18), `scripts/bench/wire_tap.py` is new (the seat's tap), and `sim-core/tests/scenario.rs` / `save_load.rs` were re-pinned under AC 16.)*
 
 ### References
 
@@ -259,7 +263,7 @@ Amendment tasks 10-13 (asked 2026-11-15): Wolf picked **Opus 5.5** subagents. cl
 
 ### Debug Log References
 
-All outputs are under `13-8b-signoff/`. Code head for every figure: `89be48c7`.
+All outputs are under `13-8b-signoff/`. Code head for Tasks 1-7's figures: `89be48c7`. Entries from Task 10 on name their own head; AC 20's runs supersede AC 4 and 7 for the tick after the dig.
 
 - **Task 1, baseline.** `state-main-5f83e82e.txt`: `state=` and end line of the 12 committed scenarios and seat-like on `main`'s code (seat-like `5511268fb5faf97f`, end line as in the Verification block). The probe applied cleanly on that code and reproduced the creation counts exactly (`cells_goal_fail` 24,036 / 35,467 / 45,147 / 30,414 / 28,850). That first run was on a loaded machine (load 2.7 to 5.4), so its ms are not quoted; the idle ms for `main` are the two Task 5 runs.
 - **REDs (Sonnet agent, before each fix).** AC 2: `one flood of the plate, however many cooldowns  left: 1200  right: 400` (three floods in 61 ticks). AC 6: `left: 6  right: 1` (2K for K = 3). AC 5: `left: 3  right: 1` (one build per job-holding dwarf). AC 3 (i) with `set_tile`'s drop removed: `the opened route must be claimed within 50 ticks`. AC 3 (ii) with the subset test always true: `the dig must be claimed within 50 ticks of the stone leaving`.
