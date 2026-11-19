@@ -1,0 +1,226 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 1 the kept failures are never used (AC 2) ===
+thread 'tests::an_unreachable_dig_is_flooded_once_not_once_per_cooldown' (16468) panicked at crates/sim-core/src/lib.rs:6234:9:
+assertion `left == right` failed: one flood of the plate, however many cooldowns
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 2 the kept failures survive set_tile (AC 3 i) ===
+thread 'tests::a_tile_that_opens_the_route_drops_the_kept_failure' (17587) panicked at crates/sim-core/src/lib.rs:6262:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 3 the kept failures survive a cell leaving blocked (AC 3 ii) ===
+thread 'tests::a_stone_hauled_off_the_only_route_drops_the_kept_failure' (18514) panicked at crates/sim-core/src/lib.rs:6310:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.02s
+
+=== 4 the kept stone map misses a miner's lift (AC 5) ===
+thread 'a_carried_stone_is_always_set_down_beside_its_carrier' (19348) panicked at crates/sim-core/src/lib.rs:2494:13:
+assertion `left == right` failed: the kept stone map is current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.01s
+
+=== 5 the kept stone map misses a miner's set-down (AC 5) ===
+thread 'a_full_stockpile_never_stacks_uncarried_stones' (20224) panicked at crates/sim-core/src/lib.rs:2494:13:
+assertion `left == right` failed: the kept stone map is current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.03s
+
+=== 6 the kept stone map misses a dig's spawned stone (AC 5) ===
+thread 'tests::head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_open_end' (21019) panicked at crates/sim-core/src/lib.rs:2494:13:
+assertion `left == right` failed: the kept stone map is current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 7 the kept stone map misses a haul pick-up (AC 5) ===
+thread 'tests::a_3x3_pile_fills_from_the_inside_out' (21978) panicked at crates/sim-core/src/lib.rs:2494:13:
+assertion `left == right` failed: the kept stone map is current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 8 the kept stone map misses a haul delivery (AC 5) ===
+thread 'tests::a_3x3_pile_fills_from_the_inside_out' (23096) panicked at crates/sim-core/src/lib.rs:2494:13:
+assertion `left == right` failed: the kept stone map is current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.02s
+
+=== 9 the kept stone map misses a felled tree's wood (AC 5) ===
+thread 'digging_a_marked_trees_ground_releases_its_woodcutter' (24241) panicked at crates/sim-core/src/lib.rs:2494:13:
+assertion `left == right` failed: the kept stone map is current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.05s
+
+=== 10 the stone map is built again for every dwarf (AC 5) ===
+thread 'tests::execute_jobs_builds_the_stone_map_once_when_no_stone_moves' (25435) panicked at crates/sim-core/src/lib.rs:6387:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 11 the delivery set finds the pile cells again (AC 6) ===
+thread 'tests::claim_jobs_finds_the_pile_cells_once_per_call' (26419) panicked at crates/sim-core/src/lib.rs:6359:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 12 a released carrier's dropped stone is missed (AC 5) ===
+thread 'a_carried_stone_is_always_set_down_beside_its_carrier' (27205) panicked at crates/sim-core/src/lib.rs:2494:13:
+assertion `left == right` failed: the kept stone map is current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.19s
+
+=== 13 head-on job-holders wait SQUEEZE_WAIT_TICKS again (AC 12) ===
+thread 'tests::two_job_holders_head_on_trade_tiles_on_the_first_look' (28060) panicked at crates/sim-core/src/lib.rs:8767:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 14 the step aside lands on a free pile cell (Task 10, #189's loop) ===
+thread 'tests::an_idle_dwarf_moved_out_of_the_way_never_lands_on_a_free_pile_cell' (29007) panicked at crates/sim-core/src/lib.rs:9114:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 15 the exit ends on a free pile cell (Task 10, #189's loop) ===
+thread 'tests::an_idle_dwarf_moved_out_of_the_way_never_lands_on_a_free_pile_cell' (29814) panicked at crates/sim-core/src/lib.rs:9125:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 16 a failed re-plan's component is flooded again (AC 14) ===
+thread 'tests::failed_re_plans_in_one_component_flood_it_once' (30721) panicked at crates/sim-core/src/lib.rs:6512:9:
+assertion `left == right` failed: one flood of the plate for both failed re-plans
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 17 the failed re-plans survive a stone moving (AC 14) ===
+thread 'tests::a_stone_lifted_mid_call_lets_a_later_re_plan_through' (31498) panicked at crates/sim-core/src/lib.rs:6561:9:
+assertion `left == right` failed: miner 2 still holds his dig
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 18 a failed re-plan's skip ignores the goals (AC 14) ===
+thread 'tests::a_failed_re_plan_leaves_a_reachable_dig_in_its_component_to_the_next_miner' (32381) panicked at crates/sim-core/src/lib.rs:6594:9:
+assertion `left == right` failed: miner 1 still holds his dig
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 19 a ring of job-holders is never stepped (AC 13) ===
+thread 'tests::a_ring_of_waiting_job_holders_steps_at_once' (33224) panicked at crates/sim-core/src/lib.rs:8860:9:
+assertion `left == right` failed: the holder stepped onto b
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 20 the ring takes a link that is not walking (AC 13) ===
+thread 'tests::a_chain_ending_on_a_dwarf_working_in_place_moves_nobody' (34154) panicked at crates/sim-core/src/lib.rs:8892:9:
+assertion `left == right` failed: the holder's path is unchanged
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 21 the ring takes an idle link (AC 13) ===
+thread 'tests::a_chain_through_an_idle_dwarf_with_an_exit_moves_nobody' (34930) panicked at crates/sim-core/src/lib.rs:8917:13:
+assertion `left == right` failed: dwarf 0 did not move
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 22 the ring takes a link whose next step is not legal (AC 13) ===
+thread 'tests::a_chain_with_a_step_that_is_not_a_legal_move_moves_nobody' (35826) panicked at crates/sim-core/src/lib.rs:8947:13:
+assertion `left == right` failed: dwarf 0 did not move
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 23 the ring steps its links but not the holder (AC 13) ===
+thread 'tests::a_ring_of_waiting_job_holders_steps_at_once' (36631) panicked at crates/sim-core/src/lib.rs:8859:9:
+assertion `left == right` failed: the holder stepped onto b
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 24 the ring steps the holder but not its links (AC 13) ===
+thread 'tests::a_ring_of_waiting_job_holders_steps_at_once' (37549) panicked at crates/sim-core/src/lib.rs:8867:13:
+assertion `left == right` failed: dwarf 1 stepped round the ring
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 25 the tick timer's step measures nothing (AC 18) ===
+thread 'the_daemon_logs_its_tick_times_every_thousand_stepped_ticks' (38861) panicked at crates/simd/tests/serve.rs:3444:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 83 filtered out; finished in 5.64s
+
+=== 26 the kept pile cells survive a stone change (AC 20) ===
+thread 'a_reassigned_hauler_puts_the_stone_down_and_another_hauler_delivers_it' (39879) panicked at crates/sim-core/src/lib.rs:2504:17:
+assertion `left == right` failed: the kept pile cells are current
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 86 filtered out; finished in 0.03s
+
+=== 27 every haul turn finds the pile cells again (AC 20) ===
+thread 'tests::execute_jobs_finds_the_pile_cells_once_when_no_stone_moves' (40819) panicked at crates/sim-core/src/lib.rs:6479:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 28 the goal pocket is never asked (AC 20) ===
+thread 'tests::a_search_for_goals_shut_in_a_small_pocket_floods_nothing' (41596) panicked at crates/sim-core/src/lib.rs:6409:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 29 the pocket test asks where the start stands, not where he can step (AC 20) ===
+thread 'tests::a_start_on_a_blocked_cell_beside_a_small_pocket_still_reaches_it' (42495) panicked at crates/sim-core/src/lib.rs:1385:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 30 a start on its own goal is skipped when the goal is not walkable (AC 20) ===
+thread 'tests::a_start_on_its_own_blocked_goal_is_already_there' (43326) panicked at crates/sim-core/src/lib.rs:1386:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.01s
+
+=== 31 a pause keeps its window (review P1) ===
+thread 'tests::a_pause_inside_a_tick_timer_window_starts_a_new_one' (44683) panicked at crates/simd/src/main.rs:1351:9:
+assertion `left == right` failed: ["tick-timer ticks=0-1000 wall_s=1.000 step_ms_mean=1.0000 step_ms_max=1.0000 send_ms_mean=0.0000 send_ms_max=0.0000 over=0"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+=== 32 a load's tick jump keeps its window (review P1) ===
+thread 'tests::a_load_inside_a_tick_timer_window_starts_a_new_one' (46029) panicked at crates/simd/src/main.rs:1320:13:
+assertion `left == right` failed: a load to tick 9001
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+=== 33 over counts nothing (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (47419) panicked at crates/simd/src/main.rs:1282:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+=== 34 over counts the iterations that kept their period (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (48812) panicked at crates/simd/src/main.rs:1282:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+=== 35 a window's maxes carry into the next (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (50189) panicked at crates/simd/src/main.rs:1298:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+=== 36 from is the first stepped tick, not the one it stepped from (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (51598) panicked at crates/simd/src/main.rs:1282:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+=== 37 send's max never moves (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (53025) panicked at crates/simd/src/main.rs:1282:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+=== 38 send's mean sums the step (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (54403) panicked at crates/simd/src/main.rs:1282:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 43 filtered out; finished in 0.00s
+
+================ MUTATION RESULTS ================
+1 the kept failures are never used (AC 2)                    KILLED
+2 the kept failures survive set_tile (AC 3 i)                KILLED
+3 the kept failures survive a cell leaving blocked (AC 3 ii) KILLED
+4 the kept stone map misses a miner's lift (AC 5)            KILLED
+5 the kept stone map misses a miner's set-down (AC 5)        KILLED
+6 the kept stone map misses a dig's spawned stone (AC 5)     KILLED
+7 the kept stone map misses a haul pick-up (AC 5)            KILLED
+8 the kept stone map misses a haul delivery (AC 5)           KILLED
+9 the kept stone map misses a felled tree's wood (AC 5)      KILLED
+10 the stone map is built again for every dwarf (AC 5)       KILLED
+11 the delivery set finds the pile cells again (AC 6)        KILLED
+12 a released carrier's dropped stone is missed (AC 5)       KILLED
+13 head-on job-holders wait SQUEEZE_WAIT_TICKS again (AC 12) KILLED
+14 the step aside lands on a free pile cell (Task 10, #189's loop) KILLED
+15 the exit ends on a free pile cell (Task 10, #189's loop)  KILLED
+16 a failed re-plan's component is flooded again (AC 14)     KILLED
+17 the failed re-plans survive a stone moving (AC 14)        KILLED
+18 a failed re-plan's skip ignores the goals (AC 14)         KILLED
+19 a ring of job-holders is never stepped (AC 13)            KILLED
+20 the ring takes a link that is not walking (AC 13)         KILLED
+21 the ring takes an idle link (AC 13)                       KILLED
+22 the ring takes a link whose next step is not legal (AC 13) KILLED
+23 the ring steps its links but not the holder (AC 13)       KILLED
+24 the ring steps the holder but not its links (AC 13)       KILLED
+25 the tick timer's step measures nothing (AC 18)            KILLED
+26 the kept pile cells survive a stone change (AC 20)        KILLED
+27 every haul turn finds the pile cells again (AC 20)        KILLED
+28 the goal pocket is never asked (AC 20)                    KILLED
+29 the pocket test asks where the start stands, not where he can step (AC 20) KILLED
+30 a start on its own goal is skipped when the goal is not walkable (AC 20) KILLED
+31 a pause keeps its window (review P1)                      KILLED
+32 a load's tick jump keeps its window (review P1)           KILLED
+33 over counts nothing (review P2)                           KILLED
+34 over counts the iterations that kept their period (review P2) KILLED
+35 a window's maxes carry into the next (review P2)          KILLED
+36 from is the first stepped tick, not the one it stepped from (review P2) KILLED
+37 send's max never moves (review P2)                        KILLED
+38 send's mean sums the step (review P2)                     KILLED
+
+All mutations killed.

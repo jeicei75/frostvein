@@ -2887,7 +2887,9 @@ development_status:
   # AMENDED 2026-11-15 (Wolf: "continue until we are happy"; "include 236 also to this fix"): seat run 2 = brief stops, not all at once. ACs 12-17, Tasks 10-15: head-on swap at once, #236's re-plan burst, blocking measured. Implementer: Opus 5.5 subagents (Wolf), claude-fable-5-2 orchestrates.
   # REVIEW run 1 2026-11-18 (Opus 5.5, fresh session): 4 layers OK, no code defect; 6 patches LEFT AS ACTION ITEMS (Wolf):
   # timer pause/load window, unpinned timer fields, re-run 13-8b.sh whole + tick-bench at HEAD, stale runbook text, PR Refs #236.
-  # Open decision: did run 5 produce files? PR #241 stays draft.
+  # Run 5 RULED 2026-11-19 (Wolf): done again after the patches, files saved. PR #241 stays draft.
+  # PATCH PASS 2026-11-19 (Opus 5.5): all 6 landed (26cb47ac, df7da46c, 33b4361c); 13-8b.sh 38/38 KILLED; tick-bench
+  # nothing slower; full gate GREEN at 33b4361c. Stays in-progress: seat run 5 (live) unrun. Next: round-2 review, run 5.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
