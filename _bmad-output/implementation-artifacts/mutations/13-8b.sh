@@ -338,9 +338,10 @@ PY
 mutation "39 a cut part-window is not logged (review run 2, D1 (b))" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '        let cut = cut.map(|cut| {\n'
+# The window is still reset; only the line is dropped, so this dies at the line count, not wall_s.
+old = '            line\n        });\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        let cut = cut.filter(|_| false).map(|cut| {\n'))
+p.write_text(s.replace(old, '            line\n        })\n        .filter(|_| false);\n'))
 PY
 
 mutation "40 a cut window's wall_s ends at the cutting iteration's record, after its pause or stall (review run 2, D1 (b))" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
@@ -367,7 +368,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            Some(_) if tick != from + u64::from(self.ticks) + 1 => Some("speed"),\n'))
 PY
 
-mutation "43 a cut leaves its window open, so the next paused iteration logs it again (review run 2, D1 (b))" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+mutation "43 a cut leaves its window open, so the full window after the pause carries it (review run 2, D1 (b); dies at wall_s < 1.0)" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '            let line = self.line(started, Some(cut));\n            *self = Self::default();\n            line\n'
