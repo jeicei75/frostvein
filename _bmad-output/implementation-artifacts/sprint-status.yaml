@@ -2893,6 +2893,9 @@ development_status:
   # REVIEW run 2 2026-11-19 (Opus 5.5, fresh): P0-P5 audited CLOSED; no HIGH, so the static audit ENDS. 5 patches LEFT AS
   # ACTION ITEMS (Wolf): log the cut part-window (D1 (b)), a speed change cuts the window, NOTE wording, P3/P4 record text.
   # Next: fresh /bmad-review-patch, then seat run 5 on the pushed build.
+  # PATCH PASS 2 2026-11-20 (Opus 5.5): all 5 landed (3c727628, beba4af4, 0ccb7694, db870cb1); rows 31-44 KILLED; full gate
+  # GREEN at db870cb1 (first gate RED at 0ccb7694: cut=pause hit serve's next_log, fixed). Stays in-progress: seat run 5 unrun.
+  # Static audit ENDED at run 2, so next: push, seat run 5 with files, record it, then gh pr ready 241.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog

@@ -206,28 +206,41 @@ Decisions:
   - Recommended: (a). The tap already covers the dropped stretch, and (b) adds an end-instant field and a second line shape.
 
 Patches:
-- [ ] [Review][Patch] **Log the part-window when a pause, a Load or a speed change cuts it (D1 (b), Wolf 2026-11-19)** [crates/simd/src/main.rs `TickTimer::record`; AC 18 text; run 4/5 card].
+- [x] [Review][Patch] **Log the part-window when a pause, a Load or a speed change cuts it (D1 (b), Wolf 2026-11-19)** [crates/simd/src/main.rs `TickTimer::record`; AC 18 text; run 4/5 card].
   - The cut window is written as a line with the same fields, plus a `cut=pause|load|speed` field. Its `ticks=` range is under 1,000.
   - Its `wall_s` ends at the last stepped iteration, which needs an end instant. It must not end at the cutting iteration, so no paused seconds and no load stall get in.
   - A window of 0 stepped ticks writes nothing.
   - Unit tests pin each cut's line (fields, range, `wall_s` excluding the pause), plus mutation rows.
   - AC 18 gets a superseded note: a line every 1,000 stepped ticks or at a cut. The card gets the reading note: one `over` with small maxes where the tap joined is its connect snapshot.
   - Serve's test must still read the full-window line.
-- [ ] [Review][Patch] **A speed change inside a window stays in `wall_s`, and the line does not name the speed** (feature, RAN; MED, latent silent failure in an instrument, the same class as P1) [crates/simd/src/main.rs:1030-1034, :504].
+- [x] [Review][Patch] **A speed change inside a window stays in `wall_s`, and the line does not name the speed** (feature, RAN; MED, latent silent failure in an instrument, the same class as P1) [crates/simd/src/main.rs:1030-1034, :504].
   - Live: 3 s at Normal inside a Fast4x window logged `ticks=7544-8544 wall_s=8.009 step_ms_mean=0.61 send_ms_mean=0.19 over=2`. By the doc comment's own rule that reads as "the machine fell 60% behind", and nothing did. Normal-then-Fast gives a falsely healthy window.
   - It bites the seat's first window every run: seat-like releases at Normal on the gui's connect, and the speed is raised afterwards.
   - Run 1 dismissed only `over` mixing periods, never `wall_s`.
   - Fix: a speed change starts a new window, as a pause does (`record` learns the speed). Add a unit test and mutation rows. Add one more row that kills at P1's `wall_s < 1.0` assert, which no row reaches today (row 31 dies at `ticks=`).
-- [ ] [Review][Patch] **The new NOTE is wrong in both halves** (edge + acceptance + feature, RAN; LOW, REWORK of P1; in the function the patch above edits) [crates/simd/src/main.rs:998-999].
+- [x] [Review][Patch] **The new NOTE is wrong in both halves** (edge + acceptance + feature, RAN; LOW, REWORK of P1; in the function the patch above edits) [crates/simd/src/main.rs:998-999].
   - A save **one tick ahead** IS caught (probe `ticks=401-1401`, or no line).
   - The Load that goes unseen is a save **of the tick the world is on**, for example Save then Load in one batch (live `saved tick 6733`, window `6544-7544` intact).
   - A **caught** Load keeps its stall too: the new window starts at that iteration's `started`, taken before the command drain (probe `ticks=101-1101 wall_s=2.000 over=1`).
   - Fix: reword the NOTE to say both. Counting the stall is defensible, since the daemon spent it.
-- [ ] [Review][Patch] **P3's row line numbers are the mutated file's, not HEAD's** (acceptance, RAN; LOW, record) [this file, closure table P3]. The asserts are at HEAD `main.rs:1282/1294/1320/1352`, not `1282/1298/1320/1351`.
-- [ ] [Review][Patch] **P4 blames the bench's own builds for the load; the load was the patch pass's background `mutate.sh`** (acceptance, READ the transcript; LOW, record) [this file, closure table P4].
+- [x] [Review][Patch] **P3's row line numbers are the mutated file's, not HEAD's** (acceptance, RAN; LOW, record) [this file, closure table P3]. The asserts are at HEAD `main.rs:1282/1294/1320/1352`, not `1282/1298/1320/1351`.
+- [x] [Review][Patch] **P4 blames the bench's own builds for the load; the load was the patch pass's background `mutate.sh`** (acceptance, READ the transcript; LOW, record) [this file, closure table P4].
   - The file's first line reads `load average: 6.75` before the bench built anything.
   - `mutate.sh` ran 05:59-06:04 and the bench started at 06:04:20, so "on an idle machine" was not met.
   - The verdicts hold: every BEYOND FLOOR row is 13.9-75.8% faster, and the controls are −3.8 to +1.9%. Fix the sentence.
+
+Patch pass (2026-11-20, a fresh session, Opus 5.5), on `c90b9193`. Commits `3c727628` (the cut line, the speed cut and the NOTE, tests, rows 31/32/36 re-anchored, rows 39-43), `beba4af4` (row 39 re-aimed), `0ccb7694` (AC 18 note, card reading note, P3/P4 record), `db870cb1` (serve's `next_log` skips timer lines, row 44). The first full gate went RED at `0ccb7694`: a `cut=pause` line arrived ahead of the rect-rejection log `invalid_rects_are_logged_dropped_and_leave_the_client_connected` waits for. The fix is `db870cb1`. Full gate `RUST_TEST_THREADS=1 scripts/gate.sh` GREEN at `db870cb1`, exit 0, 2140 s. Rows 31-43 at `3c727628`: 13/13 KILLED, each at its intended assert (`13-8b-signoff/mutate-13-8b-rows31-43-3c727628.txt`). Row 44 KILLED 3/3.
+
+| Item | Fix written for | Tested from | Pre-existing-state fixture |
+|---|---|---|---|
+| D1 (b) log the cut part-window | a window cut by a pause, a Load or a speed change | the uncut side: P2's two-window test (no `cut=`), serve's real-binary test reading the full line after the `cut=speed` part-window, the full window after each cut | P1's rule: a window 400 ticks in when a pause (from 3 s ago, paused 1 s later), a Load (to 9001 and back to 101) or a speed change arrives. RED on P1's rule: no cut line, so 1 line where 2 are due. Live, debug `simd 7493`: `ticks=0-19 cut=speed`, `19-1019 wall_s=5.141`, `1019-1374 wall_s=1.811 cut=pause` (none of the 3 s pause), `1374-1628 wall_s=2.001 cut=load` (ends where the Load's iteration began, not after the ~1.1 s load) |
+| Speed change cuts the window | a speed change mid-window | the steady-speed side: P2's test; the seat's shape (Normal, then raised): serve's test and the live probe's first line `cut=speed` | `a_speed_change_inside_a_tick_timer_window_starts_a_new_one`: 400 Fast4x ticks from 3 s ago, then Normal. RED on P1's rule: `ticks=0-1000 wall_s=3.000`, the mixed window the review measured (`wall_s=8.009`) |
+| NOTE, both halves (REWORK of P1) | a reader of the NOTE | the code: the cut ends at, and the new window starts at, the Load iteration's `started`, taken before the commands are read (row 40 pins the end). The unseen half (a save of the current tick) was NOT re-run; it rests on the review's live probe (`saved tick 6733`, window `6544-7544` intact) | P1's NOTE: "a save one tick ahead is not seen" |
+| P3 line numbers | the record | `git show df7da46c:crates/simd/src/main.rs`: lines 1282/1294/1320/1352 are the four asserts | P3's row "1282/1298/1320/1351" |
+| P4 load sentence | the record | `tick-bench-main-33b4361c.txt` line 2: `load average: 6.75` at 06:04:20, before any build | P4's row "Load 4.79 … (the bench's own builds)" |
+| (gate) `next_log` skips timer lines | a serve test waiting for its own stderr line | the whole serve suite (84/84), then the full gate | the gate's RED at `0ccb7694`: `unexpected rect-rejection log: tick-timer ticks=0-4 … cut=pause`. Row 44 removes the skip: KILLED 3/3 at that assert |
+
+Rows 39-44 added; 31, 32 and 36 re-anchored. Row 43 dies at the full window's `wall_s < 1.0` (an open window carries the pause), and so does row 31.
 
 Deferred:
 - [x] [Review][Defer] **A client's connect snapshot is timed as neither step nor send** [crates/simd/src/main.rs:463-484] — deferred, pre-existing. One `over` with small maxes reads as "the machine". Run 2's connect stalled 152 ms. The D1 patch's card reading note covers it.
@@ -456,3 +469,4 @@ All outputs are under `13-8b-signoff/`. Code head for Tasks 1-7's figures: `89be
 | 2026-11-17 | Seat run 5 (Run 4's build, watched from minute 25): Wolf sees no hiccups after the big dig. AC 21 met. Open: rulings on AC 13, AC 16, #238 and three older mutation survivors. |
 | 2026-11-17 | Wolf's rulings: AC 13 accepted at 36 (re-test later), AC 16 accepted, #238 option A in its own story, the three older mutation survivors filed as #240. |
 | 2026-11-19 | Review patch pass (Opus 5.5): six patches landed (`26cb47ac`, `df7da46c`, `33b4361c`). The tick timer drops a window on a pause or a load; `over`, `send`, `from` and the max reset are pinned; rows 31-38. Whole `13-8b.sh` 38/38 KILLED at HEAD; tick-bench after the pocket: nothing slower. #236 stays open (`Refs`). Full gate GREEN at `33b4361c`. Open: seat run 5 again, with files (Wolf). |
+| 2026-11-20 | Review run 2 patch pass (Opus 5.5): five patches landed (`3c727628`, `beba4af4`, `0ccb7694`, `db870cb1`). The tick timer logs the part-window a pause, a Load or a speed change cuts (`cut=`), and a speed change now cuts the window. The NOTE is corrected, and so is the P3/P4 record. Rows 39-44, 31-44 KILLED. Full gate green at `db870cb1` (2140 s). Seat run 5 still owed. |

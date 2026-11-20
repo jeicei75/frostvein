@@ -81,3 +81,5 @@ test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out;
 
 All mutations killed.
 exit 0
+
+# Row 44 (db870cb1): KILLED 3/3 at serve.rs:2198 in the mutant (2199 at HEAD), the inverted_log assert.
