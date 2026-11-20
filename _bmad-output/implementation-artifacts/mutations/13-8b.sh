@@ -375,3 +375,13 @@ old = '            let line = self.line(started, Some(cut));\n            *self 
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            let line = self.line(started, Some(cut));\n            line\n'))
 PY
+
+# Row 44: the gate at 0ccb7694 went RED when a `cut=pause` line arrived ahead of the rect-rejection
+# log a serve test waited for. `next_log` now skips the timer's lines.
+mutation "44 next_log hands a tick-timer cut line to a test waiting for another line (review run 2)" simd invalid_rects_are_logged_dropped_and_leave_the_client_connected <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/tests/serve.rs'); s = p.read_text()
+old = '                Ok(line) if line.starts_with("tick-timer ") => {}\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, ''))
+PY

@@ -115,11 +115,22 @@ impl Daemon {
 
     /// Blocks until the daemon logs a line, proving it actually processed the input —
     /// without this, an inbound-handling test passes whether or not the daemon read.
+    /// The tick timer's lines are skipped: since 13.8b's review run 2, a pause or a speed change
+    /// writes one (`cut=`), so it can land ahead of the line a test is waiting for.
     fn next_log(&self) -> String {
-        match self.stderr.recv_timeout(IO_TIMEOUT) {
-            Ok(line) => line,
-            Err(RecvTimeoutError::Timeout) => panic!("daemon logged nothing within {IO_TIMEOUT:?}"),
-            Err(RecvTimeoutError::Disconnected) => panic!("daemon stderr closed unexpectedly"),
+        let deadline = Instant::now() + IO_TIMEOUT;
+        loop {
+            match self
+                .stderr
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            {
+                Ok(line) if line.starts_with("tick-timer ") => {}
+                Ok(line) => return line,
+                Err(RecvTimeoutError::Timeout) => {
+                    panic!("daemon logged nothing within {IO_TIMEOUT:?}")
+                }
+                Err(RecvTimeoutError::Disconnected) => panic!("daemon stderr closed unexpectedly"),
+            }
         }
     }
 
