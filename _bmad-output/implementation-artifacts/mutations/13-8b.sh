@@ -266,20 +266,20 @@ PY
 
 # Rows 31-38: the review's P1 and P2 on `TickTimer::record` (AC 18). Unit tests in simd's main.rs
 # feed `record` known values; `over`, `send`, `from` and the max reset were unpinned before.
-mutation "31 a pause keeps its window (review P1)" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+mutation "31 a pause keeps its window (review P1; dies at the full window's wall_s < 1.0, review run 2)" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '        let Some(step) = step else {\n            *self = Self::default();\n            return None;\n'
+old = '            None => Some("pause"),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        let Some(step) = step else {\n            return None;\n'))
+p.write_text(s.replace(old, '            None => None,\n'))
 PY
 
 mutation "32 a load's tick jump keeps its window (review P1)" simd a_load_inside_a_tick_timer_window_starts_a_new_one <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '            && tick != from + u64::from(self.ticks) + 1\n'
+old = '            Some(_) if tick != from + u64::from(self.ticks) + 1 => Some("load"),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            && false\n'))
+p.write_text(s.replace(old, '            Some(_) if false => Some("load"),\n'))
 PY
 
 mutation "33 over counts nothing (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
@@ -309,12 +309,12 @@ PY
 mutation "36 from is the first stepped tick, not the one it stepped from (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-# Shifted in both places, so the jump check stays consistent and the line, not a reset, shows it.
-old = '.get_or_insert((started, tick - 1));\n'
-jump = '            && tick != from + u64::from(self.ticks) + 1\n'
+# Shifted in both places, so the jump check stays consistent and the line, not a cut, shows it.
+old = '        self.start.get_or_insert((started, tick - 1, speed));\n'
+jump = '            Some(_) if tick != from + u64::from(self.ticks) + 1 => Some("load"),\n'
 assert s.count(old) == 1 and s.count(jump) == 1
-s = s.replace(old, '.get_or_insert((started, tick));\n')
-p.write_text(s.replace(jump, '            && tick != from + u64::from(self.ticks)\n'))
+s = s.replace(old, '        self.start.get_or_insert((started, tick, speed));\n')
+p.write_text(s.replace(jump, '            Some(_) if tick != from + u64::from(self.ticks) => Some("load"),\n'))
 PY
 
 mutation "37 send's max never moves (review P2)" simd the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh <<'PY'
@@ -331,4 +331,46 @@ p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 old = '        self.send = (self.send.0 + send, self.send.1.max(send));\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        self.send = (self.send.0 + step, self.send.1.max(send));\n'))
+PY
+
+# Rows 39-43: review run 2 on `TickTimer::record` (AC 18). D1 (b) logs the part-window a pause, a
+# Load or a speed change cuts; a speed change now cuts as a pause does.
+mutation "39 a cut part-window is not logged (review run 2, D1 (b))" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '        let cut = cut.map(|cut| {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let cut = cut.filter(|_| false).map(|cut| {\n'))
+PY
+
+mutation "40 a cut window's wall_s ends at the cutting iteration's record, after its pause or stall (review run 2, D1 (b))" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            let line = self.line(started, Some(cut));\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let line = self.line(Instant::now(), Some(cut));\n'))
+PY
+
+mutation "41 a speed change keeps its window (review run 2)" simd a_speed_change_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            Some(_) if speed != window_speed => Some("speed"),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Some(_) if false => Some("speed"),\n'))
+PY
+
+mutation "42 a load's cut is named a speed change (review run 2, D1 (b))" simd a_load_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            Some(_) if tick != from + u64::from(self.ticks) + 1 => Some("load"),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            Some(_) if tick != from + u64::from(self.ticks) + 1 => Some("speed"),\n'))
+PY
+
+mutation "43 a cut leaves its window open, so the next paused iteration logs it again (review run 2, D1 (b))" simd a_pause_inside_a_tick_timer_window_starts_a_new_one <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            let line = self.line(started, Some(cut));\n            *self = Self::default();\n            line\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let line = self.line(started, Some(cut));\n            line\n'))
 PY

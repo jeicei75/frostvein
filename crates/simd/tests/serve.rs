@@ -3406,12 +3406,13 @@ fn the_daemon_logs_its_tick_times_every_thousand_stepped_ticks() {
     // Drained on a thread so the daemon never evicts this client while 1,000 ticks pass.
     thread::spawn(move || for _ in reader.lines().map_while(Result::ok) {});
 
-    // 1,000 ticks at fast4x's 5 ms are about 5 s; the few normal ticks before it add little.
+    // 1,000 ticks at fast4x's 5 ms are about 5 s. The few normal ticks before it are logged as a
+    // part-window (`cut=speed`) and skipped here.
     let deadline = Instant::now() + Duration::from_secs(30);
     let line = loop {
         let left = deadline.saturating_duration_since(Instant::now());
         match daemon.stderr.recv_timeout(left) {
-            Ok(line) if line.starts_with("tick-timer ") => break line,
+            Ok(line) if line.starts_with("tick-timer ") && !line.contains(" cut=") => break line,
             Ok(_) => {}
             Err(error) => panic!("no tick-timer line within 30 s: {error:?}"),
         }
