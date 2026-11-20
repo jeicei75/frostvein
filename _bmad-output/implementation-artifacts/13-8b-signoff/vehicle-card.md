@@ -223,6 +223,11 @@ Build `b351ece5` or later (pull the branch on both sides first). What changed si
 
 - The daemon writes one line to its own error output every 1,000 ticks: how long the ticks took in the sim
   (`step_ms_mean`, `step_ms_max`) and in sending (`send_ms_mean`).
+  **Reading the line (from build `3c727628` on):** a pause, a Load or a speed change ends the window early. That
+  part is written as a shorter line ending in `cut=pause`, `cut=load` or `cut=speed`; the next window starts
+  afresh. The first line of a seat run is usually `cut=speed`: the scenario starts at Normal and the speed is
+  raised after. One `over` with small maxes in the window where the tap joined is the tap's connect snapshot,
+  not the machine.
 - The sim no longer searches the whole map for a dig that is shut in a small pocket nobody can reach. That
   search was most of the tick after the big dig.
 - The pile's free cells are found once per change instead of once per hauler.
