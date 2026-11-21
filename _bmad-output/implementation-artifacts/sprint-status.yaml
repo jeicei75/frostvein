@@ -43,7 +43,7 @@
 # - Retrospective appends its action items to action_items; sprint-status surfaces open ones
 
 generated: 2026-08-02
-last_updated: 2026-11-11
+last_updated: 2026-11-19
                           # FULLSCREEN 4K, ACROSS ZOOM LEVELS: `--subdiv 16` holds a steady 60-90
                           # FPS -- 13,873,064 triangles clearing BOTH NFR6 bars (60 working zoom,
                           # >=30 full vista) at the FINEST SUBDIVISION THE CLIENT WILL BUILD. Small
@@ -2875,6 +2875,29 @@ development_status:
   # 13.8 -> review 2026-11-09: seat run 3 passes (stutter before the big dig gone; stops after it = #231). Wolf ruled
   # "ok then 1": 13.8 closes as is, #231 (failing claim searches + execute_jobs after a big dig) is the next story.
   # 13.8 MERGED 2026-11-11 as PR #233 (ac4d3b7e), closed no issue; #232 open. -> done.
+  13-8b-after-the-big-dig: in-progress
+  # 13.8b CREATED 2026-11-12 (claude-fable-5-2) on branch story-13-8b-after-the-big-dig (off main 5f83e82e) for #231.
+  # Probes on seat-like: execute_jobs' stone-map rebuild is 3-11 ms (not 22-41); resolve_blocked_step 4-29 ms;
+  # claim_jobs floods the ~63k-cell main component most ticks (24-45k cells/tick). Prototype (kept failed components):
+  # state same, floods -67..-82%. Task 0 RULED 2026-11-13 (Wolf): Q1 (a) three neutral cuts, Q2 slot accepted (epic 17),
+  # Q3 haul failures filed as #235. Implementer: Sonnet 5.5 subagents, claude-fable-5-2 orchestrates.
+  # DEV 2026-11-13: Tasks 1-7 done at 89be48c7 (state= identical on 13 files; seat-like mean 20.3 -> 11.8 ms, floods
+  # 24-45k -> 6-10k cells/tick; 12/12 mutation rows KILLED; tick-bench no regression). Follow-up #236. AWAITING THE SEAT
+  # (13-8b-signoff/vehicle-card.md); full gate owed at PR.
+  # AMENDED 2026-11-15 (Wolf: "continue until we are happy"; "include 236 also to this fix"): seat run 2 = brief stops, not all at once. ACs 12-17, Tasks 10-15: head-on swap at once, #236's re-plan burst, blocking measured. Implementer: Opus 5.5 subagents (Wolf), claude-fable-5-2 orchestrates.
+  # REVIEW run 1 2026-11-18 (Opus 5.5, fresh session): 4 layers OK, no code defect; 6 patches LEFT AS ACTION ITEMS (Wolf):
+  # timer pause/load window, unpinned timer fields, re-run 13-8b.sh whole + tick-bench at HEAD, stale runbook text, PR Refs #236.
+  # Run 5 RULED 2026-11-19 (Wolf): done again after the patches, files saved. PR #241 stays draft.
+  # PATCH PASS 2026-11-19 (Opus 5.5): all 6 landed (26cb47ac, df7da46c, 33b4361c); 13-8b.sh 38/38 KILLED; tick-bench
+  # nothing slower; full gate GREEN at 33b4361c. Stays in-progress: seat run 5 (live) unrun. Next: round-2 review, run 5.
+  # REVIEW run 2 2026-11-19 (Opus 5.5, fresh): P0-P5 audited CLOSED; no HIGH, so the static audit ENDS. 5 patches LEFT AS
+  # ACTION ITEMS (Wolf): log the cut part-window (D1 (b)), a speed change cuts the window, NOTE wording, P3/P4 record text.
+  # Next: fresh /bmad-review-patch, then seat run 5 on the pushed build.
+  # PATCH PASS 2 2026-11-20 (Opus 5.5): all 5 landed (3c727628, beba4af4, 0ccb7694, db870cb1); rows 31-44 KILLED; full gate
+  # GREEN at db870cb1 (first gate RED at 0ccb7694: cut=pause hit serve's next_log, fixed). Stays in-progress: seat run 5 unrun.
+  # Static audit ENDED at run 2, so next: push, seat run 5 with files, record it, then gh pr ready 241.
+  # SEAT RUN 5 WITH FILES 2026-11-21 (gui 1a50406b): Wolf "no hickups anymore"; fps 20-30 dips = gui (#224). Tap <=3.7%
+  # behind after the dig; daemon step ~2x run 4 on identical sim-core (seat machine). Next: gh pr ready 241 on Wolf's yes.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog

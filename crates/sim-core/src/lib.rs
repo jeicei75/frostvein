@@ -63,9 +63,10 @@ pub const ARRIVAL_PATIENCE_TICKS: u32 = 100;
 /// gait cycles a second, under two frames per cycle at 60 fps. The legs aliased into a blur and
 /// the figure read as sliding.
 const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
-/// 13.4 squeeze-past: how many ticks a holder has been stuck behind one blocker before the two
-/// swap. One step period: the holder's second look at the same blocker (a blocked dwarf looks
-/// once per `STEP_REST_TICKS`).
+/// 13.4 squeeze-past: how many ticks a holder has been stuck behind one IDLE blocker before the
+/// two swap. One step period: the holder's second look at the same blocker (a blocked dwarf looks
+/// once per `STEP_REST_TICKS`). Two head-on job-holders do not wait; they swap on the first look
+/// (13.8b).
 const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
 // NOTE: 13.6's 256² crew-200 scenario holds 1,800 marks, under this cap. Past it a designate
 // drops cells silently (#170), and M4's forage and fishing marks add to the same count.
@@ -77,6 +78,10 @@ pub const MAX_DESIGNATIONS: usize = 4096;
 // same `None`, cheaper. A reachable reroute past it (`resolve_blocked_step`) gives up and waits,
 // keeping the claim.
 const MAX_ASTAR_NODES: usize = 50_000;
+/// 13.8b Task 17: the most cells `goal_pocket` floods before it gives up. On seat-like after the
+/// big dig nearly every failed claim search and blocked re-route had its goals shut in at most 64
+/// cells; a few dozen per 1,000 ticks had up to 512.
+const POCKET_CELLS: usize = 64;
 /// Ticks of work a hauler spends picking a stone up, and again putting it down.
 pub const WORK_TICKS: u32 = 5;
 /// Ticks of work one dig or channel takes: 10 swings of the pick at the client's 5 ticks per swing
@@ -389,9 +394,10 @@ struct Clearing {
     drop_from: Option<Pos>,
 }
 
-/// 13.4 squeeze-past: a holder's current stand-off. `blocker` has held his next tile since tick
-/// `since`; `last` is the tick of his latest look at it. Set by the first blocked look, kept while
-/// the same blocker holds him within `2 * STEP_REST_TICKS` of `last`, removed by the swap.
+/// 13.4 squeeze-past: a holder's current stand-off with an idle blocker. `blocker` has held his
+/// next tile since tick `since`; `last` is the tick of his latest look at it. Set by the first
+/// blocked look, kept while the same blocker holds him within `2 * STEP_REST_TICKS` of `last`,
+/// removed by the swap. A head-on job-holder sets none: the two swap on the first look (13.8b).
 #[derive(Component)]
 struct Squeeze {
     blocker: Id,
@@ -655,12 +661,27 @@ fn claim_jobs(
         .collect();
     // Emitters plus every uncarried item (#162): items block claim-time reachability like fires.
     let blocked = blocked_cells(emitters.iter().chain(items.values()));
-    // Walkable components that a COMPLETED failed search has already flooded this call (#132).
-    // Per call only: terrain can change between ticks, so nothing is cached across them.
+    // Walkable components that a COMPLETED failed search has already flooded (#132), kept from the
+    // last call (13.8b) while they still hold: `set_tile` drops them, and so does a cell that was
+    // in the last call's `blocked` and is not in this one (a lifted stone). A cell entering
+    // `blocked` keeps them: closing a cell cannot make anything reachable.
     // NOTE: a search expands each cell at most once (the heuristic is consistent), so a budget of
-    // the world's cell count cannot run out. An unreachable job costs one flood of its component
-    // per call, cached here.
+    // the world's cell count cannot run out. An unreachable job costs one flood of its component,
+    // cached here until the ground opens.
     let mut components: Vec<BTreeSet<Pos>> = Vec::new();
+    {
+        let (was_blocked, kept) = std::mem::take(
+            &mut *terrain
+                .kept_failures
+                .lock()
+                .expect("nothing panics holding the kept failures"),
+        );
+        if was_blocked.is_subset(&blocked) {
+            components = kept;
+        }
+    }
+    #[cfg(test)]
+    let kept_components = components.len();
 
     // The one test of whether a dwarf tries a job this tick: his trade, no job, past his reaction
     // delay. It gates both the early skip below and `attempted`, so the two cannot drift.
@@ -673,6 +694,9 @@ fn claim_jobs(
                     .saturating_add(reaction_delay(seed.0, id, job.id))
     };
     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
+    // The pile's free cells read only terrain, `blocked` and zones, all fixed for this call: found
+    // by the first haul job, shared by every other.
+    let mut pile = None;
     for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
@@ -685,7 +709,7 @@ fn claim_jobs(
         }
         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
         // set serves every candidate.
-        let goals = work_positions(&terrain, &blocked, &zones.0, &items, job, None);
+        let goals = work_positions_with(&terrain, &blocked, &zones.0, &items, job, None, &mut pile);
         #[cfg(test)]
         CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
         // A haul's delivery leg: the stone must also have somewhere reachable to go (#132).
@@ -693,13 +717,14 @@ fn claim_jobs(
             JobKind::Haul { item } => {
                 #[cfg(test)]
                 CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
-                Some(work_positions(
+                Some(work_positions_with(
                     &terrain,
                     &blocked,
                     &zones.0,
                     &items,
                     job,
                     Some(item),
+                    &mut pile,
                 ))
             }
             _ => None,
@@ -761,6 +786,22 @@ fn claim_jobs(
                 .retry_after = tick.0.saturating_add(RETRY_COOLDOWN);
         }
     }
+    #[cfg(test)]
+    CLAIM_FAILED_FLOODED.with(|n| {
+        n.set(
+            n.get()
+                + components[kept_components..]
+                    .iter()
+                    .map(BTreeSet::len)
+                    .sum::<usize>(),
+        )
+    });
+    // An empty set (no goals to search for) skips nobody, and is never kept.
+    components.retain(|component| !component.is_empty());
+    *terrain
+        .kept_failures
+        .lock()
+        .expect("nothing panics holding the kept failures") = (blocked, components);
 }
 
 #[derive(Component)]
@@ -806,6 +847,11 @@ struct Terrain {
     tiles: Vec<Tile>,
     dirty: BTreeSet<Pos>,
     pile_ground: Mutex<PileGround>,
+    /// 13.8b: what `claim_jobs` keeps between calls: the `blocked` set of its last call and the
+    /// walkable components its completed failed searches flooded then. Derived, never saved.
+    /// `set_tile` drops it; a call keeps it only while every cell of that `blocked` is still in
+    /// its own (a cell entering `blocked` cannot make anything reachable, one leaving can).
+    kept_failures: Mutex<(BTreeSet<Pos>, Vec<BTreeSet<Pos>>)>,
 }
 
 /// What `pile_targets` keeps, for the zones it was found for. `open`: the ground its entrance
@@ -851,6 +897,11 @@ impl Terrain {
             .expect("nothing panics holding the pile ground");
         kept.open.clear();
         kept.memo = None;
+        self.kept_failures
+            .get_mut()
+            .expect("nothing panics holding the kept failures")
+            .1
+            .clear();
         true
     }
 
@@ -930,6 +981,16 @@ thread_local! {
     static MEMO_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// Goal and delivery sets `claim_jobs` has built: the skip test's count.
     static CLAIM_SET_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Cells flooded by `claim_jobs`' failed searches: the kept-failure test's count.
+    static CLAIM_FAILED_FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// `pile_targets` calls: the once-per-claim test's count.
+    static PILE_TARGETS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Stone maps `execute_jobs` has built: the once-per-call test's count.
+    static STONE_MAP_BUILDS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Cells flooded by `execute_jobs`' failed re-plans: the once-per-component test's count.
+    static REPLAN_FAILED_FLOODED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Pile cells `work_positions_with` has found to fill its `pile`: the shared-pile test's count.
+    static PILE_FILLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// Every free stockpile cell and how deep it lies: the breadth-first layer from the walkable
@@ -971,6 +1032,8 @@ fn pile_targets(
     blocked: &BTreeSet<Pos>,
     zones: &BTreeSet<Pos>,
 ) -> BTreeMap<Pos, u32> {
+    #[cfg(test)]
+    PILE_TARGETS_CALLS.with(|n| n.set(n.get() + 1));
     let cap = 4 * zones.len() + 16;
     // The zones' x/y bounding box (empty with no zones).
     let xs = || zones.iter().map(|p| p.x);
@@ -1268,6 +1331,42 @@ fn astar_heuristic(from: Pos, goals: &BTreeSet<Pos>) -> u32 {
         .unwrap_or(0)
 }
 
+/// The walkable cells joined to the walkable `goals` under `blocked`, if there are at most
+/// `POCKET_CELLS` of them. A move needs its destination walkable and, across a level, a ramp under
+/// the lower of the two cells, so every move can be walked back: a search can end on a goal only by
+/// stepping into this set.
+fn goal_pocket(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    goals: &BTreeSet<Pos>,
+) -> Option<BTreeSet<Pos>> {
+    let mut pocket: BTreeSet<Pos> = goals
+        .iter()
+        .copied()
+        .filter(|goal| is_walkable(terrain, blocked, *goal))
+        .collect();
+    if pocket.len() > POCKET_CELLS {
+        return None;
+    }
+    let mut queue: VecDeque<Pos> = pocket.iter().copied().collect();
+    while let Some(cell) = queue.pop_front() {
+        for next in astar_neighbours(terrain, blocked, cell) {
+            if pocket.insert(next) {
+                if pocket.len() > POCKET_CELLS {
+                    return None;
+                }
+                queue.push_back(next);
+            }
+        }
+    }
+    Some(pocket)
+}
+
+/// 13.8b Task 17: goals shut in a small pocket that `from` cannot step into are out of reach, and
+/// the answer is the search's own `None` without the flood of `from`'s side that found it (on
+/// seat-like after the big dig, 11 ms a tick of blocked re-routes and 6 ms of claim searches). It
+/// spends no budget and gives back no component, so nothing is kept for it: a later search pays
+/// the pocket again, never the flood.
 fn astar_with_budget(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -1278,6 +1377,31 @@ fn astar_with_budget(
     if goals.is_empty() {
         return (None, false, BTreeSet::new());
     }
+    if !goals.contains(&from)
+        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {
+            astar_neighbours(terrain, blocked, from)
+                .iter()
+                .all(|cell| !pocket.contains(cell))
+        })
+    {
+        debug_assert!(
+            astar_search(terrain, blocked, from, goals, &mut terrain.tiles.len())
+                .0
+                .is_none(),
+            "a start that cannot step into the goals' pocket never reaches them"
+        );
+        return (None, false, BTreeSet::new());
+    }
+    astar_search(terrain, blocked, from, goals, nodes_remaining)
+}
+
+fn astar_search(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    from: Pos,
+    goals: &BTreeSet<Pos>,
+    nodes_remaining: &mut usize,
+) -> (Option<Vec<Pos>>, bool, BTreeSet<Pos>) {
     let mut open = BinaryHeap::from([Reverse((astar_heuristic(from, goals), from))]);
     let mut came_from = BTreeMap::new();
     let mut costs = BTreeMap::from([(from, 0_u32)]);
@@ -1451,6 +1575,8 @@ fn fell_tree(ecs: &mut EcsWorld, at: Pos) {
 /// crossing the pile never blocks a tile for anyone else. `blocked` holds those same tiles
 /// (`blocked_cells`), so an item is never a work position and never stood on (#162): a dwarf works
 /// from the next tile.
+/// NOTE: the sim's callers share a `pile` (`work_positions_with`); this one-shot form is the tests'.
+#[cfg(test)]
 fn work_positions(
     terrain: &Terrain,
     blocked: &BTreeSet<Pos>,
@@ -1458,6 +1584,20 @@ fn work_positions(
     items: &BTreeMap<u32, Pos>,
     job: Job,
     carrying: Option<u32>,
+) -> BTreeSet<Pos> {
+    work_positions_with(terrain, blocked, zones, items, job, carrying, &mut None)
+}
+
+/// `work_positions` with the pile's free cells shared: a haul job fills `pile` on first need, so a
+/// caller whose `blocked` and zones hold still (one `claim_jobs` call) finds them once.
+fn work_positions_with(
+    terrain: &Terrain,
+    blocked: &BTreeSet<Pos>,
+    zones: &BTreeSet<Pos>,
+    items: &BTreeMap<u32, Pos>,
+    job: Job,
+    carrying: Option<u32>,
+    pile: &mut Option<BTreeMap<Pos, u32>>,
 ) -> BTreeSet<Pos> {
     match job.kind {
         JobKind::Dig | JobKind::Cut => {
@@ -1511,7 +1651,11 @@ fn work_positions(
             // and `release_claim` drops it off the pile.
             // NOTE: `claim_jobs` checks delivery reachability at claim time, so a sealed cell never
             // starts a pick-up; one sealed off mid-walk can still cost a pick-up/drop per retry (#132).
-            let targets = pile_targets(terrain, blocked, zones);
+            let targets = &*pile.get_or_insert_with(|| {
+                #[cfg(test)]
+                PILE_FILLS.with(|n| n.set(n.get() + 1));
+                pile_targets(terrain, blocked, zones)
+            });
             if carrying.is_some() {
                 // The neighbours of the DEEPEST free cells; `drop_cell` then lands on one of them.
                 let deepest = targets.values().copied().max();
@@ -1758,12 +1902,13 @@ fn closed_to_dwarves(
 }
 
 /// 13.4 squeeze-past. The ladder in `resolve_blocked_step` found no way for the holder to pass, and
-/// the blocker is idle or head-on (its path starts on the holder's tile). After `SQUEEZE_WAIT_TICKS`
-/// of the same stand-off the two trade tiles in this one call (the squeeze), so no tick boundary
-/// has two on a tile. Both rest a step period, as after any step. Returns `true` when it swapped:
-/// the holder's `path` is already advanced and its `Pos` set, so the caller must report "wait"
-/// (`false`), which stores the path and the rest period and leaves `occupied` as it is (the same
-/// two tiles stay taken).
+/// the blocker is idle or head-on (its path starts on the holder's tile). An idle blocker swaps
+/// after `SQUEEZE_WAIT_TICKS` of the same stand-off; a head-on job-holder (`idle` false) on the
+/// holder's first look (13.8b). The two trade tiles in this one call (the squeeze), so no tick
+/// boundary has two on a tile. Both rest a step period, as after any step. Returns `true` when it
+/// swapped: the holder's `path` is already advanced and its `Pos` set, so the caller must report
+/// "wait" (`false`), which stores the path and the rest period and leaves `occupied` as it is (the
+/// same two tiles stay taken).
 fn try_squeeze(
     ecs: &mut EcsWorld,
     (holder_id, pos): (Id, Pos),
@@ -1788,7 +1933,7 @@ fn try_squeeze(
         }
         _ => now,
     };
-    if now - since < SQUEEZE_WAIT_TICKS {
+    if idle && now - since < SQUEEZE_WAIT_TICKS {
         ecs.entity_mut(holder).insert(Squeeze {
             blocker: blocker_id,
             since,
@@ -1857,6 +2002,81 @@ fn make_room_down_the_idle_chain(
     }
 }
 
+/// 13.8b: case 2 of `resolve_blocked_step` found no way round a job-holding blocker. Follows the
+/// chain: the blocker, the dwarf on the blocker's next tile, and on. Every link must hold a job,
+/// be walking (`JobState::Walk`) and have a `Path` whose first tile is still a legal step from
+/// where he stands. A chain that comes back to the holder's tile is a ring: every dwarf in it, the
+/// holder included, steps onto the next one's tile in this one call, as the squeeze swap does for
+/// two. Each link's path is advanced (an emptied one removed) and each rests a step period, one
+/// that has already had his turn this tick included, as the swap's blocker does; the holder's
+/// `path` is advanced and his `Pos` set, so the caller reports "wait" and `occupied` stays as it is
+/// (the same tiles stay taken). A chain that ends anywhere else (a free tile, an idle dwarf, one
+/// working in place, no path) or loops without reaching the holder moves nobody.
+/// NOTE: each link is a dwarf not seen before in the chain, so it is never longer than the crew.
+/// The smallest ring is four: every step changes x + y by one, so a ring is even, and a ring of
+/// two is head-on (case 3).
+fn step_the_ring(
+    ecs: &mut EcsWorld,
+    blocked: &BTreeSet<Pos>,
+    pos: Pos,
+    path: &mut Vec<Pos>,
+    blocker: Entity,
+) {
+    let at: BTreeMap<Pos, Entity> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| Some((*entity.get::<Pos>()?, entity.id())))
+        .collect();
+    let terrain = ecs.resource::<Terrain>();
+    let legal = |from: Pos, to: Pos| astar_neighbours(terrain, blocked, from).contains(&to);
+    if !legal(pos, path[0]) {
+        return;
+    }
+    let mut ring: Vec<(Entity, Vec<Pos>)> = Vec::new();
+    let mut link = blocker;
+    loop {
+        if ring.iter().any(|(member, _)| *member == link) {
+            return;
+        }
+        let from = *ecs.get::<Pos>(link).expect("every dwarf has a position");
+        let steps = ecs
+            .get::<Path>(link)
+            .map(|path| path.0.clone())
+            .unwrap_or_default();
+        if ecs
+            .get::<CurrentJob>(link)
+            .is_none_or(|current| current.0.is_none())
+            || ecs.get::<JobState>(link) != Some(&JobState::Walk)
+            || steps.first().is_none_or(|next| !legal(from, *next))
+        {
+            return;
+        }
+        let next = steps[0];
+        ring.push((link, steps));
+        if next == pos {
+            break;
+        }
+        let Some(&following) = at.get(&next) else {
+            return;
+        };
+        link = following;
+    }
+    for (member, mut steps) in ring {
+        *ecs.get_mut::<Pos>(member)
+            .expect("every dwarf has a position") = steps.remove(0);
+        ecs.get_mut::<Wander>(member)
+            .expect("every dwarf wanders")
+            .cooldown = STEP_REST_TICKS;
+        if steps.is_empty() {
+            ecs.entity_mut(member).remove::<Path>();
+        } else {
+            ecs.entity_mut(member).insert(Path(steps));
+        }
+    }
+    *ecs.get_mut::<Pos>(at[&pos])
+        .expect("every dwarf has a position") = path.remove(0);
+}
+
 /// The next tile of a holder's `path` holds another dwarf (FR49). Returns `true` when `path` now
 /// starts on a free tile and the holder should step, `false` when it waits. May move the blocker
 /// (it steps aside, or yields) or replace `path` (a re-route, or the holder yields).
@@ -1865,30 +2085,36 @@ fn make_room_down_the_idle_chain(
 ///    an exit `Path` to the nearest free tile off the holder's path. One that starts on the
 ///    holder's tile makes this case 3; one that runs ahead along the holder's path leaves the
 ///    holder waiting, and the two swap once the holder has waited on this blocker for
-///    `SQUEEZE_WAIT_TICKS` (13.4). The wait is counted per blocker, whatever way the two met, so a
-///    cancel that turns a head-on job-holder idle can swap here on the first look (#220). With no
+///    `SQUEEZE_WAIT_TICKS` (13.4). The wait is counted per blocker, whatever way the two met
+///    (#220). With no
 ///    exit past the other dwarves either, the idle dwarves in the way shift (#185) and the holder
 ///    waits; after the same wait the two swap. #194's exit back up the line is gone: the squeeze
-///    does that work.
-/// 2. The blocker holds a job and is not coming the other way: re-route around every dwarf.
+///    does that work. 13.8b (#189's loop): neither the step aside nor the exit ends on a free pile
+///    cell, where he would stand on a hauler's next delivery and call it home. NOTE: case 3's
+///    escape, #185's shift and the swap can still leave an idle dwarf on one.
+/// 2. The blocker holds a job and is not coming the other way: re-route around every dwarf. With
+///    no way round, a ring of waiting job-holders (each one's next tile held by the next, back
+///    to the holder) steps at once, the holder with it (`step_the_ring`, 13.8b); otherwise wait.
 /// 3. Head-on (the blocker's path starts on the holder's tile): each side's ESCAPE is the nearest
 ///    tile, reached without passing the other dwarf, that is off the other's remaining path. The
 ///    lower id yields if it has one, else the other does. The yield IS the yielder's `Path`.
 ///    A per-step "back off if you can" rule livelocks in a dead end (see the story); an escape
 ///    gets nearer as the yielder retreats and never appears for the dwarf that advances.
 ///    13.4: where the blocker holds a job (two head-on job-holders) the escape is not used: the
-///    two swap after the wait. #194/#196's back-out is gone; the swap resolves a line of
-///    head-on dwarves in a one-wide way a pair at a time.
+///    two swap, on the holder's first look (13.8b; 13.4 made them wait first). #194/#196's
+///    back-out is gone; the swap resolves a line of head-on dwarves in a one-wide way a pair at a
+///    time.
 /// 4. Otherwise wait.
 ///
-/// NOTE: the swap (13.4, Wolf's Ruling 1) takes a holder and the dwarf that has held him for
-/// `SQUEEZE_WAIT_TICKS`: a head-on job-holder, or an idle blocker, exit or not (his `home` becomes
+/// NOTE: the swap (13.4, Wolf's Ruling 1) takes a holder and a head-on job-holder at once (13.8b),
+/// or an idle blocker, exit or not, that has held him for `SQUEEZE_WAIT_TICKS` (his `home` becomes
 /// the holder's old tile and any exit `Path` is dropped; an exit running ahead along the holder's
 /// path would no longer start next to him). The wait is counted per blocker while the holder looks
 /// again within `2 * STEP_REST_TICKS`, whatever way the two meet: a timer carried across a change
 /// of case is kept (#220). A job-holder who is not coming the other way is never swapped; he
-/// re-routes. Two dwarves sealed in one pocket both wait, and a ring of dwarves each waiting on the
-/// next waits too; neither is detected.
+/// re-routes. Two dwarves sealed in one pocket both wait, undetected. A ring of job-holders each
+/// waiting on the next steps round at once (case 2); a ring with an idle or working dwarf in it
+/// waits.
 fn resolve_blocked_step(
     ecs: &mut EcsWorld,
     blocked: &BTreeSet<Pos>,
@@ -1921,9 +2147,13 @@ fn resolve_blocked_step(
 
     if idle && !head_on(&blocker_path) {
         let terrain = ecs.resource::<Terrain>();
+        // 13.8b: never onto a free pile cell, where he would stand on a hauler's next delivery.
+        let piles = &ecs.resource::<Zones>().0;
         let aside = astar_neighbours(terrain, blocked, next)
             .into_iter()
-            .find(|tile| !occupied.contains(tile) && !holder_tiles.contains(tile));
+            .find(|tile| {
+                !occupied.contains(tile) && !holder_tiles.contains(tile) && !piles.contains(tile)
+            });
         if let Some(aside) = aside {
             step_aside(ecs, occupied, blocker, next, aside);
             return true;
@@ -1932,7 +2162,7 @@ fn resolve_blocked_step(
         // tile is passable for the search (it is the way out) but not a destination.
         let closed = closed_to_dwarves(blocked, occupied, &[pos, next]);
         let exit = route_to_nearest(terrain, &closed, next, |tile| {
-            tile != pos && !holder_tiles.contains(&tile)
+            tile != pos && !holder_tiles.contains(&tile) && !piles.contains(&tile)
         });
         let Some(route) = exit else {
             // #185: the idle dwarves in the way shift if they can. Either way the holder waits, and
@@ -1965,14 +2195,17 @@ fn resolve_blocked_step(
         }
         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
         let Some(rerouted) = astar(ecs.resource::<Terrain>(), &closed, pos, goals) else {
+            // A ring steps at once, the holder with it; either way he reports "wait", as after a
+            // swap.
+            step_the_ring(ecs, blocked, pos, path, blocker);
             return false;
         };
         *path = rerouted;
         return true;
     }
 
-    // 13.4: two head-on movers (the blocker holds a job) trade tiles after the wait, instead of one
-    // of them escaping down the line.
+    // 13.4: two head-on movers (the blocker holds a job) trade tiles, at once (13.8b), instead of
+    // one of them escaping down the line.
     if !idle {
         try_squeeze(
             ecs,
@@ -2183,10 +2416,46 @@ fn clearing_set_down(
 }
 
 /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
+/// `execute_jobs`' stone positions and the `blocked` set they make with the emitters.
+type StoneMap = (BTreeMap<u32, Pos>, BTreeSet<Pos>);
+
+fn stone_map(ecs: &EcsWorld, emitters: &[Pos]) -> StoneMap {
+    #[cfg(test)]
+    STONE_MAP_BUILDS.with(|n| n.set(n.get() + 1));
+    let stones = uncarried_stones(ecs);
+    let blocked = blocked_cells(emitters.iter().chain(stones.values()));
+    (stones, blocked)
+}
+
+/// A dwarf that carries a stone sets it down when its claim is released: the kept stone map is
+/// stale after one.
+fn forget_if_carrying(ecs: &EcsWorld, entity: Entity, stale: &mut bool) {
+    if ecs
+        .get::<Carrying>(entity)
+        .is_some_and(|carrying| carrying.0.is_some())
+    {
+        *stale = true;
+    }
+}
+
+// NOTE: `stones` and `blocked` are borrows of `kept` now; the `&blocked` / `&stones` below are the
+// old owned-value spelling, which older mutation rows anchor on.
+#[allow(clippy::needless_borrow)]
 fn execute_jobs(ecs: &mut EcsWorld) {
-    // Built once, before the loop borrows the world for terrain. Emitters are static; the items
-    // are not (a pick-up, a drop or a spawn changes them mid-loop), so `blocked` is rebuilt from
-    // them for every dwarf.
+    // Emitters are static; the items are not (a lift, a set-down, a pick-up, a delivery, a spawn
+    // or a released carrier changes them mid-loop). `kept` is the stone map of the last dwarf's
+    // turn; `stale` marks every such change (a flag, because `kept` stays borrowed for the rest
+    // of the turn that made it) and the next turn drops `kept`, building it again if it needs it.
+    let mut kept: Option<StoneMap> = None;
+    let mut stale = false;
+    // The walkable components this call's completed failed re-plans flooded, under `kept`'s
+    // `blocked` and today's tiles. Dropped with `kept`: every tile set in this loop sets `stale` too
+    // (a refused channel cut restores its tiles before anyone searches).
+    let mut failed: Vec<BTreeSet<Pos>> = Vec::new();
+    // The pile's free cells under `kept`'s `blocked` and today's tiles (zones do not change here),
+    // found by the first haul turn that needs them and dropped with `kept` (13.8b Task 17: found
+    // again on every haul turn they were about 3 ms a tick after seat-like's big dig).
+    let mut pile: Option<BTreeMap<Pos, u32>> = None;
     let emitters: Vec<Pos> = ecs
         .query_filtered::<&Pos, With<Emitter>>()
         .iter(ecs)
@@ -2201,10 +2470,16 @@ fn execute_jobs(ecs: &mut EcsWorld) {
     dwarves.sort_by_key(|(id, _)| *id);
 
     for (holder_id, entity) in dwarves {
+        if std::mem::take(&mut stale) {
+            kept = None;
+            failed.clear();
+            pile = None;
+        }
         let Some(job_id) = ecs.get::<CurrentJob>(entity).and_then(|current| current.0) else {
             continue;
         };
         let Some(job) = ecs.resource::<Jobs>().by_id.get(&job_id).copied() else {
+            forget_if_carrying(ecs, entity, &mut stale);
             release_claim(ecs, entity);
             continue;
         };
@@ -2215,8 +2490,30 @@ fn execute_jobs(ecs: &mut EcsWorld) {
             continue;
         }
         let carrying = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0);
-        let stones = uncarried_stones(ecs);
-        let blocked = blocked_cells(emitters.iter().chain(stones.values()));
+        if let Some((kept_stones, kept_blocked)) = &kept {
+            debug_assert_eq!(
+                *kept_stones,
+                uncarried_stones(ecs),
+                "the kept stone map is current"
+            );
+            debug_assert_eq!(
+                *kept_blocked,
+                blocked_cells(emitters.iter().chain(uncarried_stones(ecs).values())),
+                "the kept blocked set is current"
+            );
+            if let Some(cells) = &pile {
+                debug_assert_eq!(
+                    *cells,
+                    pile_targets(
+                        ecs.resource::<Terrain>(),
+                        kept_blocked,
+                        &ecs.resource::<Zones>().0
+                    ),
+                    "the kept pile cells are current"
+                );
+            }
+        }
+        let (stones, blocked) = &*kept.get_or_insert_with(|| stone_map(ecs, &emitters));
         // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
         // designation and claim stay his own job through lift, carry and set-down.
         let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {
@@ -2303,13 +2600,14 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     .collect()
             }
         } else {
-            work_positions(
+            work_positions_with(
                 ecs.resource::<Terrain>(),
                 &blocked,
                 &ecs.resource::<Zones>().0,
                 &stones,
                 job,
                 carrying,
+                &mut pile,
             )
         };
         if let Some((landing, from)) = set_down {
@@ -2327,6 +2625,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     .expect("every dwarf has a job state") = JobState::Walk;
                 continue;
             }
+            forget_if_carrying(ecs, entity, &mut stale);
             retry_claim(ecs, entity, job.id);
             continue;
         }
@@ -2343,13 +2642,31 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 // The world's cell count, as at claim time (13.7 review, decision 1): every dig or
                 // cut clears every path, and a re-plan capped at `MAX_ASTAR_NODES` released a far
                 // claim that `claim_jobs` then re-claimed, in a loop that never reached the job.
-                let (computed, _, _) = astar_with_budget(
-                    terrain,
-                    &blocked,
-                    pos,
-                    &work_positions,
-                    &mut terrain.tiles.len(),
-                );
+                // A start in a component a failed re-plan flooded, holding none of his goals,
+                // fails the same way: one flood per component, however many fail in it.
+                let computed = if failed.iter().any(|component| {
+                    component.contains(&pos) && work_positions.is_disjoint(component)
+                }) {
+                    None
+                } else {
+                    let (computed, _, explored) = astar_with_budget(
+                        terrain,
+                        &blocked,
+                        pos,
+                        &work_positions,
+                        &mut terrain.tiles.len(),
+                    );
+                    #[cfg(test)]
+                    REPLAN_FAILED_FLOODED.with(|n| n.set(n.get() + explored.len()));
+                    // Empty after a success or for no goals: nothing was flooded.
+                    if !explored.is_empty() {
+                        failed.push(explored);
+                    }
+                    computed
+                };
+                if computed.is_none() {
+                    forget_if_carrying(ecs, entity, &mut stale);
+                }
                 let Some(computed) = computed else {
                     retry_claim(ecs, entity, job.id);
                     continue;
@@ -2434,9 +2751,12 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 let mut lifted = blocked.clone();
                 lifted.remove(&stones[&item]);
                 if clearing_set_down(ecs, entity, job, pos, &lifted, &occupied).is_none() {
+                    forget_if_carrying(ecs, entity, &mut stale);
                     retry_claim(ecs, entity, job.id);
                     continue;
                 }
+                // The lift, and any hauler losing custody below, change the stones.
+                stale = true;
                 // A hauler may hold the item's haul claim; the miner takes custody at lift.
                 let haulers: Vec<_> = ecs
                     .iter_entities()
@@ -2459,6 +2779,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 ecs.entity_mut(entity).remove::<Path>();
             } else if let (Some((landing, _)), Some(stone)) = (set_down, item_entity(ecs, item)) {
                 *ecs.get_mut::<Pos>(stone).expect("item position") = landing;
+                stale = true;
                 ecs.get_mut::<Carrying>(entity).expect("carrying slot").0 = None;
                 ecs.entity_mut(entity).remove::<Clearing>();
                 // Walking, as after a haul's pick-up: left in `Work`, the next delta read his own
@@ -2479,6 +2800,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 // Pick up. The job stays claimed and the same dwarf now walks to the pile, so
                 // the work counter restarts and the path to the stone is spent.
                 None => {
+                    stale = true;
                     ecs.get_mut::<Carrying>(entity)
                         .expect("every dwarf has a carrying slot")
                         .0 = Some(item);
@@ -2498,6 +2820,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                             || walls_in_a_dwarf(terrain, &blocked, &occupied, cell)
                             || closes_last_level_exit(terrain, &blocked, &occupied, cell)
                     });
+                    // Delivered, retried or dropped below, the stone ends up somewhere else.
+                    stale = true;
                     // Every pile cell beside the hauler is refused (#182): it lets go and the job
                     // retries after the cooldown, as a refused channel does. Holding deadlocked
                     // when the hauler stood on the occupant's only way out. No claim-time change
@@ -2527,9 +2851,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         }
 
         if job.kind == JobKind::Cut {
+            stale = true;
             fell_tree(ecs, job.target);
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
+            forget_if_carrying(ecs, entity, &mut stale);
             release_claim(ecs, entity);
             continue;
         }
@@ -2568,6 +2894,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         let Some((changed_pos, tile, yielded)) = change else {
             ecs.resource_mut::<Jobs>().remove(job.id);
             ecs.resource_mut::<Designations>().0.remove(&job.target);
+            forget_if_carrying(ecs, entity, &mut stale);
             release_claim(ecs, entity);
             continue;
         };
@@ -2576,6 +2903,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         if job.kind != JobKind::Channel
             && walls_in_a_dwarf(ecs.resource::<Terrain>(), &blocked, &occupied, job.target)
         {
+            forget_if_carrying(ecs, entity, &mut stale);
             retry_claim(ecs, entity, job.id);
             continue;
         }
@@ -2640,11 +2968,13 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                     let old = old.expect("a changed cell was in bounds");
                     ecs.resource_mut::<Terrain>().set_tile(cell, old);
                 }
+                forget_if_carrying(ecs, entity, &mut stale);
                 retry_claim(ecs, entity, job.id);
                 continue;
             };
             landing = found;
         }
+        stale = true;
         clear_paths(ecs);
         if job.kind == JobKind::Dig {
             let above = Pos {
@@ -2659,6 +2989,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         ecs.spawn((Item(yielded), item_id, landing));
         ecs.resource_mut::<Jobs>().remove(job.id);
         ecs.resource_mut::<Designations>().0.remove(&job.target);
+        forget_if_carrying(ecs, entity, &mut stale);
         release_claim(ecs, entity);
     }
 }
@@ -3001,6 +3332,7 @@ fn assemble(
         tiles,
         dirty: BTreeSet::new(),
         pile_ground: Mutex::default(),
+        kept_failures: Mutex::default(),
     });
     let mut schedule = Schedule::default();
     schedule.add_systems(
@@ -4139,6 +4471,7 @@ mod tests {
             tiles,
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         }
     }
 
@@ -4154,6 +4487,7 @@ mod tests {
             ],
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
 
         assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
@@ -4810,6 +5144,7 @@ mod tests {
             tiles,
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
         let stone = Pos { x: 1, y: 0, z: 2 };
         let pit = Pos { x: 2, y: 0, z: 1 };
@@ -5805,6 +6140,472 @@ mod tests {
         assert_eq!(world.claims()[3], (super::Id(3), Some(JobId(0))));
     }
 
+    /// A 20 x 20 plate at z = 1 in solid stone, five miners on it, and one dig no miner can reach:
+    /// its only open side is a one-cell pocket at x = 21, walled off from the plate by the cell at
+    /// `(20, 10, 1)`, which is returned as `wall` (solid, or open when `corridor`). The dig is
+    /// queued by one step. Returns the world, a plate cell, and `wall`.
+    fn pocket_world(corridor: bool) -> (World, Pos, Pos) {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let at = |x: i32, y: i32| Pos { x, y, z: 1 };
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+        for y in 0..20 {
+            for x in 0..20 {
+                tiles[idx(at(x, y))] = Tile::Empty;
+            }
+        }
+        let wall = at(20, 10);
+        if corridor {
+            tiles[idx(wall)] = Tile::Empty;
+        }
+        tiles[idx(at(21, 10))] = Tile::Empty;
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(&mut world, std::array::from_fn(|i| at(2 + 2 * i as i32, 2)));
+        world.apply_command(super::SimCommand::Designate {
+            kind: super::DesignationKind::Dig,
+            rect: super::Rect {
+                min: at(22, 10),
+                max: at(22, 10),
+            },
+        });
+        world.step();
+        assert_eq!(world.jobs().len(), 1, "the dig is queued");
+        (world, at(2, 2), wall)
+    }
+
+    /// 13.8b Task 17: opens a room of 81 cells onto the sealed pocket, from (21, 1) to (29, 9), so the
+    /// dig's faces lie in a pocket past `POCKET_CELLS` and a search for them from the plate floods
+    /// the plate as before. Without it `astar_with_budget` answers from the one-cell pocket and the
+    /// kept failures these tests pin are never made.
+    fn open_a_room_behind_the_pocket(world: &mut World) {
+        for y in 1..=9 {
+            for x in 21..=29 {
+                assert!(
+                    world
+                        .ecs
+                        .resource_mut::<Terrain>()
+                        .set_tile(Pos { x, y, z: 1 }, Tile::Empty)
+                );
+            }
+        }
+    }
+
+    /// Failed floods `claim_jobs` has kept on the terrain.
+    fn kept_floods(world: &World) -> usize {
+        world
+            .ecs
+            .resource::<Terrain>()
+            .kept_failures
+            .lock()
+            .unwrap()
+            .1
+            .len()
+    }
+
+    fn anyone_holds_a_job(world: &World) -> bool {
+        world.claims().iter().any(|(_, job)| job.is_some())
+    }
+
+    // 13.8b AC 2. One dig no miner can reach, nothing else changing: its cooldown comes round
+    // every 20 ticks, and each time the miners' component (the plate) was flooded again on `main`.
+    // `claim_jobs` alone runs in a single-threaded executor: the counter is thread-local.
+    #[test]
+    fn an_unreachable_dig_is_flooded_once_not_once_per_cooldown() {
+        let (mut world, spot, _) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
+        let plate = walkable_area(&world, spot).len();
+        assert_eq!(plate, 400, "the plate is the miners' whole component");
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+        schedule.add_systems(super::claim_jobs);
+        super::CLAIM_FAILED_FLOODED.with(|n| n.set(0));
+        let start = world.tick();
+        for tick in start..=start + 60 {
+            world.ecs.resource_mut::<super::Tick>().0 = tick;
+            schedule.run(&mut world.ecs);
+        }
+        let flooded = super::CLAIM_FAILED_FLOODED.with(|n| n.get());
+        assert!(
+            world.jobs()[0].retry_after > 0,
+            "the dig was tried (and failed) at least once"
+        );
+        assert!(!anyone_holds_a_job(&world), "no miner can reach the dig");
+        assert_eq!(
+            flooded, plate,
+            "one flood of the plate, however many cooldowns"
+        );
+    }
+
+    // 13.8b AC 3 (i). A tile change that opens the route drops the kept failure: the dig is
+    // claimed within a cooldown plus the longest reaction delay.
+    #[test]
+    fn a_tile_that_opens_the_route_drops_the_kept_failure() {
+        let (mut world, _, wall) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
+        for _ in 0..61 {
+            world.step();
+        }
+        assert!(!anyone_holds_a_job(&world), "the dig is unreachable");
+        assert!(kept_floods(&world) > 0, "a failed flood is kept");
+        assert!(
+            world
+                .ecs
+                .resource_mut::<Terrain>()
+                .set_tile(wall, Tile::Empty)
+        );
+        let mut claimed = false;
+        for _ in 0..50 {
+            world.step();
+            claimed |= anyone_holds_a_job(&world) || world.jobs().is_empty();
+        }
+        assert!(claimed, "the opened route must be claimed within 50 ticks");
+    }
+
+    // 13.8b AC 3 (ii). A stone alone walls the corridor; a hauler carries it away through the
+    // sim's own haul job, which takes it out of `blocked` and drops the kept failure.
+    #[test]
+    fn a_stone_hauled_off_the_only_route_drops_the_kept_failure() {
+        let (mut world, _, wall) = pocket_world(true);
+        open_a_room_behind_the_pocket(&mut world);
+        set_profession(&mut world, 4, super::Profession::Hauler);
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(50), wall));
+        for _ in 0..61 {
+            world.step();
+        }
+        assert!(!anyone_holds_a_job(&world), "the stone walls the corridor");
+        assert!(kept_floods(&world) > 0, "a failed flood is kept");
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        let stone_gone = |world: &mut World| {
+            let mut carrying = world.ecs.query::<&super::Carrying>();
+            carrying.iter(&world.ecs).any(|c| c.0 == Some(50))
+                || world
+                    .ecs
+                    .query::<(&super::Id, &Pos)>()
+                    .iter(&world.ecs)
+                    .any(|(id, pos)| id.0 == 50 && *pos != wall)
+        };
+        let mut waited = 0;
+        while !stone_gone(&mut world) {
+            assert!(waited < 400, "the hauler never took the stone");
+            assert!(
+                !anyone_holds_a_job(&world) || world.claims()[4].1.is_some(),
+                "only the hauler holds a job while the stone walls the corridor"
+            );
+            world.step();
+            waited += 1;
+        }
+        let mut claimed = false;
+        for _ in 0..50 {
+            world.step();
+            claimed |= world.claims()[..4].iter().any(|(_, job)| job.is_some())
+                || world.jobs().iter().all(|job| job.kind != JobKind::Dig);
+        }
+        assert!(
+            claimed,
+            "the dig must be claimed within 50 ticks of the stone leaving"
+        );
+    }
+
+    // 13.8b AC 6. Three haul jobs no hauler can start (their stones are walled into a pocket) and
+    // one free hauler: each job builds a goal set and a delivery set, and the pile's free cells
+    // are the same for all six. One `claim_jobs` call finds them once.
+    #[test]
+    fn claim_jobs_finds_the_pile_cells_once_per_call() {
+        let (mut world, _, _) = pocket_world(false);
+        set_profession(&mut world, 4, super::Profession::Hauler);
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        for (item, y) in [(50, 9), (51, 10), (52, 11)] {
+            let stone = Pos { x: 21, y, z: 1 };
+            assert!(
+                world
+                    .ecs
+                    .resource_mut::<Terrain>()
+                    .set_tile(stone, Tile::Empty)
+            );
+            world
+                .ecs
+                .spawn((super::Item(super::ItemKind::Stone), super::Id(item), stone));
+            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+                id: JobId(item),
+                kind: JobKind::Haul { item },
+                target: stone,
+                created_tick: 0,
+                retry_after: 0,
+            }));
+        }
+        world.ecs.resource_mut::<super::Tick>().0 = 100;
+        let mut schedule = bevy_ecs::schedule::Schedule::default();
+        schedule.set_executor(bevy_ecs::schedule::SingleThreadedExecutor::new());
+        schedule.add_systems(super::claim_jobs);
+        super::PILE_TARGETS_CALLS.with(|n| n.set(0));
+        super::CLAIM_SET_BUILDS.with(|n| n.set(0));
+        schedule.run(&mut world.ecs);
+        assert_eq!(
+            super::CLAIM_SET_BUILDS.with(|n| n.get()),
+            7,
+            "three hauls build a goal set and a delivery set each, and the dig one goal set"
+        );
+        assert_eq!(super::PILE_TARGETS_CALLS.with(|n| n.get()), 1);
+    }
+
+    // 13.8b AC 5. Three miners hold digs and walk toward them: no stone is lifted, set down,
+    // dropped or spawned, so `execute_jobs` builds the stone map once, not once per miner.
+    #[test]
+    fn execute_jobs_builds_the_stone_map_once_when_no_stone_moves() {
+        let (mut world, _, _) = pocket_world(false);
+        let dwarves: Vec<_> = world
+            .ecs
+            .query_filtered::<(bevy_ecs::entity::Entity, &super::Id), bevy_ecs::query::With<super::Dwarf>>()
+            .iter(&world.ecs)
+            .map(|(entity, id)| (id.0, entity))
+            .collect();
+        for (n, y) in [3, 5, 7].into_iter().enumerate() {
+            let job = Job {
+                id: JobId(20 + n as u32),
+                kind: JobKind::Dig,
+                target: Pos { x: 20, y, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            };
+            assert!(world.ecs.resource_mut::<Jobs>().insert(job));
+            let (_, entity) = dwarves.iter().find(|(id, _)| *id == n as u32).unwrap();
+            world.ecs.get_mut::<super::CurrentJob>(*entity).unwrap().0 = Some(job.id);
+        }
+        super::STONE_MAP_BUILDS.with(|n| n.set(0));
+        super::execute_jobs(&mut world.ecs);
+        assert_eq!(super::STONE_MAP_BUILDS.with(|n| n.get()), 1);
+    }
+
+    // 13.8b Task 17 (AC 20). The dig's only face is the one-cell pocket behind the wall: a search
+    // from the plate cannot reach it, and on `646fa2c0` it flooded the whole plate (400 cells) to
+    // say so. Seat-like after the big dig: 11 ms a tick of blocked re-routes and 6 ms of claim
+    // searches did this, nearly all for goals shut in under 64 cells.
+    #[test]
+    fn a_search_for_goals_shut_in_a_small_pocket_floods_nothing() {
+        let (world, spot, wall) = pocket_world(false);
+        let blocked = super::blocked_cells(world.emitters().iter().map(|(_, pos, _)| pos));
+        let terrain = world.ecs.resource::<Terrain>();
+        let goals = BTreeSet::from([Pos {
+            x: wall.x + 1,
+            ..wall
+        }]);
+        let budget = terrain.tiles.len();
+        let mut left = budget;
+        let (path, ran_out, explored) =
+            super::astar_with_budget(terrain, &blocked, spot, &goals, &mut left);
+        assert_eq!((path, ran_out), (None, false), "the pocket is out of reach");
+        assert!(explored.is_empty(), "nothing flooded, so nothing to keep");
+        assert_eq!(left, budget, "no cell was expanded");
+    }
+
+    // 13.8b Task 17. The pocket test asks whether the start can STEP into the pocket, not whether it
+    // stands in it: a dwarf on a stone's cell (not walkable) beside the pocket still reaches it.
+    #[test]
+    fn a_start_on_a_blocked_cell_beside_a_small_pocket_still_reaches_it() {
+        let (world, _, wall) = pocket_world(true);
+        let blocked = BTreeSet::from([wall]);
+        let terrain = world.ecs.resource::<Terrain>();
+        let goal = Pos {
+            x: wall.x + 1,
+            ..wall
+        };
+        assert_eq!(
+            super::astar(terrain, &blocked, wall, &BTreeSet::from([goal])),
+            Some(vec![goal])
+        );
+    }
+
+    // 13.8b Task 17. A start on its own goal is there, even where that cell is not walkable and so
+    // in no pocket.
+    #[test]
+    fn a_start_on_its_own_blocked_goal_is_already_there() {
+        let (world, _, wall) = pocket_world(true);
+        let blocked = BTreeSet::from([wall]);
+        let terrain = world.ecs.resource::<Terrain>();
+        assert_eq!(
+            super::astar(terrain, &blocked, wall, &BTreeSet::from([wall])),
+            Some(Vec::new())
+        );
+    }
+
+    // 13.8b Task 17 (AC 20). Three haulers walk to three loose stones: no stone is lifted, set
+    // down, dropped or spawned, so `execute_jobs` finds the pile's free cells once, not once per
+    // hauler (on `646fa2c0`: three times, about 3 ms a tick on seat-like after the big dig).
+    #[test]
+    fn execute_jobs_finds_the_pile_cells_once_when_no_stone_moves() {
+        let (mut world, _, _) = pocket_world(false);
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        let mut haulers = Vec::new();
+        for (id, x) in [(0, 12), (1, 14), (2, 16)] {
+            set_profession(&mut world, id, super::Profession::Hauler);
+            let item = 50 + id;
+            world.ecs.spawn((
+                super::Item(super::ItemKind::Stone),
+                super::Id(item),
+                Pos { x, y: 8, z: 1 },
+            ));
+            assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+                id: JobId(item),
+                kind: JobKind::Haul { item },
+                target: Pos { x, y: 8, z: 1 },
+                created_tick: 0,
+                retry_after: 0,
+            }));
+            haulers.push(hold_job(&mut world, id, JobId(item)));
+        }
+        super::PILE_FILLS.with(|n| n.set(0));
+        super::execute_jobs(&mut world.ecs);
+        for entity in haulers {
+            assert!(
+                world.ecs.get::<super::Path>(entity).is_some(),
+                "every hauler has planned his walk to his stone"
+            );
+        }
+        assert_eq!(super::PILE_FILLS.with(|n| n.get()), 1);
+    }
+
+    /// Gives dwarf `id` the job `job` with no path, as after a `clear_paths`.
+    fn hold_job(world: &mut World, id: u32, job: JobId) -> super::Entity {
+        let entity = dwarf_entity(world, id);
+        world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(job);
+        world.ecs.entity_mut(entity).remove::<super::Path>();
+        entity
+    }
+
+    // 13.8b Task 11 (AC 14). Two miners on the plate hold digs whose only face is the sealed
+    // pocket, with no path: both re-plans fail in one `execute_jobs` call. The plate is flooded
+    // once, not once per miner (on `55cc430b`: 800 cells, two floods).
+    #[test]
+    fn failed_re_plans_in_one_component_flood_it_once() {
+        let (mut world, spot, _) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
+        let plate = walkable_area(&world, spot).len();
+        assert_eq!(plate, 400, "the plate is the miners' whole component");
+        let pocket_dig = world.jobs()[0].id;
+        insert_dig(&mut world, 900, Pos { x: 21, y: 11, z: 1 });
+        let first = hold_job(&mut world, 0, pocket_dig);
+        let second = hold_job(&mut world, 1, JobId(900));
+        super::REPLAN_FAILED_FLOODED.with(|n| n.set(0));
+        super::execute_jobs(&mut world.ecs);
+        for entity in [first, second] {
+            assert_eq!(
+                world.ecs.get::<super::CurrentJob>(entity).unwrap().0,
+                None,
+                "an unreachable re-plan lets the job go"
+            );
+        }
+        assert_eq!(
+            super::REPLAN_FAILED_FLOODED.with(|n| n.get()),
+            plate,
+            "one flood of the plate for both failed re-plans"
+        );
+    }
+
+    // 13.8b Task 11. A failure remembered in one call is not used once `blocked` loses a cell in
+    // it: miner 0's re-plan fails while a stone walls the corridor, hauler 1 then lifts the stone,
+    // and miner 2's re-plan through the corridor must still find its path.
+    #[test]
+    fn a_stone_lifted_mid_call_lets_a_later_re_plan_through() {
+        let (mut world, _, wall) = pocket_world(true);
+        open_a_room_behind_the_pocket(&mut world);
+        world
+            .ecs
+            .spawn((super::Item(super::ItemKind::Stone), super::Id(50), wall));
+        world
+            .ecs
+            .resource_mut::<super::Zones>()
+            .0
+            .insert(Pos { x: 10, y: 15, z: 1 });
+        let pocket_dig = world.jobs()[0].id;
+        insert_dig(&mut world, 900, Pos { x: 21, y: 11, z: 1 });
+        assert!(world.ecs.resource_mut::<Jobs>().insert(Job {
+            id: JobId(901),
+            kind: JobKind::Haul { item: 50 },
+            target: wall,
+            created_tick: 0,
+            retry_after: 0,
+        }));
+        let failing = hold_job(&mut world, 0, pocket_dig);
+        let hauler = hold_job(&mut world, 1, JobId(901));
+        *world.ecs.get_mut::<Pos>(hauler).unwrap() = Pos { x: 19, y: 10, z: 1 };
+        world
+            .ecs
+            .entity_mut(hauler)
+            .insert(super::WorkProgress(super::WORK_TICKS));
+        let later = hold_job(&mut world, 2, JobId(900));
+        super::execute_jobs(&mut world.ecs);
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(failing).unwrap().0,
+            None,
+            "miner 0 re-planned while the stone walled the corridor"
+        );
+        assert_eq!(
+            world.ecs.get::<super::Carrying>(hauler).unwrap().0,
+            Some(50),
+            "the hauler lifted the stone"
+        );
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(later).unwrap().0,
+            Some(JobId(900)),
+            "miner 2 still holds his dig"
+        );
+        assert_eq!(
+            world
+                .ecs
+                .get::<super::Path>(later)
+                .and_then(|path| path.0.last().copied()),
+            Some(Pos { x: 21, y: 10, z: 1 }),
+            "miner 2's re-plan reaches the pocket through the opened corridor"
+        );
+    }
+
+    // 13.8b Task 13. A failed re-plan's flood is skipped only for a start whose goals are not in
+    // it: miner 0's re-plan to the sealed pocket fails and floods the plate, and miner 1, on the
+    // same plate, re-plans to a dig whose face is on the plate and must still find his path.
+    #[test]
+    fn a_failed_re_plan_leaves_a_reachable_dig_in_its_component_to_the_next_miner() {
+        let (mut world, _, _) = pocket_world(false);
+        open_a_room_behind_the_pocket(&mut world);
+        let pocket_dig = world.jobs()[0].id;
+        insert_dig(&mut world, 900, Pos { x: 20, y: 5, z: 1 });
+        let failing = hold_job(&mut world, 0, pocket_dig);
+        let later = hold_job(&mut world, 1, JobId(900));
+        super::execute_jobs(&mut world.ecs);
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(failing).unwrap().0,
+            None,
+            "miner 0's re-plan to the pocket failed first"
+        );
+        assert_eq!(
+            world.ecs.get::<super::CurrentJob>(later).unwrap().0,
+            Some(JobId(900)),
+            "miner 1 still holds his dig"
+        );
+        assert_eq!(
+            world
+                .ecs
+                .get::<super::Path>(later)
+                .and_then(|path| path.0.last().copied()),
+            Some(Pos { x: 19, y: 5, z: 1 }),
+            "miner 1's re-plan reaches the dig's face on the plate"
+        );
+    }
+
     /// All five dwarves are miners, one per entry of `spots`, in ascending id order.
     fn stand_miners_at(world: &mut World, spots: [Pos; 5]) {
         for (id, spot) in spots.into_iter().enumerate() {
@@ -6475,6 +7276,7 @@ mod tests {
             tiles: vec![Tile::Empty; 6],
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
         terrain.tiles[super::worldgen::index(dims, 0, 0, 0)] = Tile::Solid(Material::Stone);
         terrain.tiles[super::worldgen::index(dims, 1, 0, 1)] = Tile::Solid(Material::Stone);
@@ -6501,6 +7303,7 @@ mod tests {
             tiles: vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize],
             dirty: BTreeSet::new(),
             pile_ground: Default::default(),
+            kept_failures: Default::default(),
         };
         let heights = [
             ((0, 0), 3),
@@ -7837,7 +8640,7 @@ mod tests {
     }
 
     // 12.9 AC3(a), 13.4 rule: the LOWER id is nearer the open end and has an escape (the room), but
-    // two head-on job-holders no longer use it: after the wait they trade tiles, and both dig.
+    // two head-on job-holders no longer use it: they trade tiles (13.8b: at once), and both dig.
     #[test]
     fn head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_open_end() {
         let (world, trace) = head_on(
@@ -7851,7 +8654,7 @@ mod tests {
     }
 
     // 12.9 AC3(b), 13.4 rule: the LOWER id is nearer the dead end and the higher id's work position
-    // is the tunnel's last cell. The lower has no escape; the two trade tiles after the wait. A
+    // is the tunnel's last cell. The lower has no escape; the two trade tiles (13.8b: at once). A
     // per-step flip rule livelocks here (the story's hand trace); this must resolve.
     #[test]
     fn head_on_in_a_tunnel_resolves_when_the_lower_id_is_nearer_the_dead_end() {
@@ -7930,15 +8733,11 @@ mod tests {
         );
     }
 
-    // 13.4 AC3: the wait is real. A holder stuck behind the same blocker does not swap on his first
-    // look; once `SQUEEZE_WAIT_TICKS` have passed the two trade tiles in one write.
+    // 13.8b AC 12: two job-holders who meet head-on trade tiles on the holder's first look, in one
+    // write; neither waits `SQUEEZE_WAIT_TICKS`.
     #[test]
-    fn a_held_dwarf_swaps_only_after_the_wait() {
-        let tick_on = |world: &mut World, ticks: u64| {
-            world.ecs.resource_mut::<super::Tick>().0 += ticks;
-        };
-        // Two head-on job-holders in the tunnel: dwarf 0 at x 13 walking east, dwarf 1 at x 14
-        // walking west.
+    fn two_job_holders_head_on_trade_tiles_on_the_first_look() {
+        // Dwarf 0 at x 13 walking east, dwarf 1 at x 14 walking west, a line of dwarves behind.
         let mut world = room_and_tunnel();
         let spots = [13, 14, 12, 11, 10].map(|x| at(x, FIX_Y, FIX_Z));
         stand_miners_at(&mut world, spots);
@@ -7953,30 +8752,18 @@ mod tests {
         let mut occupied: BTreeSet<Pos> = spots.into_iter().collect();
         let mut path = vec![blocker, at(15, FIX_Y, FIX_Z)];
 
-        let mut look = |world: &mut World, path: &mut Vec<Pos>| {
-            super::resolve_blocked_step(
-                &mut world.ecs,
-                &BTreeSet::new(),
-                &mut occupied,
-                (super::Id(0), holder),
-                path,
-                &BTreeSet::new(),
-            )
-        };
-        // First look: the holder waits and nobody moves.
-        assert!(!look(&mut world, &mut path));
-        assert_eq!(path, vec![blocker, at(15, FIX_Y, FIX_Z)]);
-        assert_eq!(world.dwarves()[0].1, holder);
-        assert_eq!(world.dwarves()[1].1, blocker);
-        // One tick short of the wait: still no swap.
-        tick_on(&mut world, super::SQUEEZE_WAIT_TICKS - 1);
-        assert!(!look(&mut world, &mut path));
-        assert_eq!(world.dwarves()[0].1, holder);
-        assert_eq!(world.dwarves()[1].1, blocker);
-        // The wait has run: the two trade tiles, the holder's path is advanced, and so is the
+        let step = super::resolve_blocked_step(
+            &mut world.ecs,
+            &BTreeSet::new(),
+            &mut occupied,
+            (super::Id(0), holder),
+            &mut path,
+            &BTreeSet::new(),
+        );
+
+        // The first look: the two have traded tiles, the holder's path is advanced, and so is the
         // blocker's. The call still reports "wait" (the caller stores the path and the rest).
-        tick_on(&mut world, 1);
-        assert!(!look(&mut world, &mut path));
+        assert!(!step);
         assert_eq!(world.dwarves()[0].1, blocker);
         assert_eq!(world.dwarves()[1].1, holder);
         assert_eq!(path, vec![at(15, FIX_Y, FIX_Z)]);
@@ -7994,11 +8781,194 @@ mod tests {
                 .ecs
                 .get::<super::Squeeze>(dwarf_entity(&world, 0))
                 .is_none(),
-            "the swap did not end the stand-off"
+            "the swap left a stand-off timer"
         );
+    }
 
-        // An idle blocker with no way out, at a dead end behind a line of dwarves: the same wait,
-        // then the swap, and his `home` is the holder's old tile.
+    /// A world of solid stone with one enclosed 2 x 2 room at z = 1 (cells `a`, `b`, `c`, `d`,
+    /// round the block in order) and a one-cell pocket for the fifth dwarf. Dwarves 0-3 stand on
+    /// `a`, `b`, `c`, `d`, each holding a job and walking, each `Path` starting on the next one's
+    /// tile; dwarf 3's `Path` is that one step. Returns the world and the four cells.
+    fn ring_room() -> (World, [Pos; 4]) {
+        let mut world = World::generate(42, Dims::DEFAULT);
+        let dims = world.dims();
+        let at = |x: i32, y: i32| Pos { x, y, z: 1 };
+        let idx = |p: Pos| super::worldgen::index(dims, p.x as u32, p.y as u32, p.z as u32);
+        let mut tiles = vec![Tile::Solid(Material::Stone); world.tiles().len()];
+        let room = [at(5, 5), at(6, 5), at(6, 6), at(5, 6)];
+        for cell in room.into_iter().chain([at(10, 10)]) {
+            tiles[idx(cell)] = Tile::Empty;
+        }
+        world.ecs.resource_mut::<Terrain>().tiles = tiles;
+        stand_miners_at(&mut world, [room[0], room[1], room[2], room[3], at(10, 10)]);
+        for (i, cell) in room.into_iter().enumerate() {
+            let entity = dwarf_entity(&world, i as u32);
+            let path = if i == 3 {
+                vec![room[0]]
+            } else {
+                vec![room[(i + 1) % 4], room[(i + 2) % 4]]
+            };
+            assert_eq!(*world.ecs.get::<Pos>(entity).unwrap(), cell);
+            world.ecs.get_mut::<super::CurrentJob>(entity).unwrap().0 = Some(JobId(900 + i as u32));
+            *world.ecs.get_mut::<super::JobState>(entity).unwrap() = super::JobState::Walk;
+            world.ecs.entity_mut(entity).insert(super::Path(path));
+        }
+        (world, room)
+    }
+
+    /// Dwarf 0's blocked look on `b`, as `execute_jobs` makes it. Returns its answer and his path.
+    fn holder_looks(world: &mut World, room: [Pos; 4]) -> (bool, Vec<Pos>) {
+        let blocked = super::world_blocked(&mut world.ecs);
+        let mut occupied = super::dwarf_tiles(
+            world
+                .ecs
+                .query_filtered::<&Pos, bevy_ecs::query::With<super::Dwarf>>()
+                .iter(&world.ecs),
+        );
+        let before = occupied.clone();
+        let mut path = vec![room[1], room[2]];
+        let step = super::resolve_blocked_step(
+            &mut world.ecs,
+            &blocked,
+            &mut occupied,
+            (super::Id(0), room[0]),
+            &mut path,
+            &BTreeSet::from([room[2]]),
+        );
+        assert_eq!(occupied, before, "the same tiles stay taken");
+        (step, path)
+    }
+
+    fn path_of(world: &World, id: u32) -> Option<Vec<Pos>> {
+        world
+            .ecs
+            .get::<super::Path>(dwarf_entity(world, id))
+            .map(|path| path.0.clone())
+    }
+
+    fn pos_of(world: &World, id: u32) -> Pos {
+        *world.ecs.get::<Pos>(dwarf_entity(world, id)).unwrap()
+    }
+
+    // 13.8b Task 11. Four job-holders round a 2 x 2 block, each one's next tile held by the next,
+    // none head-on, no way round: the holder's blocked look steps all four at once (on change A's
+    // commit nobody moves and all wait).
+    #[test]
+    fn a_ring_of_waiting_job_holders_steps_at_once() {
+        let (mut world, room) = ring_room();
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder reports a wait, as after a swap");
+        assert_eq!(pos_of(&world, 0), room[1], "the holder stepped onto b");
+        assert_eq!(path, vec![room[2]], "the holder's path is advanced");
+        for (id, (at, rest)) in [
+            (1, (room[2], Some(vec![room[3]]))),
+            (2, (room[3], Some(vec![room[0]]))),
+            (3, (room[0], None)),
+        ] {
+            assert_eq!(pos_of(&world, id), at, "dwarf {id} stepped round the ring");
+            assert_eq!(path_of(&world, id), rest, "dwarf {id}'s path is advanced");
+            assert_eq!(
+                world
+                    .ecs
+                    .get::<super::Wander>(dwarf_entity(&world, id))
+                    .unwrap()
+                    .cooldown,
+                super::STEP_REST_TICKS,
+                "dwarf {id} rests a step period"
+            );
+        }
+    }
+
+    // 13.8b Task 11. The same chain, but the last link works in place (his stale `Path` still
+    // points at the holder's tile): the chain does not close and nobody moves.
+    #[test]
+    fn a_chain_ending_on_a_dwarf_working_in_place_moves_nobody() {
+        let (mut world, room) = ring_room();
+        *world
+            .ecs
+            .get_mut::<super::JobState>(dwarf_entity(&world, 3))
+            .unwrap() = super::JobState::Work;
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder waits");
+        assert_eq!(
+            path,
+            vec![room[1], room[2]],
+            "the holder's path is unchanged"
+        );
+        for id in 0..4 {
+            assert_eq!(
+                pos_of(&world, id),
+                room[id as usize],
+                "dwarf {id} did not move"
+            );
+        }
+        assert_eq!(path_of(&world, 1), Some(vec![room[2], room[3]]));
+        assert_eq!(path_of(&world, 3), Some(vec![room[0]]));
+    }
+
+    // 13.8b Task 13. The same ring, but dwarf 2 holds no job: an idle dwarf walking his exit
+    // `Path` (a blocker's escape leaves him in `Walk`). The chain is not all job-holders, so
+    // nobody moves.
+    #[test]
+    fn a_chain_through_an_idle_dwarf_with_an_exit_moves_nobody() {
+        let (mut world, room) = ring_room();
+        let idle = dwarf_entity(&world, 2);
+        world.ecs.get_mut::<super::CurrentJob>(idle).unwrap().0 = None;
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder waits");
+        for id in 0..4 {
+            assert_eq!(
+                pos_of(&world, id),
+                room[id as usize],
+                "dwarf {id} did not move"
+            );
+        }
+        assert_eq!(
+            path,
+            vec![room[1], room[2]],
+            "the holder's path is unchanged"
+        );
+        assert_eq!(path_of(&world, 2), Some(vec![room[3], room[0]]));
+    }
+
+    // 13.8b Task 13. Dwarf 1's next tile is `d`, across the block's diagonal from `b`: not a step
+    // `astar_neighbours` allows. The chain a -> b -> d -> a would close as a ring of three, but a
+    // link with an illegal next step ends it, so nobody moves.
+    #[test]
+    fn a_chain_with_a_step_that_is_not_a_legal_move_moves_nobody() {
+        let (mut world, room) = ring_room();
+        world
+            .ecs
+            .entity_mut(dwarf_entity(&world, 1))
+            .insert(super::Path(vec![room[3]]));
+        let (step, path) = holder_looks(&mut world, room);
+        assert!(!step, "the holder waits");
+        for id in 0..4 {
+            assert_eq!(
+                pos_of(&world, id),
+                room[id as usize],
+                "dwarf {id} did not move"
+            );
+        }
+        assert_eq!(
+            path,
+            vec![room[1], room[2]],
+            "the holder's path is unchanged"
+        );
+        assert_eq!(path_of(&world, 1), Some(vec![room[3]]));
+    }
+
+    // 13.4 AC3: the wait is real. A holder stuck behind the same IDLE blocker does not swap on his
+    // first look; once `SQUEEZE_WAIT_TICKS` have passed the two trade tiles in one write. 13.8b:
+    // two head-on job-holders no longer wait
+    // (`two_job_holders_head_on_trade_tiles_on_the_first_look`).
+    #[test]
+    fn a_held_dwarf_swaps_only_after_the_wait() {
+        let tick_on = |world: &mut World, ticks: u64| {
+            world.ecs.resource_mut::<super::Tick>().0 += ticks;
+        };
+        // An idle blocker with no way out, at a dead end behind a line of dwarves: the wait, then
+        // the swap, and his `home` is the holder's old tile.
         let mut world = room_and_tunnel();
         let spots = [16, 15, 14, 13, 12].map(|x| at(x, FIX_Y, FIX_Z));
         stand_miners_at(&mut world, spots);
@@ -8023,18 +8993,39 @@ mod tests {
                 &BTreeSet::new(),
             )
         };
+        // First look: the holder waits and nobody moves.
+        assert!(!look(&mut world, &mut path));
+        assert_eq!(path, vec![blocker]);
+        assert_eq!(world.dwarves()[0].1, holder);
+        assert_eq!(world.dwarves()[1].1, blocker);
+        // One tick short of the wait: still no swap.
+        tick_on(&mut world, super::SQUEEZE_WAIT_TICKS - 1);
         assert!(!look(&mut world, &mut path));
         assert_eq!(world.dwarves()[0].1, holder);
         assert_eq!(world.dwarves()[1].1, blocker);
-        tick_on(&mut world, super::SQUEEZE_WAIT_TICKS);
+        // The wait has run: the two trade tiles and the holder's path is advanced. The call still
+        // reports "wait" (the caller stores the path and the rest).
+        tick_on(&mut world, 1);
         assert!(!look(&mut world, &mut path));
         assert_eq!(world.dwarves()[0].1, blocker);
         assert_eq!(world.dwarves()[1].1, holder);
+        assert!(path.is_empty());
         assert_eq!(occupied, spots.into_iter().collect());
         assert_eq!(world.ecs.get::<super::Wander>(entity).unwrap().home, holder);
+        assert_eq!(
+            world.ecs.get::<super::Wander>(entity).unwrap().cooldown,
+            super::STEP_REST_TICKS
+        );
         assert!(
             world.ecs.get::<super::Path>(entity).is_none(),
             "the idle blocker kept his exit path"
+        );
+        assert!(
+            world
+                .ecs
+                .get::<super::Squeeze>(dwarf_entity(&world, 0))
+                .is_none(),
+            "the swap did not end the stand-off"
         );
     }
 
@@ -8086,6 +9077,54 @@ mod tests {
         assert!(
             world.ecs.get::<super::Path>(entity).is_none(),
             "the swapped idle blocker kept his exit path"
+        );
+    }
+
+    // 13.8b (#189's loop, seen again on the campfire scenario): an idle dwarf moved out of a
+    // holder's way is never sent onto a free pile cell. Stepped aside onto the last free cell
+    // beside a hauler's work cell, he called it home, kept wandering back to it, and every delivery
+    // to it was refused for the dwarf standing on it.
+    #[test]
+    fn an_idle_dwarf_moved_out_of_the_way_never_lands_on_a_free_pile_cell() {
+        let (holder, blocker) = (at(8, FIX_Y, FIX_Z), at(9, FIX_Y, FIX_Z));
+        let (north, south) = (at(9, FIX_Y - 1, FIX_Z), at(9, FIX_Y + 1, FIX_Z));
+        let fixture = |piles: &[Pos]| {
+            let mut world = room_and_tunnel();
+            // Dwarf 0 holds a job and walks east through idle dwarf 1, in the room.
+            crew_at(&mut world, holder, blocker, &[0]);
+            world.ecs.resource_mut::<super::Zones>().0.extend(piles);
+            world
+        };
+        let look = |world: &mut World| {
+            let mut occupied: BTreeSet<Pos> = world.dwarves().iter().map(|d| d.1).collect();
+            super::resolve_blocked_step(
+                &mut world.ecs,
+                &BTreeSet::new(),
+                &mut occupied,
+                (super::Id(0), holder),
+                &mut vec![blocker, at(10, FIX_Y, FIX_Z)],
+                &BTreeSet::new(),
+            )
+        };
+
+        // The first free side (north) is a pile cell: he steps aside to the south one instead.
+        let mut world = fixture(&[north]);
+        assert!(look(&mut world));
+        let entity = dwarf_entity(&world, 1);
+        assert_eq!(world.dwarves()[1].1, south);
+        assert_eq!(world.ecs.get::<super::Wander>(entity).unwrap().home, south);
+
+        // Both free sides are pile cells: no step aside, and his exit leads off the pile (here back
+        // through the holder's tile, so the two are head-on and the holder yields).
+        let mut world = fixture(&[north, south]);
+        look(&mut world);
+        let entity = dwarf_entity(&world, 1);
+        assert_eq!(world.dwarves()[1].1, blocker);
+        let exit = &world.ecs.get::<super::Path>(entity).expect("an exit").0;
+        let end = *exit.last().expect("a non-empty exit");
+        assert!(
+            ![north, south].contains(&end) && world.tile(end) == Some(Tile::Empty),
+            "the exit ends on {end:?}"
         );
     }
 

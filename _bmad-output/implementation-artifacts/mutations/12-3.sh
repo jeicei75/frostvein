@@ -18,7 +18,13 @@ assert s.count(old) == 1
 s = s.replace(old, '                // A component belongs to its start: it proves nothing for a dwarf outside it.\n')
 old = '                if let Some(delivery) = &delivery {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                attempted = true;\n' + old))
+s = s.replace(old, '                attempted = true;\n' + old)
+# 13.8b Task 17: the goal pocket (`astar_with_budget`) answers this test's one-cell pockets before
+# any search, so the row also turns it off to reach the seam it pins (SURVIVED without, 2026-11-16).
+old_pocket = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old_pocket) == 1
+s = s.replace(old_pocket, '    if false\n        && !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n')
+p.write_text(s)
 PY
 
 mutation "first failed component covers every dwarf" sim-core an_unreachable_lower_id_does_not_starve_a_reachable_dwarf <<'PY'
@@ -26,7 +32,13 @@ import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '                    component.contains(*pos)\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    !component.is_empty()\n'))
+s = s.replace(old, '                    !component.is_empty()\n')
+# 13.8b Task 17: the goal pocket (`astar_with_budget`) answers this test's one-cell pockets before
+# any search, so the row also turns it off to reach the seam it pins (SURVIVED without, 2026-11-16).
+old_pocket = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old_pocket) == 1
+s = s.replace(old_pocket, '    if false\n        && !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n')
+p.write_text(s)
 PY
 
 mutation "haul claimed without the delivery pre-search" sim-core a_sealed_off_pile_cell_does_not_cycle_a_stone_forever <<'PY'

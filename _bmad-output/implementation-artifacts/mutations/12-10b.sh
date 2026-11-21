@@ -69,6 +69,11 @@ mutation "5c the gui preview lights an emitter's tile" gui the_channel_preview_s
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 # Re-pointed 2026-10-14 (review run 2 patch): the emitter test is one `on_emitter` closure for both modes.
+# 13.8b Task 13: indexing `at` needs the closure's argument typed; `[at[0], at[1], -1]` alone was
+# NO-COMPILE ("type annotations needed"). Same sabotage, now with the type named.
+typed = '    let on_emitter = |at| {\n'
+assert s.count(typed) == 1
+s = s.replace(typed, '    let on_emitter = |at: [i32; 3]| {\n')
 old = '            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == at\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            matches!(entity.kind, EntityKind::Torch | EntityKind::Campfire) && entity.pos == [at[0], at[1], -1]\n'))

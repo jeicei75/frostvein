@@ -1,0 +1,359 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index 68dff27a..694aff0b 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -471,6 +471,7 @@ impl Jobs {
+ }
+ 
+ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMut<Jobs>) {
++    let _probe = probe::T::new("create_jobs");
+     for (&target, &designation) in &designations.0 {
+         if jobs.targets.contains(&target) {
+             continue;
+@@ -535,6 +536,7 @@ fn stored_by_kind(ecs: &EcsWorld) -> BTreeMap<ItemKind, u32> {
+ /// Completes the next goal while its stored count meets its target, so a chain whose later stock
+ /// is already there finishes in one tick (12.12 D2). A completed goal stays completed.
+ fn advance_goals(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("advance_goals");
+     let stored = stored_by_kind(ecs);
+     let mut done = ecs.resource::<GoalsCompleted>().0;
+     while let Some(&(kind, target)) = GOALS.get(done as usize) {
+@@ -550,6 +552,7 @@ fn advance_goals(ecs: &mut EcsWorld) {
+ /// schedule, so a paused daemon takes new stockpiles and designations but derives no work from
+ /// them — 3.2's line, extended to stones unchanged.
+ fn create_haul_jobs(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("create_haul_jobs");
+     let (stored, loose) = split_stored(ecs);
+     let any_zone = !ecs.resource::<Zones>().0.is_empty();
+ 
+@@ -638,6 +641,8 @@ fn claim_jobs(
+     emitters: Query<&Pos, With<Emitter>>,
+     mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying, &Profession)>,
+ ) {
++    let _probe = probe::T::new("claim_jobs");
++    let _setup = probe::T::new("cj_setup");
+     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+     dwarves.sort_by_key(|(_, id, _, _, _, _)| **id);
+     let mut claimed: BTreeSet<_> = dwarves
+@@ -660,7 +665,19 @@ fn claim_jobs(
+     // NOTE: a search expands each cell at most once (the heuristic is consistent), so a budget of
+     // the world's cell count cannot run out. An unreachable job costs one flood of its component
+     // per call, cached here.
+-    let mut components: Vec<BTreeSet<Pos>> = Vec::new();
++    // PROTOTYPE: keep failed components across calls while the terrain is unchanged and no cell
++    // has left `blocked` (a cell entering it can only shrink reachability).
++    let ver = probe::TERRAIN_VER.load(std::sync::atomic::Ordering::Relaxed);
++    let mut components: Vec<BTreeSet<Pos>> = probe::KEPT.with(|k| {
++        let mut k = k.borrow_mut();
++        if k.0 == ver && k.1.is_subset(&blocked) {
++            probe::count("n_kept_valid");
++            std::mem::take(&mut k.2)
++        } else {
++            probe::count(if k.0 != ver { "n_reset_terrain" } else { "n_reset_unblock" });
++            Vec::new()
++        }
++    });
+ 
+     // The one test of whether a dwarf tries a job this tick: his trade, no job, past his reaction
+     // delay. It gates both the early skip below and `attempted`, so the two cannot drift.
+@@ -685,6 +702,8 @@ fn claim_jobs(
+         }
+         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
+         // set serves every candidate.
++        probe::count("n_job_tried");
++        let _goals_t = probe::T::new("cj_goals");
+         let goals = work_positions(&terrain, &blocked, &zones.0, &items, job, None);
+         #[cfg(test)]
+         CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
+@@ -704,6 +723,8 @@ fn claim_jobs(
+             }
+             _ => None,
+         };
++        drop(_goals_t);
++        let _search_t = probe::T::new("cj_search");
+         let mut attempted = false;
+         let mut assigned = false;
+         for (entity, id, pos, current, carrying, profession) in dwarves.iter_mut() {
+@@ -716,19 +737,29 @@ fn claim_jobs(
+             );
+             if can_try(&job, **id, **profession, current.0.is_none()) {
+                 attempted = true;
++                probe::count("n_cand");
+                 // A component belongs to its start: it proves nothing for a dwarf outside it.
+-                if components.iter().any(|component| {
++                let _cc = probe::T::new("cj_comp_check");
++                let skip = components.iter().any(|component| {
+                     component.contains(*pos)
+                         && (goals.is_disjoint(component)
+                             || delivery.as_ref().is_some_and(|d| d.is_disjoint(component)))
+-                }) {
++                });
++                drop(_cc);
++                if skip {
++                    probe::count("n_comp_skip");
+                     continue;
+                 }
+                 if let Some(delivery) = &delivery {
+                     let mut budget = terrain.tiles.len();
+-                    match astar_with_budget(&terrain, &blocked, **pos, delivery, &mut budget) {
++                    let _dt = probe::T::new("cj_astar_deliv");
++                    let r = astar_with_budget(&terrain, &blocked, **pos, delivery, &mut budget);
++                    drop(_dt);
++                    match r {
+                         (Some(_), false, _) => {}
+                         (None, false, explored) => {
++                            probe::count(if delivery.is_empty() { "n_deliv_fail_empty" } else { "n_deliv_fail" });
++                            probe::add("cells_deliv_fail", explored.len() as f64);
+                             components.push(explored);
+                             continue;
+                         }
+@@ -738,10 +769,18 @@ fn claim_jobs(
+                     }
+                 }
+                 let mut budget = terrain.tiles.len();
+-                let path = match astar_with_budget(&terrain, &blocked, **pos, &goals, &mut budget) {
++                let _gt = probe::T::new("cj_astar_goal");
++                let r = astar_with_budget(&terrain, &blocked, **pos, &goals, &mut budget);
++                drop(_gt);
++                let path = match r {
+                     (Some(path), false, _) => path,
+                     (None, false, explored) => {
+-                        components.push(explored);
++                        probe::count(if goals.is_empty() { "n_goal_fail_empty" } else { "n_goal_fail" });
++                        probe::add("cells_goal_fail", explored.len() as f64);
++                        if !explored.contains(*pos) { probe::count("n_start_outside"); }
++                        if components.iter().any(|c| c.contains(*pos)) { probe::count("n_start_in_known_comp"); }
++                        if components.iter().any(|c| *c == explored) { probe::count("n_dup_component"); }
++                        if !explored.is_empty() { components.push(explored); }
+                         continue;
+                     }
+                     (_, true, _) => unreachable!("a search sized to the world cannot run out"),
+@@ -752,15 +791,19 @@ fn claim_jobs(
+                     .insert((Path(path), WorkProgress(0)));
+                 claimed.insert(job.id);
+                 assigned = true;
++                probe::count("n_assigned");
+                 break;
+             }
+         }
+         if attempted && !assigned {
++            probe::count(match job.kind { JobKind::Haul { .. } => "n_fail_haul", JobKind::Cut => "n_fail_cut", _ => "n_fail_dig" });
+             jobs.get_mut(job.id)
+                 .expect("iterated job still exists")
+                 .retry_after = tick.0.saturating_add(RETRY_COOLDOWN);
+         }
+     }
++    probe::add("n_kept_cells", components.iter().map(BTreeSet::len).sum::<usize>() as f64);
++    probe::KEPT.with(|k| *k.borrow_mut() = (ver, blocked.clone(), components));
+ }
+ 
+ #[derive(Component)]
+@@ -844,6 +887,7 @@ impl Terrain {
+ 
+         let index = worldgen::index(self.dims, p.x as u32, p.y as u32, p.z as u32);
+         self.tiles[index] = tile;
++        probe::TERRAIN_VER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+         self.dirty.insert(p);
+         let kept = self
+             .pile_ground
+@@ -2184,6 +2228,7 @@ fn clearing_set_down(
+ 
+ /// Exclusive so terrain mutation and stone spawning are visible in the same tick.
+ fn execute_jobs(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("execute_jobs");
+     // Built once, before the loop borrows the world for terrain. Emitters are static; the items
+     // are not (a pick-up, a drop or a spawn changes them mid-loop), so `blocked` is rebuilt from
+     // them for every dwarf.
+@@ -2215,10 +2260,15 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             continue;
+         }
+         let carrying = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0);
++        probe::count("n_holder");
++        let _st = probe::T::new("ej_stones_blocked");
+         let stones = uncarried_stones(ecs);
+         let blocked = blocked_cells(emitters.iter().chain(stones.values()));
++        drop(_st);
++        let _rest = probe::T::new("ej_after_rebuild");
+         // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
+         // designation and claim stay his own job through lift, carry and set-down.
++        let _cp = probe::T::new("ej_clear_pick");
+         let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {
+             carrying.or_else(|| {
+                 let terrain = ecs.resource::<Terrain>();
+@@ -2269,6 +2319,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+         } else {
+             None
+         };
++        drop(_cp);
++        if clearing_item.is_some() { probe::count(if carrying.is_some() { "n_clearing_carry" } else { "n_clearing_walk" }); }
+         if let Some(item) = clearing_item {
+             if ecs
+                 .get::<Clearing>(entity)
+@@ -2289,6 +2341,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             ecs.entity_mut(entity).insert(WorkProgress(0));
+         }
+         let mut set_down = None;
++        let _wp = probe::T::new(if clearing_item.is_some() { if carrying.is_some() { "ej_set_down" } else { "ej_wp_clear" } } else { match job.kind { JobKind::Haul { .. } => "ej_wp_haul", _ => "ej_wp_other" } });
+         let work_positions = if let Some(item) = clearing_item {
+             let terrain = ecs.resource::<Terrain>();
+             if carrying.is_some() {
+@@ -2312,6 +2365,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 carrying,
+             )
+         };
++        drop(_wp);
+         if let Some((landing, from)) = set_down {
+             let mut clear = ecs.get_mut::<Clearing>(entity).expect("clearing miner");
+             clear.landing = Some(landing);
+@@ -2343,6 +2397,8 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 // The world's cell count, as at claim time (13.7 review, decision 1): every dig or
+                 // cut clears every path, and a re-plan capped at `MAX_ASTAR_NODES` released a far
+                 // claim that `claim_jobs` then re-claimed, in a loop that never reached the job.
++                let _rp = probe::T::new("ej_replan");
++                probe::count("n_replan");
+                 let (computed, _, _) = astar_with_budget(
+                     terrain,
+                     &blocked,
+@@ -2350,7 +2406,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                     &work_positions,
+                     &mut terrain.tiles.len(),
+                 );
++                drop(_rp);
+                 let Some(computed) = computed else {
++                    probe::count("n_replan_fail");
+                     retry_claim(ecs, entity, job.id);
+                     continue;
+                 };
+@@ -2372,6 +2430,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 ecs.entity_mut(entity).insert(Path(path));
+                 continue;
+             }
++            let _bs = probe::T::new("ej_blocked_step");
+             if occupied.contains(&path[0])
+                 && !resolve_blocked_step(
+                     ecs,
+@@ -2664,6 +2723,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+ }
+ 
+ fn settle(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("settle");
+     // Dwarves move first; their new positions must refuse item landings this tick.
+     let blocked = world_blocked(ecs);
+     let mut occupied = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
+@@ -2746,6 +2806,7 @@ fn settle(ecs: &mut EcsWorld) {
+ /// carrier's tile at the end of every tick no matter which system moved the carrier. Only
+ /// `advance_goals` follows it, because it must judge final positions.
+ fn carry_items(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("carry_items");
+     let mut carriers: Vec<_> = ecs
+         .iter_entities()
+         .filter(|entity| entity.contains::<Dwarf>())
+@@ -2768,6 +2829,7 @@ fn carry_items(ecs: &mut EcsWorld) {
+ }
+ 
+ fn advance_tick(mut tick: ResMut<Tick>) {
++    let _probe = probe::T::new("advance_tick");
+     tick.0 += 1;
+ }
+ 
+@@ -2799,6 +2861,7 @@ fn wander(
+         (Without<Emitter>, Without<Item>),
+     >,
+ ) {
++    let _probe = probe::T::new("wander");
+     // AD-7: query iteration is archetype order, not Id order, and all dwarves draw from
+     // one stream. Draw order is a sim outcome, so sort before touching the RNG.
+     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+@@ -3961,6 +4024,7 @@ fn reach_from(terrain: &Terrain, blocked: &BTreeSet<Pos>, start: Pos) -> Vec<Pos
+ /// Stream 0 draws the place and size, stream 1 each dwarf's name, colour and trade, so neither
+ /// shifts the other and none touches the worldgen, spawn, identity, profession or wander streams.
+ fn arrive(ecs: &mut EcsWorld) {
++    let _probe = probe::T::new("arrive");
+     let tick = ecs.resource::<Tick>().0;
+     if !ecs.resource::<Arrivals>().0 || !tick.is_multiple_of(ARRIVAL_PERIOD) {
+         return;
+@@ -9132,3 +9196,24 @@ mod tests {
+         }
+     }
+ }
++
++pub mod probe {
++    use std::cell::RefCell;
++    use std::collections::BTreeMap;
++    use std::time::Instant;
++    thread_local!(static ACC: RefCell<BTreeMap<&'static str, f64>> = RefCell::new(BTreeMap::new()));
++    pub struct T(&'static str, Instant);
++    impl T { pub fn new(n: &'static str) -> T { T(n, Instant::now()) } }
++    impl Drop for T {
++        fn drop(&mut self) {
++            let ms = self.1.elapsed().as_secs_f64() * 1000.0;
++            ACC.with(|a| *a.borrow_mut().entry(self.0).or_default() += ms);
++        }
++    }
++    pub static TERRAIN_VER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++    thread_local!(pub static KEPT: RefCell<(u64, std::collections::BTreeSet<super::Pos>, Vec<std::collections::BTreeSet<super::Pos>>)> = RefCell::new((u64::MAX, Default::default(), Vec::new())));
++    pub fn peek() -> BTreeMap<&'static str, f64> { ACC.with(|a| a.borrow().clone()) }
++    pub fn add(n: &'static str, v: f64) { ACC.with(|a| *a.borrow_mut().entry(n).or_default() += v); }
++    pub fn count(n: &'static str) { ACC.with(|a| *a.borrow_mut().entry(n).or_default() += 1.0); }
++    pub fn take() -> BTreeMap<&'static str, f64> { ACC.with(|a| std::mem::take(&mut *a.borrow_mut())) }
++}
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 0d1fabe5..6d014df2 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -355,6 +355,8 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+         let start_tiles = world.tiles().to_vec();
+         let (mut dug, mut cut) = (0, 0);
++        let mut win: Vec<(f64, f64, usize)> = Vec::new();
++        let mut prev_probe = std::collections::BTreeMap::new();
+         for _ in 0..scenario.ticks {
+             for command in schedule.due(world.tick()) {
+                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
+@@ -393,11 +395,44 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+                     }
+                 }
+             }
+-            serde_json::to_string(&crate::bridge::delta(
++            let enc_start = Instant::now();
++            let bytes = serde_json::to_string(&crate::bridge::delta(
+                 &mut world,
+                 scenario.speed,
+                 Vec::new(),
+-            ))?;
++            ))?
++            .len();
++            let enc = enc_start.elapsed().as_secs_f64() * 1000.0;
++            win.push((*ms.last().unwrap(), enc, bytes));
++            {
++                let cur = sim_core::probe::peek();
++                let t = *ms.last().unwrap();
++                if t >= 100.0 {
++                    let mut d: Vec<_> = cur.iter().map(|(k, v)| (*k, v - prev_probe.get(k).copied().unwrap_or(0.0))).filter(|(_, v)| *v >= 1.0).collect();
++                    d.sort_by(|a, b| b.1.total_cmp(&a.1));
++                    let top: Vec<String> = d.iter().take(16).map(|(k, v)| format!("{k}={v:.1}")).collect();
++                    eprintln!("SPIKE tick={} ms={t:.1} {}", world.tick(), top.join(" "));
++                }
++                prev_probe = cur;
++            }
++            if win.len() == 500 {
++                let n = win.len() as f64;
++                let step_mean = win.iter().map(|w| w.0).sum::<f64>() / n;
++                let step_max = win.iter().map(|w| w.0).fold(0.0, f64::max);
++                let enc_mean = win.iter().map(|w| w.1).sum::<f64>() / n;
++                let kb_mean = win.iter().map(|w| w.2 as f64).sum::<f64>() / n / 1024.0;
++                eprintln!(
++                    "PROBE tick={} crew={} arriving={} marks={} items={} step_mean={step_mean:.2} step_max={step_max:.1} enc_mean={enc_mean:.2} kb_mean={kb_mean:.1}",
++                    world.tick(), world.dwarves().len(), world.arriving_count(),
++                    world.designations().len(), world.items().len()
++                );
++                let mut sys: Vec<_> = sim_core::probe::take().into_iter().collect();
++                sys.sort_by(|a, b| b.1.total_cmp(&a.1));
++                let top: Vec<String> = sys.iter().take(40).map(|(k, v)| format!("{k}={:.2}", v / n)).collect();
++                eprintln!("  SYS {}", top.join(" "));
++                win.clear();
++                prev_probe.clear();
++            }
+         }
+         let Stats {
+             mean,

@@ -1,0 +1,36 @@
+# 13.8b AC 20 after the cut, run 2 of 2. simd at a6492612 (Task 17's sim: 74533924 pile cells per stone map, 67be6aef goal pocket), release, devpod. 2026-11-16T07:58:01Z
+# Command: as the AC 19 baseline (tick-timer-baseline-run1.txt): simd 7469 --scenario <scratch copy of 13-8-signoff/prototypes/seat-like.json with "speed": "fast4x"> 2> stderr
+#   and as its ONLY client: python3 scripts/bench/wire_tap.py tap.csv --port 7469 --stop-tick 30000. One daemon at a time, reaped by PID.
+# Load: before: load average: 1.01, 1.64, 3.51; after: load average: 1.33, 1.34, 3.01.
+# stdout: scenario seat-like: done at tick 30000 state=250b5bbeee340ff9 commands=1631/1631
+# Fields as the baseline's. The daemon's stderr, timer lines only (its one other line: the tap's broken pipe at the end).
+tick-timer ticks=0-1000 wall_s=5.236 step_ms_mean=0.1452 step_ms_max=35.8138 send_ms_mean=0.0693 send_ms_max=0.2921 over=2
+tick-timer ticks=1000-2000 wall_s=5.145 step_ms_mean=0.3483 step_ms_max=38.8210 send_ms_mean=0.0845 send_ms_max=0.2944 over=3
+tick-timer ticks=2000-3000 wall_s=5.263 step_ms_mean=0.5978 step_ms_max=39.1897 send_ms_mean=0.0959 send_ms_max=0.3233 over=15
+tick-timer ticks=3000-4000 wall_s=5.211 step_ms_mean=0.7371 step_ms_max=40.6985 send_ms_mean=0.1086 send_ms_max=0.3403 over=44
+tick-timer ticks=4000-5000 wall_s=5.585 step_ms_mean=1.1067 step_ms_max=37.5228 send_ms_mean=0.1294 send_ms_max=0.2743 over=30
+tick-timer ticks=5000-6000 wall_s=5.162 step_ms_mean=0.5353 step_ms_max=40.4979 send_ms_mean=0.1396 send_ms_max=0.3361 over=6
+tick-timer ticks=6000-7000 wall_s=5.357 step_ms_mean=0.7290 step_ms_max=76.3729 send_ms_mean=0.1511 send_ms_max=0.3744 over=6
+tick-timer ticks=7000-8000 wall_s=5.157 step_ms_mean=0.4553 step_ms_max=40.2533 send_ms_mean=0.1574 send_ms_max=0.3242 over=1
+tick-timer ticks=8000-9000 wall_s=5.161 step_ms_mean=0.5880 step_ms_max=39.3830 send_ms_mean=0.1697 send_ms_max=0.3608 over=2
+tick-timer ticks=9000-10000 wall_s=5.153 step_ms_mean=0.5765 step_ms_max=42.5996 send_ms_mean=0.1788 send_ms_max=0.3715 over=1
+tick-timer ticks=10000-11000 wall_s=5.179 step_ms_mean=0.7574 step_ms_max=39.3721 send_ms_mean=0.1825 send_ms_max=0.3647 over=10
+tick-timer ticks=11000-12000 wall_s=5.243 step_ms_mean=0.8280 step_ms_max=68.4717 send_ms_mean=0.1954 send_ms_max=0.3531 over=9
+tick-timer ticks=12000-13000 wall_s=5.208 step_ms_mean=0.8773 step_ms_max=47.0298 send_ms_mean=0.2045 send_ms_max=0.4200 over=6
+tick-timer ticks=13000-14000 wall_s=5.158 step_ms_mean=0.6024 step_ms_max=42.1217 send_ms_mean=0.2163 send_ms_max=0.4826 over=1
+tick-timer ticks=14000-15000 wall_s=5.162 step_ms_mean=0.4865 step_ms_max=39.6440 send_ms_mean=0.2259 send_ms_max=0.4312 over=4
+tick-timer ticks=15000-16000 wall_s=5.155 step_ms_mean=0.3539 step_ms_max=39.5437 send_ms_mean=0.2281 send_ms_max=0.6321 over=1
+tick-timer ticks=16000-17000 wall_s=5.186 step_ms_mean=0.3624 step_ms_max=40.0314 send_ms_mean=0.2369 send_ms_max=0.7017 over=11
+tick-timer ticks=17000-18000 wall_s=5.889 step_ms_mean=2.5805 step_ms_max=24.7615 send_ms_mean=0.3229 send_ms_max=0.7451 over=134
+tick-timer ticks=18000-19000 wall_s=8.271 step_ms_mean=5.8081 step_ms_max=45.8244 send_ms_mean=0.3745 send_ms_max=0.7063 over=269
+tick-timer ticks=19000-20000 wall_s=8.468 step_ms_mean=6.2768 step_ms_max=50.4815 send_ms_mean=0.3940 send_ms_max=0.7670 over=241
+tick-timer ticks=20000-21000 wall_s=8.235 step_ms_mean=6.0473 step_ms_max=50.7522 send_ms_mean=0.4116 send_ms_max=0.9814 over=259
+tick-timer ticks=21000-22000 wall_s=9.566 step_ms_mean=7.7116 step_ms_max=51.7799 send_ms_mean=0.4334 send_ms_max=0.9320 over=312
+tick-timer ticks=22000-23000 wall_s=9.326 step_ms_mean=7.5513 step_ms_max=53.9893 send_ms_mean=0.4691 send_ms_max=1.3538 over=294
+tick-timer ticks=23000-24000 wall_s=8.770 step_ms_mean=7.2658 step_ms_max=82.6037 send_ms_mean=0.5031 send_ms_max=1.1340 over=311
+tick-timer ticks=24000-25000 wall_s=10.700 step_ms_mean=10.0793 step_ms_max=66.0120 send_ms_mean=0.5175 send_ms_max=1.0348 over=870
+tick-timer ticks=25000-26000 wall_s=11.230 step_ms_mean=10.6311 step_ms_max=58.6422 send_ms_mean=0.5405 send_ms_max=1.0615 over=918
+tick-timer ticks=26000-27000 wall_s=10.841 step_ms_mean=9.7093 step_ms_max=68.0723 send_ms_mean=0.5641 send_ms_max=1.0922 over=449
+tick-timer ticks=27000-28000 wall_s=8.522 step_ms_mean=7.1697 step_ms_max=57.1373 send_ms_mean=0.5863 send_ms_max=0.9487 over=302
+tick-timer ticks=28000-29000 wall_s=7.151 step_ms_mean=5.3955 step_ms_max=63.1960 send_ms_mean=0.6053 send_ms_max=1.2082 over=178
+tick-timer ticks=29000-30000 wall_s=5.766 step_ms_mean=3.9100 step_ms_max=45.1068 send_ms_mean=0.6170 send_ms_max=1.5487 over=121

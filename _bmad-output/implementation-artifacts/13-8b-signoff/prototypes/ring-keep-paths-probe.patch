@@ -1,0 +1,369 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index a3793c51..39441130 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1782,6 +1782,31 @@ fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
+     release_claim(ecs, entity);
+ }
+ 
++pub static PROBE: [std::sync::atomic::AtomicU64; 16] = [const { std::sync::atomic::AtomicU64::new(0) }; 16];
++fn probe(i: usize) {
++    PROBE[i].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++}
++
++fn probe_add(i: usize, n: u64) {
++    PROBE[i].fetch_add(n, std::sync::atomic::Ordering::Relaxed);
++}
++
++fn clear_paths_near(ecs: &mut EcsWorld, at: Pos) {
++    let near = |p: &Pos| (p.x - at.x).abs() <= 2 && (p.y - at.y).abs() <= 2 && (p.z - at.z).abs() <= 2;
++    let entities: Vec<_> = ecs
++        .iter_entities()
++        .filter(|entity| {
++            entity.get::<Path>().is_some_and(|path| {
++                path.0.iter().any(near) || entity.get::<Pos>().is_some_and(near)
++            })
++        })
++        .map(|entity| entity.id())
++        .collect();
++    for entity in entities {
++        ecs.entity_mut(entity).remove::<Path>();
++    }
++}
++
+ fn clear_paths(ecs: &mut EcsWorld) {
+     let entities: Vec<_> = ecs
+         .iter_entities()
+@@ -1855,7 +1880,7 @@ fn try_squeeze(
+         }
+         _ => now,
+     };
+-    if now - since < SQUEEZE_WAIT_TICKS {
++    if idle && now - since < SQUEEZE_WAIT_TICKS {
+         ecs.entity_mut(holder).insert(Squeeze {
+             blocker: blocker_id,
+             since,
+@@ -1880,6 +1905,7 @@ fn try_squeeze(
+         ecs.entity_mut(blocker)
+             .insert(Path(blocker_path[1..].to_vec()));
+     }
++    probe(5);
+     true
+ }
+ 
+@@ -1924,6 +1950,54 @@ fn make_room_down_the_idle_chain(
+     }
+ }
+ 
++/// PROTOTYPE: the holder waits on a job-holder who waits on the next, round to the holder: every
++/// dwarf in the ring steps onto its next tile in this one call.
++fn rotate_ring(ecs: &mut EcsWorld, holder_id: Id, pos: Pos, path: &mut Vec<Pos>, blocker: Entity) -> bool {
++    let at: BTreeMap<Pos, Entity> = ecs
++        .iter_entities()
++        .filter(|entity| entity.contains::<Dwarf>())
++        .filter_map(|entity| Some((*entity.get::<Pos>()?, entity.id())))
++        .collect();
++    let mut ring: Vec<Entity> = Vec::new();
++    let mut current = blocker;
++    loop {
++        if ring.contains(&current) || ring.len() > 64 {
++            return false;
++        }
++        let walking = ecs.get::<JobState>(current) == Some(&JobState::Walk)
++            && ecs.get::<CurrentJob>(current).is_some_and(|job| job.0.is_some());
++        let Some(next) = ecs.get::<Path>(current).and_then(|path| path.0.first().copied()) else {
++            return false;
++        };
++        if !walking {
++            return false;
++        }
++        ring.push(current);
++        if next == pos {
++            break;
++        }
++        let Some(&following) = at.get(&next) else {
++            return false;
++        };
++        current = following;
++    }
++    for member in ring {
++        let mut steps = ecs.get::<Path>(member).expect("checked above").0.clone();
++        let next = steps.remove(0);
++        *ecs.get_mut::<Pos>(member).expect("every dwarf has a position") = next;
++        ecs.get_mut::<Wander>(member).expect("every dwarf wanders").cooldown = STEP_REST_TICKS;
++        if steps.is_empty() {
++            ecs.entity_mut(member).remove::<Path>();
++        } else {
++            ecs.entity_mut(member).insert(Path(steps));
++        }
++    }
++    let holder = at[&pos];
++    debug_assert_eq!(ecs.get::<Id>(holder), Some(&holder_id));
++    *ecs.get_mut::<Pos>(holder).expect("every dwarf has a position") = path.remove(0);
++    true
++}
++
+ /// The next tile of a holder's `path` holds another dwarf (FR49). Returns `true` when `path` now
+ /// starts on a free tile and the holder should step, `false` when it waits. May move the blocker
+ /// (it steps aside, or yields) or replace `path` (a re-route, or the holder yields).
+@@ -2004,6 +2078,7 @@ fn resolve_blocked_step(
+         let Some(route) = exit else {
+             // #185: the idle dwarves in the way shift if they can. Either way the holder waits, and
+             // with no way out for the idle blocker the two squeeze past after the wait (13.4).
++            probe(0);
+             make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles);
+             try_squeeze(
+                 ecs,
+@@ -2020,6 +2095,7 @@ fn resolve_blocked_step(
+     }
+     if !head_on(&blocker_path) {
+         if idle {
++            probe(1);
+             try_squeeze(
+                 ecs,
+                 (holder_id, pos),
+@@ -2032,6 +2108,14 @@ fn resolve_blocked_step(
+         }
+         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
+         let Some(rerouted) = astar(ecs.resource::<Terrain>(), &closed, pos, goals) else {
++            if std::env::var_os("NO_RING").is_none() && rotate_ring(ecs, holder_id, pos, path, blocker) {
++                probe(4);
++                return false;
++            }
++            probe(2);
++            if ecs.get::<JobState>(blocker) == Some(&JobState::Work) {
++                probe(8);
++            }
+             return false;
+         };
+         *path = rerouted;
+@@ -2041,6 +2125,7 @@ fn resolve_blocked_step(
+     // 13.4: two head-on movers (the blocker holds a job) trade tiles after the wait, instead of one
+     // of them escaping down the line.
+     if !idle {
++        probe(3);
+         try_squeeze(
+             ecs,
+             (holder_id, pos),
+@@ -2080,6 +2165,7 @@ fn resolve_blocked_step(
+         (None, None) => {
+             // 13.4: head-on, neither can step off: squeeze past after the wait, instead of the
+             // holder backing out.
++            probe(4);
+             if try_squeeze(
+                 ecs,
+                 (holder_id, pos),
+@@ -2433,6 +2519,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             // with a set-down, so a dwarf has just stepped onto it or its only route. Letting go
+             // here dropped it under him, where it could wall a dwarf in (12.9's rule).
+             if carrying.is_some() {
++                probe(6);
+                 *ecs.get_mut::<JobState>(entity)
+                     .expect("every dwarf has a job state") = JobState::Walk;
+                 continue;
+@@ -2454,13 +2541,26 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 // The world's cell count, as at claim time (13.7 review, decision 1): every dig or
+                 // cut clears every path, and a re-plan capped at `MAX_ASTAR_NODES` released a far
+                 // claim that `claim_jobs` then re-claimed, in a loop that never reached the job.
++                let started = std::time::Instant::now();
++                let mut budget = terrain.tiles.len();
++                let goal_count = work_positions.len() as u64;
+                 let (computed, _, _) = astar_with_budget(
+                     terrain,
+                     &blocked,
+                     pos,
+                     &work_positions,
+-                    &mut terrain.tiles.len(),
++                    &mut budget,
+                 );
++                let spent = (terrain.tiles.len() - budget) as u64;
++                if computed.is_none() {
++                    probe(12);
++                    probe_add(13, spent);
++                } else {
++                    probe_add(14, spent);
++                }
++                probe_add(15, goal_count);
++                probe_add(10, started.elapsed().as_nanos() as u64);
++                probe(11);
+                 if computed.is_none() {
+                     forget_if_carrying(ecs, entity, &mut stale);
+                 }
+@@ -2486,7 +2586,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 ecs.entity_mut(entity).insert(Path(path));
+                 continue;
+             }
+-            if occupied.contains(&path[0])
++            if occupied.contains(&path[0]) {
++                probe(7);
++            }
++            let started = std::time::Instant::now();
++            let waits = occupied.contains(&path[0])
+                 && !resolve_blocked_step(
+                     ecs,
+                     &blocked,
+@@ -2494,8 +2598,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                     (holder_id, pos),
+                     &mut path,
+                     &work_positions,
+-                )
+-            {
++                );
++            probe_add(9, started.elapsed().as_nanos() as u64);
++            if waits {
+                 // Wait one step period and look again, so a blocked dwarf searches once per
+                 // period and not every tick.
+                 if let Some(mut wander) = ecs.get_mut::<Wander>(entity) {
+@@ -2772,7 +2877,11 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             landing = found;
+         }
+         stale = true;
+-        clear_paths(ecs);
++        if std::env::var_os("KEEP_PATHS").is_some() {
++            clear_paths_near(ecs, job.target);
++        } else {
++            clear_paths(ecs);
++        }
+         if job.kind == JobKind::Dig {
+             let above = Pos {
+                 z: job.target.z + 1,
+@@ -3955,6 +4064,48 @@ impl World {
+     /// Sorted ascending by `Id` — stable order is required by AD-7.
+     // NOTE: `DWARF_LIGHT` is a uniform property, not saved per-dwarf state, until lanterns can be
+     // dropped. `carrying()` remains the sibling reader for the one mutable dwarf property.
++    pub fn debug_dwarf(&self, id: u32) -> String {
++        let find = |f: &dyn Fn(&bevy_ecs::world::EntityRef) -> bool| {
++            self.ecs.iter_entities().find(|e| e.contains::<Dwarf>() && f(e))
++        };
++        let Some(e) = find(&|e| e.get::<Id>() == Some(&Id(id))) else {
++            return "gone".into();
++        };
++        let pos = *e.get::<Pos>().unwrap();
++        let job = e.get::<CurrentJob>().and_then(|c| c.0).and_then(|j| self.ecs.resource::<Jobs>().by_id.get(&j).copied());
++        let path = e.get::<Path>().map(|p| p.0.clone()).unwrap_or_default();
++        let terrain = self.ecs.resource::<Terrain>();
++        let mut out = format!(
++            "id={id} pos={pos:?} state={:?} job={:?} carrying={:?} clearing={} cooldown={} path_len={} standable={}",
++            e.get::<JobState>().unwrap(),
++            job.map(|j| (j.kind, j.target)),
++            e.get::<Carrying>().and_then(|c| c.0),
++            e.get::<Clearing>().is_some(),
++            e.get::<Wander>().map(|w| w.cooldown).unwrap_or(0),
++            path.len(),
++            terrain.is_standable(pos),
++        );
++        if let Some(next) = path.first() {
++            let adjacent = astar_neighbours(terrain, &BTreeSet::new(), pos).contains(next);
++            out += &format!(" next={next:?} next_standable={} adjacent={adjacent}", terrain.is_standable(*next));
++            if let Some(b) = find(&|b| b.get::<Pos>() == Some(next)) {
++                let bjob = b.get::<CurrentJob>().and_then(|c| c.0).and_then(|j| self.ecs.resource::<Jobs>().by_id.get(&j).copied());
++                let bpath = b.get::<Path>().map(|p| p.0.clone()).unwrap_or_default();
++                out += &format!(
++                    " BLOCKER id={} state={:?} job={:?} carrying={:?} path_len={} bnext={:?} head_on={}",
++                    b.get::<Id>().unwrap().0,
++                    b.get::<JobState>().unwrap(),
++                    bjob.map(|j| (j.kind, j.target)),
++                    b.get::<Carrying>().and_then(|c| c.0),
++                    bpath.len(),
++                    bpath.first(),
++                    bpath.first() == Some(&pos),
++                );
++            }
++        }
++        out
++    }
++
+     pub fn dwarves(&self) -> Vec<(Id, Pos, JobState, LightKind)> {
+         let mut dwarves: Vec<_> = self
+             .ecs
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 0d1fabe5..9df542fa 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -355,6 +355,10 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+         let start_tiles = world.tiles().to_vec();
+         let (mut dug, mut cut) = (0, 0);
++        let mut still: std::collections::BTreeMap<u32, (sim_core::Pos, u32)> = Default::default();
++        let (mut w_idle, mut w_walk, mut w_work, mut w_ms) = (0u64, 0u64, 0u64, 0f64);
++        let mut stalls: Vec<u32> = Vec::new();
++        let mut stalled_ids: BTreeSet<u32> = BTreeSet::new();
+         for _ in 0..scenario.ticks {
+             for command in schedule.due(world.tick()) {
+                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
+@@ -371,9 +375,14 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+                 .into_iter()
+                 .map(|(pos, kind)| (pos, kind, world.tile(pos)))
+                 .collect();
++            let ld = |i: usize| sim_core::PROBE[i].load(std::sync::atomic::Ordering::Relaxed);
++            let p0 = [ld(9), ld(10), ld(11), ld(2), ld(7), ld(12), ld(13), ld(14), ld(15)];
+             let started = Instant::now();
+             world.step();
+             ms.push(started.elapsed().as_secs_f64() * 1000.0);
++            if *ms.last().unwrap() > 150.0 {
++                println!("SLOW t={} ms={:.0} resolve_ms={:.0} replan_ms={:.0} replans={} reroute_fail={} blocked_looks={} replan_fails={} fail_nodes={} ok_nodes={} goals={}", world.tick(), ms.last().unwrap(), (ld(9) - p0[0]) as f64 / 1e6, (ld(10) - p0[1]) as f64 / 1e6, ld(11) - p0[2], ld(2) - p0[3], ld(7) - p0[4], ld(12) - p0[5], ld(13) - p0[6], ld(14) - p0[7], ld(15) - p0[8]);
++            }
+             let after: BTreeSet<_> = world
+                 .designations()
+                 .into_iter()
+@@ -393,6 +402,60 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+                     }
+                 }
+             }
++            {
++                w_ms += *ms.last().unwrap();
++                let claims: std::collections::BTreeMap<u32, bool> =
++                    world.claims().into_iter().map(|(id, c)| (id.0, c.is_some())).collect();
++                for (id, pos, state, _) in world.dwarves() {
++                    match state {
++                        sim_core::JobState::Idle => w_idle += 1,
++                        sim_core::JobState::Walk => w_walk += 1,
++                        sim_core::JobState::Work => w_work += 1,
++                    }
++                    let walking = state == sim_core::JobState::Walk && claims[&id.0];
++                    let entry = still.entry(id.0).or_insert((pos, 0));
++                    if walking && entry.0 == pos {
++                        entry.1 += 1;
++                    } else {
++                        if entry.1 > 12 {
++                            stalls.push(entry.1);
++                            stalled_ids.insert(id.0);
++                        }
++                        *entry = (pos, 0);
++                    }
++                }
++                if world.tick() >= 22000 && world.tick() % 1000 == 0 {
++                    let mut n = 0;
++                    for (id, (_, t)) in &still {
++                        if *t > 300 {
++                            n += 1;
++                            if n <= 30 {
++                                println!("STUCK t={} still={} {}", world.tick(), t, world.debug_dwarf(*id));
++                            }
++                        }
++                    }
++                    println!("STUCKN t={} n={}", world.tick(), n);
++                }
++                if world.tick() % 1000 == 0 {
++                    let n = world.dwarves().len() as u64 * 1000;
++                    let short = stalls.iter().filter(|&&t| t <= 23).count();
++                    let mid = stalls.iter().filter(|&&t| t > 23 && t <= 60).count();
++                    let long = stalls.iter().filter(|&&t| t > 60).count();
++                    let lost: u32 = stalls.iter().map(|t| t - 11).sum();
++                    println!(
++                        "STALL t={} crew={} idle%={:.0} walk%={:.0} work%={:.0} stalls={} (<=23:{} <=60:{} >60:{}) max={} dwarves={} lost_ticks={} mean_ms={:.2} marks={}",
++                        world.tick(), n / 1000, 100.0 * w_idle as f64 / n as f64,
++                        100.0 * w_walk as f64 / n as f64, 100.0 * w_work as f64 / n as f64,
++                        stalls.len(), short, mid, long, stalls.iter().max().unwrap_or(&0),
++                        stalled_ids.len(), lost, w_ms / 1000.0, world.designations().len()
++                    );
++                    let c: Vec<u64> = sim_core::PROBE.iter().map(|a| a.swap(0, std::sync::atomic::Ordering::Relaxed)).collect();
++                    println!("WHY t={} blocked_looks={} idle_boxed={} idle_exit_ahead={} reroute_fail={} head_on_job={} ring_rotations={} swaps={} carry_wait_ticks={} reroute_fail_behind_worker={} resolve_ms={:.2} replan_ms={:.2} replans={} max_ms={:.0} over100={}", world.tick(), c[7], c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[8], c[9] as f64 / 1e9, c[10] as f64 / 1e9, c[11], ms[ms.len() - 1000..].iter().cloned().fold(0.0, f64::max), ms[ms.len() - 1000..].iter().filter(|m| **m > 100.0).count());
++                    (w_idle, w_walk, w_work, w_ms) = (0, 0, 0, 0.0);
++                    stalls.clear();
++                    stalled_ids.clear();
++                }
++            }
+             serde_json::to_string(&crate::bridge::delta(
+                 &mut world,
+                 scenario.speed,

@@ -1,0 +1,63 @@
+STALL t=1000 crew=18 idle%=2 walk%=24 work%=2 stalls=0 (<=23:0 <=60:0 >60:0) max=0 dwarves=0 lost_ticks=0 mean_ms=0.13 marks=124
+WHY t=1000 blocked_looks=3 idle_boxed=0 idle_exit_ahead=0 reroute_fail=0 head_on_job=2 head_on_idle=0 swaps=2 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.00 replan_ms=0.00 replans=20 max_ms=40 over100=0
+STALL t=2000 crew=29 idle%=0 walk%=58 work%=4 stalls=7 (<=23:6 <=60:1 >60:0) max=54 dwarves=5 lost_ticks=85 mean_ms=0.59 marks=101
+WHY t=2000 blocked_looks=47 idle_boxed=0 idle_exit_ahead=0 reroute_fail=11 head_on_job=1 head_on_idle=0 swaps=1 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.17 replan_ms=0.03 replans=170 max_ms=41 over100=0
+STALL t=3000 crew=40 idle%=0 walk%=70 work%=3 stalls=4 (<=23:3 <=60:1 >60:0) max=54 dwarves=3 lost_ticks=67 mean_ms=0.91 marks=82
+WHY t=3000 blocked_looks=249 idle_boxed=0 idle_exit_ahead=0 reroute_fail=7 head_on_job=1 head_on_idle=0 swaps=1 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.21 replan_ms=0.05 replans=122 max_ms=42 over100=0
+STALL t=4000 crew=53 idle%=0 walk%=72 work%=4 stalls=7 (<=23:4 <=60:2 >60:1) max=65 dwarves=7 lost_ticks=145 mean_ms=1.35 marks=46
+WHY t=4000 blocked_looks=106 idle_boxed=0 idle_exit_ahead=0 reroute_fail=15 head_on_job=10 head_on_idle=0 swaps=10 carry_wait_ticks=0 reroute_fail_behind_worker=9 resolve_ms=0.39 replan_ms=0.06 replans=398 max_ms=42 over100=0
+STALL t=5000 crew=67 idle%=12 walk%=65 work%=3 stalls=10 (<=23:10 <=60:0 >60:0) max=21 dwarves=10 lost_ticks=88 mean_ms=1.65 marks=11
+WHY t=5000 blocked_looks=162 idle_boxed=0 idle_exit_ahead=0 reroute_fail=11 head_on_job=33 head_on_idle=0 swaps=33 carry_wait_ticks=0 reroute_fail_behind_worker=1 resolve_ms=0.21 replan_ms=0.20 replans=481 max_ms=46 over100=0
+STALL t=6000 crew=85 idle%=29 walk%=49 work%=1 stalls=3 (<=23:2 <=60:1 >60:0) max=49 dwarves=3 lost_ticks=52 mean_ms=1.30 marks=3
+WHY t=6000 blocked_looks=57 idle_boxed=1 idle_exit_ahead=0 reroute_fail=6 head_on_job=21 head_on_idle=0 swaps=21 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.04 replan_ms=0.02 replans=122 max_ms=44 over100=0
+STALL t=7000 crew=96 idle%=44 walk%=44 work%=0 stalls=7 (<=23:5 <=60:2 >60:0) max=54 dwarves=7 lost_ticks=124 mean_ms=1.73 marks=0
+WHY t=7000 blocked_looks=142 idle_boxed=1 idle_exit_ahead=1 reroute_fail=11 head_on_job=13 head_on_idle=0 swaps=13 carry_wait_ticks=0 reroute_fail_behind_worker=4 resolve_ms=0.05 replan_ms=0.12 replans=77 max_ms=78 over100=0
+STALL t=8000 crew=112 idle%=43 walk%=43 work%=0 stalls=4 (<=23:3 <=60:1 >60:0) max=31 dwarves=3 lost_ticks=48 mean_ms=1.70 marks=0
+WHY t=8000 blocked_looks=201 idle_boxed=0 idle_exit_ahead=1 reroute_fail=4 head_on_job=78 head_on_idle=0 swaps=78 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.05 replan_ms=0.01 replans=41 max_ms=42 over100=0
+STALL t=9000 crew=120 idle%=48 walk%=45 work%=0 stalls=6 (<=23:6 <=60:0 >60:0) max=21 dwarves=5 lost_ticks=38 mean_ms=1.95 marks=0
+WHY t=9000 blocked_looks=145 idle_boxed=0 idle_exit_ahead=2 reroute_fail=4 head_on_job=49 head_on_idle=0 swaps=49 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.04 replan_ms=0.02 replans=47 max_ms=44 over100=0
+STALL t=10000 crew=128 idle%=48 walk%=46 work%=0 stalls=3 (<=23:3 <=60:0 >60:0) max=21 dwarves=3 lost_ticks=29 mean_ms=2.12 marks=0
+WHY t=10000 blocked_looks=244 idle_boxed=0 idle_exit_ahead=0 reroute_fail=3 head_on_job=92 head_on_idle=0 swaps=92 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.04 replan_ms=0.01 replans=46 max_ms=47 over100=0
+STALL t=11000 crew=140 idle%=48 walk%=43 work%=0 stalls=5 (<=23:5 <=60:0 >60:0) max=22 dwarves=5 lost_ticks=51 mean_ms=2.43 marks=0
+WHY t=11000 blocked_looks=338 idle_boxed=0 idle_exit_ahead=0 reroute_fail=5 head_on_job=148 head_on_idle=0 swaps=148 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.17 replan_ms=0.02 replans=65 max_ms=44 over100=0
+STALL t=12000 crew=148 idle%=50 walk%=44 work%=0 stalls=17 (<=23:17 <=60:0 >60:0) max=21 dwarves=16 lost_ticks=160 mean_ms=2.81 marks=0
+WHY t=12000 blocked_looks=383 idle_boxed=3 idle_exit_ahead=2 reroute_fail=13 head_on_job=140 head_on_idle=1 swaps=140 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.23 replan_ms=0.03 replans=98 max_ms=85 over100=0
+STALL t=13000 crew=164 idle%=47 walk%=43 work%=0 stalls=23 (<=23:19 <=60:4 >60:0) max=43 dwarves=17 lost_ticks=285 mean_ms=3.09 marks=0
+WHY t=13000 blocked_looks=363 idle_boxed=1 idle_exit_ahead=2 reroute_fail=26 head_on_job=118 head_on_idle=0 swaps=118 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.32 replan_ms=0.01 replans=119 max_ms=63 over100=0
+STALL t=14000 crew=177 idle%=58 walk%=35 work%=0 stalls=260 (<=23:137 <=60:64 >60:59) max=208 dwarves=43 lost_ticks=10386 mean_ms=19.08 marks=0
+WHY t=14000 blocked_looks=1451 idle_boxed=261 idle_exit_ahead=3 reroute_fail=978 head_on_job=26 head_on_idle=15 swaps=143 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=16.64 replan_ms=0.01 replans=107 max_ms=144 over100=19
+STALL t=15000 crew=185 idle%=75 walk%=20 work%=0 stalls=182 (<=23:118 <=60:36 >60:28) max=384 dwarves=33 lost_ticks=7463 mean_ms=8.27 marks=0
+WHY t=15000 blocked_looks=815 idle_boxed=194 idle_exit_ahead=5 reroute_fail=410 head_on_job=38 head_on_idle=8 swaps=131 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=6.80 replan_ms=0.01 replans=88 max_ms=150 over100=8
+STALL t=16000 crew=198 idle%=85 walk%=9 work%=0 stalls=8 (<=23:7 <=60:1 >60:0) max=32 dwarves=4 lost_ticks=91 mean_ms=0.41 marks=0
+WHY t=16000 blocked_looks=44 idle_boxed=7 idle_exit_ahead=1 reroute_fail=2 head_on_job=3 head_on_idle=2 swaps=6 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.00 replan_ms=0.00 replans=23 max_ms=39 over100=0
+STALL t=17000 crew=200 idle%=91 walk%=8 work%=0 stalls=0 (<=23:0 <=60:0 >60:0) max=0 dwarves=0 lost_ticks=0 mean_ms=0.32 marks=0
+WHY t=17000 blocked_looks=0 idle_boxed=0 idle_exit_ahead=0 reroute_fail=0 head_on_job=0 head_on_idle=0 swaps=0 carry_wait_ticks=0 reroute_fail_behind_worker=0 resolve_ms=0.00 replan_ms=0.00 replans=0 max_ms=44 over100=0
+STALL t=18000 crew=200 idle%=49 walk%=49 work%=2 stalls=85 (<=23:75 <=60:9 >60:1) max=64 dwarves=57 lost_ticks=957 mean_ms=4.40 marks=1430
+WHY t=18000 blocked_looks=598 idle_boxed=2 idle_exit_ahead=16 reroute_fail=94 head_on_job=113 head_on_idle=0 swaps=113 carry_wait_ticks=0 reroute_fail_behind_worker=24 resolve_ms=1.67 replan_ms=0.30 replans=1850 max_ms=128 over100=2
+STALL t=19000 crew=200 idle%=21 walk%=75 work%=4 stalls=592 (<=23:368 <=60:177 >60:47) max=120 dwarves=127 lost_ticks=11846 mean_ms=21.14 marks=1291
+WHY t=19000 blocked_looks=2471 idle_boxed=7 idle_exit_ahead=2 reroute_fail=1151 head_on_job=817 head_on_idle=0 swaps=819 carry_wait_ticks=11 reroute_fail_behind_worker=178 resolve_ms=12.27 replan_ms=1.14 replans=3607 max_ms=185 over100=12
+STALL t=20000 crew=200 idle%=22 walk%=75 work%=4 stalls=341 (<=23:224 <=60:101 >60:16) max=120 dwarves=109 lost_ticks=5919 mean_ms=19.86 marks=1165
+WHY t=20000 blocked_looks=1984 idle_boxed=3 idle_exit_ahead=4 reroute_fail=572 head_on_job=876 head_on_idle=4 swaps=876 carry_wait_ticks=100 reroute_fail_behind_worker=100 resolve_ms=6.46 replan_ms=2.83 replans=2386 max_ms=316 over100=10
+STALL t=21000 crew=200 idle%=23 walk%=74 work%=3 stalls=178 (<=23:136 <=60:37 >60:5) max=65 dwarves=90 lost_ticks=2587 mean_ms=17.62 marks=1050
+WHY t=21000 blocked_looks=1286 idle_boxed=3 idle_exit_ahead=3 reroute_fail=260 head_on_job=746 head_on_idle=0 swaps=747 carry_wait_ticks=275 reroute_fail_behind_worker=80 resolve_ms=4.46 replan_ms=3.32 replans=1995 max_ms=197 over100=12
+STALL t=22000 crew=200 idle%=25 walk%=72 work%=3 stalls=304 (<=23:186 <=60:101 >60:17) max=142 dwarves=96 lost_ticks=5597 mean_ms=23.78 marks=940
+WHY t=22000 blocked_looks=1845 idle_boxed=5 idle_exit_ahead=3 reroute_fail=572 head_on_job=957 head_on_idle=8 swaps=957 carry_wait_ticks=1001 reroute_fail_behind_worker=148 resolve_ms=8.87 replan_ms=3.29 replans=2595 max_ms=414 over100=21
+STALL t=23000 crew=200 idle%=27 walk%=69 work%=3 stalls=297 (<=23:171 <=60:96 >60:30) max=352 dwarves=104 lost_ticks=7093 mean_ms=28.83 marks=830
+WHY t=23000 blocked_looks=2929 idle_boxed=18 idle_exit_ahead=1 reroute_fail=1956 head_on_job=622 head_on_idle=8 swaps=627 carry_wait_ticks=1201 reroute_fail_behind_worker=114 resolve_ms=15.02 replan_ms=1.99 replans=1825 max_ms=237 over100=27
+STALL t=24000 crew=200 idle%=28 walk%=70 work%=2 stalls=165 (<=23:90 <=60:25 >60:50) max=1143 dwarves=95 lost_ticks=28931 mean_ms=37.43 marks=764
+WHY t=24000 blocked_looks=4713 idle_boxed=10 idle_exit_ahead=0 reroute_fail=4151 head_on_job=333 head_on_idle=1 swaps=336 carry_wait_ticks=1922 reroute_fail_behind_worker=43 resolve_ms=26.82 replan_ms=0.85 replans=1321 max_ms=145 over100=35
+STALL t=25000 crew=200 idle%=28 walk%=70 work%=2 stalls=181 (<=23:78 <=60:37 >60:66) max=2298 dwarves=93 lost_ticks=56964 mean_ms=49.71 marks=712
+WHY t=25000 blocked_looks=5940 idle_boxed=36 idle_exit_ahead=1 reroute_fail=5347 head_on_job=357 head_on_idle=2 swaps=371 carry_wait_ticks=2000 reroute_fail_behind_worker=60 resolve_ms=38.27 replan_ms=1.05 replans=819 max_ms=295 over100=148
+STALL t=26000 crew=200 idle%=29 walk%=70 work%=1 stalls=55 (<=23:41 <=60:10 >60:4) max=951 dwarves=33 lost_ticks=2395 mean_ms=45.57 marks=687
+WHY t=26000 blocked_looks=6722 idle_boxed=24 idle_exit_ahead=1 reroute_fail=6349 head_on_job=255 head_on_idle=0 swaps=267 carry_wait_ticks=2000 reroute_fail_behind_worker=13 resolve_ms=36.03 replan_ms=0.76 replans=452 max_ms=185 over100=111
+STALL t=27000 crew=200 idle%=29 walk%=70 work%=1 stalls=56 (<=23:26 <=60:2 >60:28) max=2122 dwarves=41 lost_ticks=32771 mean_ms=58.39 marks=645
+WHY t=27000 blocked_looks=7243 idle_boxed=0 idle_exit_ahead=0 reroute_fail=6959 head_on_job=241 head_on_idle=0 swaps=241 carry_wait_ticks=2000 reroute_fail_behind_worker=6 resolve_ms=48.30 replan_ms=1.05 replans=690 max_ms=287 over100=150
+STALL t=28000 crew=200 idle%=29 walk%=70 work%=1 stalls=43 (<=23:24 <=60:13 >60:6) max=2472 dwarves=21 lost_ticks=5371 mean_ms=74.84 marks=618
+WHY t=28000 blocked_looks=8165 idle_boxed=2 idle_exit_ahead=0 reroute_fail=7981 head_on_job=127 head_on_idle=2 swaps=127 carry_wait_ticks=2105 reroute_fail_behind_worker=36 resolve_ms=66.76 replan_ms=0.53 replans=471 max_ms=327 over100=315
+STALL t=29000 crew=200 idle%=30 walk%=69 work%=1 stalls=39 (<=23:16 <=60:12 >60:11) max=1061 dwarves=15 lost_ticks=3465 mean_ms=75.93 marks=596
+WHY t=29000 blocked_looks=8855 idle_boxed=31 idle_exit_ahead=2 reroute_fail=8672 head_on_job=79 head_on_idle=16 swaps=91 carry_wait_ticks=2945 reroute_fail_behind_worker=29 resolve_ms=68.69 replan_ms=0.09 replans=276 max_ms=264 over100=340
+STALL t=30000 crew=200 idle%=30 walk%=69 work%=1 stalls=36 (<=23:6 <=60:28 >60:2) max=109 dwarves=9 lost_ticks=935 mean_ms=74.07 marks=573
+WHY t=30000 blocked_looks=9187 idle_boxed=67 idle_exit_ahead=1 reroute_fail=9044 head_on_job=30 head_on_idle=2 swaps=57 carry_wait_ticks=3000 reroute_fail_behind_worker=36 resolve_ms=66.76 replan_ms=0.10 replans=197 max_ms=223 over100=307
+bench seat-like run 1/1: ticks=30000 commands=1631/1631 mean=19.3805 p99=190.5829 max=414.199 over10=7722 state=9ce78f52678b9603
+bench seat-like end tick=30000 marks=573 items=1187 zones=1800 goals=140/0/0 done=dig:1027,cut:30 stored=465 cells=1833 crew=200 arriving=0
+bench seat-like: 1 run, mean 19.3805 ms (1 run: no floor)

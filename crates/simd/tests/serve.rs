@@ -115,11 +115,22 @@ impl Daemon {
 
     /// Blocks until the daemon logs a line, proving it actually processed the input —
     /// without this, an inbound-handling test passes whether or not the daemon read.
+    /// The tick timer's lines are skipped: since 13.8b's review run 2, a pause or a speed change
+    /// writes one (`cut=`), so it can land ahead of the line a test is waiting for.
     fn next_log(&self) -> String {
-        match self.stderr.recv_timeout(IO_TIMEOUT) {
-            Ok(line) => line,
-            Err(RecvTimeoutError::Timeout) => panic!("daemon logged nothing within {IO_TIMEOUT:?}"),
-            Err(RecvTimeoutError::Disconnected) => panic!("daemon stderr closed unexpectedly"),
+        let deadline = Instant::now() + IO_TIMEOUT;
+        loop {
+            match self
+                .stderr
+                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+            {
+                Ok(line) if line.starts_with("tick-timer ") => {}
+                Ok(line) => return line,
+                Err(RecvTimeoutError::Timeout) => {
+                    panic!("daemon logged nothing within {IO_TIMEOUT:?}")
+                }
+                Err(RecvTimeoutError::Disconnected) => panic!("daemon stderr closed unexpectedly"),
+            }
         }
     }
 
@@ -3390,4 +3401,62 @@ fn a_bad_dims_or_crew_flag_is_refused_naming_the_flag() {
             output.stdout
         );
     }
+}
+
+/// 13.8b AC 18: every 1,000 stepped ticks the daemon logs what they cost, so a seat that falls
+/// behind real time shows whether the step, the delta's encoding and broadcast, or the machine
+/// took the time.
+#[test]
+fn the_daemon_logs_its_tick_times_every_thousand_stepped_ticks() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+    send_speed(&mut writer, protocol::Speed::Fast4x);
+    // Drained on a thread so the daemon never evicts this client while 1,000 ticks pass.
+    thread::spawn(move || for _ in reader.lines().map_while(Result::ok) {});
+
+    // 1,000 ticks at fast4x's 5 ms are about 5 s. The few normal ticks before it are logged as a
+    // part-window (`cut=speed`) and skipped here.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let line = loop {
+        let left = deadline.saturating_duration_since(Instant::now());
+        match daemon.stderr.recv_timeout(left) {
+            Ok(line) if line.starts_with("tick-timer ") && !line.contains(" cut=") => break line,
+            Ok(_) => {}
+            Err(error) => panic!("no tick-timer line within 30 s: {error:?}"),
+        }
+    };
+    let fields: Vec<(&str, &str)> = line
+        .split(' ')
+        .skip(1)
+        .map(|field| field.split_once('=').expect("key=value"))
+        .collect();
+    let keys: Vec<&str> = fields.iter().map(|(key, _)| *key).collect();
+    assert_eq!(
+        keys,
+        [
+            "ticks",
+            "wall_s",
+            "step_ms_mean",
+            "step_ms_max",
+            "send_ms_mean",
+            "send_ms_max",
+            "over"
+        ],
+        "{line}"
+    );
+    let (from, to) = fields[0].1.split_once('-').expect("ticks=FROM-TO");
+    let (from, to): (u64, u64) = (from.parse().unwrap(), to.parse().unwrap());
+    assert_eq!(to - from, 1000, "{line}");
+    let number = |i: usize| -> f64 { fields[i].1.parse().expect("a number") };
+    // No tick finishes before its period: 1,000 of them take at least fast4x's 5 s.
+    assert!(number(1) >= 5.0, "{line}");
+    assert!(number(2) > 0.0, "the step took no time: {line}");
+    assert!(number(3) >= number(2), "{line}");
+    assert!(number(4) > 0.0, "the encoding took no time: {line}");
+    assert!(number(5) >= number(4), "{line}");
+    let over: u32 = fields[6].1.parse().expect("a count");
+    assert!(over <= 1000, "{line}");
 }

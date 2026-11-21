@@ -1,0 +1,155 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index a3793c51..98f681ca 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -1782,6 +1782,11 @@ fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
+     release_claim(ecs, entity);
+ }
+ 
++pub static PROBE: [std::sync::atomic::AtomicU64; 8] = [const { std::sync::atomic::AtomicU64::new(0) }; 8];
++fn probe(i: usize) {
++    PROBE[i].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++}
++
+ fn clear_paths(ecs: &mut EcsWorld) {
+     let entities: Vec<_> = ecs
+         .iter_entities()
+@@ -1855,7 +1860,7 @@ fn try_squeeze(
+         }
+         _ => now,
+     };
+-    if now - since < SQUEEZE_WAIT_TICKS {
++    if idle && now - since < SQUEEZE_WAIT_TICKS {
+         ecs.entity_mut(holder).insert(Squeeze {
+             blocker: blocker_id,
+             since,
+@@ -1880,6 +1885,7 @@ fn try_squeeze(
+         ecs.entity_mut(blocker)
+             .insert(Path(blocker_path[1..].to_vec()));
+     }
++    probe(5);
+     true
+ }
+ 
+@@ -2004,6 +2010,7 @@ fn resolve_blocked_step(
+         let Some(route) = exit else {
+             // #185: the idle dwarves in the way shift if they can. Either way the holder waits, and
+             // with no way out for the idle blocker the two squeeze past after the wait (13.4).
++            probe(0);
+             make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles);
+             try_squeeze(
+                 ecs,
+@@ -2020,6 +2027,7 @@ fn resolve_blocked_step(
+     }
+     if !head_on(&blocker_path) {
+         if idle {
++            probe(1);
+             try_squeeze(
+                 ecs,
+                 (holder_id, pos),
+@@ -2032,6 +2040,7 @@ fn resolve_blocked_step(
+         }
+         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
+         let Some(rerouted) = astar(ecs.resource::<Terrain>(), &closed, pos, goals) else {
++            probe(2);
+             return false;
+         };
+         *path = rerouted;
+@@ -2041,6 +2050,7 @@ fn resolve_blocked_step(
+     // 13.4: two head-on movers (the blocker holds a job) trade tiles after the wait, instead of one
+     // of them escaping down the line.
+     if !idle {
++        probe(3);
+         try_squeeze(
+             ecs,
+             (holder_id, pos),
+@@ -2080,6 +2090,7 @@ fn resolve_blocked_step(
+         (None, None) => {
+             // 13.4: head-on, neither can step off: squeeze past after the wait, instead of the
+             // holder backing out.
++            probe(4);
+             if try_squeeze(
+                 ecs,
+                 (holder_id, pos),
+@@ -2433,6 +2444,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             // with a set-down, so a dwarf has just stepped onto it or its only route. Letting go
+             // here dropped it under him, where it could wall a dwarf in (12.9's rule).
+             if carrying.is_some() {
++                probe(6);
+                 *ecs.get_mut::<JobState>(entity)
+                     .expect("every dwarf has a job state") = JobState::Walk;
+                 continue;
+@@ -2486,6 +2498,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 ecs.entity_mut(entity).insert(Path(path));
+                 continue;
+             }
++            if occupied.contains(&path[0]) {
++                probe(7);
++            }
+             if occupied.contains(&path[0])
+                 && !resolve_blocked_step(
+                     ecs,
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 0d1fabe5..62170f52 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -355,6 +355,10 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+         let mut ms = Vec::with_capacity(scenario.ticks as usize);
+         let start_tiles = world.tiles().to_vec();
+         let (mut dug, mut cut) = (0, 0);
++        let mut still: std::collections::BTreeMap<u32, (sim_core::Pos, u32)> = Default::default();
++        let (mut w_idle, mut w_walk, mut w_work, mut w_ms) = (0u64, 0u64, 0u64, 0f64);
++        let mut stalls: Vec<u32> = Vec::new();
++        let mut stalled_ids: BTreeSet<u32> = BTreeSet::new();
+         for _ in 0..scenario.ticks {
+             for command in schedule.due(world.tick()) {
+                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
+@@ -393,6 +397,48 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+                     }
+                 }
+             }
++            {
++                w_ms += *ms.last().unwrap();
++                let claims: std::collections::BTreeMap<u32, bool> =
++                    world.claims().into_iter().map(|(id, c)| (id.0, c.is_some())).collect();
++                for (id, pos, state, _) in world.dwarves() {
++                    match state {
++                        sim_core::JobState::Idle => w_idle += 1,
++                        sim_core::JobState::Walk => w_walk += 1,
++                        sim_core::JobState::Work => w_work += 1,
++                    }
++                    let walking = state == sim_core::JobState::Walk && claims[&id.0];
++                    let entry = still.entry(id.0).or_insert((pos, 0));
++                    if walking && entry.0 == pos {
++                        entry.1 += 1;
++                    } else {
++                        if entry.1 > 12 {
++                            stalls.push(entry.1);
++                            stalled_ids.insert(id.0);
++                        }
++                        *entry = (pos, 0);
++                    }
++                }
++                if world.tick() % 1000 == 0 {
++                    let n = world.dwarves().len() as u64 * 1000;
++                    let short = stalls.iter().filter(|&&t| t <= 23).count();
++                    let mid = stalls.iter().filter(|&&t| t > 23 && t <= 60).count();
++                    let long = stalls.iter().filter(|&&t| t > 60).count();
++                    let lost: u32 = stalls.iter().map(|t| t - 11).sum();
++                    println!(
++                        "STALL t={} crew={} idle%={:.0} walk%={:.0} work%={:.0} stalls={} (<=23:{} <=60:{} >60:{}) max={} dwarves={} lost_ticks={} mean_ms={:.2} marks={}",
++                        world.tick(), n / 1000, 100.0 * w_idle as f64 / n as f64,
++                        100.0 * w_walk as f64 / n as f64, 100.0 * w_work as f64 / n as f64,
++                        stalls.len(), short, mid, long, stalls.iter().max().unwrap_or(&0),
++                        stalled_ids.len(), lost, w_ms / 1000.0, world.designations().len()
++                    );
++                    let c: Vec<u64> = sim_core::PROBE.iter().map(|a| a.swap(0, std::sync::atomic::Ordering::Relaxed)).collect();
++                    println!("WHY t={} blocked_looks={} idle_boxed={} idle_exit_ahead={} reroute_fail={} head_on_job={} head_on_idle={} swaps={} carry_wait_ticks={}", world.tick(), c[7], c[0], c[1], c[2], c[3], c[4], c[5], c[6]);
++                    (w_idle, w_walk, w_work, w_ms) = (0, 0, 0, 0.0);
++                    stalls.clear();
++                    stalled_ids.clear();
++                }
++            }
+             serde_json::to_string(&crate::bridge::delta(
+                 &mut world,
+                 scenario.speed,

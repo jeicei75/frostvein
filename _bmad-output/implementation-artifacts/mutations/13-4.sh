@@ -8,12 +8,14 @@
 # 113"; 3 "dwarves 0 and 1 never swapped"; 4b the idle swap assert; 4 the idle `home` assert; 5
 # save_load "saves taken mid-stand-off diverged"; 5b save_load "no stand-off timer ever ran".
 
+# 13.8b re-anchor: only an idle blocker waits now (`idle && `), and the killing test pins the wait
+# on an idle blocker only (head-on job-holders swap on the first look).
 mutation "1 the wait is 0: a swap on the first look (AC 3)" sim-core a_held_dwarf_swaps_only_after_the_wait <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '    if now - since < SQUEEZE_WAIT_TICKS {\n'
+old = '    if idle && now - since < SQUEEZE_WAIT_TICKS {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '    if now - since < 0 * SQUEEZE_WAIT_TICKS {\n'))
+p.write_text(s.replace(old, '    if idle && now - since < 0 * SQUEEZE_WAIT_TICKS {\n'))
 PY
 
 # The stand-off is forgotten between looks (a blocked dwarf looks once per step period), so the
@@ -91,6 +93,8 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                    squeeze: entity.get::<Squeeze>().filter(|_| false).map(|squeeze| SavedSqueeze {\n'))
 PY
 
+# 13.8b: the save test's stand-off is now miner 1 held by idle woodcutter 0 in a two-cell pocket
+# (head-on job-holders keep no timer). Only dwarf 1 times it, with blocker 0, as below.
 # Review run 1: the stand-off save test compared only dwarves, claims, jobs and paths, so a
 # corrupted blocker id went unseen. Killed by the test's independent blocker-id assert (the other
 # dwarf's id, from the fixture). Review run 2 (REWORK): only dwarf 1 times the stand-off, with

@@ -36,6 +36,11 @@ s = s.replace(arm_g, '                    (None, true, _) => continue,\n        
 old_stamp = '        if attempted && !assigned {\n'
 assert s.count(old_stamp) == 1
 s = s.replace(old_stamp, '        if attempted && !assigned && !sat_out {\n')
+# 13.8b Task 17: the goal pocket (`astar_with_budget`) answers this test's one-cell pockets before
+# any search, so the row also turns it off to reach the seam it pins (SURVIVED without, 2026-11-16).
+old_pocket = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old_pocket) == 1
+s = s.replace(old_pocket, '    if false\n        && !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n')
 p.write_text(s)
 PY
 
@@ -69,6 +74,11 @@ s = s.replace(arm_g, '                    (None, true, _) => continue,\n        
 old_stamp = '        if attempted && !assigned {\n'
 assert s.count(old_stamp) == 1
 s = s.replace(old_stamp, '        if attempted && !assigned && !sat_out {\n')
+# 13.8b Task 17: the goal pocket (`astar_with_budget`) answers this test's one-cell pockets before
+# any search, so the row also turns it off to reach the seam it pins (SURVIVED without, 2026-11-16).
+old_pocket = '    if !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n'
+assert s.count(old_pocket) == 1
+s = s.replace(old_pocket, '    if false\n        && !goals.contains(&from)\n        && goal_pocket(terrain, blocked, goals).is_some_and(|pocket| {\n')
 p.write_text(s)
 PY
 
@@ -94,16 +104,16 @@ PY
 mutation "4 the execute_jobs re-plan is capped at MAX_ASTAR_NODES again (decision 1)" sim-core a_far_claim_is_kept_through_terrain_churn_past_the_node_cap <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''                let (computed, _, _) = astar_with_budget(
-                    terrain,
-                    &blocked,
-                    pos,
-                    &work_positions,
-                    &mut terrain.tiles.len(),
-                );
+old = '''                    let (computed, _, explored) = astar_with_budget(
+                        terrain,
+                        &blocked,
+                        pos,
+                        &work_positions,
+                        &mut terrain.tiles.len(),
+                    );
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                let computed = astar(terrain, &blocked, pos, &work_positions);\n'))
+p.write_text(s.replace(old, old.replace('&mut terrain.tiles.len()', '&mut { MAX_ASTAR_NODES }')))
 PY
 
 # A designate filter that drops the pocket digs: without the 25-queued assert the test passes
@@ -126,6 +136,9 @@ PY
 # dig was never dug, so the older `must be dug within 300 ticks` assert killed the row and the id
 # assert stayed unpinned. Now only miner Id(0) keeps one. Miners 1-4 still claim and dig the late
 # dig, and `claims()` lists Id(0) first, so only `assert_eq!(job, late)` can see it.
+# 13.8b Task 13: SURVIVED on 3126c999. Miner 0 never reached the sabotaged arm: claim_jobs' skip
+# (a start inside a failed component holding none of the goals) caught him first, now that failed
+# components are kept across calls (13.8b AC 2). A third edit exempts Id(0) from that skip.
 mutation "6 miner 0 keeps an unreachable dig with an empty path while the others dig on" sim-core a_reachable_dig_behind_unreachable_ones_is_dug_on_the_256_valley <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
@@ -146,6 +159,13 @@ old_release = '''                let Some(computed) = computed else {
 '''
 assert s.count(old_release) == 1
 s = s.replace(old_release, '''                let Some(computed) = computed else {
+''')
+old_skip = '''                if components.iter().any(|component| {
+                    component.contains(*pos)
+'''
+assert s.count(old_skip) == 1
+s = s.replace(old_skip, '''                if id.0 != 0 && components.iter().any(|component| {
+                    component.contains(*pos)
 ''')
 p.write_text(s)
 PY

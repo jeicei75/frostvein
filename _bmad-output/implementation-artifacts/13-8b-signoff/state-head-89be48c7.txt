@@ -1,0 +1,26 @@
+bench big-pile run 1/1: ticks=5006 commands=47/47 mean=0.0837 p99=0.2216 max=10.071 over10=1 state=d194264e791cd656
+bench big-pile end tick=5006 marks=12 items=34 zones=518 goals=0/1/0 done=dig:34,cut:0 stored=16 cells=34 crew=5 arriving=0
+bench deep-pit run 1/1: ticks=3000 commands=5/5 mean=0.0354 p99=0.0822 max=9.031 over10=0 state=7a56e20a6967ef54
+bench deep-pit end tick=3000 marks=0 items=27 zones=22 goals=0/0/0 done=dig:0,cut:0 stored=22 cells=37 crew=5 arriving=0
+bench dig-loop run 1/1: ticks=10000 commands=0/0 mean=0.0262 p99=0.0587 max=8.758 over10=0 state=d4a55ee194e799c2
+bench dig-loop end tick=17640 marks=10 items=44 zones=21 goals=0/0/0 done=dig:2,cut:0 stored=21 cells=12 crew=5 arriving=0
+bench full-pile-crowd run 1/1: ticks=10006 commands=47/47 mean=0.0279 p99=0.1008 max=8.817 over10=0 state=04d60af4f08cb730
+bench full-pile-crowd end tick=10006 marks=0 items=46 zones=4 goals=0/0/0 done=dig:46,cut:0 stored=4 cells=46 crew=5 arriving=0
+bench plan-compact-piles run 1/1: ticks=10006 commands=55/55 mean=0.0496 p99=0.1975 max=9.007 over10=0 state=fcd6104b2e4ec109
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/6/1 done=dig:46,cut:3 stored=48 cells=109 crew=5 arriving=0
+bench plan-far-piles run 1/1: ticks=10006 commands=53/53 mean=0.0409 p99=0.1429 max=9.689 over10=0 state=1e63ccdf9cd34204
+bench plan-far-piles end tick=10006 marks=0 items=58 zones=90 goals=12/10/1 done=dig:46,cut:3 stored=58 cells=109 crew=5 arriving=0
+bench plan-spread-piles run 1/1: ticks=10006 commands=55/55 mean=0.0500 p99=0.1910 max=10.667 over10=1 state=4350876210016b2b
+bench plan-spread-piles end tick=10006 marks=0 items=58 zones=203 goals=12/2/0 done=dig:46,cut:3 stored=40 cells=109 crew=5 arriving=0
+bench plan run 1/1: ticks=10006 commands=50/50 mean=0.0401 p99=0.1248 max=8.472 over10=0 state=ad52532ce56d70f4
+bench plan end tick=10006 marks=0 items=58 zones=78 goals=12/10/1 done=dig:46,cut:3 stored=58 cells=109 crew=5 arriving=0
+bench seat-slow run 1/1: ticks=3000 commands=0/0 mean=0.0804 p99=0.2090 max=9.344 over10=0 state=a40680419d7765c6
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/11/1 done=dig:0,cut:0 stored=123 cells=0 crew=5 arriving=0
+bench stuck-tunnel run 1/1: ticks=10000 commands=0/0 mean=0.0275 p99=0.0885 max=9.148 over10=0 state=c08a3298921968ac
+bench stuck-tunnel end tick=28082 marks=0 items=60 zones=89 goals=38/4/1 done=dig:3,cut:0 stored=60 cells=3 crew=5 arriving=0
+bench they-keep-coming run 1/1: ticks=21000 commands=0/0 mean=0.0870 p99=0.1847 max=38.237 over10=22 state=75fd7c20e91eeb0f
+bench they-keep-coming end tick=21000 marks=0 items=0 zones=0 goals=0/0/0 done=dig:0,cut:0 stored=0 cells=0 crew=200 arriving=0
+bench two-hundred-on-256 run 1/1: ticks=2500 commands=1801/1801 mean=20.5524 p99=133.8565 max=335.204 over10=931 state=8d20f1748952b676
+bench two-hundred-on-256 end tick=2500 marks=1476 items=600 zones=1800 goals=22/0/0 done=dig:234,cut:90 stored=27 cells=2146 crew=200 arriving=0
+bench seat-like run 1/1: ticks=30000 commands=1631/1631 mean=11.9111 p99=107.5658 max=399.496 over10=5928 state=5511268fb5faf97f
+bench seat-like end tick=30000 marks=230 items=1530 zones=1800 goals=136/0/0 done=dig:1370,cut:30 stored=497 cells=2176 crew=200 arriving=0

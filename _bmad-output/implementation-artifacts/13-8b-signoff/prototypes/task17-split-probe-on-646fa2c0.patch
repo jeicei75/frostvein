@@ -1,0 +1,405 @@
+diff --git a/crates/sim-core/src/lib.rs b/crates/sim-core/src/lib.rs
+index e754b47b..9b388f46 100644
+--- a/crates/sim-core/src/lib.rs
++++ b/crates/sim-core/src/lib.rs
+@@ -473,6 +473,7 @@ impl Jobs {
+ }
+ 
+ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMut<Jobs>) {
++    let _probe_t = pt(1);
+     for (&target, &designation) in &designations.0 {
+         if jobs.targets.contains(&target) {
+             continue;
+@@ -537,6 +538,7 @@ fn stored_by_kind(ecs: &EcsWorld) -> BTreeMap<ItemKind, u32> {
+ /// Completes the next goal while its stored count meets its target, so a chain whose later stock
+ /// is already there finishes in one tick (12.12 D2). A completed goal stays completed.
+ fn advance_goals(ecs: &mut EcsWorld) {
++    let _probe_t = pt(8);
+     let stored = stored_by_kind(ecs);
+     let mut done = ecs.resource::<GoalsCompleted>().0;
+     while let Some(&(kind, target)) = GOALS.get(done as usize) {
+@@ -552,6 +554,7 @@ fn advance_goals(ecs: &mut EcsWorld) {
+ /// schedule, so a paused daemon takes new stockpiles and designations but derives no work from
+ /// them — 3.2's line, extended to stones unchanged.
+ fn create_haul_jobs(ecs: &mut EcsWorld) {
++    let _probe_t = pt(2);
+     let (stored, loose) = split_stored(ecs);
+     let any_zone = !ecs.resource::<Zones>().0.is_empty();
+ 
+@@ -640,6 +643,7 @@ fn claim_jobs(
+     emitters: Query<&Pos, With<Emitter>>,
+     mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying, &Profession)>,
+ ) {
++    let _probe_t = pt(3);
+     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+     dwarves.sort_by_key(|(_, id, _, _, _, _)| **id);
+     let mut claimed: BTreeSet<_> = dwarves
+@@ -690,6 +694,7 @@ fn claim_jobs(
+                     .saturating_add(reaction_delay(seed.0, id, job.id))
+     };
+     let jobs_in_order: Vec<_> = jobs.iter().copied().collect();
++    probe_n(28, jobs_in_order.len() as u64);
+     // The pile's free cells read only terrain, `blocked` and zones, all fixed for this call: found
+     // by the first haul job, shared by every other.
+     let mut pile = None;
+@@ -698,11 +703,14 @@ fn claim_jobs(
+             continue;
+         }
+         // No dwarf can try it: building its goal sets would be wasted, and no cooldown is stamped.
++        let _probe_pre = pt(23);
+         if !dwarves.iter().any(|(_, id, _, current, _, profession)| {
+             can_try(&job, **id, **profession, current.0.is_none())
+         }) {
+             continue;
+         }
++        drop(_probe_pre);
++        let _probe_g = pt(24);
+         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
+         // set serves every candidate.
+         let goals = work_positions_with(&terrain, &blocked, &zones.0, &items, job, None, &mut pile);
+@@ -725,6 +733,7 @@ fn claim_jobs(
+             }
+             _ => None,
+         };
++        drop(_probe_g);
+         let mut attempted = false;
+         let mut assigned = false;
+         for (entity, id, pos, current, carrying, profession) in dwarves.iter_mut() {
+@@ -747,9 +756,11 @@ fn claim_jobs(
+                 }
+                 if let Some(delivery) = &delivery {
+                     let mut budget = terrain.tiles.len();
++                    let _probe_d = pt(25);
+                     match astar_with_budget(&terrain, &blocked, **pos, delivery, &mut budget) {
+                         (Some(_), false, _) => {}
+                         (None, false, explored) => {
++                            probe_n(29, 1);
+                             components.push(explored);
+                             continue;
+                         }
+@@ -759,9 +770,14 @@ fn claim_jobs(
+                     }
+                 }
+                 let mut budget = terrain.tiles.len();
++                let _probe_a = pt(27);
+                 let path = match astar_with_budget(&terrain, &blocked, **pos, &goals, &mut budget) {
+                     (Some(path), false, _) => path,
+                     (None, false, explored) => {
++                        probe_n(30, 1);
++                        probe_n(31, explored.len() as u64);
++                        let (size, reached) = rev_flood(&terrain, &blocked, **pos, &goals, 70_000);
++                        rev_hist(45, size, !reached, explored.len());
+                         components.push(explored);
+                         continue;
+                     }
+@@ -1028,6 +1044,7 @@ fn pile_targets(
+ ) -> BTreeMap<Pos, u32> {
+     #[cfg(test)]
+     PILE_TARGETS_CALLS.with(|n| n.set(n.get() + 1));
++    let _probe_pt = pt(44);
+     let cap = 4 * zones.len() + 16;
+     // The zones' x/y bounding box (empty with no zones).
+     let xs = || zones.iter().map(|p| p.x);
+@@ -1778,6 +1795,42 @@ fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
+     entity.remove::<Arriving>();
+ }
+ 
++pub static PROBE_NS: [std::sync::atomic::AtomicU64; 64] = [const { std::sync::atomic::AtomicU64::new(0) }; 64];
++pub static PROBE_N: [std::sync::atomic::AtomicU64; 64] = [const { std::sync::atomic::AtomicU64::new(0) }; 64];
++pub struct ProbeT(usize, std::time::Instant);
++impl Drop for ProbeT {
++    fn drop(&mut self) {
++        PROBE_NS[self.0].fetch_add(self.1.elapsed().as_nanos() as u64, std::sync::atomic::Ordering::Relaxed);
++        PROBE_N[self.0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
++    }
++}
++pub fn pt(i: usize) -> ProbeT {
++    ProbeT(i, std::time::Instant::now())
++}
++pub fn rev_flood(terrain: &Terrain, closed: &BTreeSet<Pos>, from: Pos, goals: &BTreeSet<Pos>, cap: usize) -> (usize, bool) {
++    let mut seen: BTreeSet<Pos> = goals.iter().copied().filter(|g| is_walkable(terrain, closed, *g) || *g == from).collect();
++    let mut queue: VecDeque<Pos> = seen.iter().copied().collect();
++    while let Some(c) = queue.pop_front() {
++        if c == from { return (seen.len(), true); }
++        if seen.len() > cap { return (seen.len(), true); }
++        for n in astar_neighbours(terrain, closed, c) {
++            if seen.insert(n) { queue.push_back(n); }
++        }
++        if !seen.contains(&from) {
++            // from may be closed? it's excepted; nothing
++        }
++    }
++    (seen.len(), false)
++}
++// slot base b: n[b]=reverse<=64, n[b+1]<=512, n[b+2]<=4096, n[b+3] > 4096 or reached; ns-ish: n[b+4] forward nodes saved when rev<=4096
++fn rev_hist(b: usize, size: usize, enclosed: bool, forward: usize) {
++    if enclosed && size <= 64 { probe_n(b, 1) } else if enclosed && size <= 512 { probe_n(b + 1, 1) } else if enclosed && size <= 4096 { probe_n(b + 2, 1) } else { probe_n(b + 3, 1) }
++    if enclosed && size <= 4096 { probe_n(b + 4, forward as u64) }
++}
++pub fn probe_n(i: usize, n: u64) {
++    PROBE_N[i].fetch_add(n, std::sync::atomic::Ordering::Relaxed);
++}
++
+ fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
+     let retry_after = ecs.resource::<Tick>().0.saturating_add(RETRY_COOLDOWN);
+     if let Some(job) = ecs.resource_mut::<Jobs>().get_mut(job_id) {
+@@ -1787,6 +1840,7 @@ fn retry_claim(ecs: &mut EcsWorld, entity: Entity, job_id: JobId) {
+ }
+ 
+ fn clear_paths(ecs: &mut EcsWorld) {
++    let _probe_t = pt(19);
+     let entities: Vec<_> = ecs
+         .iter_entities()
+         .filter(|entity| entity.contains::<Path>())
+@@ -1844,6 +1898,7 @@ fn try_squeeze(
+     idle: bool,
+     blocker_path: &[Pos],
+ ) -> bool {
++    let _probe_s = pt(43);
+     let next = path[0];
+     let now = ecs.resource::<Tick>().0;
+     let holder = ecs
+@@ -2051,6 +2106,7 @@ fn resolve_blocked_step(
+     goals: &BTreeSet<Pos>,
+ ) -> bool {
+     let next = path[0];
++    let _probe_f = pt(42);
+     let (blocker_id, blocker) = ecs
+         .iter_entities()
+         .filter(|entity| entity.contains::<Dwarf>())
+@@ -2071,6 +2127,7 @@ fn resolve_blocked_step(
+         .unwrap_or_default();
+     let holder_tiles: BTreeSet<Pos> = path.iter().copied().collect();
+     let head_on = |blocker_path: &[Pos]| blocker_path.first() == Some(&pos);
++    drop(_probe_f);
+ 
+     if idle && !head_on(&blocker_path) {
+         let terrain = ecs.resource::<Terrain>();
+@@ -2087,14 +2144,16 @@ fn resolve_blocked_step(
+         }
+         // No way aside: leave by the nearest free tile off the holder's path. The holder's own
+         // tile is passable for the search (it is the way out) but not a destination.
++        let _probe_e = pt(33);
+         let closed = closed_to_dwarves(blocked, occupied, &[pos, next]);
+         let exit = route_to_nearest(terrain, &closed, next, |tile| {
+             tile != pos && !holder_tiles.contains(&tile) && !piles.contains(&tile)
+         });
++        drop(_probe_e);
+         let Some(route) = exit else {
+             // #185: the idle dwarves in the way shift if they can. Either way the holder waits, and
+             // with no way out for the idle blocker the two squeeze past after the wait (13.4).
+-            make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles);
++            { let _p = pt(34); make_room_down_the_idle_chain(ecs, blocked, occupied, (pos, next), &holder_tiles); }
+             try_squeeze(
+                 ecs,
+                 (holder_id, pos),
+@@ -2120,10 +2179,20 @@ fn resolve_blocked_step(
+             );
+             return false;
+         }
++        let _probe_r = pt(35);
+         let closed = closed_to_dwarves(blocked, occupied, &[pos]);
+-        let Some(rerouted) = astar(ecs.resource::<Terrain>(), &closed, pos, goals) else {
++        let mut budget = MAX_ASTAR_NODES;
++        let (found, out, _) = astar_with_budget(ecs.resource::<Terrain>(), &closed, pos, goals, &mut budget);
++        drop(_probe_r);
++        if found.is_some() { probe_n(36, 1) } else { probe_n(37, 1); if out { probe_n(40, 1) }
++            let (size, reached) = rev_flood(ecs.resource::<Terrain>(), &closed, pos, goals, 70_000);
++            rev_hist(50, size, !reached, MAX_ASTAR_NODES - budget);
++            if reached && !out { probe_n(55, 1) } }
++        probe_n(38, (MAX_ASTAR_NODES - budget) as u64);
++        let Some(rerouted) = found else {
+             // A ring steps at once, the holder with it; either way he reports "wait", as after a
+             // swap.
++            let _p = pt(39);
+             step_the_ring(ecs, blocked, pos, path, blocker);
+             return false;
+         };
+@@ -2145,6 +2214,7 @@ fn resolve_blocked_step(
+         return false;
+     }
+     let blocker_tiles: BTreeSet<Pos> = blocker_path.iter().copied().collect();
++    let _probe_h = pt(41);
+     let (holder_escape, blocker_escape) = {
+         let terrain = ecs.resource::<Terrain>();
+         (
+@@ -2162,6 +2232,7 @@ fn resolve_blocked_step(
+             ),
+         )
+     };
++    drop(_probe_h);
+     let holder_yields = match (&holder_escape, &blocker_escape) {
+         (Some(_), Some(_)) => holder_id < blocker_id,
+         (Some(_), None) => true,
+@@ -2347,6 +2418,7 @@ fn clearing_set_down(
+ type StoneMap = (BTreeMap<u32, Pos>, BTreeSet<Pos>);
+ 
+ fn stone_map(ecs: &EcsWorld, emitters: &[Pos]) -> StoneMap {
++    let _probe_t = pt(11);
+     #[cfg(test)]
+     STONE_MAP_BUILDS.with(|n| n.set(n.get() + 1));
+     let stones = uncarried_stones(ecs);
+@@ -2369,6 +2441,7 @@ fn forget_if_carrying(ecs: &EcsWorld, entity: Entity, stale: &mut bool) {
+ // old owned-value spelling, which older mutation rows anchor on.
+ #[allow(clippy::needless_borrow)]
+ fn execute_jobs(ecs: &mut EcsWorld) {
++    let _probe_t = pt(4);
+     // Emitters are static; the items are not (a lift, a set-down, a pick-up, a delivery, a spawn
+     // or a released carrier changes them mid-loop). `kept` is the stone map of the last dwarf's
+     // turn; `stale` marks every such change (a flag, because `kept` stays borrowed for the rest
+@@ -2379,6 +2452,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+     // `blocked` and today's tiles. Dropped with `kept`: every tile set in this loop sets `stale` too
+     // (a refused channel cut restores its tiles before anyone searches).
+     let mut failed: Vec<BTreeSet<Pos>> = Vec::new();
++    let _probe_setup = pt(10);
+     let emitters: Vec<Pos> = ecs
+         .query_filtered::<&Pos, With<Emitter>>()
+         .iter(ecs)
+@@ -2391,6 +2465,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+         .filter_map(|entity| Some((*entity.get::<Id>()?, entity.id())))
+         .collect();
+     dwarves.sort_by_key(|(id, _)| *id);
++    drop(_probe_setup);
+ 
+     for (holder_id, entity) in dwarves {
+         if std::mem::take(&mut stale) {
+@@ -2427,6 +2502,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+         let (stones, blocked) = &*kept.get_or_insert_with(|| stone_map(ecs, &emitters));
+         // NOTE: a miner's clearing trigger lives here, before the ordinary work run. The
+         // designation and claim stay his own job through lift, carry and set-down.
++        let _probe_c = pt(12);
+         let clearing_item = if matches!(job.kind, JobKind::Dig | JobKind::Channel) {
+             carrying.or_else(|| {
+                 let terrain = ecs.resource::<Terrain>();
+@@ -2496,7 +2572,9 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             ecs.entity_mut(entity).remove::<Clearing>();
+             ecs.entity_mut(entity).insert(WorkProgress(0));
+         }
++        drop(_probe_c);
+         let mut set_down = None;
++        let _probe_w = pt(13);
+         let work_positions = if let Some(item) = clearing_item {
+             let terrain = ecs.resource::<Terrain>();
+             if carrying.is_some() {
+@@ -2520,6 +2598,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 carrying,
+             )
+         };
++        drop(_probe_w);
+         if let Some((landing, from)) = set_down {
+             let mut clear = ecs.get_mut::<Clearing>(entity).expect("clearing miner");
+             clear.landing = Some(landing);
+@@ -2559,6 +2638,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 }) {
+                     None
+                 } else {
++                    let _probe_r = pt(14);
+                     let (computed, _, explored) = astar_with_budget(
+                         terrain,
+                         &blocked,
+@@ -2566,6 +2646,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                         &work_positions,
+                         &mut terrain.tiles.len(),
+                     );
++                    if explored.is_empty() { probe_n(20, 1) } else { probe_n(21, 1); probe_n(22, explored.len() as u64) }
+                     #[cfg(test)]
+                     REPLAN_FAILED_FLOODED.with(|n| n.set(n.get() + explored.len()));
+                     // Empty after a success or for no goals: nothing was flooded.
+@@ -2599,6 +2680,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 ecs.entity_mut(entity).insert(Path(path));
+                 continue;
+             }
++            let _probe_b = pt(15);
+             if occupied.contains(&path[0])
+                 && !resolve_blocked_step(
+                     ecs,
+@@ -2619,6 +2701,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 ecs.entity_mut(entity).insert(Path(path));
+                 continue;
+             }
++            drop(_probe_b);
+             let next = path.remove(0);
+             *ecs.get_mut::<Pos>(entity)
+                 .expect("every dwarf has a position") = next;
+@@ -2723,6 +2806,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+                 // (`drop_cell`, the rule `work_positions` sent it here by); `release_claim` then
+                 // clears the slot, the same funnel every abnormal exit uses.
+                 Some(item) => {
++                    let _probe_d = pt(17);
+                     let terrain = ecs.resource::<Terrain>();
+                     let targets = pile_targets(terrain, &blocked, &ecs.resource::<Zones>().0);
+                     let landing = drop_cell(&targets, pos, |cell| {
+@@ -2770,6 +2854,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+             continue;
+         }
+ 
++        let _probe_x = pt(18);
+         let change = {
+             let terrain = ecs.resource::<Terrain>();
+             match job.kind {
+@@ -2905,6 +2990,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
+ }
+ 
+ fn settle(ecs: &mut EcsWorld) {
++    let _probe_t = pt(5);
+     // Dwarves move first; their new positions must refuse item landings this tick.
+     let blocked = world_blocked(ecs);
+     let mut occupied = dwarf_tiles(ecs.query_filtered::<&Pos, With<Dwarf>>().iter(ecs));
+@@ -2987,6 +3073,7 @@ fn settle(ecs: &mut EcsWorld) {
+ /// carrier's tile at the end of every tick no matter which system moved the carrier. Only
+ /// `advance_goals` follows it, because it must judge final positions.
+ fn carry_items(ecs: &mut EcsWorld) {
++    let _probe_t = pt(7);
+     let mut carriers: Vec<_> = ecs
+         .iter_entities()
+         .filter(|entity| entity.contains::<Dwarf>())
+@@ -3009,6 +3096,7 @@ fn carry_items(ecs: &mut EcsWorld) {
+ }
+ 
+ fn advance_tick(mut tick: ResMut<Tick>) {
++    let _probe_t = pt(0);
+     tick.0 += 1;
+ }
+ 
+@@ -3040,6 +3128,7 @@ fn wander(
+         (Without<Emitter>, Without<Item>),
+     >,
+ ) {
++    let _probe_t = pt(6);
+     // AD-7: query iteration is archetype order, not Id order, and all dwarves draw from
+     // one stream. Draw order is a sim outcome, so sort before touching the RNG.
+     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
+@@ -4203,6 +4292,7 @@ fn reach_from(terrain: &Terrain, blocked: &BTreeSet<Pos>, start: Pos) -> Vec<Pos
+ /// Stream 0 draws the place and size, stream 1 each dwarf's name, colour and trade, so neither
+ /// shifts the other and none touches the worldgen, spawn, identity, profession or wander streams.
+ fn arrive(ecs: &mut EcsWorld) {
++    let _probe_t = pt(9);
+     let tick = ecs.resource::<Tick>().0;
+     if !ecs.resource::<Arrivals>().0 || !tick.is_multiple_of(ARRIVAL_PERIOD) {
+         return;
+diff --git a/crates/simd/src/scenario.rs b/crates/simd/src/scenario.rs
+index 0d1fabe5..38481e20 100644
+--- a/crates/simd/src/scenario.rs
++++ b/crates/simd/src/scenario.rs
+@@ -374,6 +374,21 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
+             let started = Instant::now();
+             world.step();
+             ms.push(started.elapsed().as_secs_f64() * 1000.0);
++            if world.tick() % 1000 == 0 {
++                let ns: Vec<f64> = sim_core::PROBE_NS.iter().map(|a| a.swap(0, std::sync::atomic::Ordering::Relaxed) as f64 / 1e6 / 1000.0).collect();
++                let n: Vec<u64> = sim_core::PROBE_N.iter().map(|a| a.swap(0, std::sync::atomic::Ordering::Relaxed)).collect();
++                let w = &ms[ms.len() - 1000..];
++                let step = w.iter().sum::<f64>() / 1000.0;
++                let sys: f64 = ns[0..10].iter().sum();
++                let ej_known: f64 = [10, 11, 12, 13, 14, 15, 17, 18].iter().map(|&i| ns[i]).sum();
++                println!("PROBE t={} step={:.2} max={:.0} sys_sum={:.2} | tick={:.3} cj={:.3} chj={:.3} claim={:.2} exec={:.2} settle={:.2} wander={:.2} carry={:.3} goals={:.3} arrive={:.3} | ej_setup={:.2} stonemap={:.2}({}) clearing={:.2} workpos={:.2}({}) replan={:.2}({} ok={} fail={} flood={}) blocked={:.2}({}) deliver={:.2}({}) complete={:.2}({}) clear_paths={:.2}({}) ej_rest={:.2}",
++                    world.tick(), step, w.iter().cloned().fold(0.0, f64::max), sys,
++                    ns[0], ns[1], ns[2], ns[3], ns[4], ns[5], ns[6], ns[7], ns[8], ns[9],
++                    ns[10], ns[11], n[11], ns[12], ns[13], n[13], ns[14], n[14], n[20], n[21], n[22], ns[15], n[15], ns[17], n[17], ns[18], n[18], ns[19], n[19], ns[4] - ej_known);
++                println!("PROBE2 t={} claim: jobs={} precheck={:.2}({}) goals={:.2}({}) deliv={:.2}({} fail={}) goal_astar={:.2}({} fail={} flood={}) | blocked: find={:.2} exit={:.2}({}) room={:.2}({}) reroute={:.2}({} ok={} fail={} out={} nodes={}) ring={:.2}({}) escapes={:.2}({}) squeeze={:.2}({}) pile_targets={:.2}({}) | claimfail_rev<=64/512/4096/big={}/{}/{}/{} saved={} | reroutefail_rev={}/{}/{}/{} saved={} reached_but_completed={}",
++                    world.tick(), n[28], ns[23], n[23], ns[24], n[24], ns[25], n[25], n[29], ns[27], n[27], n[30], n[31],
++                    ns[42], ns[33], n[33], ns[34], n[34], ns[35], n[35], n[36], n[37], n[40], n[38], ns[39], n[39], ns[41], n[41], ns[43], n[43], ns[44], n[44], n[45], n[46], n[47], n[48], n[49], n[50], n[51], n[52], n[53], n[54], n[55]);
++            }
+             let after: BTreeSet<_> = world
+                 .designations()
+                 .into_iter()

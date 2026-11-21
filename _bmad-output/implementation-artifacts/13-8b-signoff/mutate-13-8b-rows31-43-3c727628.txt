@@ -1,0 +1,85 @@
+# 13-8b.sh rows 31-43 at 3c727628 (review run 2 patch pass, 2026-11-20). Row 39 was re-aimed at beba4af4
+# (its first form skipped the reset and died at wall_s, main.rs:1407) and re-run alone: KILLED at
+# main.rs:1412 in the mutant = 1411 at HEAD, the pause test's lines.len() == 2.
+
+=== 31 a pause keeps its window (review P1; dies at the full window's wall_s < 1.0, review run 2) ===
+thread 'tests::a_pause_inside_a_tick_timer_window_starts_a_new_one' (21377) panicked at crates/simd/src/main.rs:1407:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 32 a load's tick jump keeps its window (review P1) ===
+thread 'tests::a_load_inside_a_tick_timer_window_starts_a_new_one' (22621) panicked at crates/simd/src/main.rs:1355:13:
+assertion `left == right` failed: a load to tick 9001: ["tick-timer ticks=0-1000 wall_s=2.000 step_ms_mean=1.0000 step_ms_max=1.0000 send_ms_mean=0.0000 send_ms_max=0.0000 over=0"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 33 over counts nothing (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (23973) panicked at crates/simd/src/main.rs:1301:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 34 over counts the iterations that kept their period (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (25352) panicked at crates/simd/src/main.rs:1301:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 35 a window's maxes carry into the next (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (26718) panicked at crates/simd/src/main.rs:1317:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 36 from is the first stepped tick, not the one it stepped from (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (28090) panicked at crates/simd/src/main.rs:1301:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 37 send's max never moves (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (29453) panicked at crates/simd/src/main.rs:1301:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 38 send's mean sums the step (review P2) ===
+thread 'tests::the_tick_timer_reports_what_it_was_fed_and_starts_each_window_afresh' (30871) panicked at crates/simd/src/main.rs:1301:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 39 a cut part-window is not logged (review run 2, D1 (b)) ===
+thread 'tests::a_pause_inside_a_tick_timer_window_starts_a_new_one' (32276) panicked at crates/simd/src/main.rs:1407:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 40 a cut window's wall_s ends at the cutting iteration's record, after its pause or stall (review run 2, D1 (b)) ===
+thread 'tests::a_pause_inside_a_tick_timer_window_starts_a_new_one' (33693) panicked at crates/simd/src/main.rs:1419:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 41 a speed change keeps its window (review run 2) ===
+thread 'tests::a_speed_change_inside_a_tick_timer_window_starts_a_new_one' (35083) panicked at crates/simd/src/main.rs:1444:9:
+assertion `left == right` failed: ["tick-timer ticks=0-1000 wall_s=3.000 step_ms_mean=1.0000 step_ms_max=1.0000 send_ms_mean=0.0000 send_ms_max=0.0000 over=0"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 42 a load's cut is named a speed change (review run 2, D1 (b)) ===
+thread 'tests::a_load_inside_a_tick_timer_window_starts_a_new_one' (36454) panicked at crates/simd/src/main.rs:1356:13:
+assertion `left == right` failed: ["tick-timer ticks=0-400 wall_s=1.000 step_ms_mean=1.0000 step_ms_max=1.0000 send_ms_mean=0.0000 send_ms_max=0.0000 over=0 cut=speed", "tick-timer ticks=9000-10000 wall_s=1.000 step_ms_mean=1.0000 step_ms_max=1.0000 send_ms_mean=0.0000 send_ms_max=0.0000 over=0"]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+=== 43 a cut leaves its window open, so the next paused iteration logs it again (review run 2, D1 (b)) ===
+thread 'tests::a_pause_inside_a_tick_timer_window_starts_a_new_one' (37824) panicked at crates/simd/src/main.rs:1406:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 0.00s
+
+================ MUTATION RESULTS ================
+31 a pause keeps its window (review P1; dies at the full window's wall_s < 1.0, review run 2) KILLED
+32 a load's tick jump keeps its window (review P1)           KILLED
+33 over counts nothing (review P2)                           KILLED
+34 over counts the iterations that kept their period (review P2) KILLED
+35 a window's maxes carry into the next (review P2)          KILLED
+36 from is the first stepped tick, not the one it stepped from (review P2) KILLED
+37 send's max never moves (review P2)                        KILLED
+38 send's mean sums the step (review P2)                     KILLED
+39 a cut part-window is not logged (review run 2, D1 (b))    KILLED
+40 a cut window's wall_s ends at the cutting iteration's record, after its pause or stall (review run 2, D1 (b)) KILLED
+41 a speed change keeps its window (review run 2)            KILLED
+42 a load's cut is named a speed change (review run 2, D1 (b)) KILLED
+43 a cut leaves its window open, so the next paused iteration logs it again (review run 2, D1 (b)) KILLED
+
+All mutations killed.
+exit 0
+
+# Row 44 (db870cb1): KILLED 3/3 at serve.rs:2198 in the mutant (2199 at HEAD), the inverted_log assert.

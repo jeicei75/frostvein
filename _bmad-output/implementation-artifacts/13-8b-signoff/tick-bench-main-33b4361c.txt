@@ -1,0 +1,25 @@
+# RUNS=5 scripts/tick-bench.sh main HEAD (33b4361c), 2026-11-19T06:04:20Z
+# uptime at start:  06:04:20 up 17 min,  0 users,  load average: 6.75, 6.76, 3.95
+building 5f83e82ef0bfb14f64fa590740484c4e46e6a396 ...
+building 33b4361c9556cff259fc57389d38e6305e13a0dc ...
+building control (5f83e82ef0bfb14f64fa590740484c4e46e6a396) ...
+base 5f83e82ef0bfb14f64fa590740484c4e46e6a396
+head 33b4361c9556cff259fc57389d38e6305e13a0dc
+control: base again, functions shuffled (--shuffle-sections=*=1)
+runs 5 per build, interleaved; load before: 4.79, 6.11, 3.92
+scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+big-pile                   0.1273     0.0343   -73.1%    -0.6%       2.0%       2.9%       3.1%  differ BEYOND FLOOR
+deep-pit                   0.0369     0.0214   -41.9%    -1.2%       9.2%      16.3%       7.1%  differ BEYOND FLOOR
+dig-loop                   0.0283     0.0227   -19.9%    -2.1%       2.1%       5.7%       5.1%  differ BEYOND FLOOR
+full-pile-crowd            0.0296     0.0255   -13.9%    -1.7%       4.0%       4.7%       2.7%  differ BEYOND FLOOR
+plan-compact-piles         0.0535     0.0403   -24.7%    +0.5%       3.6%       3.5%       7.1%  differ BEYOND FLOOR
+plan-far-piles             0.0445     0.0349   -21.7%    -1.4%       3.1%       6.3%       5.2%  differ BEYOND FLOOR
+plan-spread-piles          0.0536     0.0414   -22.7%    -2.7%       9.9%       7.0%       5.4%  differ BEYOND FLOOR
+plan                       0.0442     0.0345   -21.8%    -1.0%       8.2%       6.4%       5.9%  differ BEYOND FLOOR
+seat-slow                  0.0901     0.0684   -24.1%    -0.6%       8.7%       8.5%       8.2%  differ BEYOND FLOOR
+stuck-tunnel               0.0272     0.0254    -6.5%    -3.8%      10.7%       7.9%       4.6%  differ within floor
+they-keep-coming           0.0857     0.0866    +1.0%    +1.9%       3.6%       6.7%       4.0%  same   within floor
+two-hundred-on-256        22.7498     5.4978   -75.8%    +0.4%       4.7%       8.2%       3.8%  differ BEYOND FLOOR
+load after: 1.36, 1.76, 2.50
+# uptime at end:  06:18:28 up 31 min,  0 users,  load average: 1.36, 1.76, 2.50
+# exit=0
