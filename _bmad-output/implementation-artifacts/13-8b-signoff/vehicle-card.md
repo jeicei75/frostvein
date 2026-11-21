@@ -298,8 +298,46 @@ the clock, not the blocking the stall probe counts, and Task 17 changed no behav
 
 ### Sitting, Run 5 (2026-11-17): Run 4's build, watched
 
-Wolf re-ran the Run 4 commands (files named `run5`) and watched from minute 25, just before the big dig, to the
-end: "1 gone I would say .. i did not see hickups this time and watched it from 25 till the stop".
+Wolf re-ran the Run 4 commands and watched from minute 25, just before the big dig, to the end: "1 gone I would
+say .. i did not see hickups this time and watched it from 25 till the stop". No files were saved from this
+sitting (corrected 2026-11-21: this card said "files named `run5`", which was an assumption). The sitting with
+files is below.
 
 - Question 1 (after the big dig): **gone**.
 - Question 2 (minutes 16-21): not watched this time.
+
+### Sitting, Run 5 with files (2026-11-21): the review patches' build
+
+Wolf: "no hickups anymore (well fps drops between 20-30 some times .. probably stable 30 is ok for this game".
+
+- Question 1 (after the big dig): **gone**, as on 11-17, now on the build with the review patches.
+- The fps drops are the gui drawing, not the sim stopping: see the gui log below.
+- Files: `13-8b-seat-like-run5.csv` (the gui log, build `1a50406b`), `13-8b-wire-tap-seat-run5.csv` (the tap;
+  tick 30,000 at 3,009 s). The daemon's timer log (`13-8b-simd-stderr-seat-run5.txt`) is not in the folder.
+
+Tap, the same measure as Runs 3 and 4 (late = more than 150 ms after the tick before):
+
+| ticks | Run 3 wall | Run 3 late ticks | Run 4 wall | Run 4 late ticks | Run 5 wall | Run 5 late ticks |
+|---|---|---|---|---|---|---|
+| to 17,000 | 100.1-101.1 | 1-31 | 100.1-100.3 | 0-24 | 100.1-100.3 | 1-4 |
+| 18,000 | 100.9 | 71 | 100.1 | 0 | 100.1 | 0 |
+| 19,000 | 114.7 | 294 | 100.1 | 0 | 100.2 | 47 |
+| 20,000-21,000 | 101.6-103.9 | 97-139 | 100.1 | 0 | 100.1 | 4-10 |
+| 22,000-23,000 | 121.2-125.4 | 285-327 | 100.1-100.2 | 1-23 | 100.3 | 69-71 |
+| 24,000-27,000 | 117.3-128.1 | 250-301 | 100.1-100.2 | 2-32 | 100.6-103.7 | 49-113 |
+| 28,000-29,000 | 106.7-108.0 | 152-153 | 100.2 | 14-27 | 100.8-102.0 | 45-64 |
+| 30,000 | 100.8 | 63 | 100.1 | 13 | 100.5 | 16 |
+
+Longest single gap: Run 5 299 ms (tick 26,477), Run 4 292 ms, Run 3 581 ms.
+
+After the big dig, Run 5 sits between Runs 3 and 4: at most 3.7% behind real time (Run 3 28%, Run 4 0.2%) and
+45-113 late ticks per 1,000 (Run 3 250-327, Run 4 0-32). No gap reached 300 ms, and Wolf saw no stops. Without
+the daemon's log this run cannot say whether the extra late ticks are the step or the seat machine. No sim
+code changed between the two builds (the review patches touched only the daemon's timer and its log), so the
+seat machine is the likelier reading.
+
+The gui log, the same build as the tap: steady p50 19.8 ms (Run 4 22.2), p99 45.4 ms (69.0), worst 307 ms
+(369); frames of 50 ms or more 598 (6,311). By 3-minute bucket the p50 is 47-59 fps except two stretches:
+minutes 12-15 (27 fps, crew 120, half the frames under 30 fps) and minutes 30-36 (35-39 fps, a third of the
+frames under 30 fps, the re-meshing after the big dig). Those are the drops Wolf saw. They are the gui's
+crowd and re-mesh cost (#224), which this story does not touch. One mark, at the end of the log.
