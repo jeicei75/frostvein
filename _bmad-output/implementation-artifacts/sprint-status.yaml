@@ -2875,7 +2875,7 @@ development_status:
   # 13.8 -> review 2026-11-09: seat run 3 passes (stutter before the big dig gone; stops after it = #231). Wolf ruled
   # "ok then 1": 13.8 closes as is, #231 (failing claim searches + execute_jobs after a big dig) is the next story.
   # 13.8 MERGED 2026-11-11 as PR #233 (ac4d3b7e), closed no issue; #232 open. -> done.
-  13-8b-after-the-big-dig: in-progress
+  13-8b-after-the-big-dig: done
   # 13.8b CREATED 2026-11-12 (claude-fable-5-2) on branch story-13-8b-after-the-big-dig (off main 5f83e82e) for #231.
   # Probes on seat-like: execute_jobs' stone-map rebuild is 3-11 ms (not 22-41); resolve_blocked_step 4-29 ms;
   # claim_jobs floods the ~63k-cell main component most ticks (24-45k cells/tick). Prototype (kept failed components):
@@ -2898,6 +2898,7 @@ development_status:
   # Static audit ENDED at run 2, so next: push, seat run 5 with files, record it, then gh pr ready 241.
   # SEAT RUN 5 WITH FILES 2026-11-21 (gui 1a50406b): Wolf "no hickups anymore"; fps 20-30 dips = gui (#224). Tap <=3.7%
   # behind after the dig; daemon step ~2x run 4 on identical sim-core (seat machine). Next: gh pr ready 241 on Wolf's yes.
+  # 13.8b MERGED 2026-11-21 as PR #241 (3c6cf3b7), closed #231 only; #236 open. -> done.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
