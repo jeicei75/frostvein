@@ -1,0 +1,334 @@
+---
+model: claude-opus-5-5  # session default (story authored on Opus 5.5)
+baseline_commit: 3c6cf3b7
+---
+
+# Story 13.9: Forage
+
+Status: ready-for-dev
+
+## Story
+
+As the boss,
+I want woodcutters to gather food from plants in an area I mark, again and again as the plants regrow,
+so that the fortress has its first food.
+
+## Branch
+
+`story-13-9-forage`, cut from `main` `3c6cf3b7` (13.8b's merge). Its first commit `b99f881e` is 13.8b's close-out and rides into this PR, as `51da2d4e` did for 13.8.
+
+**Standing ACs that bind:** Epic 13's M3 ACs 1–8 (**one full gate per story, at PR**), plus M4 ACs 10, 11, 12, 14, 16, 17 and 18. AC 13 (needs) and AC 15 (new trade) do not apply: there is no eating yet, and forage goes to the existing woodcutter.
+
+**Wire diff (AD-6, enums snake_case):**
+- `ItemKind` gains `Berries`.
+- NEW `PlantState { Ripe, Growing }`, NEW `Plant { pos, state }`, NEW `PlantChange { pos, state: Option<PlantState> }` (`None` = the plant is gone), NEW `ForageCell { pos }`.
+- `Snapshot` gains `plants: Vec<Plant>` and `forage: Vec<ForageCell>`.
+- `Delta` gains `plants: Vec<PlantChange>`: only the plants that changed since the last delta, the way `tiles` works. It also gains `forage: Vec<ForageCell>`, resent in full like `zones`.
+- `Command` gains `PlaceForageArea { rects: Vec<Rect> }` and `RemoveForageArea { rect }`. `Refusal` gains `PlaceForageArea { rect }`.
+
+**Saved fields (two), plus one new job kind and one new item kind inside existing fields:**
+- `SaveState.plants: Vec<(Pos, u64)>`, each plant's `ripe_at` tick.
+- `SaveState.forage: Vec<Pos>`, the forage-area cells.
+- `JobKind::Forage` goes in `jobs`, and `ItemKind::Berries` goes in `items`.
+
+Every state hash therefore moves (memory: `state-hash-covers-save-encoding`). AC 2 reads the reach with those two fields stripped from the encoding.
+
+## Task 0 — Wolf rules before dev
+
+Each question has a recommendation, and the ACs and Tasks are written for it. A different answer amends the ACs it names.
+
+- **Q1. What is a plant?**
+  - (a) **Recommended:** a plant is sim state of its own, `Plants(BTreeMap<Pos, Plant { ripe_at: u64 }>)`. It is not a tile and not an entity with an `Id`. It stands on a standable cell and blocks nothing: dwarves walk through it, and it never touches `set_tile`, `clear_paths` or the id counter. Generated on its own seed stream after the trees, it shifts no tile, no spawn and no id, so a world with no forage area plays exactly as it does on `main` (AC 2). Ripe means `tick >= ripe_at`.
+  - (b) A new `Material` tile at surface + 1, like a tree. It blocks standing and paths, ripples into every `Material` match in the wire and both clients, moves the terrain fingerprint and every scenario outcome, and makes regrowth a `set_tile` (path and pile caches dropped on every regrow at 256²).
+- **Q2. Names and constants (standing AC 18).**
+  - (a) **Recommended:**
+    - The plant is a berry bush. The item is `ItemKind::Berries` (wire `berries`), the first raw food; later stories add carcass, fish and meal.
+    - Placement: one in 16 eligible columns, uniform, on its own stream `STREAM_PLANTS`.
+    - Eligible means: the column's top tile is `Solid(Snow)`, the cell above it is empty, and the column is outside the lake, outside the camp box (`CAMP_RADIUS + 1`, as the trees use), off the edge ring, and not a tree column. At least one side neighbour of the bush's cell must be standable at generation, so that no bush is born unforageable.
+    - `FORAGE_WORK_TICKS = 30`; `REGROW_TICKS = 3_000` (5 min at 1x, 75 s at fast4x); one `Berries` per forage.
+  - (b) Other numbers or names. Patches (clustered bushes) instead of uniform placement are a later look call at the seat, not this story.
+- **Q3. What is a forage area?**
+  - (a) **Recommended:** a saved cell set of its own, `ForageArea(BTreeSet<Pos>)`, shaped like the stockpile.
+    - `PlaceForageArea { rects }` takes several rects, because plants sit on hills as the forest does. It keeps the standable cells of its rects.
+    - It is refused, naming the bounding rect, when no kept cell holds a plant.
+    - `RemoveForageArea { rect }` subtracts cells, and the gui's Clear sends it too.
+    - An area may overlap a stockpile.
+    - Forage jobs come from the area's ripe plants, not from `Designations`, so they do not count against `MAX_DESIGNATIONS`; the plant count bounds them.
+  - (b) Per-plant marks, `DesignationKind::Forage`, like cut. Completing a job deletes its mark, so "again and again while the area stands" would need a second store anyway.
+- **Q4. The bench scenario (standing AC 14, FR67).**
+  - (a) **Recommended:** `scenarios/two-hundred-on-256.json` gains one `place_forage_area` command at `at: 1`, near the pile, covering at least 30 plants. It is "the 256² bench scenario" that 13.10 inherits "with its forage area".
+    - `at: 1` puts the forage jobs ahead of the 200 cut jobs in the woodcutters' FIFO (Found B).
+    - `main`'s `simd` cannot read the new command (`deny_unknown_fields`), so the delta against `main` (standing AC 10) runs on `main`'s copy of the file. The forage file is recorded as a HEAD-only row.
+  - (b) A new `scenarios/forage-on-256.json`, with `two-hundred-on-256.json` left unchanged. Every later story's bench then runs two 256² files (about 20 min more per tick-bench).
+- **Q5. The forage-area mode: input and the draft (standing AC 16; this is the draft for Wolf to approve).**
+  - (a) **Recommended:** key **6**, which is free. Digit6–Digit0 are unbound, and #118 is about the F-keys, so it is untouched. The mode works the way stockpile does:
+    ```
+    HUD (None):  1 dig  2 channel  3 stockpile  4 clear  5 cut  6 forage   Space pause ...
+    HUD (mode):  forage: drag over the bushes  Esc leave   |   forage: release to mark  Esc abort
+    drag preview: the stockpile slab shape in a berry colour on the kept cells; bushes inside the box lit
+    placed area:  the same slab, berry colour, under the bushes (a pile under it still shows as a pile)
+    refused:      "forage area refused: no plant in it"  (the existing refusal line)
+    bush, ripe:   a low dark-green block with red berry dots   bush, growing: the green block only, smaller
+    berries item: a small red cube (the item-cube slot wood uses)
+    tui:          ripe bush "  red   growing bush "  dim green   berries %  red   area cell :  berry colour
+    ```
+  - (b) Wolf edits the draft, or routes the mode through the selection UI.
+- **Q6. The three committed seat saves.**
+  - (a) **Recommended:** patch each with `"plants": []` and `"forage": []`, as data, with a throwaway script as 13.8 did. Their worlds then stay plant-free and the #203, #204 and #206 reproducers keep their outcome.
+  - (b) Regenerate their plants from the seed. Their outcome is unchanged either way (Q1 a), but each save grows by about 900 entries.
+
+## Found at creation (2026-11-21, `main` `3c6cf3b7`)
+
+- **A. Nothing plant-shaped exists, and neither existing store fits an area.**
+  - The only mention is the `MAX_DESIGNATIONS` comment (`lib.rs:71-72`), which says forage marks will add to the cap. Under Q3 (a) that is stale; rewrite it.
+  - `Designations` is one kind per cell, and a finished job deletes its mark (`lib.rs:2853-2861`).
+  - Every `Zone` is a pile: hauling (`create_haul_jobs` `:558`, "stored" `:508`), the tui's stored colour (`view.rs:325-339`) and the gui's overlap nudge (`project.rs:2296-2312`) all assume it. Reusing `Zone` would make berries "stored" where they lie.
+- **B. On the bench, woodcutters never clear their cuts.** `two-hundred-on-256` ends at `done=dig:321,cut:96` (`13-8b-signoff/state-head-a28a5523.txt`): 96 of 200 cut marks by t2,500. FIFO is ascending `JobId` within a trade (`lib.rs:696-700`), so forage jobs created after tick 6 would never be claimed inside the window. Hence `at: 1` (Q4).
+- **C. Haul is slow on the bench.** Only `stored=36` of `items=711` by t2,500 (#235). Berries reaching the pile inside the window is therefore plausible but not certain. If `food=0`, that is a finding for Wolf, not a reason to change haul code here (#235 owns it).
+- **D. The bench end-line reader splits on `",cut:"`** (`simd/tests/bench.rs:292-295`). A field appended inside `done=` breaks its parse, so new fields go after `arriving=` (`scenario.rs:433`).
+- **E. Uncarried items block cells** for claim-time reachability (#162, `lib.rs:662-663`). A forage that drops berries onto a cell where earlier berries still lie would stack items (the #154 class).
+- **F. `Mirror::apply_delta` destructures `Delta { .., }`** (`client-core/src/lib.rs:244-295`), so a new `Delta` field is dropped silently unless it is added there. About 120 `Snapshot`/`Delta` struct literals across the gui, tui and client-core tests need the new fields.
+- **G. The `Cut` wire name was never pinned** (`bridge.rs:473-487` lists Dig and Channel only). Pin Cut and every new variant.
+- **H. The simd load validator** counts `Dig|Channel|Cut` as tile jobs against `MAX_DESIGNATIONS` and treats every other job as a haul (`main.rs:660-680`, `:713-732`). A Forage job falls into the haul arm unless it gets its own.
+
+## Acceptance Criteria
+
+1. **Plants grow, seeded (FR58, AD-7; mechanism AC because NFR9 is about reproducibility).**
+   - Worldgen places berry bushes on the eligible cells (Q2), all ripe at tick 0, from `STREAM_PLANTS` alone.
+   - Seed 42 at 128² holds a plant count inside a band the dev pins (±15% of the measured count). Same seed ⇒ identical plants; another seed differs.
+   - No plant stands in the lake, the camp box, the edge ring or a tree column, or on anything but snow.
+2. **Plants change no existing outcome (standing AC 11, FR53).**
+   - Every pin in `tests/worldgen.rs` passes unchanged, the terrain fingerprint (`:502`) included.
+   - Every committed scenario run as on `main` (bench file per Q4) has the same end line as `main`, except for the new end-line fields.
+   - A throwaway build that drops `plants` and `forage` from the encoding reads `state` `same` against `main` on all of those rows.
+3. **A forage area is placed, removed and refused (FR58, NFR11).**
+   - `PlaceForageArea` keeps the standable cells of its rects.
+   - An area holding no plant is refused with `Refusal::PlaceForageArea` naming the bounding rect, and that includes a rect with no standable cell. The tui status row and the gui refusal line show `forage area refused: no plant in it`.
+   - `RemoveForageArea` removes cells. A forage job whose plant leaves every area is retired and its holder released within one tick.
+4. **Woodcutters forage, haulers store (FR58).**
+   - Every ripe plant inside an area, with no job and no uncarried item on its cell, has exactly one `Forage` job.
+   - Only woodcutters claim it. The worker works from a walkable side neighbour for `FORAGE_WORK_TICKS`. The plant then turns `Growing` and one `Berries` item lies on the plant's cell.
+   - With a pile placed, a hauler stores the berries.
+5. **Cuts and forages share one FIFO (FR58; mechanism AC: AD-12's single claiming system).**
+   - One woodcutter, a cut mark, then a forage area: he cuts first, then forages.
+   - The reverse order: he forages first.
+6. **Regrowth (FR58).**
+   - A foraged plant is ripe again `REGROW_TICKS` after its forage, and is foraged again while the area stands. A scenario test forages the same plant twice, and the second forage starts no earlier than `REGROW_TICKS` after the first.
+   - With the area removed between the two, the plant is not foraged again.
+   - **Cut line** (epic): if regrowth is cut, this AC drops and plants are a one-off harvest.
+7. **A plant whose ground goes is gone.** A channel (or a dig of the tile under it) removes the plant. Its job is retired and the clients see it disappear.
+8. **Determinism and save (NFR9, AD-11, standing AC 12).**
+   - A world saved with a plant mid-regrowth, berries on the ground and a forage job held, loaded and stepped 300 ticks, equals the never-saved world. That includes the new `plants()` and `forage_area()` readers.
+   - A save missing the `plants` or `forage` key is refused, with a positive control.
+   - The three committed seat saves are patched (Q6), and their scenarios load and keep their end lines.
+   - `simd`'s load validator refuses an out-of-bounds plant or forage cell, a Forage job whose target holds no plant, and a reused Forage target, each naming the cause.
+9. **Both clients show it (NFR10).**
+   - `client-core::Mirror` tracks a plant from ripe to growing to ripe to gone across deltas, and holds the forage cells.
+   - The tui draws ripe bushes, growing bushes, berries and forage cells, each distinguishable (Q5), with no TUI regression. The TUI gains no input.
+10. **The gui forage mode and the look, plain (standing AC 16, 17).**
+    - Key 6 enters the mode Wolf approved (Q5). A drag sends `PlaceForageArea`, the preview lights the bushes in the box, a refusal shows on the refusal line, and Clear removes the area.
+    - Bushes draw in two states and berries draw as an item. The area draws as a slab distinct from a pile.
+11. **The fortress forages by itself on the bench (FR67, standing AC 14).**
+    - `two-hundred-on-256` (Q4) ends with `foraged=K food=F`, both ≥ 1. `food` is stored berries on the pile, by 3.3's rule. No order is given after the scenario's opening commands.
+    - The `#[ignore]` release test `the_two_hundred_on_256_scenario_does_real_work` asserts both.
+    - If `food=0`, the run is recorded and Wolf rules (Found C).
+12. **The bench delta is recorded (standing AC 10).** `RUNS=5 scripts/tick-bench.sh main HEAD` runs over the committed files, with `main`'s copy of the bench file (Q4). Each row's delta is recorded against its floor, and the forage file is recorded as a HEAD-only row.
+13. **The instruments are tested (standing AC 8).**
+    - The bench end line's `foraged=` and `food=` read `0 0` on the one-dig fixture and `≥1 ≥1` on a small forage fixture, driven through the binary.
+    - The tui capture shows a ripe bush turning into a growing one.
+    - The gui `--drag forage,…` capture fails when no forage cell resulted.
+14. **The mutation table kills** (Task 10), and `python3 scripts/audit-mutations.py` exits 0.
+15. **The seat (standing AC 16, 17).**
+    - Wolf marks a forage area in a fresh game and watches woodcutters forage, berries hauled, and a bush regrow.
+    - He judges the plain look. His words are recorded.
+    - The gui frame rate at 256² is recorded beside seat run 5's (NFR13). A miss is measured and ruled.
+
+## Tasks / Subtasks
+
+- [ ] **Task 0: Wolf's rulings (Q1–Q6).** Record the answers in the Change Log and amend the ACs they name. Q5's answer is the approved draft. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
+- [ ] **Task 1: plants in worldgen (AC 1, 2).** UPDATE `crates/sim-core/src/worldgen.rs` and `src/lib.rs`.
+  - [ ] Add `STREAM_PLANTS` (ASCII `"PLANTS__"`) beside the streams (`lib.rs:31-38`), and the constants `PLANT_ONE_IN = 16`, `FORAGE_WORK_TICKS = 30` and `REGROW_TICKS = 3_000` beside `CUT_WORK_TICKS` (`:86-93`).
+  - [ ] NEW `pub(crate) fn place_plants(dims, tiles: &[Tile], camp, rng) -> BTreeMap<Pos, Plant>` in `worldgen.rs`, modelled on `place_trees` (`:375-443`). Call it in `generate` after `place_trees` (`lib.rs:3392-3393`) with `ChaCha8Rng::seed_from_u64(seed ^ STREAM_PLANTS)`. Find the top tile by scanning the column, because heights are not kept. A tree column holds a `TreeTrunk`.
+  - [ ] NEW resource `Plants { by_pos: BTreeMap<Pos, Plant>, changed: BTreeSet<Pos> }` with `pub struct Plant { pub ripe_at: u64 }`. `assemble` (`:3305-3318`) takes it. Add the public readers `World::plants() -> Vec<(Pos, bool /*ripe*/)>` and `World::drain_plant_changes() -> Vec<(Pos, Option<bool>)>`, the second shaped like `drain_dirty` (`:3724`).
+  - [ ] Tests in `tests/worldgen.rs`: the AC 1 band, eligibility, and same/different seed. Do not touch the existing pins; AC 2 needs them to pass as they are.
+- [ ] **Task 2: the forage area (AC 3).** UPDATE `lib.rs`.
+  - [ ] NEW `SimCommand::PlaceForageArea { rect }` / `RemoveForageArea { rect }`, and `Refusal::PlaceForageArea { rect }` (`:152-161`). NEW `World::place_forage_area(&[Rect]) -> Option<Refusal>`, the twin of `place_stockpile` (`:3734`): refused only when no rect keeps a plant cell, naming the bounding box.
+  - [ ] NEW resource `ForageArea(BTreeSet<Pos>)`, beside `Zones` (`:841`). Cells are kept by the stockpile's standable test (`:3947-3960`). Add the reader `World::forage_area() -> Vec<Pos>`.
+  - [ ] Rewrite the stale `MAX_DESIGNATIONS` comment (`:71-72`, Found A).
+- [ ] **Task 3: forage jobs, regrowth, plant loss (AC 4–7).** UPDATE `lib.rs`.
+  - [ ] `JobKind::Forage` (`:360`). Extend every exhaustive site:
+    - `trade()` (`:624`) maps it to `Woodcutter`. That is all AC 5 needs; `claim_jobs` itself does not change (AD-12).
+    - `Jobs::insert/remove` (`:430`, `:450`) treat it as a tile job, unique by target.
+    - `work_positions_with` (`:1593`) joins the `Dig | Cut` arm's walkable side neighbours, without the Dig-only item fallback.
+    - The work-time match (`:2733-2737`) and the `unreachable!` at `:2889`.
+    - The CancelDesignation job filter (`:3921`) leaves Forage alone; an area is removed by `RemoveForageArea`.
+  - [ ] In `create_jobs` (`:479`), after the designation loop: create a Forage job for each ripe plant in the area whose cell is not in `jobs.targets` and holds no uncarried item (Found E). Also retire, with a release, each Forage job whose plant is gone, unripe or outside every area (the `create_haul_jobs` retire shape, `:558-575`).
+  - [ ] Forage completion, beside cut completion (`:2853-2861`):
+    - set `ripe_at = tick + REGROW_TICKS` and mark the plant changed;
+    - spawn `Item(Berries)` at the plant cell with `ids.allocate()`;
+    - remove the job and `release_claim`.
+    - No `clear_paths`: nothing walkable changed.
+  - [ ] NEW system `tend_plants`, chained after `execute_jobs` (`:3337-3353`), which skips while paused (AD-2). It removes each plant whose cell is no longer standable and marks it changed, and it marks changed each plant whose `ripe_at == tick`.
+  - [ ] `ItemKind::Berries` (`:197`). `yield_of` (`:208`) is unaffected, because berries come from no material. `goal_kind_text` and the GOALS count by kind are unchanged.
+  - [ ] Scenario tests in `tests/scenario.rs` for AC 3–7, built on the timber helpers (`:2445-2510`) and `a_cut_is_hauled_to_the_pile_as_wood` (`:2579`). Find a plant near `camp_origin()` from `world.plants()`; never hardcode one.
+- [ ] **Task 4: save and the load validator (AC 8).** UPDATE `src/save.rs`, `lib.rs` (`to_save` `:3486-3571`, `from_save` `:3573-3591`), and `crates/simd/src/main.rs`.
+  - [ ] `SaveState.plants` and `SaveState.forage`, with no `#[serde(default)]`.
+  - [ ] Validator (`main.rs:594`): bounds checks for plants and forage cells. Forage jobs get their own arm (Found H): unique target, a plant at the target, and a count bound of the plant count, kept out of both the tile-job and the haul counts. Refusal tests go in `simd/tests/serve.rs`.
+  - [ ] `tests/save_load.rs`: add the two readers to the per-tick equality list (`:170-188`), a mid-regrowth variant modelled on `:298-365` with its guard, and the missing-key tests modelled on `:1222-1267`.
+  - [ ] Patch `scenarios/saves/*.save` per Q6 with a throwaway script, not committed.
+- [ ] **Task 5: the wire (AC 9).** UPDATE `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs` and `main.rs`, and `crates/client-core/src/lib.rs`.
+  - [ ] The protocol types from the Wire diff, with snake_case names pinned in the wire-literal test (`protocol :346`).
+  - [ ] Bridge: `snapshot()` and `delta()` (`bridge.rs:1-90`). `item_kind_out`, `refusal_out` (`:348-361`). Pin Cut, Berries and the plant states in the wire-name tests (`:429-487`, Found G).
+  - [ ] `apply_sim_command` (`main.rs:513-552`) and `command_rects` (`:1226-1238`) take the two new commands. The scenario reader accepts them through the same path.
+  - [ ] `Mirror`: `plants: BTreeMap<Pos, PlantState>` and `forage`. `apply_delta` applies `plants` as changes and `forage` as a full resend (Found F). `refusal_text` gets the new arm. Add tests in `client-core/tests/mirror.rs`.
+- [ ] **Task 6: the tui (AC 9).** UPDATE `crates/tui/src/view.rs` and `palette.rs`.
+  - [ ] Draw order: zones, forage cells, designations, plants, items, then entities. The glyphs and colours are the ones Q5 approves.
+  - [ ] Extend `DrawTally` (`view.rs:75-135`) and the glyph-distinctness test (`palette.rs` ~`:497-520`). Plant glyphs must be ASCII (#152).
+  - [ ] Plants on other levels follow #172's existing peek rule. Add a `// NOTE:` naming #172; no fix here.
+- [ ] **Task 7: the gui (AC 10).** UPDATE `crates/gui/src/designate.rs`, `project.rs`, `appearance.rs`, `ingest.rs` and `capture.rs`.
+  - [ ] `DesignateMode::Forage` on `Digit6`, with the hints from Q5 (ASCII, test `:497`). `commands_for` (`:295-345`) sends `PlaceForageArea { rects: surface }`. Clear also sends `RemoveForageArea` for each surface rect. Add Digit6 to the keymap guard (`ingest.rs:5051`, Digit list `:5119-5123`).
+  - [ ] Preview: `sim_will_keep` (`project.rs:1079-1105`) keeps standable cells. `preview_appearance` (`:1111-1145`) uses a berry-coloured slab and lights the bushes in the box, as cut lights tree bases (`:3916-3941`).
+  - [ ] Render: forage cells as a slab like zones (`:2290-2380`) with a NEW `appearance::forage_color`. Each bush is one entity with ONE shared mesh per state and shared materials, so 256²'s ~3k bushes batch. Berries use the item cube (`:2267-2277`), with `item_translation`, `item_scale` (`:2383-2393`) and `appearance` extended exhaustively.
+  - [ ] `--drag` takes `forage` (`parse_drag` `ingest.rs:1458-1486`, `mode_key` `:1548-1557`). `assert_drag_produced_work` (`capture.rs:169`) gains a forage arm: zero forage cells fails the capture.
+- [ ] **Task 8: the instruments (AC 11, 13).**
+  - [ ] `simd --bench`'s end line (`scenario.rs:433`) appends ` foraged=K food=F` after `arriving=` (Found D). `foraged` counts forage completions, the way `done=` counts cuts. `food` counts stored `Berries`, by `split_stored`'s rule.
+  - [ ] Check every reader of the end line and of `next_log` before you change the line (memory: `new-log-line-breaks-next-line-readers`).
+  - [ ] NEW fixture `crates/simd/tests/fixtures/one-forage.json`: a small seed world, a pile, a forage area on a few plants, and enough ticks for one forage and one haul. A test in `simd/tests/bench.rs` reads `foraged=0 food=0` on `one-dig.json` and `≥1 ≥1` on `one-forage.json`.
+  - [ ] A tui test in `tui/tests/client.rs` drives the binary over a served world: the capture's ripe-bush count at a plant falls and its growing count rises after a forage. A gui headless test in `gui/tests/headless.rs`: every mirror plant has a projected bush in the right state.
+  - [ ] **RED first, for each instrument:**
+    - Comment out the `foraged`/`food` increment; the fixture test must fail on `foraged=0`.
+    - Draw growing bushes with the ripe glyph; the tui test must fail.
+    - Make the forage arm of `commands_for` send nothing; the `--drag forage` capture must fail.
+    - Restore each step with an edit, never `git checkout --` (memory: `sabotage-restore-trap`).
+- [ ] **Task 9: the bench scenario and the delta (AC 2, 11, 12).**
+  - [ ] Per Q4, add one `place_forage_area` at `at: 1` to `two-hundred-on-256.json`, picked by a throwaway script: the rect nearest the pile (`(143,144)`) with at least 30 plants. Record the plant count and the rect in `about`. Add a re-pin line to the doc comment of `the_two_hundred_on_256_scenario_does_real_work` (`bench.rs:266-274`), plus the AC 11 asserts.
+  - [ ] AC 2: run every committed scenario's end line on `main` and HEAD, and save both to `13-9-signoff/state-{main,head}-<sha>.txt`. Run the strip build in a scratch worktree (memory: `mutation-run-poisons-concurrent-builds`).
+  - [ ] AC 12: save `RUNS=5 scripts/tick-bench.sh main HEAD` to `13-9-signoff/tick-bench-main-<sha>.txt`. Record the delta table in the Debug Log, in 13.8's form.
+- [ ] **Task 10: mutation table (AC 14).** NEW `_bmad-output/implementation-artifacts/mutations/13-9.sh`, with count-guarded anchors, and save the run to `13-9-signoff/`. At least one row each for:
+  - the area refusal;
+  - `trade(Forage)`;
+  - the item-on-cell skip;
+  - the retire-on-area-removal;
+  - `REGROW_TICKS` use;
+  - plant loss in `tend_plants`;
+  - the `changed` mark on forage;
+  - `apply_delta`'s plants arm;
+  - the save fields' required keys;
+  - the validator's Forage arm.
+
+  Run `audit-mutations.py` before the first code commit, so that rows against code you rewrite are re-pointed in the same commit (memory: `deleting-code-retires-rows-in-the-same-commit`).
+- [ ] **Task 11: the seat card (AC 15).** NEW `13-9-signoff/vehicle-card.md` in 13.8b's skeleton:
+  - the run in the seat's form (persistent fact: `launch-gui.ps1`, `simd 7451`), with `--perf-log` to an absolute `D:\Workspace\frostvein\.bin\` path;
+  - what to do: mark an area at key 6, watch a forage, a haul and, at fast4x, a regrowth;
+  - one question;
+  - the sitting, recorded in Wolf's words.
+- [ ] **Task 12: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).
+
+## Verification
+
+Nothing here can run at creation, because the feature does not exist. Each line states the obligation the dev inherits: the exact command, the non-zero observation, and the RED that must be seen first.
+
+```bash
+# AC 1-8: sim
+cargo test -p sim-core
+#   expect: the new worldgen, scenario and save_load tests pass, and every existing worldgen pin passes unchanged
+
+# AC 2, 11: end lines, main vs HEAD (release, every committed scenario)
+for f in $(git ls-files 'scenarios/*.json'); do target/release/simd --bench "$f" --runs 1 | rg ' end '; done
+#   expect HEAD: every row except two-hundred-on-256 equals main's line up to the new ' foraged=0 food=0'
+#   expect HEAD two-hundred-on-256: foraged>=1 food>=1 (if food=0, record it and Wolf rules)
+#   RED: comment out the food increment -> food=0 on one-forage.json and the fixture test fails; restore by edit
+
+# AC 12: bench delta
+RUNS=5 scripts/tick-bench.sh main HEAD 2>&1 | tee _bmad-output/implementation-artifacts/13-9-signoff/tick-bench-main-$(git rev-parse --short=8 HEAD).txt
+
+# AC 9, 13: tui instrument (pin the level with --z; read it from the plant chosen by the test, never assume)
+target/release/simd 7461 --dims 128,128,32 & sleep 3; target/release/tui 7461 --frames 3 --z <plant z> > tui.out; kill %1
+sed 's/\x1b\[[0-9;?]*[A-Za-z]//g' tui.out | rg -o '"' | wc -l
+#   expect: > 0 bushes on that level.  RED: draw no plants -> 0, and the tui test fails
+
+# AC 10, 13: gui drag instrument (headless, devpod lavapipe)
+target/release/gui <port> --headless --drag forage,<x0>,<y0>,<x1>,<y1> --frames 40 --capture /abs/forage.png
+#   expect: the capture passes with forage cells > 0.  RED: empty forage arm in commands_for -> the capture fails
+
+# AC 14
+env -u NO_COLOR RUST_TEST_THREADS=1 scripts/mutate.sh _bmad-output/implementation-artifacts/mutations/13-9.sh
+python3 scripts/audit-mutations.py
+
+# gate (once, at PR)
+RUST_TEST_THREADS=1 scripts/gate.sh
+```
+
+The seat run lives on the vehicle card (Task 11), in the seat's form: WSL `simd 7451`, then PowerShell `.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-9-seat.csv')`.
+
+## Dev Notes
+
+### Scope guardrails (do NOT)
+- No eating, hunger or food consumption (13.10). No cooking or meals (13.20). No new trade: forage is the woodcutter's.
+- No change to `claim_jobs`' logic or ordering (AD-12). The only claim-side change is `trade()`'s new arm.
+- No haul change, even if `food=0` on the bench (#235 owns slow hauls; Found C).
+- No #172 fix, no #214 off-map fix, no #170 cap fix. No TUI input (NFR10).
+- No art rounds. The bushes are plain primitives, and look tuning waits for a concrete defect judged at the seat (memory: `art-gates-visual-judgement`).
+- No plant clustering, no seasons, no plant spreading.
+
+### What already exists (build on it)
+- The cut job is the forage job's template: mark, walk to a side neighbour, work, drop at the target, release (`lib.rs:1554`, `:2853-2861`). The addendum calls forage "a near copy" (`prds/prd-frostvein-2026-10-28/addendum.md:9`).
+- `place_stockpile` / `Zones` / `Refusal::PlaceStockpile` is the area's template, end to end, through `bridge::refusal_out` and `client-core::refusal_text`.
+- Haul is kind-agnostic: berries haul and store with no change (`lib.rs:558`, `:1644`, `:2798-2851`).
+- `Terrain.dirty` / `drain_dirty` is the template for `Plants.changed` / `drain_plant_changes` (`lib.rs:848-914`, `bridge.rs:55-60`).
+- 12.7 (`110cab48`, PR #171) added Wood, Cut and the gui cut mode end to end. Its file list is this story's file list.
+
+### Key decisions & traps
+- **A plant is not a tile and not an entity** (Q1 a). That is why AC 2 can demand unchanged outcomes. Giving plants `Id`s would shift every item id and move every haul order.
+- **Ripeness is derived from the tick** (`tick >= ripe_at`). Only the wire needs to hear about it, through `changed`. There is no per-plant timer to tick.
+- **Forage jobs are not designations.** They are re-derived each tick from area ∩ ripe plants, so a regrown plant gets a fresh job (and a fresh, later `JobId`) with no store to update.
+- **The bench's forage area goes at `at: 1`** (Found B). Otherwise 104 unfinished cuts starve it.
+- **New end-line fields go after `arriving=`** (Found D).
+- **Add the new `Delta` fields to `apply_delta`** (Found F). The compiler will not tell you.
+- **A forage job skips a cell holding an uncarried item** (Found E), so berries never stack on a bush.
+- **Berries can drop under a dwarf** standing on the bush, because a bush blocks nothing. Add a scenario test that a dwarf on the bush's cell when the berries land still walks off and the berries are hauled.
+- **Bushes batch:** one mesh per state and shared materials. At 256² there are about 3k of them, and NFR13 is measured at the seat (#224 is the known fps debt).
+- **`tend_plants` is a full scan of the plants per tick** (about 3k at 256²). That is fine at that count; leave a `// NOTE:` naming it. AC 12 measures it.
+
+### Previous story intelligence
+- 13.8 kept committed scenarios byte-identical by making the new thing a saved setting, and proved the reach with a strip build (`13-8-they-keep-coming.md` AC 10). AC 2 reuses that proof.
+- 13.8b: the bench row for `two-hundred-on-256` is the one Wolf watches. Its mean on `main` is about 5.5 ms on the devpod (`13-8b-signoff/tick-bench-main-33b4361c.txt`).
+- Run the gate with `RUST_TEST_THREADS=1` (45–65 min). Build probes in a scratch worktree, never in the shared tree (memories: `probe-sabotage-leaks-into-wolfs-build`, `cargo-target-dir-builds-cwd-sources`).
+
+### Project Structure Notes
+- UPDATE:
+  - sim-core: `crates/sim-core/src/lib.rs`, `src/worldgen.rs`, `src/save.rs`, `tests/worldgen.rs`, `tests/scenario.rs`, `tests/save_load.rs`
+  - protocol: `crates/protocol/src/lib.rs`
+  - simd: `crates/simd/src/bridge.rs`, `src/main.rs`, `src/scenario.rs`, `tests/bench.rs`, `tests/serve.rs`
+  - client-core: `crates/client-core/src/lib.rs`, `tests/mirror.rs`
+  - tui: `crates/tui/src/view.rs`, `src/palette.rs`, `tests/client.rs`
+  - gui: `crates/gui/src/designate.rs`, `src/project.rs`, `src/appearance.rs`, `src/ingest.rs`, `src/capture.rs`, `tests/headless.rs`
+  - `scenarios/two-hundred-on-256.json`; `scenarios/saves/*.save` (data patch)
+- NEW:
+  - `crates/simd/tests/fixtures/one-forage.json`
+  - `_bmad-output/implementation-artifacts/mutations/13-9.sh`
+  - `_bmad-output/implementation-artifacts/13-9-signoff/` (vehicle card, state lines, tick-bench, mutate runs)
+- No new crate, no new dependency, no new crate edge.
+
+### References
+- Epic 13, Story 13.9, standing ACs 10–18: `_bmad-output/planning-artifacts/epics.md:2944-2966`, `:3186-3211`; M3 standing ACs `:2557-2570`
+- FR58, FR67, NFR9–NFR13: `epics.md:152`, `:167`, `:205-219`; M4 requirements `:299-326`
+- PRD addendum (forage = the Cut job shape): `prds/prd-frostvein-2026-10-28/addendum.md:9`
+- 13.8 story (form, AC 10 strip-build proof): `13-8-they-keep-coming.md`; 13.8b record: `13-8b-after-the-big-dig.md`, `13-8b-signoff/`
+- Issues: #118 (F-keys), #152 (wide glyphs), #154 (stacked items), #162 (items block), #172 (tui trees), #224 (gui fps), #235 (slow haul)
+
+## Dev Agent Record
+
+### Agent Model Used
+
+### Debug Log References
+
+### Completion Notes List
+
+### File List
+
+## Change Log
+
+| date | entry |
+|---|---|
+| 2026-11-21 | Story created (Opus 5.5) on `story-13-9-forage` off `main` `3c6cf3b7`. Task 0 Q1–Q6 open for Wolf; Q5 holds the forage-mode draft (standing AC 16). Status → ready-for-dev. |
