@@ -313,7 +313,8 @@ Wolf: "no hickups anymore (well fps drops between 20-30 some times .. probably s
 - Question 1 (after the big dig): **gone**, as on 11-17, now on the build with the review patches.
 - The fps drops are the gui drawing, not the sim stopping: see the gui log below.
 - Files: `13-8b-seat-like-run5.csv` (the gui log, build `1a50406b`), `13-8b-wire-tap-seat-run5.csv` (the tap;
-  tick 30,000 at 3,009 s). The daemon's timer log (`13-8b-simd-stderr-seat-run5.txt`) is not in the folder.
+  tick 30,000 at 3,009 s), `13-8b-simd-stderr-seat-run5.txt` (the daemon's timer). The daemon log has no build
+  stamp and no `cut=` line (the run stayed at Normal), so its build is not proven by the log itself.
 
 Tap, the same measure as Runs 3 and 4 (late = more than 150 ms after the tick before):
 
@@ -331,10 +332,17 @@ Tap, the same measure as Runs 3 and 4 (late = more than 150 ms after the tick be
 Longest single gap: Run 5 299 ms (tick 26,477), Run 4 292 ms, Run 3 581 ms.
 
 After the big dig, Run 5 sits between Runs 3 and 4: at most 3.7% behind real time (Run 3 28%, Run 4 0.2%) and
-45-113 late ticks per 1,000 (Run 3 250-327, Run 4 0-32). No gap reached 300 ms, and Wolf saw no stops. Without
-the daemon's log this run cannot say whether the extra late ticks are the step or the seat machine. No sim
-code changed between the two builds (the review patches touched only the daemon's timer and its log), so the
-seat machine is the likelier reading.
+45-113 late ticks per 1,000 (Run 3 250-327, Run 4 0-32). No gap reached 300 ms, and Wolf saw no stops.
+
+The daemon's own line says where the late ticks come from: the step. After the big dig (t17,000-30,000) the
+step mean is 6.0-32.5 ms a tick (Run 4 3.2-16.6), worst 64-264 ms (31-144), 0-105 ticks per 1,000 over the
+100 ms tick (0-4), worst at t26,000-28,000. Sending 0.6-2.2 ms (0.4-1.3). Before the dig the two runs match:
+mean 0.5-2.3 ms (Run 4 0.3-3.8), 0-3 over.
+
+So the same work took about twice as long after the dig. The sim did not change: `sim-core` is identical
+between the two builds (the review patches touched only `simd`'s timer, not what it times), the seed is the
+same, and before the dig the step is the same. That points at the seat machine having less to give the
+daemon during this run's last 15 minutes. What else was running is not known. It did not show as stops.
 
 The gui log, the same build as the tap: steady p50 19.8 ms (Run 4 22.2), p99 45.4 ms (69.0), worst 307 ms
 (369); frames of 50 ms or more 598 (6,311). By 3-minute bucket the p50 is 47-59 fps except two stretches:

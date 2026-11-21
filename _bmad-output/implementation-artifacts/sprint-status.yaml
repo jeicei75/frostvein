@@ -2897,7 +2897,7 @@ development_status:
   # GREEN at db870cb1 (first gate RED at 0ccb7694: cut=pause hit serve's next_log, fixed). Stays in-progress: seat run 5 unrun.
   # Static audit ENDED at run 2, so next: push, seat run 5 with files, record it, then gh pr ready 241.
   # SEAT RUN 5 WITH FILES 2026-11-21 (gui 1a50406b): Wolf "no hickups anymore"; fps 20-30 dips = gui (#224). Tap <=3.7%
-  # behind after the dig. Daemon stderr not delivered. Next: gh pr ready 241 on Wolf's yes.
+  # behind after the dig; daemon step ~2x run 4 on identical sim-core (seat machine). Next: gh pr ready 241 on Wolf's yes.
   13-9-forage: backlog
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
