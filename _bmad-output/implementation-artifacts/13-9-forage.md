@@ -222,7 +222,7 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - what to do: mark an area at key 6, watch a forage, a haul and, at fast4x, a regrowth;
   - one question;
   - the sitting, recorded in Wolf's words.
-- [ ] **Task 12: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).
+- [x] **Task 12: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).
 
 ## Verification
 
@@ -351,6 +351,12 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - **Reading:** the rows beyond the floor are the generated 128² worlds, each with about 480 bushes. They pay about +5 us a tick, `tend_plants`' full scan (its `// NOTE:`). The three save-loaded rows (dig-loop, seat-slow, stuck-tunnel) hold no plants (Q6) and stay within the floor.
 - **At 256²** (1,892 bushes) the scan is under 1% of a 5.5 ms tick. The forage file's tick is cheaper because woodcutters cut less.
 
+**Task 12, the gate:**
+- The first full gate at `f80e6e62` was RED on one check only: the AO pixel guard's open-snow medians read LL 59 / LR 57 against controls 60/59. Four bushes stand in the LL window.
+- The cause is attributed: the same build with bush drawing switched off reads 60/59.
+- Wolf ruled the re-baseline (2026-11-22), committed as `5963e6d3`.
+- The full gate at `5963e6d3` is GREEN in 2,311 s: cargo test, the 256² release run, all 17 pixel guards, and the mutation tables.
+
 **Task 10, AC 14:** `13-9-signoff/mutate-13-9-cae33344.txt` has 16 of 17 rows KILLED. Row 8, "a regrown plant is never announced", SURVIVED: no test read the regrowth's `PlantChange`. Ripeness is derived from the tick, so without the announcement both clients would draw a regrown bush as growing for ever. New test `a_regrown_plant_is_announced_on_the_tick_it_ripens` (`tests/scenario.rs`). Row 8 is re-pointed to it, and the re-run is KILLED at that test's assert (`mutate-13-9-row8-rerun.txt`). `audit-mutations.py` exits 0 (1,055 rows).
 
 ### Completion Notes List
@@ -413,3 +419,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 |---|---|
 | 2026-11-21 | Story created (Opus 5.5) on `story-13-9-forage` off `main` `3c6cf3b7`. Task 0 Q1–Q6 open for Wolf; Q5 holds the forage-mode draft (standing AC 16). Status → ready-for-dev. |
 | 2026-11-22 | Task 0 ruled (Wolf): Q1–Q6 all (a), as recommended; no AC amended. Q5's draft is approved as written. Implementer: Sonnet 5.5 subagents, claude-opus-5-5 orchestrates. Status → in-progress. |
+| 2026-11-22 | Tasks 1–10 and 12 done: Sonnet 5.5 subagents for Tasks 1–8 (`7aaf1697`, `cb021528`, `544db973`, `c3f626b0`, `54ce2e1b`, `897b3420`), Opus for Tasks 9–12. Mutation row 8 survived and is now pinned (`f80e6e62`). Wolf ruled the AO guard re-baseline to 59/57 for the bushes (`5963e6d3`). Full gate GREEN at `5963e6d3`. The seat sitting (Task 11, AC 15) is open. |
