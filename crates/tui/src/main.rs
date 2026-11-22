@@ -225,7 +225,7 @@ what the sim holds"
         );
         // 13.9: the forage layer, same drawn-of-held shape; Task 8's capture test reads this line.
         eprintln!(
-            "forage: z {} ripe={} of {} growing={} of {} berries={} of {}",
+            "forage: z {} ripe={} of {} growing={} of {} berries={} of {} marked={} of {}",
             tally.z,
             tally.drawn_forage.ripe,
             tally.mirror_forage.ripe,
@@ -233,6 +233,8 @@ what the sim holds"
             tally.mirror_forage.growing,
             tally.drawn_forage.berries,
             tally.mirror_forage.berries,
+            tally.drawn_forage.marked,
+            tally.mirror_forage.marked,
         );
         // The span is what a cross-client check actually compares against: this client's screen
         // axes ARE the world axes, while the Bevy client's boot camera is yawed ~40 degrees, so

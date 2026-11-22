@@ -142,7 +142,7 @@ pub fn designation_cell(kind: DesignationKind) -> Cell {
             glyph: '▼',
             fg: (92, 174, 224),
         },
-        DesignationKind::Forage => forage_cell(),
+        DesignationKind::Forage => marked_bush_cell(),
     }
 }
 
@@ -234,12 +234,12 @@ pub fn growing_bush_cell() -> Cell {
     }
 }
 
-/// A forage mark. TODO(13.9 R3): the area's old `:` look, kept so the mark compiles; the
-/// mark's own look is R3's.
-pub fn forage_cell() -> Cell {
+/// A bush with a forage mark on it, the way a cut mark (`/`) shows a marked tree: the mark IS
+/// the glyph of the cell. ASCII on purpose, #152.
+pub fn marked_bush_cell() -> Cell {
     Cell {
-        glyph: ':',
-        fg: (176, 64, 96),
+        glyph: '&',
+        fg: (240, 150, 56),
     }
 }
 
@@ -458,6 +458,7 @@ mod tests {
             designation_cell(DesignationKind::Dig),
             designation_cell(DesignationKind::Channel),
             designation_cell(DesignationKind::Cut),
+            designation_cell(DesignationKind::Forage),
             zone_cell(),
             cursor_cell(),
             pending_rect_cell(Mode::Dig),
@@ -485,6 +486,10 @@ mod tests {
                 Cell {
                     glyph: '/',
                     fg: (226, 96, 64),
+                },
+                Cell {
+                    glyph: '&',
+                    fg: (240, 150, 56),
                 },
                 Cell {
                     glyph: '≡',
@@ -567,7 +572,7 @@ mod tests {
         let looks = [
             (ripe_bush_cell(), '"', (214, 62, 62)),
             (growing_bush_cell(), '"', (58, 112, 66)),
-            (forage_cell(), ':', (176, 64, 96)),
+            (marked_bush_cell(), '&', (240, 150, 56)),
             (berries_item_cell(), '%', (222, 70, 84)),
             (stored_berries_item_cell(), '%', (88, 190, 118)),
         ];
@@ -582,13 +587,15 @@ mod tests {
         for (cell, _, _) in looks {
             assert_ne!(cell, ore, "berries must not read as ore");
         }
-        // The mark `:`, bush `"` and berries `%` all overwrite one another: glyphs differ.
+        // The marked bush `&`, bush `"` and berries `%` all overwrite one another: glyphs differ,
+        // and a marked bush reads differently from a ripe one by glyph, not by colour alone.
         let glyphs: std::collections::BTreeSet<_> =
-            [forage_cell(), ripe_bush_cell(), berries_item_cell()]
+            [marked_bush_cell(), ripe_bush_cell(), berries_item_cell()]
                 .iter()
                 .map(|cell| cell.glyph)
                 .collect();
         assert_eq!(glyphs.len(), 3);
+        assert_ne!(marked_bush_cell(), designation_cell(DesignationKind::Cut));
     }
 
     #[test]

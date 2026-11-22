@@ -2036,13 +2036,18 @@ fn the_goal_row_changes_on_the_delta_that_changes_goals() {
 }
 
 /// 13.9 AC 13: the `--frame` path prints `forage: z N ripe=A of B growing=A of B berries=A of B
+/// marked=A of B`
 /// on stderr, A drawn on the map rows and B held in the mirror at that level. `ripe`
 /// and `growing` are read back from the capture's own pixels (glyph and colour), so a growing bush
 /// drawn as a ripe one moves the numbers. The stub serves the world before a forage and the world
 /// after one (that bush `Growing`, its berries on its cell): the sim's own forage is proved in
 /// sim-core, and `--frame` reads only the connect snapshot, so two connections stand for the two
 /// moments.
-fn forage_tally(plants: &[protocol::Plant], items: Vec<protocol::Item>) -> String {
+fn forage_tally(
+    plants: &[protocol::Plant],
+    items: Vec<protocol::Item>,
+    marked: &[[i32; 3]],
+) -> String {
     const SIDE: usize = 9;
     // NOTE: the level is the plant's own; a level is never assumed.
     let z = plants[0].pos[2];
@@ -2071,7 +2076,13 @@ fn forage_tally(plants: &[protocol::Plant], items: Vec<protocol::Item>) -> Strin
         },
         tiles,
         entities: Vec::new(),
-        designations: Vec::new(),
+        designations: marked
+            .iter()
+            .map(|&pos| protocol::Designation {
+                pos,
+                kind: protocol::DesignationKind::Forage,
+            })
+            .collect(),
         zones: Vec::new(),
         plants: plants.to_vec(),
         items,
@@ -2133,8 +2144,10 @@ fn the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear() {
             bush(c[0], c[1], protocol::PlantState::Ripe),
         ],
         Vec::new(),
+        &[b],
     );
     assert_eq!(drawn_of_held(&before, "ripe"), (3, 3), "{before}");
+    assert_eq!(drawn_of_held(&before, "marked"), (1, 1), "{before}");
     assert_eq!(drawn_of_held(&before, "growing"), (0, 0), "{before}");
     assert_eq!(drawn_of_held(&before, "berries"), (0, 0), "{before}");
 
@@ -2150,7 +2163,9 @@ fn the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear() {
             kind: protocol::ItemKind::Berries,
             count: 1,
         }],
+        &[b],
     );
+    assert_eq!(drawn_of_held(&after, "marked"), (1, 1), "{after}");
     assert_eq!(drawn_of_held(&after, "growing"), (1, 1), "{after}");
     assert_eq!(drawn_of_held(&after, "ripe"), (2, 2), "{after}");
     assert_eq!(drawn_of_held(&after, "berries"), (1, 1), "{after}");
