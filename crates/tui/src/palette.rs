@@ -217,6 +217,47 @@ pub fn stored_bloodstone_item_cell() -> Cell {
     }
 }
 
+// 13.9 (Q5): ASCII on purpose, #152. A ripe bush and a growing one share `"`; only the colour
+// differs, so "ripe" is read by colour.
+pub fn ripe_bush_cell() -> Cell {
+    Cell {
+        glyph: '"',
+        fg: (214, 62, 62),
+    }
+}
+
+pub fn growing_bush_cell() -> Cell {
+    Cell {
+        glyph: '"',
+        fg: (58, 112, 66),
+    }
+}
+
+/// A forage-area cell, under the bushes. The berry colour is the ripe bush's.
+pub fn forage_cell() -> Cell {
+    Cell {
+        glyph: ':',
+        fg: (176, 64, 96),
+    }
+}
+
+/// A berry. NOTE: `%` is also the tetrahedrite ore TILE glyph; the layers differ (item over
+/// terrain) and so does the colour (red here, blue there).
+pub fn berries_item_cell() -> Cell {
+    Cell {
+        glyph: '%',
+        fg: (222, 70, 84),
+    }
+}
+
+/// Berries on a stockpile cell: the berry glyph in the stockpile's colour, like a stored stone.
+pub fn stored_berries_item_cell() -> Cell {
+    Cell {
+        glyph: berries_item_cell().glyph,
+        fg: zone_cell().fg,
+    }
+}
+
 /// One dwarf sharing a cell with one or more stones — the loaded twin of `☺`.
 // NOTE: the glyph states co-location, which is a carry in every case the sim produces except a
 // dwarf standing on a loose stone it does not hold.
@@ -517,6 +558,35 @@ mod tests {
                 .all(|glyph| !existing_glyphs.contains(glyph)),
             "marker glyphs must not collide with terrain or entities"
         );
+    }
+
+    #[test]
+    fn the_forage_looks_are_pinned_ascii_and_distinct() {
+        let looks = [
+            (ripe_bush_cell(), '"', (214, 62, 62)),
+            (growing_bush_cell(), '"', (58, 112, 66)),
+            (forage_cell(), ':', (176, 64, 96)),
+            (berries_item_cell(), '%', (222, 70, 84)),
+            (stored_berries_item_cell(), '%', (88, 190, 118)),
+        ];
+        for (cell, glyph, fg) in looks {
+            assert_eq!(cell, Cell { glyph, fg });
+            assert!(cell.glyph.is_ascii(), "#152: forage glyphs stay ASCII");
+        }
+        // Ripe against growing is the one pair that shares a glyph, so colour must separate it.
+        assert_ne!(ripe_bush_cell().fg, growing_bush_cell().fg);
+        // No new look may equal an existing terrain look, glyph AND colour.
+        let ore = tile_cell(Tile::Solid(Material::Tetrahedrite));
+        for (cell, _, _) in looks {
+            assert_ne!(cell, ore, "berries must not read as ore");
+        }
+        // The area `:`, bush `"` and berries `%` all overwrite one another: glyphs differ.
+        let glyphs: std::collections::BTreeSet<_> =
+            [forage_cell(), ripe_bush_cell(), berries_item_cell()]
+                .iter()
+                .map(|cell| cell.glyph)
+                .collect();
+        assert_eq!(glyphs.len(), 3);
     }
 
     #[test]

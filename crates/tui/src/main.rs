@@ -223,6 +223,19 @@ the viewport, or overpainted by the cursor, a dwarf or an item. Do not read the 
 what the sim holds"
             }
         );
+        // 13.9: the forage layer, same drawn-of-held shape; Task 8's capture test reads this line.
+        eprintln!(
+            "forage: z {} ripe={} of {} growing={} of {} berries={} of {} area={} of {}",
+            tally.z,
+            tally.drawn_forage.ripe,
+            tally.mirror_forage.ripe,
+            tally.drawn_forage.growing,
+            tally.mirror_forage.growing,
+            tally.drawn_forage.berries,
+            tally.mirror_forage.berries,
+            tally.drawn_forage.area,
+            tally.mirror_forage.area,
+        );
         // The span is what a cross-client check actually compares against: this client's screen
         // axes ARE the world axes, while the Bevy client's boot camera is yawed ~40 degrees, so
         // "north" does not mean the same thing in the two views. Numbers do.

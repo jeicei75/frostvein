@@ -5,8 +5,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
-    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, bloodstone_item_cell, carrier_cell, crowd_cell,
-    cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, item_cell, pending_rect_cell,
+    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, berries_item_cell, bloodstone_item_cell, carrier_cell,
+    crowd_cell, cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, forage_cell,
+    growing_bush_cell, item_cell, pending_rect_cell, ripe_bush_cell, stored_berries_item_cell,
     stored_bloodstone_item_cell, stored_item_cell, stored_tetrahedrite_item_cell,
     stored_wood_item_cell, tetrahedrite_item_cell, tile_cell, wood_item_cell, zone_cell,
 };
@@ -75,6 +76,12 @@ pub struct MarkTally {
     pub drawn_zones: usize,
     pub mirror_designations: usize,
     pub mirror_zones: usize,
+    /// 13.9: ripe bushes, growing bushes, berries and forage cells, as drawn on the map rows and
+    /// as the mirror holds them at this cut. Like the marks, a plant under an item or a dwarf, or
+    /// outside the viewport, is in the mirror count but not the drawn one. They stay out of
+    /// `complete()`, which only the `marks:` line reads.
+    pub drawn_forage: ForageTally,
+    pub mirror_forage: ForageTally,
     /// The x/y bounding box of every mark the MIRROR holds at this cut, or `None` when there are
     /// none. Read from the mirror rather than the frame so it does not depend on what fitted on
     /// screen — it is the half of this readout that can be checked against the other client's
@@ -88,6 +95,14 @@ pub struct MarkTally {
     /// stockpile sits one level up, so no single `--z` shows all four modes, and an interactive
     /// `tui` opens at `opening_z` rather than at whatever the operator passed to `--frame`.
     pub elsewhere: Vec<(i32, usize, usize)>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ForageTally {
+    pub ripe: usize,
+    pub growing: usize,
+    pub berries: usize,
+    pub area: usize,
 }
 
 impl MarkTally {
@@ -111,8 +126,36 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
     // appears in the status row's `z 1/2`, so counting there would invent a mark.
     let map_cells =
         usize::from(framebuffer.w) * usize::from(framebuffer.h.saturating_sub(FOOTER_ROWS));
+    let map_cells_slice = || framebuffer.cells.iter().take(map_cells);
+    let count = |wanted: &[Cell]| {
+        map_cells_slice()
+            .filter(|cell| wanted.contains(cell))
+            .count()
+    };
+    let at_cut = |pos: [i32; 3]| pos[2] == state.z;
     MarkTally {
         z: state.z,
+        drawn_forage: ForageTally {
+            ripe: count(&[ripe_bush_cell()]),
+            growing: count(&[growing_bush_cell()]),
+            berries: count(&[berries_item_cell(), stored_berries_item_cell()]),
+            area: count(&[forage_cell()]),
+        },
+        mirror_forage: ForageTally {
+            ripe: mirror
+                .plants()
+                .filter(|&(pos, plant)| at_cut(pos) && plant == protocol::PlantState::Ripe)
+                .count(),
+            growing: mirror
+                .plants()
+                .filter(|&(pos, plant)| at_cut(pos) && plant == protocol::PlantState::Growing)
+                .count(),
+            berries: mirror
+                .items()
+                .filter(|item| at_cut(item.pos) && item.kind == protocol::ItemKind::Berries)
+                .count(),
+            area: mirror.forage().iter().filter(|c| at_cut(c.pos)).count(),
+        },
         drawn_designations: framebuffer
             .cells
             .iter()
@@ -310,9 +353,26 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         }
     }
 
+    for cell in mirror.forage() {
+        if let Some(index) = screen_index(cell.pos) {
+            framebuffer.cells[index] = forage_cell();
+        }
+    }
+
     for designation in mirror.designations() {
         if let Some(index) = screen_index(designation.pos) {
             framebuffer.cells[index] = designation_cell(designation.kind);
+        }
+    }
+
+    // NOTE: #172 (peek) is open: like zones and items, a plant on another z-level is not drawn
+    // (`screen_index` is same-level only), and nothing here peeks down to it. Not fixed here.
+    for (pos, state) in mirror.plants() {
+        if let Some(index) = screen_index(pos) {
+            framebuffer.cells[index] = match state {
+                protocol::PlantState::Ripe => ripe_bush_cell(),
+                protocol::PlantState::Growing => growing_bush_cell(),
+            };
         }
     }
 
@@ -334,9 +394,8 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
                 (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
-                // TODO(13.9 Task 6): berries get their own glyph and colour; wood's stands in.
-                (protocol::ItemKind::Berries, true) => stored_wood_item_cell(),
-                (protocol::ItemKind::Berries, false) => wood_item_cell(),
+                (protocol::ItemKind::Berries, true) => stored_berries_item_cell(),
+                (protocol::ItemKind::Berries, false) => berries_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
@@ -1525,6 +1584,118 @@ mod tests {
         assert_eq!(framebuffer.cell(2, 1).glyph, '◊');
         assert_eq!(framebuffer.cell(1, 1).fg, zone_cell().fg);
         assert_eq!(framebuffer.cell(2, 1).fg, zone_cell().fg);
+    }
+
+    /// 13.9: a 9x7 view centred on (32,32). Ripe bush at +0, growing at +1, area-only cell at +2,
+    /// berries on open ground at +3, and a bush under an item, and a forage cell under a bush, later.
+    fn forage_mirror() -> (Mirror, ViewState) {
+        let dims = Dims { x: 64, y: 64, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.plants = vec![
+            protocol::Plant {
+                pos: [32, 32, 1],
+                state: protocol::PlantState::Ripe,
+            },
+            protocol::Plant {
+                pos: [33, 32, 1],
+                state: protocol::PlantState::Growing,
+            },
+            // Under an item.
+            protocol::Plant {
+                pos: [32, 33, 1],
+                state: protocol::PlantState::Ripe,
+            },
+            // Over a forage cell.
+            protocol::Plant {
+                pos: [33, 33, 1],
+                state: protocol::PlantState::Growing,
+            },
+        ];
+        snapshot.forage = vec![
+            protocol::ForageCell { pos: [34, 32, 1] },
+            protocol::ForageCell { pos: [33, 33, 1] },
+        ];
+        snapshot.items = vec![
+            Item {
+                id: 1,
+                pos: [35, 32, 1],
+                kind: protocol::ItemKind::Berries,
+            },
+            Item {
+                id: 2,
+                pos: [32, 33, 1],
+                kind: protocol::ItemKind::Berries,
+            },
+        ];
+        let mirror = mirror(&snapshot);
+        let state = initial(&mirror, Some(1));
+        (mirror, state)
+    }
+
+    fn at(framebuffer: &Framebuffer, x: i64, y: i64, state: &ViewState) -> Cell {
+        let (w, h) = (framebuffer.w, framebuffer.h - FOOTER_ROWS);
+        let sx = x - state.camera.0 + i64::from(w) / 2;
+        let sy = y - state.camera.1 + i64::from(h) / 2;
+        framebuffer.cell(sx as u16, sy as u16)
+    }
+
+    #[test]
+    fn forage_things_draw_their_glyph_and_colour() {
+        let (mirror, state) = forage_mirror();
+        let framebuffer = render(&mirror, &state, 11, 12);
+        assert_eq!(at(&framebuffer, 32, 32, &state), ripe_bush_cell());
+        assert_eq!(at(&framebuffer, 33, 32, &state), growing_bush_cell());
+        assert_eq!(at(&framebuffer, 34, 32, &state), forage_cell());
+        assert_eq!(at(&framebuffer, 35, 32, &state), berries_item_cell());
+        assert_ne!(ripe_bush_cell().fg, growing_bush_cell().fg);
+    }
+
+    /// Draw order: forage cells, designations, plants, items. Each overwrites the one before.
+    #[test]
+    fn forage_draw_order_holds() {
+        let (mirror, state) = forage_mirror();
+        let framebuffer = render(&mirror, &state, 11, 12);
+        assert_eq!(
+            at(&framebuffer, 32, 33, &state),
+            berries_item_cell(),
+            "an item shows over a bush"
+        );
+        assert_eq!(
+            at(&framebuffer, 33, 33, &state),
+            growing_bush_cell(),
+            "a bush shows over a forage cell"
+        );
+    }
+
+    #[test]
+    fn the_forage_tally_counts_each_kind_and_range_checks() {
+        let (mirror, state) = forage_mirror();
+        let framebuffer = render(&mirror, &state, 11, 12);
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        // Drawn: the item hides one ripe bush, the bush hides one area cell.
+        assert_eq!(
+            tally.drawn_forage,
+            ForageTally {
+                ripe: 1,
+                growing: 2,
+                berries: 2,
+                area: 1
+            }
+        );
+        assert_eq!(
+            tally.mirror_forage,
+            ForageTally {
+                ripe: 2,
+                growing: 2,
+                berries: 2,
+                area: 2
+            }
+        );
+        // Off this level, nothing is held or drawn.
+        let other = ViewState { z: 0, ..state };
+        let tally = tally_marks(&mirror, &other, &render(&mirror, &other, 11, 12));
+        assert_eq!(tally.mirror_forage, ForageTally::default());
+        assert_eq!(tally.drawn_forage, ForageTally::default());
     }
 
     /// 12.7: the `marks:` tally counts a cut mark. A cut glyph the tally does not know reads as

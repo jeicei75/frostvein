@@ -181,10 +181,10 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - [x] Bridge: `snapshot()` and `delta()` (`bridge.rs:1-90`). `item_kind_out`, `refusal_out` (`:348-361`). Pin Cut, Berries and the plant states in the wire-name tests (`:429-487`, Found G).
   - [x] `apply_sim_command` (`main.rs:513-552`) and `command_rects` (`:1226-1238`) take the two new commands. The scenario reader accepts them through the same path.
   - [x] `Mirror`: `plants: BTreeMap<Pos, PlantState>` and `forage`. `apply_delta` applies `plants` as changes and `forage` as a full resend (Found F). `refusal_text` gets the new arm. Add tests in `client-core/tests/mirror.rs`.
-- [ ] **Task 6: the tui (AC 9).** UPDATE `crates/tui/src/view.rs` and `palette.rs`.
-  - [ ] Draw order: zones, forage cells, designations, plants, items, then entities. The glyphs and colours are the ones Q5 approves.
-  - [ ] Extend `DrawTally` (`view.rs:75-135`) and the glyph-distinctness test (`palette.rs` ~`:497-520`). Plant glyphs must be ASCII (#152).
-  - [ ] Plants on other levels follow #172's existing peek rule. Add a `// NOTE:` naming #172; no fix here.
+- [x] **Task 6: the tui (AC 9).** UPDATE `crates/tui/src/view.rs` and `palette.rs`.
+  - [x] Draw order: zones, forage cells, designations, plants, items, then entities. The glyphs and colours are the ones Q5 approves.
+  - [x] Extend `DrawTally` (`view.rs:75-135`) and the glyph-distinctness test (`palette.rs` ~`:497-520`). Plant glyphs must be ASCII (#152).
+  - [x] Plants on other levels follow #172's existing peek rule. Add a `// NOTE:` naming #172; no fix here.
 - [ ] **Task 7: the gui (AC 10).** UPDATE `crates/gui/src/designate.rs`, `project.rs`, `appearance.rs`, `ingest.rs` and `capture.rs`.
   - [ ] `DesignateMode::Forage` on `Digit6`, with the hints from Q5 (ASCII, test `:497`). `commands_for` (`:295-345`) sends `PlaceForageArea { rects: surface }`. Clear also sends `RemoveForageArea` for each surface rect. Add Digit6 to the keymap guard (`ingest.rs:5051`, Digit list `:5119-5123`).
   - [ ] Preview: `sim_will_keep` (`project.rs:1079-1105`) keeps standable cells. `preview_appearance` (`:1111-1145`) uses a berry-coloured slab and lights the bushes in the box, as cut lights tree bases (`:3916-3941`).
@@ -350,6 +350,13 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - Mutation rows re-pointed (the Berries stand-in arms): 12-7 row 14, 3-2 `items draw above entities`, 3-3 `stone counting and stone drawing use different filters`. `audit-mutations.py` exits 0.
 - Sabotage (each watched fail, restored by edit): `apply_delta` skipping plants (mirror test), bridge `Delta.plants` empty (serve test), `refusal_out` to the wrong variant (serve test), `Delta.forage` empty (serve test), `Berries` mapped to stone (bridge test), `apply_sim_command` dropping `PlaceForageArea` (bench and both serve tests).
 
+- Task 6 (the tui), by a Sonnet 5.5 subagent. Looks (`palette.rs`): ripe bush `"` (214,62,62); growing bush `"` (58,112,66); berries `%` (222,70,84), stored berries `%` in the stockpile green; forage cell `:` (176,64,96). All ASCII. Order in `render`: zones, forage cells, designations, plants, items, entities.
+- Glyph check: `"` and `:` are used by nothing else. `%` is the tetrahedrite ore TILE glyph (blue (60,90,210)); berries are an item layer over terrain and red, so no clash in a layer, and a palette test pins that no new cell equals the ore cell.
+- Tally: the story's `DrawTally` is `MarkTally`. It gained `drawn_forage` and `mirror_forage` (`ForageTally { ripe, growing, berries, area }`), drawn counted on the map rows by exact cell (glyph and colour). `complete()` is unchanged. Printed by the `--frame` path on stderr (the only path that tallies; `--frames` streams frames and prints no tally): `forage: z N ripe=A of B growing=A of B berries=A of B area=A of B`.
+- #172: plants use `screen_index` (same level only), as zones and items do; a `// NOTE:` names #172, not fixed.
+- Tests: `view.rs` `forage_things_draw_their_glyph_and_colour`, `forage_draw_order_holds`, `the_forage_tally_counts_each_kind_and_range_checks`; `palette.rs` `the_forage_looks_are_pinned_ascii_and_distinct`. Sabotage (each watched fail, restored by edit): growing drawn ripe (3 fail), plants not drawn (3 fail), forage cells drawn after plants (2 fail).
+- Mutation rows re-pointed: 3-2 `items draw above entities`, 3-3 `stone counting and stone drawing use different filters` (the Berries arms). `audit-mutations.py` exits 0.
+
 ### File List
 
 - `crates/sim-core/src/lib.rs`, `src/worldgen.rs`, `tests/worldgen.rs`, `tests/scenario.rs`
@@ -358,6 +365,7 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - Task 4: `crates/sim-core/src/save.rs`, `src/lib.rs` (`to_save`, `from_save`), `tests/save_load.rs`; `crates/simd/src/main.rs` (validator), `tests/serve.rs`; `scenarios/saves/*.save` (3, data patch); mutations `2-4-the-world-endures.sh`, `3-2-the-dig.sh` (re-pointed)
 - Task 5 mutations re-pointed: `12-7.sh`, `3-2-the-dig.sh`, `3-3-the-haul-and-the-skeleton-walks.sh`
 - `_bmad-output/implementation-artifacts/mutations/{10-9-the-land-reads-natural,12-7,2-4-the-world-endures,3-3-the-haul-and-the-skeleton-walks,5-1-the-world-grows-things-that-glow}.sh` (re-pointed)
+- Task 6: tui `src/view.rs`, `src/palette.rs`, `src/main.rs` (the `forage:` stderr line); mutations `3-2-the-dig.sh`, `3-3-the-haul-and-the-skeleton-walks.sh` (re-pointed)
 
 ## Change Log
 
