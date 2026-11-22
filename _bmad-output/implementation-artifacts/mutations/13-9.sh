@@ -93,12 +93,12 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                protocol::PlantState::Growing => ripe_bush_cell(),\n'))
 PY
 
-mutation "16 the gui forage drag sends a cut mark (AC 10)" gui a_forage_drag_is_one_designate_forage_spanning_the_followed_ground <<'PY'
+mutation "16 the gui forage drag sends a cut mark (AC 10)" gui a_forage_drag_is_one_single_level_designate_per_level_holding_a_ripe_bush <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '                });\n            vec![Command::Designate {\n                kind: DesignationKind::Forage,\n'
+old = '            .map(|&z| Command::Designate {\n                kind: DesignationKind::Forage,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                });\n            vec![Command::Designate {\n                kind: DesignationKind::Cut,\n'))
+p.write_text(s.replace(old, '            .map(|&z| Command::Designate {\n                kind: DesignationKind::Cut,\n'))
 PY
 
 mutation "18 the bridge sends a forage mark as a cut mark (R2)" simd every_designation_kind_maps_to_its_named_wire_variant <<'PY'
@@ -247,10 +247,20 @@ p.write_text(s.replace(old, '            if false && *count > sim_core::FORAGE_T
 PY
 
 # 13.9 seat run 2 (Wolf: "dragging works only in the surface level it was initiated").
-mutation "35 the gui forage drag stays on one level (seat run 2)" gui a_forage_drag_is_one_designate_forage_spanning_the_followed_ground <<'PY'
+mutation "35 the gui forage drag marks only one level (seat run 2)" gui a_forage_drag_across_a_step_sends_single_level_marks_on_both_levels <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '                    (low.min(rect.min[2]), high.max(rect.max[2]))\n'
+old = '        DesignateMode::Forage => ripe_levels\n            .iter()\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    (low.min(low), high.max(high))\n'))
+p.write_text(s.replace(old, '        DesignateMode::Forage => ripe_levels\n            .iter()\n            .take(1)\n'))
+PY
+
+# 13.9 seat run 3 (Wolf: "it still refuses to mark bushes in other than initial surface"): simd drops a
+# rect spanning levels, so every forage rect must be single-level.
+mutation "36 the gui forage drag sends a rect spanning two levels (seat run 3)" gui a_forage_drag_across_a_step_sends_single_level_marks_on_both_levels <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
+old = '                    min: [cut_rect.min[0], cut_rect.min[1], z],\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    min: [cut_rect.min[0], cut_rect.min[1], z - 1],\n'))
 PY

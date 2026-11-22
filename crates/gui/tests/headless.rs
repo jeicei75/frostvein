@@ -4662,6 +4662,81 @@ fn a_side_face_hit_on_flat_ground_falls_back_to_the_cell_above() {
     );
 }
 
+/// 13.9 seat runs 2 and 3: a forage drag across a step marks the ripe bushes on BOTH levels, and
+/// every rect it sends is single-level, because simd's `rect_is_valid` drops a taller rect with
+/// only a log line (run 3's "still refuses to mark bushes in other than initial surface").
+#[test]
+fn a_forage_drag_across_a_step_sends_single_level_marks_on_both_levels() {
+    let anchor = [1, 1, 1];
+    let release = [2, 1, 0];
+    let rig = CameraRig::new(anchor);
+    let anchor_cursor = rig
+        .project_world_point(anchor)
+        .expect("the literal anchor must project")
+        * PICK_VIEWPORT.as_vec2();
+    let release_cursor = rig
+        .project_world_point(release)
+        .expect("the literal release tile must project")
+        * PICK_VIEWPORT.as_vec2();
+    let dims = Dims { x: 3, y: 3, z: 3 };
+    let mut tiles = vec![Tile::Empty; (dims.x * dims.y * dims.z) as usize];
+    let index =
+        |[x, y, z]: [i32; 3]| (x + y * dims.x as i32 + z * dims.x as i32 * dims.y as i32) as usize;
+    tiles[index(anchor)] = Tile::Solid(Material::Stone);
+    tiles[index(release)] = Tile::Solid(Material::Stone);
+    let mut snapshot = snapshot_with_dims(dims, tiles, vec![]);
+    snapshot.plants = vec![
+        protocol::Plant {
+            pos: [1, 1, 2],
+            state: protocol::PlantState::Ripe,
+        },
+        protocol::Plant {
+            pos: [2, 1, 1],
+            state: protocol::PlantState::Ripe,
+        },
+    ];
+
+    let mut app = live_app(snapshot).0;
+    install_pick_camera(&mut app, rig, anchor_cursor);
+    app.world_mut().resource_mut::<SliceLevel>().set(2);
+    app.update();
+    press_once(&mut app, KeyCode::Digit6);
+    set_mouse(&mut app, |mouse| mouse.press(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+    app.world_mut()
+        .query_filtered::<&mut Window, With<PrimaryWindow>>()
+        .single_mut(app.world_mut())
+        .expect("the pick harness owns one primary window")
+        .set_cursor_position(Some(release_cursor));
+    set_mouse(&mut app, |mouse| mouse.release(MouseButton::Left));
+    app.update();
+    clear_mouse(&mut app);
+
+    let sent = queued(&app);
+    let at = |z| protocol::Command::Designate {
+        kind: DesignationKind::Forage,
+        rect: protocol::Rect {
+            min: [1, 1, z],
+            max: [2, 1, z],
+        },
+    };
+    assert_eq!(
+        sent,
+        vec![at(1), at(2)],
+        "a forage drag across a step must mark the bush on each level"
+    );
+    for command in &sent {
+        let protocol::Command::Designate { rect, .. } = command else {
+            panic!("a forage drag sends only designations: {command:?}");
+        };
+        assert_eq!(
+            rect.min[2], rect.max[2],
+            "simd drops a rect spanning levels: {command:?}"
+        );
+    }
+}
+
 /// AC4's single-z rect kept a median 19.4% of a 6x6 stockpile footprint on natural ground. RULED
 /// 2026-08-27 (Wolf): the standable modes follow the surface instead. Dig keeps single-z, where
 /// cutting one level into a slope is the point.

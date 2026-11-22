@@ -1,0 +1,35 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 16 the gui forage drag sends a cut mark (AC 10) ===
+thread 'designate::tests::a_forage_drag_is_one_single_level_designate_per_level_holding_a_ripe_bush' (631399) panicked at crates/gui/src/designate.rs:600:9:
+assertion `left == right` failed: one command per ripe level, 9 and 10
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 249 filtered out; finished in 0.00s
+
+=== 35 the gui forage drag marks only one level (seat run 2) ===
+thread 'a_forage_drag_across_a_step_sends_single_level_marks_on_both_levels' (633072) panicked at crates/gui/tests/headless.rs:4724:5:
+assertion `left == right` failed: a forage drag across a step must mark the bush on each level
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.04s
+
+=== 36 the gui forage drag sends a rect spanning two levels (seat run 3) ===
+thread 'a_forage_drag_across_a_step_sends_single_level_marks_on_both_levels' (634823) panicked at crates/gui/tests/headless.rs:4724:5:
+assertion `left == right` failed: a forage drag across a step must mark the bush on each level
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 130 filtered out; finished in 0.11s
+
+=== 13 the channel preview skips the sim filter ===
+thread 'project::tests::a_channel_drag_over_the_campfire_does_not_light_its_tile' (636584) panicked at crates/gui/src/project.rs:4577:9:
+assertion `left == right` failed: the channel preview lights the cells beside the fire, never the fire
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 249 filtered out; finished in 0.00s
+
+=== the preview stops following the ground with the send path ===
+thread 'project::tests::a_channel_preview_across_a_step_follows_the_ground' (638210) panicked at crates/gui/src/project.rs:4619:9:
+assertion `left == right` failed: a channel preview across a step must light the ground at both heights
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 249 filtered out; finished in 0.00s
+
+================ MUTATION RESULTS ================
+16 the gui forage drag sends a cut mark (AC 10)              KILLED
+35 the gui forage drag marks only one level (seat run 2)     KILLED
+36 the gui forage drag sends a rect spanning two levels (seat run 3) KILLED
+13 the channel preview skips the sim filter                  KILLED
+the preview stops following the ground with the send path    KILLED
+
+All mutations killed.

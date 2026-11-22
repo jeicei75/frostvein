@@ -1,0 +1,11 @@
+# 13.9 seat run 3 live probe (2026-11-22): release simd --pause-at 1, a raw-TCP client sends the gui forage commands for two ripe bushes on adjacent levels.
+# old = the 98c79ae8 gui (one rect spanning both levels); new = one single-level rect per level holding a ripe bush.
+== old
+bushes [19, 135, 16] [20, 134, 17]
+forage marks seen: []
+both marked: False
+daemon: invalid client rect: {"type": "designate", "kind": "forage", "rect": {"min": [19, 134, 16], "max": [20, 135, 17]}}
+== new
+bushes [19, 135, 16] [20, 134, 17]
+forage marks seen: [(19, 135, 16), (20, 134, 17)]
+both marked: True

@@ -393,6 +393,13 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
   - Mutation row 35 pins the span and is KILLED. Rows 16 (13-9), 13 (12-10b) and "the preview stops following the ground with the send path" (8-2) are re-pointed (`mutate-13-9-seat2-rows.txt`).
   - **Pre-existing, not 13.9's:** that 8-2 row SURVIVES. It sabotages `preview_cells`, but its test (`a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level`) reads only the queued commands. On `main` the row and test are identical, and `designate.rs` never calls `preview_cells`, so it has pinned nothing since 8.2 (`e01e7ffd`, 2026-08-27). **Wolf ruled: fix.** New unit test `a_channel_preview_across_a_step_follows_the_ground` (`gui/src/project.rs`) drags a channel preview across a step. It expects the standable cell lit at both heights. The row is re-pointed to it and KILLED at its assert (`mutate-8-2-preview-row-rerun.txt`).
 
+- **Seat run 3 (Wolf, `bb687047`):** "it still refuses to mark bushes in other than initial surface but this time it marks them as red".
+  - Cause: the run-2 fix sent ONE rect spanning levels, which simd's `rect_is_valid` (single-level wire rule) drops with a log line and no word to the client. The unit test checked the command builder, not the daemon.
+  - Fix: one single-level `Designate { kind: Forage }` per level of the followed ground that holds a ripe bush (from the mirror). With no ripe bush, one command on the cut-target level, so the refusal still shows. No part-of-box refusals.
+  - New headless test `a_forage_drag_across_a_step_sends_single_level_marks_on_both_levels`: a real drag across a step sends a mark on each level, every rect single-level.
+  - Rows 16, 35 and 36 are KILLED (`mutate-13-9-seat3-rows.txt`, with the 12-10b and 8-2 preview rows).
+  - Live probe on a real daemon (`seat3-forage-levels-probe.txt`): the old rect is dropped ("invalid client rect"), and the new commands mark bushes on levels 16 and 17.
+
 **Task 12, the gate:**
 - The first full gate at `f80e6e62` was RED on one check only: the AO pixel guard's open-snow medians read LL 59 / LR 57 against controls 60/59. Four bushes stand in the LL window.
 - The cause is attributed: the same build with bush drawing switched off reads 60/59.
@@ -501,3 +508,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 | 2026-11-22 | Amendment 1 built: R1 `c2aabc7c`, R2 `7f06e9a5`, R3 `7436e558`/`c1f74fca` (Sonnet 5.5), R4 by Opus (`fe7a831c`, `144bd046`, `a2e3e14c`, `13259347`). Mutation row 31 survived and is now pinned. Full gate GREEN at `13259347`. The seat card is rewritten for run 2. |
 | 2026-11-22 | Seat run 2 (Wolf, `48aba96a`): the forage drag marked only its start level. Fixed: one command spanning the followed ground's levels (mutation row 35). Found a pre-existing dead mutation row in `8-2` (preview vs send path), recorded for Wolf. |
 | 2026-11-22 | Wolf ruled the dead 8-2 preview row fixed: a new test pins the channel preview following the ground, and the row is KILLED. The full gate at `98c79ae8` is GREEN (2,160 s). |
+| 2026-11-22 | Seat run 3 (Wolf, `bb687047`): marks still only on the start level. The run-2 rect spanned levels and simd dropped it. Fixed with one single-level forage command per ripe level; headless test, mutation rows 35/36 and a live daemon probe. |

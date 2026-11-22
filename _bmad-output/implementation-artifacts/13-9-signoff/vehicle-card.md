@@ -70,3 +70,10 @@ continued idling .."
 initiated". Cause: R3 sent forage like cut, one `Designate` on the cut-target level, and a bush is one cell tall, so a
 drag missed every bush up or down a slope. Fixed: still ONE command (one refusal at most), now spanning every level
 the followed ground touches; the preview follows the ground too.
+
+**Run 3, 2026-11-22, build `bb687047` (Wolf).** His words: "well it still refuses to mark bushes in other than initial
+surface but this time it marks them as red". The preview lit the bushes on every level, but the one forage rect spanning
+several levels broke the wire's single-level rule: simd drops such a rect with only a log line ("invalid client rect"),
+so nothing reached the sim. My run-2 fix was tested at the command builder only, never against the daemon. Fixed: one
+single-level command per level holding a ripe bush. Live-probed on a real daemon (`seat3-forage-levels-probe.txt`): the
+old command is dropped, and the new commands mark both bushes.
