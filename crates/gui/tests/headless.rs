@@ -4237,7 +4237,7 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
                 rect: at(standable),
             }],
         ),
-        // 13.9: key 6 marks forage on the standable surface, one `designate forage` per rect.
+        // 13.9 R3: forage is like cut: one `designate forage` on the cut-target rect.
         (
             KeyCode::Digit6,
             vec![protocol::Command::Designate {
@@ -6244,6 +6244,94 @@ fn projected_bushes(
         );
     }
     bushes
+}
+
+/// 13.9 R3 (AC 10): a mirror holding a forage designation on a bush projects THAT bush as marked,
+/// wearing the shared marked material (a visible glow) while its neighbours keep the plain one,
+/// no ground slab is projected for the mark, and removing the designation unmarks the bush.
+#[test]
+fn a_forage_mark_shows_on_its_bush_and_clears_with_the_designation() {
+    use protocol::{Plant, PlantState};
+    let dims = Dims { x: 4, y: 1, z: 3 };
+    let mut tiles = vec![Tile::Empty; 12];
+    for tile in tiles.iter_mut().take(4) {
+        *tile = Tile::Solid(Material::Snow);
+    }
+    let mut start = snapshot_with_dims(dims, tiles, Vec::new());
+    start.plants = vec![
+        Plant {
+            pos: [0, 0, 1],
+            state: PlantState::Ripe,
+        },
+        Plant {
+            pos: [1, 0, 1],
+            state: PlantState::Ripe,
+        },
+    ];
+    let mut app = headless_app(start);
+    app.update();
+    let looks = |app: &mut App| {
+        app.world_mut()
+            .query::<(
+                &gui::project::ProjectedPlant,
+                &MeshMaterial3d<StandardMaterial>,
+            )>()
+            .iter(app.world())
+            .map(|(plant, material)| (plant.pos, (plant.marked, material.0.clone())))
+            .collect::<BTreeMap<_, _>>()
+    };
+    let slabs = |app: &mut App| {
+        app.world_mut()
+            .query::<&gui::project::ProjectedDesignation>()
+            .iter(app.world())
+            .count()
+    };
+    let plain = looks(&mut app);
+    assert!(
+        !plain[&[0, 0, 1]].0 && !plain[&[1, 0, 1]].0,
+        "nothing is marked yet"
+    );
+
+    let mut message = delta(Vec::new(), Vec::new());
+    message.designations = vec![Designation {
+        pos: [0, 0, 1],
+        kind: DesignationKind::Forage,
+    }];
+    apply_delta(&mut app, message);
+    app.update();
+    let marked = looks(&mut app);
+    assert!(
+        marked[&[0, 0, 1]].0,
+        "the marked bush is projected as marked"
+    );
+    assert!(!marked[&[1, 0, 1]].0, "its neighbour is not");
+    assert_ne!(
+        marked[&[0, 0, 1]].1,
+        marked[&[1, 0, 1]].1,
+        "the marked bush wears the marked material"
+    );
+    assert_eq!(marked[&[1, 0, 1]].1, plain[&[1, 0, 1]].1);
+    let glow = app
+        .world()
+        .resource::<Assets<StandardMaterial>>()
+        .get(&marked[&[0, 0, 1]].1)
+        .expect("the marked material resolves")
+        .emissive;
+    assert_ne!(glow, bevy::color::LinearRgba::BLACK, "the mark glows");
+    assert_eq!(slabs(&mut app), 0, "a forage mark is no ground slab");
+    // The capture's mark oracle counts the marked bush as the mark's draw.
+    let stats = app
+        .world_mut()
+        .run_system_once(gui::capture::draw_stats)
+        .unwrap();
+    assert_eq!(stats.designations(), 1, "the marked bush is the mark drawn");
+
+    // The mark is used up: the next delta no longer holds it.
+    apply_delta(&mut app, delta_at(2, Vec::new(), Vec::new()));
+    app.update();
+    let cleared = looks(&mut app);
+    assert!(!cleared[&[0, 0, 1]].0, "the bush is unmarked again");
+    assert_eq!(cleared[&[0, 0, 1]].1, plain[&[0, 0, 1]].1);
 }
 
 /// 13.9 AC10: every plant in the mirror has exactly one projected bush, in its state; a ripe bush

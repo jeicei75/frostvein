@@ -9,7 +9,9 @@ p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '''    let wanted_designations = mirror
         .designations()
         .iter()
-        .filter(|designation| designation.pos[2] <= slice.level())
+        .filter(|designation| {
+            designation.pos[2] <= slice.level() && designation.kind != DesignationKind::Forage
+        })
         .map(|designation| (designation.pos, designation.kind))
         .collect::<std::collections::BTreeMap<_, _>>();
 '''
@@ -37,9 +39,10 @@ PY
 mutation "mark slice filter is removed" gui marks_follow_the_slice_control_at_and_below_the_cut <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        .filter(|designation| designation.pos[2] <= slice.level())\n'
+# Re-pointed 2026-11-22 (13.9 R3): the filter also drops forage marks (they tint bushes, not slabs).
+old = '            designation.pos[2] <= slice.level() && designation.kind != DesignationKind::Forage\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .filter(|_designation| true)\n'))
+p.write_text(s.replace(old, '            designation.kind != DesignationKind::Forage\n'))
 PY
 
 mutation "designation absence no longer despawns" gui cancellation_delta_despawns_a_missing_designation <<'PY'

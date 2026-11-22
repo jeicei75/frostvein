@@ -93,16 +93,13 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                protocol::PlantState::Growing => ripe_bush_cell(),\n'))
 PY
 
-mutation "16 the gui forage drag sends no mark (AC 10)" gui a_forage_drag_is_one_designate_forage_per_surface_rect <<'PY'
+mutation "16 the gui forage drag sends no mark (AC 10)" gui a_forage_drag_is_one_designate_forage_on_the_cut_target_rect <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = """        DesignateMode::Forage => surface
-            .iter()
-            .map(|rect| Command::Designate {
-                kind: DesignationKind::Forage,
-                rect: *rect,
-            })
-            .collect(),
+old = """        DesignateMode::Forage => vec![Command::Designate {
+            kind: DesignationKind::Forage,
+            rect: cut_rect,
+        }],
 """
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        DesignateMode::Forage => vec![],\n'))
@@ -138,4 +135,28 @@ p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 old = '            PlantState::Growing => self.bush_growing_mesh.clone(),\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            PlantState::Growing => self.bush_ripe_mesh.clone(),\n'))
+PY
+
+mutation "21 the tui draws a marked bush as an unmarked one (R3, AC 9)" tui a_marked_bush_is_drawn_marked_and_keeps_the_tally_complete <<'PY'
+import pathlib
+p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
+old = '        if forage_marks.contains(&pos) {\n            continue;\n        }\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        if false && forage_marks.contains(&pos) {\n            continue;\n        }\n'))
+PY
+
+mutation "22 the gui never shows a forage mark on its bush (R3, AC 10)" gui a_forage_mark_shows_on_its_bush_and_clears_with_the_designation <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = '.map(|(pos, state)| (pos, (state, forage_marks.contains(&pos))))'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '.map(|(pos, state)| (pos, (state, forage_marks.contains(&pos) && false)))'))
+PY
+
+mutation "23 the gui forage preview lights growing bushes (R3, AC 10)" gui the_forage_preview_lights_ripe_bushes_and_not_growing_ones <<'PY'
+import pathlib
+p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
+old = 'if mirror.plant(tile) == Some(PlantState::Ripe) {'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'if mirror.plant(tile).is_some() {'))
 PY

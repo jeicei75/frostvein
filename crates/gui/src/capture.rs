@@ -189,6 +189,21 @@ impl DrawStats {
     }
 }
 
+/// What shows a designation: a slab per dig, channel or cut mark, and a marked bush per forage mark
+/// (13.9 R3: a forage mark tints its bush instead of lying under it). One parameter, because
+/// `capture_after_frames` sits on Bevy's 16-parameter ceiling.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct ProjectedMarks<'w, 's> {
+    slabs: Query<'w, 's, &'static ProjectedDesignation>,
+    bushes: Query<'w, 's, &'static crate::project::ProjectedPlant>,
+}
+
+impl ProjectedMarks<'_, '_> {
+    fn count(&self) -> usize {
+        self.slabs.iter().count() + self.bushes.iter().filter(|bush| bush.marked).count()
+    }
+}
+
 /// The capture's projection-derived draw counts. Kept as one production system so the headless
 /// instrument test drives the exact queries the capture uses, without requiring a render surface.
 pub fn draw_stats(
@@ -196,7 +211,7 @@ pub fn draw_stats(
     mirror: Res<MirrorResource>,
     terrain: Query<&TerrainTile>,
     chunk_cells: Query<&TerrainChunkCells>,
-    designations: Query<&ProjectedDesignation>,
+    designations: ProjectedMarks,
     zones: Query<&ProjectedZone>,
 ) -> DrawStats {
     collect_draw_stats(
@@ -303,7 +318,7 @@ fn collect_draw_stats(
     mirror: &Mirror,
     terrain: &Query<&TerrainTile>,
     chunk_cells: &Query<&TerrainChunkCells>,
-    designations: &Query<&ProjectedDesignation>,
+    designations: &ProjectedMarks,
     zones: &Query<&ProjectedZone>,
 ) -> DrawStats {
     DrawStats::new(
@@ -313,7 +328,7 @@ fn collect_draw_stats(
             .filter(|cell| cell[2] == level)
             .count(),
         expected_cut_face(mirror, level),
-        designations.iter().count(),
+        designations.count(),
         zones.iter().count(),
         mirror
             .designations()
@@ -1021,7 +1036,7 @@ pub fn capture_after_frames(
     clock: CaptureClock,
     terrain: Query<&TerrainTile>,
     chunk_cells: Query<&TerrainChunkCells>,
-    designations: Query<&ProjectedDesignation>,
+    designations: ProjectedMarks,
     zones: Query<&ProjectedZone>,
     picked: Option<Res<PickedTile>>,
     scripted: ScriptedInput,

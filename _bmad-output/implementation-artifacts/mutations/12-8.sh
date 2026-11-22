@@ -75,17 +75,19 @@ PY
 mutation "the box filtered back to trees" gui the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        DesignateMode::Cut | DesignateMode::Clear | DesignateMode::None => true,\n'
+# Re-pointed 2026-11-22 (13.9 R3): the arm also names Forage (the box previews like cut's); the mutation filters only Cut.
+old = '        DesignateMode::Cut | DesignateMode::Forage | DesignateMode::Clear | DesignateMode::None => {\n            true\n        }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        DesignateMode::Cut => crate::designate::is_tree_tile(mirror, tile),\n        DesignateMode::Clear | DesignateMode::None => true,\n'))
+p.write_text(s.replace(old, '        DesignateMode::Cut => crate::designate::is_tree_tile(mirror, tile),\n        DesignateMode::Forage | DesignateMode::Clear | DesignateMode::None => true,\n'))
 PY
 
 mutation "the box's open cells drawn in the cut style" gui the_cut_preview_covers_every_rect_cell_and_only_tree_cells_are_in_the_cut_style <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '                assets.hover_highlight.clone()\n            },\n        ),\n'
+# Re-pointed 2026-11-22 (13.9 R3): the forage arm ends the same way, so the old text carries the cut arm's own condition.
+old = 'is_tree_tile(mirror, tile) {\n                assets.cut_mark.clone()\n            } else {\n                assets.hover_highlight.clone()\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                assets.cut_mark.clone()\n            },\n        ),\n'))
+p.write_text(s.replace(old, 'is_tree_tile(mirror, tile) {\n                assets.cut_mark.clone()\n            } else {\n                assets.cut_mark.clone()\n'))
 PY
 
 mutation "the tint never cleared" gui a_cut_marked_pine_wears_the_shared_tint_and_keeps_it_across_a_respawn <<'PY'

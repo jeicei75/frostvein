@@ -206,8 +206,8 @@ pub fn designation_color(kind: DesignationKind) -> Color {
         // 12.7: a cold cyan-green, 66+ from every TUI mark colour and 50+ from the dig, channel and
         // zone literals above; `mark_colours_are_distinct_cold_literals` holds the floors.
         DesignationKind::Cut => Color::srgb_u8(30, 190, 150),
-        // TODO(13.9 R3): the mark's own colour; the preview slab's berry colour stands in.
-        DesignationKind::Forage => forage_color(),
+        // A forage mark is no slab: it tints the bush itself (`forage_mark_color`).
+        DesignationKind::Forage => forage_mark_color(),
     }
 }
 
@@ -262,10 +262,10 @@ pub const BERRY_ITEM_DROP: f32 = -0.5 + BERRY_ITEM_SCALE / 2.0;
 /// bush's block would otherwise swallow it (13.9: a bush blocks nothing, and berries land on it).
 pub const BERRY_ITEM_SHIFT: f32 = 0.3;
 
-/// The forage-area slab: a berry-crimson, warm where every other mark is cold, and unlike the
-/// zone slab's slate-teal so a pile under the area still reads as a pile (13.9 Q5).
-pub fn forage_color() -> Color {
-    Color::srgb_u8(176, 64, 96)
+/// The glow a forage mark gives its bush, the way a cut mark tints its tree: a warm amber,
+/// where every slab mark is cold, and far from the bush's green and its berry red (13.9 Q8).
+pub fn forage_mark_color() -> Color {
+    Color::srgb_u8(255, 176, 40)
 }
 
 /// A bush's leaf block, shared by both states. Same green as the TUI's growing bush.
@@ -512,7 +512,7 @@ mod tests {
 
     use super::{
         RIM_LEVELS, bush_berry_color, bush_color, day_lighting, day_weight, designation_color,
-        entity_appearance, foliage_snow_color, forage_color, hover_highlight_color,
+        entity_appearance, foliage_snow_color, forage_mark_color, hover_highlight_color,
         light_properties, lighting_at, material_color, night_lighting, rim_dissolved_color,
         snow_cap_color, zone_color,
     };
@@ -742,11 +742,14 @@ mod tests {
         }
     }
 
-    /// 13.9 Q5: the forage slab must not read as the pile's slab beneath it, nor as a berry item.
+    /// 13.9 Q5: the forage mark's glow must not read as the bush's leaf green, its berry red or
+    /// the pile's slab.
     #[test]
-    fn the_forage_slab_is_far_from_the_zone_slab() {
+    fn the_forage_mark_colour_is_far_from_the_bush_and_the_zone_slab() {
         let rgb = |color: Color| color.to_srgba().to_u8_array_no_alpha();
-        assert!(channel_distance(rgb(forage_color()), rgb(zone_color())) >= MIN_MARK_SEPARATION);
+        for other in [zone_color(), bush_color(), bush_berry_color()] {
+            assert!(channel_distance(rgb(forage_mark_color()), rgb(other)) >= MIN_MARK_SEPARATION);
+        }
         assert!(
             channel_distance(rgb(bush_color()), rgb(bush_berry_color())) >= MIN_MARK_SEPARATION
         );

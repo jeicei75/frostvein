@@ -241,10 +241,7 @@ pub fn designation_target(mirror: &Mirror, cell: PickedCell, mode: DesignateMode
         // Clear is here because it must REACH the standable cell to remove a channel or a
         // stockpile. Its other half — the dig at the cell the ray hit — is covered by the second
         // rect `commands_for` receives, so clear is the one mode that needs both.
-        DesignateMode::Channel
-        | DesignateMode::Stockpile
-        | DesignateMode::Forage
-        | DesignateMode::Clear => {
+        DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Clear => {
             // `render_to_world` is the single axis conversion, per AC2 — the face normal is a
             // render-space unit vector and must not be re-derived by hand here.
             let [dx, dy, dz] = render_to_world(cell.face.normal());
@@ -268,7 +265,10 @@ pub fn designation_target(mirror: &Mirror, cell: PickedCell, mode: DesignateMode
             // answer; the preview filter and the sim both drop it, visibly and consistently.
             neighbour
         }
-        DesignateMode::Cut => cut_target(mirror, cell),
+        // A bush stands on the ground the ray hits, so forage targets what cut targets: the cell
+        // above the ground, one level for the whole drag (the sim also takes a bush directly
+        // above a rect cell).
+        DesignateMode::Cut | DesignateMode::Forage => cut_target(mirror, cell),
         DesignateMode::Dig | DesignateMode::None => cell.tile,
     }
 }
@@ -330,21 +330,12 @@ fn commands_for(
         DesignateMode::Stockpile => vec![Command::PlaceStockpile {
             rects: surface.to_vec(),
         }],
-        // TODO(13.9 R3): a mark command per surface rect, as channel does; an empty surface still
-        // reaches the sim on the picked rect so the refusal line shows. NOTE: each rect is
-        // refused on its own, so a drag over uneven ground can raise a refusal for a rect with no
-        // ripe bush while another rect marked some.
-        DesignateMode::Forage if surface.is_empty() => vec![Command::Designate {
+        // Like cut: ONE command on the single-z rect at the cut-target level, so a drag raises at
+        // most one refusal and never a spurious one for a part of the box (12.1).
+        DesignateMode::Forage => vec![Command::Designate {
             kind: DesignationKind::Forage,
-            rect: picked_rect,
+            rect: cut_rect,
         }],
-        DesignateMode::Forage => surface
-            .iter()
-            .map(|rect| Command::Designate {
-                kind: DesignationKind::Forage,
-                rect: *rect,
-            })
-            .collect(),
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -516,11 +507,17 @@ mod tests {
         );
     }
 
+    /// Like cut: one `designate forage` on the cut-target rect, whatever the ground does, so a
+    /// drag over uneven ground raises at most one refusal.
     #[test]
-    fn a_forage_drag_is_one_designate_forage_per_surface_rect() {
+    fn a_forage_drag_is_one_designate_forage_on_the_cut_target_rect() {
         let picked = Rect {
             min: [62, 62, 9],
             max: [62, 66, 9],
+        };
+        let cut_rect = Rect {
+            min: [62, 62, 10],
+            max: [62, 66, 10],
         };
         let surface = [
             Rect {
@@ -532,23 +529,17 @@ mod tests {
                 max: [62, 66, 10],
             },
         ];
+        let expected = vec![Command::Designate {
+            kind: DesignationKind::Forage,
+            rect: cut_rect,
+        }];
         assert_eq!(
-            commands_for(DesignateMode::Forage, picked, &surface, picked),
-            surface
-                .iter()
-                .map(|rect| Command::Designate {
-                    kind: DesignationKind::Forage,
-                    rect: *rect
-                })
-                .collect::<Vec<_>>()
+            commands_for(DesignateMode::Forage, picked, &surface, cut_rect),
+            expected
         );
-        // An empty surface still reaches the sim, which refuses it on the refusal line.
         assert_eq!(
-            commands_for(DesignateMode::Forage, picked, &[], picked),
-            vec![Command::Designate {
-                kind: DesignationKind::Forage,
-                rect: picked
-            }]
+            commands_for(DesignateMode::Forage, picked, &[], cut_rect),
+            expected
         );
     }
 
