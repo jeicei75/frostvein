@@ -5,7 +5,7 @@ baseline_commit: 3c6cf3b7
 
 # Story 13.9: Forage
 
-Status: ready-for-dev
+Status: in-progress
 
 ## Story
 
@@ -145,7 +145,7 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings (Q1–Q6).** Record the answers in the Change Log and amend the ACs they name. Q5's answer is the approved draft. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
+- [x] **Task 0: Wolf's rulings (Q1–Q6).** Record the answers in the Change Log and amend the ACs they name. Q5's answer is the approved draft. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
 - [ ] **Task 1: plants in worldgen (AC 1, 2).** UPDATE `crates/sim-core/src/worldgen.rs` and `src/lib.rs`.
   - [ ] Add `STREAM_PLANTS` (ASCII `"PLANTS__"`) beside the streams (`lib.rs:31-38`), and the constants `PLANT_ONE_IN = 16`, `FORAGE_WORK_TICKS = 30` and `REGROW_TICKS = 3_000` beside `CUT_WORK_TICKS` (`:86-93`).
   - [ ] NEW `pub(crate) fn place_plants(dims, tiles: &[Tile], camp, rng) -> BTreeMap<Pos, Plant>` in `worldgen.rs`, modelled on `place_trees` (`:375-443`). Call it in `generate` after `place_trees` (`lib.rs:3392-3393`) with `ChaCha8Rng::seed_from_u64(seed ^ STREAM_PLANTS)`. Find the top tile by scanning the column, because heights are not kept. A tree column holds a `TreeTrunk`.
@@ -321,6 +321,8 @@ The seat run lives on the vehicle card (Task 11), in the seat's form: WSL `simd 
 
 ### Agent Model Used
 
+Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). claude-opus-5-5 orchestrates and verifies, and keeps the REDs, the mutation run, the bench and the full gate.
+
 ### Debug Log References
 
 ### Completion Notes List
@@ -332,3 +334,4 @@ The seat run lives on the vehicle card (Task 11), in the seat's form: WSL `simd 
 | date | entry |
 |---|---|
 | 2026-11-21 | Story created (Opus 5.5) on `story-13-9-forage` off `main` `3c6cf3b7`. Task 0 Q1–Q6 open for Wolf; Q5 holds the forage-mode draft (standing AC 16). Status → ready-for-dev. |
+| 2026-11-22 | Task 0 ruled (Wolf): Q1–Q6 all (a), as recommended; no AC amended. Q5's draft is approved as written. Implementer: Sonnet 5.5 subagents, claude-opus-5-5 orchestrates. Status → in-progress. |

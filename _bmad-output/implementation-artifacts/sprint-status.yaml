@@ -2899,9 +2899,10 @@ development_status:
   # SEAT RUN 5 WITH FILES 2026-11-21 (gui 1a50406b): Wolf "no hickups anymore"; fps 20-30 dips = gui (#224). Tap <=3.7%
   # behind after the dig; daemon step ~2x run 4 on identical sim-core (seat machine). Next: gh pr ready 241 on Wolf's yes.
   # 13.8b MERGED 2026-11-21 as PR #241 (3c6cf3b7), closed #231 only; #236 open. -> done.
-  13-9-forage: ready-for-dev
+  13-9-forage: in-progress
   # 13.9 CREATED 2026-11-21 (claude-opus-5-5) on branch story-13-9-forage (off main 3c6cf3b7; first commit b99f881e = 13.8b
   # close-out). Task 0 Q1-Q6 open for Wolf (plant model, constants, forage area, bench file, key-6 mode draft, seat saves).
+  # TASK 0 RULED 2026-11-22 (Wolf): Q1-Q6 all (a). Implementer: Sonnet 5.5 subagents, claude-opus-5-5 orchestrates.
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
   # 13.11 carries #227 too (13.6 run 2, Wolf 2026-11-01): idle dwarves never move from crew ~50 up (wander home = camp,
