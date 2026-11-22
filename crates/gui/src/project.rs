@@ -2271,7 +2271,8 @@ pub fn reconcile(
                             ItemKind::Stone => assets.slot(TerrainSlot::Stone, 0),
                             ItemKind::Tetrahedrite => assets.slot(TerrainSlot::Tetrahedrite, 0),
                             ItemKind::Bloodstone => assets.slot(TerrainSlot::Bloodstone, 0),
-                            ItemKind::Wood => assets.wood_item.clone(),
+                            // TODO(13.9 Task 7): berries get a red cube; wood's stands in.
+                            ItemKind::Wood | ItemKind::Berries => assets.wood_item.clone(),
                         }),
                         Transform::from_translation(item_translation(position, kind, stacks[&id]))
                             .with_scale(item_scale(kind)),
@@ -2384,7 +2385,8 @@ fn item_translation(position: [i32; 3], kind: ItemKind, stack: usize) -> Vec3 {
     let drop = match kind {
         // An ore item is the stone's cube in the ore's colour: same drop, same scale.
         ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => STONE_ITEM_DROP,
-        ItemKind::Wood => WOOD_ITEM_DROP,
+        // TODO(13.9 Task 7): berries get their own drop.
+        ItemKind::Wood | ItemKind::Berries => WOOD_ITEM_DROP,
     };
     world_to_render(position) + Vec3::new(0.0, drop + ITEM_STACK_STEP * stack as f32, 0.0)
 }
@@ -2395,7 +2397,8 @@ fn item_scale(kind: ItemKind) -> Vec3 {
         ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => {
             Vec3::splat(STONE_ITEM_SCALE)
         }
-        ItemKind::Wood => WOOD_ITEM_SCALE,
+        // TODO(13.9 Task 7): berries get their own scale.
+        ItemKind::Wood | ItemKind::Berries => WOOD_ITEM_SCALE,
     }
 }
 
@@ -4222,6 +4225,8 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -4285,6 +4290,8 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -4464,6 +4471,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5477,6 +5486,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5499,6 +5510,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5531,6 +5544,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5573,6 +5588,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5627,6 +5644,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5715,6 +5734,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5796,6 +5817,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5919,6 +5942,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5978,6 +6003,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,

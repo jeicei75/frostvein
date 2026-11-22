@@ -168,9 +168,10 @@ PY
 mutation "14 gui wood draws as a stone" gui a_wood_item_projects_as_a_log_and_a_stone_still_as_a_stone <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        ItemKind::Wood => WOOD_ITEM_SCALE,\n'
+# Re-pointed 2026-11-22 (13.9 Task 5): wood's scale arm now also covers Berries.
+old = '        ItemKind::Wood | ItemKind::Berries => WOOD_ITEM_SCALE,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        ItemKind::Wood => Vec3::splat(STONE_ITEM_SCALE),\n'))
+p.write_text(s.replace(old, '        ItemKind::Wood | ItemKind::Berries => Vec3::splat(STONE_ITEM_SCALE),\n'))
 PY
 
 mutation "14b gui items sharing a cell all draw at the same height" gui four_logs_on_one_cell_draw_at_four_distinct_heights <<'PY'

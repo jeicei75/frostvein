@@ -150,6 +150,7 @@ p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 # Re-pointed 2026-10-05 (12.7): the item layer now picks the cell by kind (a `match` on kind and
 # stored-ness); the seam is unchanged.
 # Re-pointed 2026-10-11 (12.10): the match gained the four real ore-item arms (Task 5 replaced the stub arms).
+# Re-pointed 2026-11-22 (13.9 Task 5): the match gained the two Berries stand-in arms.
 item = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             let stored = mirror.zones().iter().any(|zone| zone.pos == item.pos);
@@ -162,6 +163,9 @@ item = '''    for item in mirror.items() {
                 (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
+                // TODO(13.9 Task 6): berries get their own glyph and colour; wood's stands in.
+                (protocol::ItemKind::Berries, true) => stored_wood_item_cell(),
+                (protocol::ItemKind::Berries, false) => wood_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }

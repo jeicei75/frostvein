@@ -357,6 +357,17 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "refused",
         ),
         (
+            "forage-refused",
+            variant("forage-refused", |json| {
+                // The top of the map is air: no plant stands there, so the area is refused.
+                json["commands"][0]["command"] = serde_json::json!({
+                    "type": "place_forage_area",
+                    "rects": [{"min": [10, 10, 31], "max": [10, 10, 31]}]
+                })
+            }),
+            "PlaceForageArea",
+        ),
+        (
             "crew-zero",
             variant("crew-zero", |json| json["start"]["crew"] = 0.into()),
             "start crew",
@@ -428,6 +439,48 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "{name}: stderr must name {cause:?}: {stderr}"
         );
     }
+}
+
+/// 13.9 AC 9: a scenario file reads `place_forage_area` through the daemon's own command path.
+/// The oracle places the same area straight through `sim_core`, at a plant it finds itself.
+#[test]
+fn a_scenario_places_a_forage_area_through_the_command_path() {
+    let probe =
+        sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5);
+    let (plant, _) = probe.plants()[0];
+    let path = variant("forage-area", |json| {
+        json["commands"][0] = serde_json::json!({
+            "at": DIG_AT,
+            "command": {
+                "type": "place_forage_area",
+                "rects": [{"min": [plant.x, plant.y, plant.z], "max": [plant.x, plant.y, plant.z]}]
+            }
+        });
+    });
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+
+    let mut world =
+        sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5);
+    let cell = sim_core::Rect {
+        min: plant,
+        max: plant,
+    };
+    for _ in 0..TICKS {
+        if world.tick() == DIG_AT {
+            assert_eq!(world.place_forage_area(&[cell]), None);
+        }
+        world.step();
+    }
+    assert_eq!(world.forage_area(), vec![plant]);
+    assert_eq!(run_states(&text), vec![fnv(&world)], "{text}");
+    assert_ne!(
+        fnv(&world),
+        expected(false),
+        "the forage area must change the world's hash"
+    );
 }
 
 /// 13.6 AC 3: `dims` and `crew` in a seed start are honoured. No command here: the fixture's dig

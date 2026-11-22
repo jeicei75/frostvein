@@ -3603,3 +3603,172 @@ fn the_daemon_logs_its_tick_times_every_thousand_stepped_ticks() {
     let over: u32 = fields[6].1.parse().expect("a count");
     assert!(over <= 1000, "{line}");
 }
+
+/// `place_forage_area` over the wire: one single-cell rect per cell.
+fn send_forage_area(writer: &mut TcpStream, cells: &[[i32; 3]]) {
+    let rects = cells
+        .iter()
+        .map(|p| {
+            format!(
+                "{{\"min\":[{},{},{}],\"max\":[{},{},{}]}}",
+                p[0], p[1], p[2], p[0], p[1], p[2]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    send_literal(
+        writer,
+        format!("{{\"type\":\"place_forage_area\",\"rects\":[{rects}]}}\n").as_bytes(),
+    );
+}
+
+/// 13.9 AC 9 end to end: the forage area, a forage and its berries all cross the wire.
+///
+/// The plants are read from the snapshot, never hardcoded: the five nearest the camp are marked,
+/// because any one of them may be unreachable and the test is about the wire, not the path.
+#[test]
+fn a_forage_area_reaches_the_client_and_a_forage_streams_a_growing_plant_and_berries() {
+    use protocol::{DwarfJob, ItemKind, PlantState};
+
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let camp = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.kind == protocol::EntityKind::Campfire)
+        .expect("the camp has a campfire")
+        .pos;
+    assert!(!snapshot.plants.is_empty(), "the world grows plants");
+    assert!(
+        snapshot
+            .plants
+            .iter()
+            .all(|plant| plant.state == PlantState::Ripe),
+        "every plant is ripe at tick 0"
+    );
+    assert!(snapshot.forage.is_empty(), "no area until one is placed");
+    let mut mirror =
+        client_core::Mirror::from_snapshot(snapshot.clone()).expect("the snapshot builds a mirror");
+    let mut nearest: Vec<[i32; 3]> = snapshot.plants.iter().map(|plant| plant.pos).collect();
+    nearest
+        .sort_by_key(|p| (p[0] - camp[0]).abs() + (p[1] - camp[1]).abs() + (p[2] - camp[2]).abs());
+    nearest.truncate(5);
+
+    send_forage_area(&mut writer, &nearest);
+    send_speed(&mut writer, protocol::Speed::Fast4x);
+
+    let (mut area_seen, mut held, mut growing, mut berries) = (false, None, None, None);
+    for _ in 0..3000 {
+        let delta = read_delta(&mut reader);
+        let tick = delta.tick;
+        mirror.apply_delta(delta.clone());
+        // `plants` is changes only: a full resend would carry every plant in the world.
+        for change in &delta.plants {
+            assert!(
+                nearest.contains(&change.pos),
+                "tick {tick}: a plant outside the area changed: {change:?}"
+            );
+        }
+        let cells: Vec<[i32; 3]> = delta.forage.iter().map(|cell| cell.pos).collect();
+        if !cells.is_empty() {
+            let mut sorted = nearest.clone();
+            sorted.sort();
+            assert_eq!(
+                cells, sorted,
+                "tick {tick}: the area is resent whole, sorted"
+            );
+            area_seen = true;
+        }
+        for entity in &delta.entities {
+            if entity.profession == Some(protocol::Profession::Woodcutter)
+                && let Some(DwarfJob::Forage { target }) = entity.job
+            {
+                assert!(nearest.contains(&target));
+                held.get_or_insert((entity.id, target));
+            }
+        }
+        if growing.is_none()
+            && let Some(change) = delta
+                .plants
+                .iter()
+                .find(|change| change.state == Some(PlantState::Growing))
+        {
+            growing = Some((tick, change.pos));
+            assert_eq!(mirror.plant(change.pos), Some(PlantState::Growing));
+        }
+        if let Some((_, plant)) = growing
+            && berries.is_none()
+            && delta
+                .items
+                .iter()
+                .any(|item| item.kind == ItemKind::Berries && item.pos == plant)
+        {
+            berries = Some(tick);
+        }
+        if berries.is_some() {
+            break;
+        }
+    }
+
+    assert!(area_seen, "the forage cells never reached the client");
+    assert_eq!(mirror.forage().len(), nearest.len());
+    let (holder, _) = held.expect("no woodcutter ever held a forage job");
+    assert!(
+        dwarf_professions(&snapshot).contains(&(holder, protocol::Profession::Woodcutter)),
+        "only the woodcutter forages"
+    );
+    let (_, plant) = growing.expect("no plant ever turned growing on the wire");
+    assert!(berries.is_some(), "no berries on the plant's cell");
+    assert_eq!(mirror.plant(plant), Some(PlantState::Growing));
+}
+
+/// A forage area holding no plant comes back as `Refusal::PlaceForageArea` naming the bounding
+/// rect: an air rect (no standable cell) and a camp rect (standable, but the camp box grows none).
+#[test]
+fn a_forage_area_over_no_plant_is_refused_on_the_wire_and_places_nothing() {
+    let daemon = Daemon::spawn();
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+    let camp = snapshot
+        .entities
+        .iter()
+        .find(|entity| entity.kind == protocol::EntityKind::Campfire)
+        .expect("the camp has a campfire")
+        .pos;
+    send_speed(&mut writer, protocol::Speed::Paused);
+    let _ = read_delta_with_speed(&mut reader, protocol::Speed::Paused);
+
+    let air = protocol::Rect {
+        min: [10, 10, 31],
+        max: [10, 10, 31],
+    };
+    let near_camp = protocol::Rect {
+        min: [camp[0] - 1, camp[1] - 1, camp[2]],
+        max: [camp[0] + 1, camp[1] + 1, camp[2]],
+    };
+    for rect in [air, near_camp] {
+        send_literal(
+            &mut writer,
+            format!(
+                "{{\"type\":\"place_forage_area\",\"rects\":[{}]}}\n",
+                serde_json::to_string(&rect).unwrap()
+            )
+            .as_bytes(),
+        );
+        let mut refused = false;
+        for _ in 0..50 {
+            let delta = read_delta(&mut reader);
+            assert!(delta.forage.is_empty(), "a refused area placed cells");
+            if delta.refusals == vec![protocol::Refusal::PlaceForageArea { rect }] {
+                refused = true;
+                break;
+            }
+        }
+        assert!(refused, "no PlaceForageArea refusal for {rect:?}");
+    }
+}

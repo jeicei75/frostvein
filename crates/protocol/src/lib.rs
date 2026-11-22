@@ -132,6 +132,7 @@ pub enum DwarfJob {
     Dig { target: [i32; 3] },
     Channel { target: [i32; 3] },
     Cut { target: [i32; 3] },
+    Forage { target: [i32; 3] },
     Haul,
 }
 
@@ -173,6 +174,10 @@ pub struct Rect {
 #[serde(tag = "command", rename_all = "snake_case")]
 pub enum Refusal {
     PlaceStockpile {
+        rect: Rect,
+    },
+    /// No kept cell of the area holds a plant.
+    PlaceForageArea {
         rect: Rect,
     },
     /// The only cause is an unknown dwarf id.
@@ -223,6 +228,13 @@ pub enum Command {
         rects: Vec<Rect>,
     },
     RemoveStockpile {
+        rect: Rect,
+    },
+    /// One player drag, several rects, like `PlaceStockpile`.
+    PlaceForageArea {
+        rects: Vec<Rect>,
+    },
+    RemoveForageArea {
         rect: Rect,
     },
     SetProfession {
@@ -286,6 +298,32 @@ pub enum ItemKind {
     Wood,
     Tetrahedrite,
     Bloodstone,
+    Berries,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlantState {
+    Ripe,
+    Growing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Plant {
+    pub pos: [i32; 3],
+    pub state: PlantState,
+}
+
+/// `state: None` means the plant is gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantChange {
+    pub pos: [i32; 3],
+    pub state: Option<PlantState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForageCell {
+    pub pos: [i32; 3],
 }
 
 /// One step of the goal chain (12.12). All three are sent on every message, in chain order.
@@ -308,6 +346,8 @@ pub struct Snapshot {
     pub entities: Vec<Entity>,
     pub designations: Vec<Designation>,
     pub zones: Vec<Zone>,
+    pub plants: Vec<Plant>,
+    pub forage: Vec<ForageCell>,
     pub items: Vec<Item>,
     pub speed: Speed,
     pub tick: u64,
@@ -325,6 +365,9 @@ pub struct Delta {
     pub entities: Vec<Entity>,
     pub designations: Vec<Designation>,
     pub zones: Vec<Zone>,
+    /// Only the plants that changed since the last delta, like `tiles`.
+    pub plants: Vec<PlantChange>,
+    pub forage: Vec<ForageCell>,
     pub items: Vec<Item>,
     pub speed: Speed,
     pub goals: Vec<Goal>,
@@ -350,6 +393,8 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
+        "plants": [{"pos": [1, 2, 5], "state": "ripe"}, {"pos": [3, 2, 5], "state": "growing"}],
+        "forage": [{"pos": [1, 2, 5]}],
         "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
         "speed": "normal",
         "tick": 9,
@@ -363,6 +408,8 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
+        "plants": [{"pos": [1, 2, 5], "state": "growing"}, {"pos": [3, 2, 5], "state": null}, {"pos": [4, 2, 5], "state": "ripe"}],
+        "forage": [{"pos": [1, 2, 5]}],
         "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
         "speed": "fast",
         "goals": [{"kind": "wood", "target": 10, "progress": 12, "completed": true}, {"kind": "tetrahedrite", "target": 10, "progress": 3, "completed": false}, {"kind": "bloodstone", "target": 1, "progress": 0, "completed": false}]
@@ -396,13 +443,29 @@ mod tests {
             }
         );
         assert_eq!(serde_json::to_string(&refusal_cut).unwrap(), designate);
+        let forage_literal =
+            r#"{"command":"place_forage_area","rect":{"min":[64,64,8],"max":[66,66,8]}}"#;
+        let forage_refusal: Refusal = serde_json::from_str(forage_literal).unwrap();
+        assert_eq!(
+            forage_refusal,
+            Refusal::PlaceForageArea {
+                rect: Rect {
+                    min: [64, 64, 8],
+                    max: [66, 66, 8]
+                }
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&forage_refusal).unwrap(),
+            forage_literal
+        );
         let mut plain: Delta = serde_json::from_str(DELTA_WIRE).unwrap();
         assert!(plain.refusals.is_empty());
         let plain_value: serde_json::Value = serde_json::from_str(DELTA_WIRE).unwrap();
         assert_eq!(serde_json::to_value(&plain).unwrap(), plain_value);
         assert_eq!(
             serde_json::to_string(&plain).unwrap(),
-            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3],"kind":"stone"}],"speed":"fast","goals":[{"kind":"wood","target":10,"progress":12,"completed":true},{"kind":"tetrahedrite","target":10,"progress":3,"completed":false},{"kind":"bloodstone","target":1,"progress":0,"completed":false}]}"#
+            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"plants":[{"pos":[1,2,5],"state":"growing"},{"pos":[3,2,5],"state":null},{"pos":[4,2,5],"state":"ripe"}],"forage":[{"pos":[1,2,5]}],"items":[{"id":12,"pos":[1,2,3],"kind":"stone"}],"speed":"fast","goals":[{"kind":"wood","target":10,"progress":12,"completed":true},{"kind":"tetrahedrite","target":10,"progress":3,"completed":false},{"kind":"bloodstone","target":1,"progress":0,"completed":false}]}"#
         );
         plain.refusals.push(refusal);
         let encoded = serde_json::to_string(&plain).unwrap();
@@ -527,6 +590,20 @@ mod tests {
         );
         assert_eq!(snapshot.zones, vec![Zone { pos: [1, 2, 4] }]);
         assert_eq!(
+            snapshot.plants,
+            vec![
+                Plant {
+                    pos: [1, 2, 5],
+                    state: PlantState::Ripe
+                },
+                Plant {
+                    pos: [3, 2, 5],
+                    state: PlantState::Growing
+                }
+            ]
+        );
+        assert_eq!(snapshot.forage, vec![ForageCell { pos: [1, 2, 5] }]);
+        assert_eq!(
             snapshot.items,
             vec![Item {
                 id: 12,
@@ -585,6 +662,24 @@ mod tests {
             }]
         );
         assert_eq!(delta.zones, vec![Zone { pos: [1, 2, 4] }]);
+        assert_eq!(
+            delta.plants,
+            vec![
+                PlantChange {
+                    pos: [1, 2, 5],
+                    state: Some(PlantState::Growing)
+                },
+                PlantChange {
+                    pos: [3, 2, 5],
+                    state: None
+                },
+                PlantChange {
+                    pos: [4, 2, 5],
+                    state: Some(PlantState::Ripe)
+                }
+            ]
+        );
+        assert_eq!(delta.forage, vec![ForageCell { pos: [1, 2, 5] }]);
         assert_eq!(
             delta.items,
             vec![Item {
@@ -645,6 +740,24 @@ mod tests {
                         min: [1, 2, 3],
                         max: [4, 5, 3],
                     }],
+                },
+            ),
+            (
+                r#"{"type":"place_forage_area","rects":[{"min":[1,2,3],"max":[4,5,3]}]}"#,
+                Command::PlaceForageArea {
+                    rects: vec![Rect {
+                        min: [1, 2, 3],
+                        max: [4, 5, 3],
+                    }],
+                },
+            ),
+            (
+                r#"{"type":"remove_forage_area","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                Command::RemoveForageArea {
+                    rect: Rect {
+                        min: [1, 2, 3],
+                        max: [4, 5, 3],
+                    },
                 },
             ),
             (
@@ -750,6 +863,10 @@ mod tests {
                 },
                 r#"{"cut":{"target":[73,59,12]}}"#,
             ),
+            (
+                DwarfJob::Forage { target: [7, 8, 9] },
+                r#"{"forage":{"target":[7,8,9]}}"#,
+            ),
             (DwarfJob::Haul, "\"haul\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
@@ -791,6 +908,31 @@ mod tests {
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }
+        for (value, wire) in [
+            (PlantState::Ripe, "\"ripe\""),
+            (PlantState::Growing, "\"growing\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (
+                PlantChange {
+                    pos: [1, 2, 3],
+                    state: None,
+                },
+                r#"{"pos":[1,2,3],"state":null}"#,
+            ),
+            (
+                PlantChange {
+                    pos: [1, 2, 3],
+                    state: Some(PlantState::Ripe),
+                },
+                r#"{"pos":[1,2,3],"state":"ripe"}"#,
+            ),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+            assert_eq!(serde_json::from_str::<PlantChange>(wire).unwrap(), value);
+        }
         for (item_wire, item) in [
             (
                 r#"{"id":12,"pos":[1,2,3],"kind":"stone"}"#,
@@ -822,6 +964,14 @@ mod tests {
                     id: 15,
                     pos: [1, 2, 3],
                     kind: ItemKind::Bloodstone,
+                },
+            ),
+            (
+                r#"{"id":16,"pos":[1,2,3],"kind":"berries"}"#,
+                Item {
+                    id: 16,
+                    pos: [1, 2, 3],
+                    kind: ItemKind::Berries,
                 },
             ),
         ] {
@@ -880,6 +1030,24 @@ mod tests {
                     },
                 },
                 "remove_stockpile",
+            ),
+            (
+                Command::PlaceForageArea {
+                    rects: vec![Rect {
+                        min: [0, 0, 0],
+                        max: [0, 0, 0],
+                    }],
+                },
+                "place_forage_area",
+            ),
+            (
+                Command::RemoveForageArea {
+                    rect: Rect {
+                        min: [0, 0, 0],
+                        max: [0, 0, 0],
+                    },
+                },
+                "remove_forage_area",
             ),
         ] {
             assert_eq!(serde_json::to_value(value).unwrap()["type"], wire);

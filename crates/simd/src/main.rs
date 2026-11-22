@@ -420,6 +420,8 @@ fn tick(
                 | protocol::Command::CancelDesignation { .. }
                 | protocol::Command::PlaceStockpile { .. }
                 | protocol::Command::RemoveStockpile { .. }
+                | protocol::Command::PlaceForageArea { .. }
+                | protocol::Command::RemoveForageArea { .. }
                 | protocol::Command::SetProfession { .. }) => {
                     if let Some(live) = &mut scenario {
                         live.client_command();
@@ -532,6 +534,16 @@ fn apply_sim_command(
         }
         protocol::Command::RemoveStockpile { rect } => {
             world.apply_command(sim_core::SimCommand::RemoveStockpile {
+                rect: bridge::rect_in(rect),
+            });
+            None
+        }
+        protocol::Command::PlaceForageArea { rects } => {
+            let rects: Vec<_> = rects.into_iter().map(bridge::rect_in).collect();
+            world.place_forage_area(&rects).map(bridge::refusal_out)
+        }
+        protocol::Command::RemoveForageArea { rect } => {
+            world.apply_command(sim_core::SimCommand::RemoveForageArea {
                 rect: bridge::rect_in(rect),
             });
             None
@@ -1289,8 +1301,10 @@ fn command_rects(command: &protocol::Command) -> Option<&[protocol::Rect]> {
     match command {
         protocol::Command::Designate { rect, .. }
         | protocol::Command::CancelDesignation { rect }
-        | protocol::Command::RemoveStockpile { rect } => Some(std::slice::from_ref(rect)),
-        protocol::Command::PlaceStockpile { rects } => Some(rects),
+        | protocol::Command::RemoveStockpile { rect }
+        | protocol::Command::RemoveForageArea { rect } => Some(std::slice::from_ref(rect)),
+        protocol::Command::PlaceStockpile { rects }
+        | protocol::Command::PlaceForageArea { rects } => Some(rects),
         protocol::Command::SetSpeed { .. }
         | protocol::Command::SetProfession { .. }
         | protocol::Command::Save

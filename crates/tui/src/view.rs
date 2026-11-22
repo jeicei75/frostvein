@@ -334,6 +334,9 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
                 (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
+                // TODO(13.9 Task 6): berries get their own glyph and colour; wood's stands in.
+                (protocol::ItemKind::Berries, true) => stored_wood_item_cell(),
+                (protocol::ItemKind::Berries, false) => wood_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
@@ -744,6 +747,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,

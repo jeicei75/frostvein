@@ -5,13 +5,15 @@
 use std::collections::BTreeMap;
 
 use protocol::{
-    Delta, Designation, Dims, Entity, Goal, Item, ItemKind, Rect, Snapshot, Speed, Tile, Zone,
+    Delta, Designation, Dims, Entity, ForageCell, Goal, Item, ItemKind, PlantState, Rect, Snapshot,
+    Speed, Tile, Zone,
 };
 use thiserror::Error;
 
 pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
     match refusal {
         protocol::Refusal::PlaceStockpile { .. } => "stockpile refused: no valid cells",
+        protocol::Refusal::PlaceForageArea { .. } => "forage area refused: no plant in it",
         protocol::Refusal::SetProfession { .. } => "trade refused: no such dwarf",
         // The sim counts a cell skipped at MAX_DESIGNATIONS as not applied, so a full mark cap
         // refuses with these same texts. NOTE: the tui status row clips at the terminal's width
@@ -88,6 +90,7 @@ pub fn goal_kind_text(kind: ItemKind) -> &'static str {
         ItemKind::Wood => "wood",
         ItemKind::Tetrahedrite => "tetrahedrite",
         ItemKind::Bloodstone => "bloodstone",
+        ItemKind::Berries => "berries",
     }
 }
 
@@ -221,6 +224,8 @@ pub struct Mirror {
     entities: BTreeMap<u32, Entity>,
     designations: Vec<Designation>,
     zones: Vec<Zone>,
+    plants: BTreeMap<[i32; 3], PlantState>,
+    forage: Vec<ForageCell>,
     items: BTreeMap<u32, Item>,
     speed: Speed,
     tick: u64,
@@ -248,6 +253,8 @@ impl Mirror {
             entities,
             designations,
             zones,
+            plants,
+            forage,
             items,
             speed,
             goals,
@@ -287,6 +294,18 @@ impl Mirror {
         self.entities = next_entities;
         self.designations = designations;
         self.zones = zones;
+        // `plants` is changes only, like `tiles`; `None` is a plant that is gone.
+        for change in plants {
+            match change.state {
+                Some(state) => {
+                    self.plants.insert(change.pos, state);
+                }
+                None => {
+                    self.plants.remove(&change.pos);
+                }
+            }
+        }
+        self.forage = forage;
         self.items = items.into_iter().map(|item| (item.id, item)).collect();
         self.speed = speed;
         self.goals = goals;
@@ -330,6 +349,18 @@ impl Mirror {
         &self.zones
     }
 
+    pub fn plants(&self) -> impl Iterator<Item = ([i32; 3], PlantState)> + '_ {
+        self.plants.iter().map(|(pos, state)| (*pos, *state))
+    }
+
+    pub fn plant(&self, pos: [i32; 3]) -> Option<PlantState> {
+        self.plants.get(&pos).copied()
+    }
+
+    pub fn forage(&self) -> &[ForageCell] {
+        &self.forage
+    }
+
     pub fn previous_entity(&self, id: u32) -> Option<&Entity> {
         self.previous_entities.get(&id)
     }
@@ -349,6 +380,12 @@ impl Mirror {
                 .collect(),
             designations: snapshot.designations,
             zones: snapshot.zones,
+            plants: snapshot
+                .plants
+                .into_iter()
+                .map(|plant| (plant.pos, plant.state))
+                .collect(),
+            forage: snapshot.forage,
             items: snapshot
                 .items
                 .into_iter()
@@ -567,6 +604,10 @@ mod tests {
                 "stockpile refused: no valid cells",
             ),
             (
+                protocol::Refusal::PlaceForageArea { rect },
+                "forage area refused: no plant in it",
+            ),
+            (
                 protocol::Refusal::SetProfession { dwarf: 999 },
                 "trade refused: no such dwarf",
             ),
@@ -716,6 +757,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -745,6 +788,8 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: vec![Item {
                 id: 9,
                 pos: [0, 0, 0],
@@ -770,6 +815,8 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
 
@@ -804,6 +851,8 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
 
@@ -917,6 +966,8 @@ mod tests {
             ],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
+            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
 

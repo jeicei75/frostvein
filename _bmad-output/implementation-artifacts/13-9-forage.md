@@ -176,11 +176,11 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - [x] Validator (`main.rs:594`): bounds checks for plants and forage cells. Forage jobs get their own arm (Found H): unique target, a plant at the target, and a count bound of the plant count, kept out of both the tile-job and the haul counts. Refusal tests go in `simd/tests/serve.rs`.
   - [x] `tests/save_load.rs`: add the two readers to the per-tick equality list (`:170-188`), a mid-regrowth variant modelled on `:298-365` with its guard, and the missing-key tests modelled on `:1222-1267`.
   - [x] Patch `scenarios/saves/*.save` per Q6 with a throwaway script, not committed.
-- [ ] **Task 5: the wire (AC 9).** UPDATE `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs` and `main.rs`, and `crates/client-core/src/lib.rs`.
-  - [ ] The protocol types from the Wire diff, with snake_case names pinned in the wire-literal test (`protocol :346`).
-  - [ ] Bridge: `snapshot()` and `delta()` (`bridge.rs:1-90`). `item_kind_out`, `refusal_out` (`:348-361`). Pin Cut, Berries and the plant states in the wire-name tests (`:429-487`, Found G).
-  - [ ] `apply_sim_command` (`main.rs:513-552`) and `command_rects` (`:1226-1238`) take the two new commands. The scenario reader accepts them through the same path.
-  - [ ] `Mirror`: `plants: BTreeMap<Pos, PlantState>` and `forage`. `apply_delta` applies `plants` as changes and `forage` as a full resend (Found F). `refusal_text` gets the new arm. Add tests in `client-core/tests/mirror.rs`.
+- [x] **Task 5: the wire (AC 9).** UPDATE `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs` and `main.rs`, and `crates/client-core/src/lib.rs`.
+  - [x] The protocol types from the Wire diff, with snake_case names pinned in the wire-literal test (`protocol :346`).
+  - [x] Bridge: `snapshot()` and `delta()` (`bridge.rs:1-90`). `item_kind_out`, `refusal_out` (`:348-361`). Pin Cut, Berries and the plant states in the wire-name tests (`:429-487`, Found G).
+  - [x] `apply_sim_command` (`main.rs:513-552`) and `command_rects` (`:1226-1238`) take the two new commands. The scenario reader accepts them through the same path.
+  - [x] `Mirror`: `plants: BTreeMap<Pos, PlantState>` and `forage`. `apply_delta` applies `plants` as changes and `forage` as a full resend (Found F). `refusal_text` gets the new arm. Add tests in `client-core/tests/mirror.rs`.
 - [ ] **Task 6: the tui (AC 9).** UPDATE `crates/tui/src/view.rs` and `palette.rs`.
   - [ ] Draw order: zones, forage cells, designations, plants, items, then entities. The glyphs and colours are the ones Q5 approves.
   - [ ] Extend `DrawTally` (`view.rs:75-135`) and the glyph-distinctness test (`palette.rs` ~`:497-520`). Plant glyphs must be ASCII (#152).
@@ -341,11 +341,22 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - Mutation rows re-pointed: 2-4 (`assemble` call tail, and the `from_save` destructure anchor), 3-2 `load accepts duplicate job targets` (the Forage arm repeats the check, so the anchor now starts at the tile-job arm).
 - Tests: `tests/worldgen.rs` (3), `tests/scenario.rs` (13), `lib.rs` `a_dwarf_on_the_bush_as_the_berries_land_walks_off_and_they_are_hauled` (needs ecs access: a hand-built world cannot hold plants before Task 4).
 
+- Task 5 (the wire), by a Sonnet 5.5 subagent. Protocol: `ItemKind::Berries`, `PlantState`, `Plant`, `PlantChange`, `ForageCell`, `Snapshot.plants/forage`, `Delta.plants/forage`, `Command::PlaceForageArea/RemoveForageArea`, `Refusal::PlaceForageArea`; every name is pinned by a hand-written literal in the protocol wire tests. `PlantChange.state: None` serializes as `null`.
+- GAP in the story's wire diff: it lists no job variant for a dwarf doing a forage. `DwarfJob` gains `Forage { target }` (wire `{"forage":{"target":[x,y,z]}}`), pinned in the protocol and bridge tests; without it `dwarf_job(Forage)` could only panic on a served world.
+- Found G done: `Cut` (designation kind and job), `Berries` and both plant states are pinned in the bridge wire-name tests.
+- `Mirror` keeps `plants: BTreeMap<[i32; 3], PlantState>` (wire positions are arrays) and `forage: Vec<ForageCell>`; accessors `plants()`, `plant(pos)`, `forage()`. `apply_delta` applies `plants` as changes (`None` removes) and `forage` as a full resend.
+- The scenario reader needed no code: it deserializes `protocol::Command`, so `place_forage_area` is read through the daemon's own path. `bench.rs` has a test that a scenario places an area (state hash against a `sim_core` oracle) and a case in the unusable-scenario table for a refused one.
+- TODO arms left for later tasks: tui `view.rs` item match (berries draw as wood, `TODO(13.9 Task 6)`); gui `project.rs` item material, drop and scale (berries share wood's, three `TODO(13.9 Task 7)`). The gui's `DwarfJob` uses are `matches!`, so none needed an arm.
+- Mutation rows re-pointed (the Berries stand-in arms): 12-7 row 14, 3-2 `items draw above entities`, 3-3 `stone counting and stone drawing use different filters`. `audit-mutations.py` exits 0.
+- Sabotage (each watched fail, restored by edit): `apply_delta` skipping plants (mirror test), bridge `Delta.plants` empty (serve test), `refusal_out` to the wrong variant (serve test), `Delta.forage` empty (serve test), `Berries` mapped to stone (bridge test), `apply_sim_command` dropping `PlaceForageArea` (bench and both serve tests).
+
 ### File List
 
 - `crates/sim-core/src/lib.rs`, `src/worldgen.rs`, `tests/worldgen.rs`, `tests/scenario.rs`
 - `crates/simd/src/bridge.rs`, `src/main.rs` (TODO arms only)
+- Task 5: `crates/protocol/src/lib.rs`; `crates/simd/src/bridge.rs`, `src/main.rs`, `tests/serve.rs`, `tests/bench.rs`; `crates/client-core/src/lib.rs`, `tests/mirror.rs`; empty `plants`/`forage` added to Snapshot/Delta literals in gui `src/{capture,ingest,pick,project}.rs`, `tests/{capture,headless}.rs` and tui `src/view.rs`, `tests/client.rs`; TODO arms in tui `src/view.rs` and gui `src/project.rs`
 - Task 4: `crates/sim-core/src/save.rs`, `src/lib.rs` (`to_save`, `from_save`), `tests/save_load.rs`; `crates/simd/src/main.rs` (validator), `tests/serve.rs`; `scenarios/saves/*.save` (3, data patch); mutations `2-4-the-world-endures.sh`, `3-2-the-dig.sh` (re-pointed)
+- Task 5 mutations re-pointed: `12-7.sh`, `3-2-the-dig.sh`, `3-3-the-haul-and-the-skeleton-walks.sh`
 - `_bmad-output/implementation-artifacts/mutations/{10-9-the-land-reads-natural,12-7,2-4-the-world-endures,3-3-the-haul-and-the-skeleton-walks,5-1-the-world-grows-things-that-glow}.sh` (re-pointed)
 
 ## Change Log
