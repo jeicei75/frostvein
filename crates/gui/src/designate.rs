@@ -330,14 +330,21 @@ fn commands_for(
         DesignateMode::Stockpile => vec![Command::PlaceStockpile {
             rects: surface.to_vec(),
         }],
-        // Same shape as the stockpile: one command per drag, and an empty surface still reaches
-        // the sim so the refusal line shows ("no plant in it").
-        DesignateMode::Forage if surface.is_empty() => vec![Command::PlaceForageArea {
-            rects: vec![picked_rect],
+        // TODO(13.9 R3): a mark command per surface rect, as channel does; an empty surface still
+        // reaches the sim on the picked rect so the refusal line shows. NOTE: each rect is
+        // refused on its own, so a drag over uneven ground can raise a refusal for a rect with no
+        // ripe bush while another rect marked some.
+        DesignateMode::Forage if surface.is_empty() => vec![Command::Designate {
+            kind: DesignationKind::Forage,
+            rect: picked_rect,
         }],
-        DesignateMode::Forage => vec![Command::PlaceForageArea {
-            rects: surface.to_vec(),
-        }],
+        DesignateMode::Forage => surface
+            .iter()
+            .map(|rect| Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: *rect,
+            })
+            .collect(),
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -351,7 +358,6 @@ fn commands_for(
                 [
                     Command::CancelDesignation { rect: *rect },
                     Command::RemoveStockpile { rect: *rect },
-                    Command::RemoveForageArea { rect: *rect },
                 ]
             }))
             .chain(std::iter::once(Command::CancelDesignation {
@@ -448,9 +454,6 @@ mod tests {
                 Command::RemoveStockpile {
                     rect: standable_rect
                 },
-                Command::RemoveForageArea {
-                    rect: standable_rect
-                },
                 Command::CancelDesignation { rect: cut_rect },
             ]
         );
@@ -514,7 +517,7 @@ mod tests {
     }
 
     #[test]
-    fn a_forage_drag_is_one_place_forage_area_over_the_surface() {
+    fn a_forage_drag_is_one_designate_forage_per_surface_rect() {
         let picked = Rect {
             min: [62, 62, 9],
             max: [62, 66, 9],
@@ -531,15 +534,20 @@ mod tests {
         ];
         assert_eq!(
             commands_for(DesignateMode::Forage, picked, &surface, picked),
-            vec![Command::PlaceForageArea {
-                rects: surface.to_vec()
-            }]
+            surface
+                .iter()
+                .map(|rect| Command::Designate {
+                    kind: DesignationKind::Forage,
+                    rect: *rect
+                })
+                .collect::<Vec<_>>()
         );
         // An empty surface still reaches the sim, which refuses it on the refusal line.
         assert_eq!(
             commands_for(DesignateMode::Forage, picked, &[], picked),
-            vec![Command::PlaceForageArea {
-                rects: vec![picked]
+            vec![Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: picked
             }]
         );
     }

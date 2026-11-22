@@ -176,8 +176,9 @@ fn a_finished_dig_is_counted_as_done_and_as_a_changed_cell() {
 }
 
 /// 13.9 AC 13: the end line's `foraged=` and `food=` (after `arriving=`, so `done=dig:N,cut:M` still
-/// splits on `,cut:`). The one-dig fixture forages nothing; the one-forage fixture (a pile and an
-/// area over two bushes) forages and hauls at least one berry home inside 360 ticks.
+/// splits on `,cut:`). The one-dig fixture forages nothing; the one-forage fixture (one hauler, a
+/// pile and forage marks over two bushes) picks both bushes on one trip and stores ONE berries item
+/// of count 2 inside 320 ticks, so `food` reads 2 only if it sums counts (it counts 1 item).
 #[test]
 fn the_end_line_counts_forages_and_stored_berries() {
     let dig = stdout(&bench(Path::new(FIXTURE), 1));
@@ -189,10 +190,13 @@ fn the_end_line_counts_forages_and_stored_berries() {
         1,
     ));
     let end = end_line(&forage);
-    let foraged: usize = field(&end, "foraged").parse().unwrap();
-    let food: usize = field(&end, "food").parse().unwrap();
-    assert!(foraged >= 1, "a woodcutter foraged a bush: {end}");
-    assert!(food >= 1, "and a hauler stored the berries: {end}");
+    assert_eq!(field(&end, "foraged"), "2", "two bushes were picked: {end}");
+    assert_eq!(field(&end, "items"), "1", "as one load: {end}");
+    assert_eq!(
+        field(&end, "food"),
+        "2",
+        "food sums the load's count, not its items: {end}"
+    );
     assert!(
         end.find("arriving=") < end.find("foraged="),
         "new fields follow arriving=, outside done=: {end}"
@@ -394,13 +398,14 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
         (
             "forage-refused",
             variant("forage-refused", |json| {
-                // The top of the map is air: no plant stands there, so the area is refused.
+                // The top of the map is air: no ripe bush stands there, so the mark is refused.
                 json["commands"][0]["command"] = serde_json::json!({
-                    "type": "place_forage_area",
-                    "rects": [{"min": [10, 10, 31], "max": [10, 10, 31]}]
+                    "type": "designate",
+                    "kind": "forage",
+                    "rect": {"min": [10, 10, 31], "max": [10, 10, 31]}
                 })
             }),
-            "PlaceForageArea",
+            "kind: Forage",
         ),
         (
             "crew-zero",
@@ -476,11 +481,10 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
     }
 }
 
-/// 13.9 AC 9: a scenario file reads `place_forage_area` through the daemon's own command path.
-/// The oracle places the same area straight through `sim_core`, at a plant it finds itself.
+/// 13.9 AC 9: a scenario file reads `designate` with kind `forage` through the daemon's own command
+/// path. The oracle marks the same bush straight through `sim_core`, at a plant it finds itself.
 #[test]
-#[ignore = "13.9 R2: the wire still has place_forage_area; R2 moves it to designate forage"]
-fn a_scenario_places_a_forage_area_through_the_command_path() {
+fn a_scenario_places_a_forage_mark_through_the_command_path() {
     let probe =
         sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5);
     let (plant, _) = probe.plants()[0];
@@ -488,8 +492,9 @@ fn a_scenario_places_a_forage_area_through_the_command_path() {
         json["commands"][0] = serde_json::json!({
             "at": DIG_AT,
             "command": {
-                "type": "place_forage_area",
-                "rects": [{"min": [plant.x, plant.y, plant.z], "max": [plant.x, plant.y, plant.z]}]
+                "type": "designate",
+                "kind": "forage",
+                "rect": {"min": [plant.x, plant.y, plant.z], "max": [plant.x, plant.y, plant.z]}
             }
         });
     });
@@ -506,7 +511,6 @@ fn a_scenario_places_a_forage_area_through_the_command_path() {
     };
     for _ in 0..TICKS {
         if world.tick() == DIG_AT {
-            // TODO(13.9 R2): the scenario command becomes a forage designation on the wire.
             assert_eq!(
                 world.apply_command(sim_core::SimCommand::Designate {
                     kind: sim_core::DesignationKind::Forage,
@@ -525,7 +529,7 @@ fn a_scenario_places_a_forage_area_through_the_command_path() {
     assert_ne!(
         fnv(&world),
         expected(false),
-        "the forage area must change the world's hash"
+        "the forage mark must change the world's hash"
     );
 }
 

@@ -420,8 +420,6 @@ fn tick(
                 | protocol::Command::CancelDesignation { .. }
                 | protocol::Command::PlaceStockpile { .. }
                 | protocol::Command::RemoveStockpile { .. }
-                | protocol::Command::PlaceForageArea { .. }
-                | protocol::Command::RemoveForageArea { .. }
                 | protocol::Command::SetProfession { .. }) => {
                     if let Some(live) = &mut scenario {
                         live.client_command();
@@ -538,26 +536,6 @@ fn apply_sim_command(
             });
             None
         }
-        // TODO(13.9 R2): the wire's forage area becomes `Designate { kind: forage }`. Until then a
-        // forage drag marks the ripe bushes in its rects, and is refused when none does.
-        protocol::Command::PlaceForageArea { rects } => {
-            let first = *rects.first()?;
-            let total = rects.len();
-            let refused = rects
-                .into_iter()
-                .filter(|rect| {
-                    world
-                        .apply_command(sim_core::SimCommand::Designate {
-                            kind: sim_core::DesignationKind::Forage,
-                            rect: bridge::rect_in(*rect),
-                        })
-                        .is_some()
-                })
-                .count();
-            (refused == total).then_some(protocol::Refusal::PlaceForageArea { rect: first })
-        }
-        // TODO(13.9 R2): there is no area to remove; a Clear's `CancelDesignation` takes the marks.
-        protocol::Command::RemoveForageArea { .. } => None,
         protocol::Command::SetProfession { dwarf, profession } => world
             .apply_command(sim_core::SimCommand::SetProfession {
                 dwarf: sim_core::Id(dwarf),
@@ -1314,10 +1292,8 @@ fn command_rects(command: &protocol::Command) -> Option<&[protocol::Rect]> {
     match command {
         protocol::Command::Designate { rect, .. }
         | protocol::Command::CancelDesignation { rect }
-        | protocol::Command::RemoveStockpile { rect }
-        | protocol::Command::RemoveForageArea { rect } => Some(std::slice::from_ref(rect)),
-        protocol::Command::PlaceStockpile { rects }
-        | protocol::Command::PlaceForageArea { rects } => Some(rects),
+        | protocol::Command::RemoveStockpile { rect } => Some(std::slice::from_ref(rect)),
+        protocol::Command::PlaceStockpile { rects } => Some(rects),
         protocol::Command::SetSpeed { .. }
         | protocol::Command::SetProfession { .. }
         | protocol::Command::Save

@@ -205,7 +205,11 @@ mutation "a scripted drag that designates nothing still passes" gui mark_counts_
 import pathlib
 p = pathlib.Path('crates/gui/src/capture.rs'); s = p.read_text()
 # Re-pointed 2026-10-05 (12.7): a cut drag shares dig's non-zero check, so the arm is `Dig | Channel | Cut`; the `> 0` -> `>= 0` sabotage is unchanged.
-old = """            DesignateMode::Dig | DesignateMode::Channel | DesignateMode::Cut => assert!(
+# Re-pointed 2026-11-22 (13.9 R2): forage marks like a cut, so the arm gained `Forage` (rustfmt splits it).
+old = """            DesignateMode::Dig
+            | DesignateMode::Channel
+            | DesignateMode::Cut
+            | DesignateMode::Forage => assert!(
                 self.expected_designations > 0,"""
 assert s.count(old) == 1
 p.write_text(s.replace(old, old.replace('> 0,', '>= 0,')))

@@ -8,7 +8,7 @@ const SNAPSHOT_WIRE: &str = r#"{
         {"id":7,"kind":"dwarf","pos":[0,0,0],"state":"idle","light":null},
         {"id":2,"kind":"torch","pos":[1,0,0],"state":"idle","light":"torch"}
     ],
-    "designations":[{"pos":[0,0,0],"kind":"dig"}], "zones":[], "plants":[], "forage":[], "items":[],
+    "designations":[{"pos":[0,0,0],"kind":"dig"}], "zones":[], "plants":[], "items":[],
     "speed":"normal", "tick":9, "goals":[]
 }"#;
 
@@ -19,27 +19,27 @@ const FIRST_DELTA_WIRE: &str = r#"{
         {"id":7,"kind":"dwarf","pos":[1,0,0],"state":"walk","light":null},
         {"id":2,"kind":"torch","pos":[1,0,0],"state":"idle","light":"torch"}
     ],
-    "designations":[], "zones":[{"pos":[1,0,0]}], "plants":[], "forage":[],
-    "items":[{"id":9,"pos":[0,0,0],"kind":"stone"}], "speed":"fast", "goals":[]
+    "designations":[], "zones":[{"pos":[1,0,0]}], "plants":[],
+    "items":[{"id":9,"pos":[0,0,0],"kind":"stone","count":1}], "speed":"fast", "goals":[]
 }"#;
 
 const SECOND_DELTA_WIRE: &str = r#"{
     "type":"delta", "tick":11, "tiles":[],
     "entities":[{"id":7,"kind":"dwarf","pos":[1,0,0],"state":"walk","light":null}],
-    "designations":[], "zones":[], "plants":[], "forage":[], "items":[], "speed":"fast", "goals":[]
+    "designations":[], "zones":[], "plants":[], "items":[], "speed":"fast", "goals":[]
 }"#;
 
 const THIRD_DELTA_WIRE: &str = r#"{
     "type":"delta", "tick":12,
     "tiles":[{"pos":[0,0,0],"tile":{"ramp":"snow"}}],
     "entities":[{"id":7,"kind":"dwarf","pos":[1,0,0],"state":"walk","light":null}],
-    "designations":[], "zones":[], "plants":[], "forage":[], "items":[], "speed":"fast", "goals":[]
+    "designations":[], "zones":[], "plants":[], "items":[], "speed":"fast", "goals":[]
 }"#;
 
 const RESET_SNAPSHOT_WIRE: &str = r#"{
     "type":"snapshot", "dims":{"x":1,"y":1,"z":1}, "tiles":["empty"],
     "entities":[{"id":99,"kind":"campfire","pos":[0,0,0],"state":"idle","light":"campfire"}],
-    "designations":[], "zones":[], "plants":[], "forage":[], "items":[], "speed":"paused", "tick":20, "goals":[]
+    "designations":[], "zones":[], "plants":[], "items":[], "speed":"paused", "tick":20, "goals":[]
 }"#;
 
 #[test]
@@ -143,12 +143,11 @@ fn recorded_wire_messages_build_the_expected_mirror() {
 }
 
 #[test]
-fn a_plant_goes_from_ripe_to_growing_to_ripe_to_gone_and_the_forage_area_is_resent_whole() {
+fn a_plant_goes_from_ripe_to_growing_to_ripe_to_gone() {
     let snapshot: Snapshot = serde_json::from_str(
         r#"{"type":"snapshot","dims":{"x":3,"y":1,"z":1},"tiles":["empty","empty","empty"],
         "entities":[],"designations":[],"zones":[],
         "plants":[{"pos":[0,0,0],"state":"ripe"},{"pos":[2,0,0],"state":"growing"}],
-        "forage":[{"pos":[0,0,0]},{"pos":[1,0,0]}],
         "items":[],"speed":"normal","tick":1,"goals":[]}"#,
     )
     .unwrap();
@@ -160,42 +159,55 @@ fn a_plant_goes_from_ripe_to_growing_to_ripe_to_gone_and_the_forage_area_is_rese
             ([2, 0, 0], protocol::PlantState::Growing)
         ]
     );
-    assert_eq!(mirror.forage().len(), 2);
 
-    let delta = |tick: u64, plants: &str, forage: &str| -> Delta {
+    let delta = |tick: u64, plants: &str| -> Delta {
         serde_json::from_str(&format!(
             r#"{{"type":"delta","tick":{tick},"tiles":[],"entities":[],"designations":[],
-            "zones":[],"plants":{plants},"forage":{forage},"items":[],"speed":"normal","goals":[]}}"#
+            "zones":[],"plants":{plants},"items":[],"speed":"normal","goals":[]}}"#
         ))
         .unwrap()
     };
 
     // Ripe to growing; the untouched plant is not in the delta and must stay.
-    mirror.apply_delta(delta(
-        2,
-        r#"[{"pos":[0,0,0],"state":"growing"}]"#,
-        r#"[{"pos":[0,0,0]}]"#,
-    ));
+    mirror.apply_delta(delta(2, r#"[{"pos":[0,0,0],"state":"growing"}]"#));
     assert_eq!(mirror.plant([0, 0, 0]), Some(protocol::PlantState::Growing));
     assert_eq!(mirror.plant([2, 0, 0]), Some(protocol::PlantState::Growing));
-    // The forage area is a full resend: one cell now, not two.
-    assert_eq!(mirror.forage(), [protocol::ForageCell { pos: [0, 0, 0] }]);
 
     // Growing to ripe, with an empty `plants` in between changing nothing.
-    mirror.apply_delta(delta(3, "[]", "[]"));
+    mirror.apply_delta(delta(3, "[]"));
     assert_eq!(mirror.plant([0, 0, 0]), Some(protocol::PlantState::Growing));
-    assert!(
-        mirror.forage().is_empty(),
-        "an empty resend clears the area"
-    );
-    mirror.apply_delta(delta(4, r#"[{"pos":[0,0,0],"state":"ripe"}]"#, "[]"));
+    mirror.apply_delta(delta(4, r#"[{"pos":[0,0,0],"state":"ripe"}]"#));
     assert_eq!(mirror.plant([0, 0, 0]), Some(protocol::PlantState::Ripe));
 
     // Gone: `state: null` removes it.
-    mirror.apply_delta(delta(5, r#"[{"pos":[0,0,0],"state":null}]"#, "[]"));
+    mirror.apply_delta(delta(5, r#"[{"pos":[0,0,0],"state":null}]"#));
     assert_eq!(mirror.plant([0, 0, 0]), None);
     assert_eq!(
         mirror.plants().collect::<Vec<_>>(),
         vec![([2, 0, 0], protocol::PlantState::Growing)]
     );
+}
+
+#[test]
+fn an_item_keeps_its_count_through_a_snapshot_and_a_delta() {
+    let snapshot: Snapshot = serde_json::from_str(
+        r#"{"type":"snapshot","dims":{"x":1,"y":1,"z":1},"tiles":["empty"],
+        "entities":[],"designations":[],"zones":[],"plants":[],
+        "items":[{"id":4,"pos":[0,0,0],"kind":"berries","count":3}],
+        "speed":"normal","tick":1,"goals":[]}"#,
+    )
+    .unwrap();
+    let mut mirror = Mirror::from_snapshot(snapshot).unwrap();
+    let counts = |mirror: &Mirror| mirror.items().map(|item| item.count).collect::<Vec<_>>();
+    assert_eq!(counts(&mirror), vec![3]);
+
+    let delta: Delta = serde_json::from_str(
+        r#"{"type":"delta","tick":2,"tiles":[],"entities":[],"designations":[],
+        "zones":[],"plants":[],
+        "items":[{"id":4,"pos":[0,0,0],"kind":"berries","count":5}],
+        "speed":"normal","goals":[]}"#,
+    )
+    .unwrap();
+    mirror.apply_delta(delta);
+    assert_eq!(counts(&mirror), vec![5]);
 }

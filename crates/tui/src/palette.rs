@@ -142,6 +142,7 @@ pub fn designation_cell(kind: DesignationKind) -> Cell {
             glyph: '▼',
             fg: (92, 174, 224),
         },
+        DesignationKind::Forage => forage_cell(),
     }
 }
 
@@ -233,7 +234,8 @@ pub fn growing_bush_cell() -> Cell {
     }
 }
 
-/// A forage-area cell, under the bushes. The berry colour is the ripe bush's.
+/// A forage mark. TODO(13.9 R3): the area's old `:` look, kept so the mark compiles; the
+/// mark's own look is R3's.
 pub fn forage_cell() -> Cell {
     Cell {
         glyph: ':',
@@ -580,7 +582,7 @@ mod tests {
         for (cell, _, _) in looks {
             assert_ne!(cell, ore, "berries must not read as ore");
         }
-        // The area `:`, bush `"` and berries `%` all overwrite one another: glyphs differ.
+        // The mark `:`, bush `"` and berries `%` all overwrite one another: glyphs differ.
         let glyphs: std::collections::BTreeSet<_> =
             [forage_cell(), ripe_bush_cell(), berries_item_cell()]
                 .iter()

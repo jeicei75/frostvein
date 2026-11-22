@@ -6,8 +6,8 @@ use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
     BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, berries_item_cell, bloodstone_item_cell, carrier_cell,
-    crowd_cell, cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, forage_cell,
-    growing_bush_cell, item_cell, pending_rect_cell, ripe_bush_cell, stored_berries_item_cell,
+    crowd_cell, cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, growing_bush_cell,
+    item_cell, pending_rect_cell, ripe_bush_cell, stored_berries_item_cell,
     stored_bloodstone_item_cell, stored_item_cell, stored_tetrahedrite_item_cell,
     stored_wood_item_cell, tetrahedrite_item_cell, tile_cell, wood_item_cell, zone_cell,
 };
@@ -76,7 +76,7 @@ pub struct MarkTally {
     pub drawn_zones: usize,
     pub mirror_designations: usize,
     pub mirror_zones: usize,
-    /// 13.9: ripe bushes, growing bushes, berries and forage cells, as drawn on the map rows and
+    /// 13.9: ripe bushes, growing bushes and berries, as drawn on the map rows and
     /// as the mirror holds them at this cut. Like the marks, a plant under an item or a dwarf, or
     /// outside the viewport, is in the mirror count but not the drawn one. They stay out of
     /// `complete()`, which only the `marks:` line reads.
@@ -102,7 +102,6 @@ pub struct ForageTally {
     pub ripe: usize,
     pub growing: usize,
     pub berries: usize,
-    pub area: usize,
 }
 
 impl MarkTally {
@@ -120,6 +119,9 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
         designation_cell(protocol::DesignationKind::Dig).glyph,
         designation_cell(protocol::DesignationKind::Channel).glyph,
         designation_cell(protocol::DesignationKind::Cut).glyph,
+        // TODO(13.9 R3): a forage mark sits under its bush (plants draw after marks), so the
+        // drawn count undercounts it and `complete()` reads false while one stands.
+        designation_cell(protocol::DesignationKind::Forage).glyph,
     ];
     let zone_glyph = zone_cell().glyph;
     // NOTE: the footer rows are goal, roster, status and hint text. The cut mark's ASCII `/` also
@@ -139,7 +141,6 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
             ripe: count(&[ripe_bush_cell()]),
             growing: count(&[growing_bush_cell()]),
             berries: count(&[berries_item_cell(), stored_berries_item_cell()]),
-            area: count(&[forage_cell()]),
         },
         mirror_forage: ForageTally {
             ripe: mirror
@@ -154,7 +155,6 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
                 .items()
                 .filter(|item| at_cut(item.pos) && item.kind == protocol::ItemKind::Berries)
                 .count(),
-            area: mirror.forage().iter().filter(|c| at_cut(c.pos)).count(),
         },
         drawn_designations: framebuffer
             .cells
@@ -350,12 +350,6 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
     for zone in mirror.zones() {
         if let Some(index) = screen_index(zone.pos) {
             framebuffer.cells[index] = zone_cell();
-        }
-    }
-
-    for cell in mirror.forage() {
-        if let Some(index) = screen_index(cell.pos) {
-            framebuffer.cells[index] = forage_cell();
         }
     }
 
@@ -807,7 +801,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -1383,6 +1376,7 @@ mod tests {
             id: 9,
             pos: [3, 1, 1],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }];
         let named = |id, x, colour| Entity {
             id,
@@ -1448,11 +1442,13 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 2],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
         ];
         snapshot.entities = vec![Entity {
@@ -1504,11 +1500,13 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 1],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
         ];
 
@@ -1530,11 +1528,13 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Wood,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 1],
                 kind: protocol::ItemKind::Wood,
+                count: 1,
             },
         ];
 
@@ -1556,21 +1556,25 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Tetrahedrite,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [2, 1, 1],
                 kind: protocol::ItemKind::Bloodstone,
+                count: 1,
             },
             Item {
                 id: 7,
                 pos: [3, 1, 1],
                 kind: protocol::ItemKind::Tetrahedrite,
+                count: 1,
             },
             Item {
                 id: 8,
                 pos: [4, 1, 1],
                 kind: protocol::ItemKind::Bloodstone,
+                count: 1,
             },
         ];
 
@@ -1586,8 +1590,8 @@ mod tests {
         assert_eq!(framebuffer.cell(2, 1).fg, zone_cell().fg);
     }
 
-    /// 13.9: a 9x7 view centred on (32,32). Ripe bush at +0, growing at +1, area-only cell at +2,
-    /// berries on open ground at +3, and a bush under an item, and a forage cell under a bush, later.
+    /// 13.9: a 9x7 view centred on (32,32). Ripe bush at +0, growing at +1, a bare forage mark at +2,
+    /// berries on open ground at +3, and a bush under an item, and a forage mark under a bush, later.
     fn forage_mirror() -> (Mirror, ViewState) {
         let dims = Dims { x: 64, y: 64, z: 3 };
         let mut snapshot = empty_snapshot(dims);
@@ -1605,26 +1609,34 @@ mod tests {
                 pos: [32, 33, 1],
                 state: protocol::PlantState::Ripe,
             },
-            // Over a forage cell.
+            // Over a forage mark.
             protocol::Plant {
                 pos: [33, 33, 1],
                 state: protocol::PlantState::Growing,
             },
         ];
-        snapshot.forage = vec![
-            protocol::ForageCell { pos: [34, 32, 1] },
-            protocol::ForageCell { pos: [33, 33, 1] },
+        snapshot.designations = vec![
+            Designation {
+                pos: [34, 32, 1],
+                kind: protocol::DesignationKind::Forage,
+            },
+            Designation {
+                pos: [33, 33, 1],
+                kind: protocol::DesignationKind::Forage,
+            },
         ];
         snapshot.items = vec![
             Item {
                 id: 1,
                 pos: [35, 32, 1],
                 kind: protocol::ItemKind::Berries,
+                count: 1,
             },
             Item {
                 id: 2,
                 pos: [32, 33, 1],
                 kind: protocol::ItemKind::Berries,
+                count: 1,
             },
         ];
         let mirror = mirror(&snapshot);
@@ -1645,12 +1657,15 @@ mod tests {
         let framebuffer = render(&mirror, &state, 11, 12);
         assert_eq!(at(&framebuffer, 32, 32, &state), ripe_bush_cell());
         assert_eq!(at(&framebuffer, 33, 32, &state), growing_bush_cell());
-        assert_eq!(at(&framebuffer, 34, 32, &state), forage_cell());
+        assert_eq!(
+            at(&framebuffer, 34, 32, &state),
+            designation_cell(DesignationKind::Forage)
+        );
         assert_eq!(at(&framebuffer, 35, 32, &state), berries_item_cell());
         assert_ne!(ripe_bush_cell().fg, growing_bush_cell().fg);
     }
 
-    /// Draw order: forage cells, designations, plants, items. Each overwrites the one before.
+    /// Draw order: designations, plants, items. Each overwrites the one before.
     #[test]
     fn forage_draw_order_holds() {
         let (mirror, state) = forage_mirror();
@@ -1663,7 +1678,7 @@ mod tests {
         assert_eq!(
             at(&framebuffer, 33, 33, &state),
             growing_bush_cell(),
-            "a bush shows over a forage cell"
+            "a bush shows over a forage mark"
         );
     }
 
@@ -1672,14 +1687,13 @@ mod tests {
         let (mirror, state) = forage_mirror();
         let framebuffer = render(&mirror, &state, 11, 12);
         let tally = tally_marks(&mirror, &state, &framebuffer);
-        // Drawn: the item hides one ripe bush, the bush hides one area cell.
+        // Drawn: the item hides one ripe bush, the bush hides one forage mark.
         assert_eq!(
             tally.drawn_forage,
             ForageTally {
                 ripe: 1,
                 growing: 2,
                 berries: 2,
-                area: 1
             }
         );
         assert_eq!(
@@ -1688,7 +1702,6 @@ mod tests {
                 ripe: 2,
                 growing: 2,
                 berries: 2,
-                area: 2
             }
         );
         // Off this level, nothing is held or drawn.
@@ -1730,6 +1743,7 @@ mod tests {
             id: 5,
             pos: [0, 0, 0],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }];
         snapshot.entities = vec![Entity {
             id: 1,
@@ -1763,6 +1777,7 @@ mod tests {
             id: 5,
             pos: [1, 1, 0],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }];
         snapshot.entities = vec![
             Entity {
@@ -1848,16 +1863,19 @@ mod tests {
                 id: 5,
                 pos: [2, 1, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 7,
                 pos: [4, 1, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
         ];
         snapshot.entities = vec![

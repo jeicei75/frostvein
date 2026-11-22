@@ -146,7 +146,6 @@ fn snapshot_with_dims(dims: Dims, tiles: Vec<Tile>, entities: Vec<Entity>) -> Sn
         designations: Vec::new(),
         zones: Vec::new(),
         plants: Vec::new(),
-        forage: Vec::new(),
         items: Vec::new(),
         speed: Speed::Normal,
         tick: 0,
@@ -167,7 +166,6 @@ fn delta_at(tick: u64, tiles: Vec<TileChange>, entities: Vec<Entity>) -> Delta {
         designations: Vec::new(),
         zones: Vec::new(),
         plants: Vec::new(),
-        forage: Vec::new(),
         items: Vec::new(),
         speed: Speed::Normal,
         refusals: Vec::new(),
@@ -258,6 +256,7 @@ fn projected_marks(app: &mut App) -> Vec<([i32; 3], Option<&'static str>, [i32; 
                     DesignationKind::Channel => "channel",
                     // 12.7 Task 4: the cut mark's own headless tests land with the gui.
                     DesignationKind::Cut => "cut",
+                    DesignationKind::Forage => "forage",
                 }),
                 gui::transform::render_to_world(transform.translation),
             )
@@ -372,7 +371,6 @@ fn designation_delta_projects_in_the_same_update_that_ingests_it() {
             }],
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -504,7 +502,6 @@ fn a_designation_kind_change_restyles_the_existing_position_mark() {
             }],
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -789,7 +786,6 @@ fn snapshot_then_delta_in_one_frame_leaves_no_stale_marks() {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -831,7 +827,6 @@ fn send_empty_designation_delta(app: &mut App, tiles: Vec<TileChange>) {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -961,11 +956,13 @@ fn items_above_the_cut_are_hidden_with_the_entities() {
             id: 501,
             pos: [0, 0, 2],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         },
         Item {
             id: 502,
             pos: [0, 1, 1],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         },
     ];
     let mut app = headless_app(snapshot);
@@ -2156,6 +2153,7 @@ fn snapshot_item_receives_a_render_mesh() {
         id: 42,
         pos: [1, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     }];
     let mut app = headless_app(snapshot);
 
@@ -2185,6 +2183,7 @@ fn a_projected_item_is_rubble_resting_on_the_tile_floor() {
         id: 42,
         pos: [1, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     }];
     let mut app = headless_app(snapshot);
 
@@ -3105,7 +3104,6 @@ fn mouse_designation_on_a_sliced_underground_level_round_trips_to_a_projected_ma
             }],
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -4225,10 +4223,6 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
                 protocol::Command::RemoveStockpile {
                     rect: at(standable),
                 },
-                // 13.9: and the forage area on the same surface.
-                protocol::Command::RemoveForageArea {
-                    rect: at(standable),
-                },
                 // 12.7: and the cut-target rect, which over bare ground is the cell above it.
                 protocol::Command::CancelDesignation {
                     rect: at(standable),
@@ -4243,11 +4237,12 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
                 rect: at(standable),
             }],
         ),
-        // 13.9: key 6 places a forage area on the standable surface, one command like a stockpile.
+        // 13.9: key 6 marks forage on the standable surface, one `designate forage` per rect.
         (
             KeyCode::Digit6,
-            vec![protocol::Command::PlaceForageArea {
-                rects: vec![at(standable)],
+            vec![protocol::Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: at(standable),
             }],
         ),
     ];
@@ -4583,7 +4578,6 @@ fn a_buried_channel_mark_climbs_onto_the_rock_covering_it() {
             }],
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -5521,6 +5515,7 @@ fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
         id: 70,
         pos: [0, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     }];
     let mut app = headless_app(start);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
@@ -5532,6 +5527,7 @@ fn a_hauler_keeps_his_stone_until_he_is_drawn_at_the_cell_he_drops_it_on() {
             id: 70,
             pos: at,
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }],
         goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])
@@ -5605,6 +5601,7 @@ fn a_hauler_does_not_pick_up_his_stone_until_he_is_drawn_at_its_cell() {
         id: 70,
         pos: [1, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     }];
     let mut app = headless_app(start);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
@@ -5634,6 +5631,7 @@ fn a_hauler_does_not_pick_up_his_stone_until_he_is_drawn_at_its_cell() {
                 id: 70,
                 pos: [1, 0, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             }],
             goals: Vec::new(),
             ..delta_at(1, Vec::new(), vec![hauling])
@@ -5699,6 +5697,7 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
         id: 70,
         pos: [0, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     }];
     let mut app = headless_app(start);
     // Real frame time, so the drop below can be WALKED: a delivered stone stays in his hands
@@ -5713,6 +5712,7 @@ fn a_carried_stone_is_the_dwarfs_child_at_the_carry_offset_until_he_lets_go() {
             id: 70,
             pos: at,
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }],
         goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])
@@ -5802,6 +5802,7 @@ fn reach_app() -> App {
         id: 70,
         pos: [1, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     }];
     let mut app = headless_app(start);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
@@ -5828,6 +5829,7 @@ fn stone_70_at(tick: u64, entity: Entity, at: [i32; 3]) -> Delta {
             id: 70,
             pos: at,
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }],
         goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])
@@ -5858,6 +5860,7 @@ fn a_stone_the_wire_puts_in_his_hands_holds_its_cell_while_the_hauler_walks_in()
         id: 70,
         pos: [2, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     }];
     let mut app = headless_app(start);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
@@ -6138,11 +6141,13 @@ fn a_wood_item_projects_as_a_log_and_a_stone_still_as_a_stone() {
             id: 1,
             pos: [0, 0, 0],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         },
         Item {
             id: 2,
             pos: [1, 0, 0],
             kind: protocol::ItemKind::Wood,
+            count: 1,
         },
     ];
     let mut app = headless_app(start);
@@ -6180,11 +6185,13 @@ fn a_berry_item_projects_as_a_small_red_cube_and_wood_still_as_a_log() {
             id: 1,
             pos: [0, 0, 0],
             kind: protocol::ItemKind::Berries,
+            count: 1,
         },
         Item {
             id: 2,
             pos: [1, 0, 0],
             kind: protocol::ItemKind::Wood,
+            count: 1,
         },
     ];
     let mut app = headless_app(start);
@@ -6332,55 +6339,6 @@ fn every_mirror_plant_has_a_bush_in_its_state_and_a_forage_flips_it() {
     );
 }
 
-/// 13.9 AC10: the forage area draws as a slab per cell, and over a pile the slab is raised and
-/// inset so the pile's own slab still shows (Q5: a pile under the area reads as a pile).
-#[test]
-fn the_forage_area_draws_a_slab_per_cell_and_a_pile_under_it_still_shows() {
-    use protocol::ForageCell;
-    let dims = Dims { x: 3, y: 1, z: 3 };
-    let mut tiles = vec![Tile::Empty; 9];
-    for tile in tiles.iter_mut().take(3) {
-        *tile = Tile::Solid(Material::Snow);
-    }
-    let mut start = snapshot_with_dims(dims, tiles, Vec::new());
-    start.forage = vec![ForageCell { pos: [0, 0, 1] }, ForageCell { pos: [1, 0, 1] }];
-    start.zones = vec![Zone { pos: [1, 0, 1] }];
-    let mut app = headless_app(start);
-    app.update();
-
-    let slabs = app
-        .world_mut()
-        .query::<(&gui::project::ProjectedForage, &Transform)>()
-        .iter(app.world())
-        .map(|(slab, transform)| (slab.0, *transform))
-        .collect::<BTreeMap<_, _>>();
-    assert_eq!(
-        slabs.keys().copied().collect::<Vec<_>>(),
-        vec![[0, 0, 1], [1, 0, 1]],
-        "one slab per forage cell"
-    );
-    let zone = app
-        .world_mut()
-        .query::<(&ProjectedZone, &Transform)>()
-        .iter(app.world())
-        .find_map(|(zone, transform)| (zone.0 == [1, 0, 1]).then_some(*transform))
-        .expect("the pile's own slab stays");
-    let bare = slabs[&[0, 0, 1]];
-    let over_pile = slabs[&[1, 0, 1]];
-    assert!(
-        over_pile.scale.x < zone.scale.x,
-        "the slab over a pile is inset, so the pile's rim shows"
-    );
-    assert!(
-        over_pile.translation.y > zone.translation.y,
-        "and raised, so it does not z-fight the pile"
-    );
-    assert_eq!(
-        bare.scale, zone.scale,
-        "off a pile it is a full slab like a zone"
-    );
-}
-
 /// 12.10 AC7: an ore item is the stone's small cube (same scale, same drop) in the ore's colour,
 /// and the three kinds are three different colours. Nothing glows.
 #[test]
@@ -6391,16 +6349,19 @@ fn an_ore_item_projects_as_a_stone_cube_in_its_ore_colour() {
             id: 1,
             pos: [0, 0, 0],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         },
         Item {
             id: 2,
             pos: [1, 0, 0],
             kind: protocol::ItemKind::Tetrahedrite,
+            count: 1,
         },
         Item {
             id: 3,
             pos: [2, 0, 0],
             kind: protocol::ItemKind::Bloodstone,
+            count: 1,
         },
     ];
     let mut app = headless_app(start);
@@ -6611,12 +6572,14 @@ fn four_logs_on_one_cell_draw_at_four_distinct_heights() {
             id,
             pos: [1, 0, 0],
             kind: protocol::ItemKind::Wood,
+            count: 1,
         })
         .to_vec();
     start.items.push(Item {
         id: 99,
         pos: [0, 0, 0],
         kind: protocol::ItemKind::Stone,
+        count: 1,
     });
     let mut app = headless_app(start);
     app.update();
@@ -6652,6 +6615,7 @@ fn a_carried_log_is_drawn_at_the_log_scale() {
         id: 70,
         pos: [0, 0, 0],
         kind: protocol::ItemKind::Wood,
+        count: 1,
     }];
     let mut app = headless_app(start);
     app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(
@@ -6663,6 +6627,7 @@ fn a_carried_log_is_drawn_at_the_log_scale() {
             id: 70,
             pos: at,
             kind: protocol::ItemKind::Wood,
+            count: 1,
         }],
         goals: Vec::new(),
         ..delta_at(tick, Vec::new(), vec![entity])

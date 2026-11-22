@@ -29,7 +29,6 @@ fn snapshot_line() -> String {
         designations: Vec::new(),
         zones: Vec::new(),
         plants: Vec::new(),
-        forage: Vec::new(),
         items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
@@ -54,7 +53,6 @@ fn delta_line_with_speed(tick: u64, speed: protocol::Speed) -> String {
         designations: Vec::new(),
         zones: Vec::new(),
         plants: Vec::new(),
-        forage: Vec::new(),
         items: Vec::new(),
         speed,
 
@@ -240,7 +238,6 @@ fn capture_frames_refusing(refusal: Option<protocol::Refusal>) -> Vec<String> {
                 designations: Vec::new(),
                 zones: Vec::new(),
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
                 refusals: Vec::new(),
@@ -577,7 +574,6 @@ fn mark_snapshot_line() -> String {
         designations: Vec::new(),
         zones: Vec::new(),
         plants: Vec::new(),
-        forage: Vec::new(),
         items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
@@ -635,7 +631,6 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 designations: Vec::new(),
                 zones: Vec::new(),
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
 
@@ -688,7 +683,6 @@ fn capture_designation_frames(key: Option<&str>) -> (String, String) {
                 designations: designations.clone(),
                 zones: Vec::new(),
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
 
@@ -837,12 +831,12 @@ fn capture_dig_replay(changes: bool) -> String {
                     .collect(),
                 zones: Vec::new(),
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: late
                     .then_some(protocol::Item {
                         id: 12,
                         pos: TARGET,
                         kind: protocol::ItemKind::Stone,
+                        count: 1,
                     })
                     .into_iter()
                     .collect(),
@@ -997,6 +991,7 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
                     id,
                     pos: [x, 6, 1],
                     kind,
+                    count: 1,
                 });
                 if stored {
                     zones.push(protocol::Zone { pos: [x, 6, 1] });
@@ -1048,7 +1043,6 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
             designations: Vec::new(),
             zones: zones.clone(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: items.clone(),
             speed: protocol::Speed::Normal,
             tick: 7,
@@ -1067,7 +1061,6 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
                 designations: Vec::new(),
                 zones: zones.clone(),
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: items.clone(),
                 speed: protocol::Speed::Normal,
 
@@ -1248,11 +1241,11 @@ fn capture_haul_replay(changes: bool) -> String {
                 designations: Vec::new(),
                 zones: vec![protocol::Zone { pos: PILE }],
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: vec![protocol::Item {
                     id: 12,
                     pos: stone,
                     kind: protocol::ItemKind::Stone,
+                    count: 1,
                 }],
                 speed: protocol::Speed::Normal,
 
@@ -1379,7 +1372,6 @@ fn moving_snapshot_line(x: i32) -> String {
         designations: Vec::new(),
         zones: Vec::new(),
         plants: Vec::new(),
-        forage: Vec::new(),
         items: Vec::new(),
         speed: protocol::Speed::Normal,
         tick: SNAPSHOT_TICK,
@@ -1400,7 +1392,6 @@ fn moving_delta_line(tick: u64, x: i32) -> String {
         designations: Vec::new(),
         zones: Vec::new(),
         plants: Vec::new(),
-        forage: Vec::new(),
         items: Vec::new(),
         speed: protocol::Speed::Normal,
 
@@ -1557,7 +1548,6 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: protocol::Speed::Normal,
 
@@ -1771,7 +1761,6 @@ fn capture_roster_with(no_color: bool, at_work: bool) -> String {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: protocol::Speed::Normal,
             tick: SNAPSHOT_TICK,
@@ -1795,7 +1784,6 @@ fn capture_roster_with(no_color: bool, at_work: bool) -> String {
                 designations: Vec::new(),
                 zones: Vec::new(),
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
                 refusals: Vec::new(),
@@ -2002,7 +1990,6 @@ fn the_goal_row_changes_on_the_delta_that_changes_goals() {
                 designations: Vec::new(),
                 zones: Vec::new(),
                 plants: Vec::new(),
-                forage: Vec::new(),
                 items: Vec::new(),
                 speed: protocol::Speed::Normal,
                 refusals: Vec::new(),
@@ -2049,7 +2036,7 @@ fn the_goal_row_changes_on_the_delta_that_changes_goals() {
 }
 
 /// 13.9 AC 13: the `--frame` path prints `forage: z N ripe=A of B growing=A of B berries=A of B
-/// area=A of B` on stderr, A drawn on the map rows and B held in the mirror at that level. `ripe`
+/// on stderr, A drawn on the map rows and B held in the mirror at that level. `ripe`
 /// and `growing` are read back from the capture's own pixels (glyph and colour), so a growing bush
 /// drawn as a ripe one moves the numbers. The stub serves the world before a forage and the world
 /// after one (that bush `Growing`, its berries on its cell): the sim's own forage is proved in
@@ -2087,10 +2074,6 @@ fn forage_tally(plants: &[protocol::Plant], items: Vec<protocol::Item>) -> Strin
         designations: Vec::new(),
         zones: Vec::new(),
         plants: plants.to_vec(),
-        forage: plants
-            .iter()
-            .map(|plant| protocol::ForageCell { pos: plant.pos })
-            .collect(),
         items,
         speed: protocol::Speed::Normal,
         tick: 7,
@@ -2154,8 +2137,6 @@ fn the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear() {
     assert_eq!(drawn_of_held(&before, "ripe"), (3, 3), "{before}");
     assert_eq!(drawn_of_held(&before, "growing"), (0, 0), "{before}");
     assert_eq!(drawn_of_held(&before, "berries"), (0, 0), "{before}");
-    // The bushes are painted over their area cells, so the area is held but not drawn.
-    assert_eq!(drawn_of_held(&before, "area"), (0, 3), "{before}");
 
     let after = forage_tally(
         &[
@@ -2167,6 +2148,7 @@ fn the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear() {
             id: 40,
             pos: [a[0], a[1] + 1, 1],
             kind: protocol::ItemKind::Berries,
+            count: 1,
         }],
     );
     assert_eq!(drawn_of_held(&after, "growing"), (1, 1), "{after}");

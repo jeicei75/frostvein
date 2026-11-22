@@ -157,10 +157,6 @@ pub struct ProjectedDesignationKind(pub DesignationKind);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedZone(pub [i32; 3]);
 
-/// One forage-area slab, at the cell the sim holds.
-#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProjectedForage(pub [i32; 3]);
-
 /// One berry bush: the cell it stands on and the state it is drawn in. The state is what the
 /// reconcile compares to decide a mesh swap, so a ripe-to-growing change cannot go unseen.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1954,7 +1950,6 @@ pub fn reconcile(
     projected: &DynamicProjectionQuery,
     designations: &Query<(BevyEntity, &ProjectedDesignation, &ProjectedDesignationKind)>,
     zones: &Query<(BevyEntity, &ProjectedZone)>,
-    forage: &Query<(BevyEntity, &ProjectedForage)>,
     plants: &Query<(BevyEntity, &ProjectedPlant)>,
     terrain: &TerrainQuery,
     trees: &TreeMeshQuery,
@@ -2449,43 +2444,6 @@ pub fn reconcile(
         }
     }
 
-    // The forage area: one slab per cell, like a zone, in the berry colour. Where a pile stands
-    // under it the slab is raised and inset (`forage_mark_transform`), so the pile's rim still shows.
-    let wanted_forage = mirror
-        .forage()
-        .iter()
-        .filter(|cell| cell.pos[2] <= slice.level())
-        .map(|cell| cell.pos)
-        .collect::<BTreeSet<_>>();
-    let pile_cells = mirror
-        .zones()
-        .iter()
-        .map(|zone| zone.pos)
-        .collect::<BTreeSet<_>>();
-    let existing_forage = forage
-        .iter()
-        .map(|(entity, mark)| (mark.0, entity))
-        .collect::<BTreeMap<_, _>>();
-    for (&position, &entity) in &existing_forage {
-        if !wanted_forage.contains(&position) {
-            commands.entity(entity).despawn();
-        }
-    }
-    for position in wanted_forage {
-        let transform = forage_mark_transform(position, pile_cells.contains(&position));
-        if let Some(&entity) = existing_forage.get(&position) {
-            commands.entity(entity).insert(transform);
-        } else {
-            let mut entity = commands.spawn((ProjectedForage(position), transform));
-            if let Some(assets) = assets {
-                entity.insert((
-                    Mesh3d(assets.mark_mesh.clone()),
-                    MeshMaterial3d(assets.forage_mark.clone()),
-                ));
-            }
-        }
-    }
-
     // Bushes: one entity per plant, ONE shared mesh per state and one shared material. A state
     // change swaps the mesh handle and the `ProjectedPlant` state in place; a plant that leaves
     // the mirror is despawned (never stripped: removing components crashes the render sync).
@@ -2532,19 +2490,6 @@ pub fn reconcile(
             }
         }
     }
-}
-
-/// The forage slab sits where a zone slab does. Over a pile it is raised and inset, so the pile's
-/// own slab still shows round it and the cell still reads as a pile (13.9 Q5).
-fn forage_mark_transform(position: [i32; 3], over_pile: bool) -> Transform {
-    if !over_pile {
-        return slab_transform(position, -0.46);
-    }
-    slab_transform(position, -0.36).with_scale(Vec3::new(
-        MARK_FOOTPRINT_SCALE * 0.72,
-        MARK_FOOTPRINT_SCALE,
-        MARK_FOOTPRINT_SCALE * 0.72,
-    ))
 }
 
 /// Where an item is drawn: the tile centre, dropped onto the tile floor, and lifted one log height
@@ -2632,6 +2577,8 @@ fn designation_mark_transform(
         // NOTE: not lifted over cells drawn above it as dig's is: a tree's base has open air
         // around it, and the trunk is not a cube that could seal the slab in.
         DesignationKind::Cut => slab_transform(position, -0.46),
+        // TODO(13.9 R3): the mark on a marked bush; this is a flat slab on its cell for now.
+        DesignationKind::Forage => slab_transform(position, -0.46),
     }
 }
 
@@ -3298,6 +3245,8 @@ impl ProjectionAssets {
             DesignationKind::Dig => self.dig_mark.clone(),
             DesignationKind::Channel => self.channel_mark.clone(),
             DesignationKind::Cut => self.cut_mark.clone(),
+            // TODO(13.9 R3): the mark's own look; the preview slab's material stands in.
+            DesignationKind::Forage => self.forage_mark.clone(),
         }
     }
 
@@ -4431,7 +4380,6 @@ mod tests {
                 pos: [0, 0, 2],
                 state: PlantState::Ripe,
             }],
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -4515,7 +4463,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -4580,7 +4527,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -4766,7 +4712,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5781,7 +5726,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5805,7 +5749,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5839,7 +5782,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5883,7 +5825,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5939,7 +5880,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -6029,7 +5969,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -6112,7 +6051,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -6237,7 +6175,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -6298,7 +6235,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,

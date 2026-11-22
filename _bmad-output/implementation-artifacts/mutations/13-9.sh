@@ -45,7 +45,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        if false && plant.ripe_at == tick {\n'))
 PY
 
-mutation "9 apply_delta drops the plant changes (Found F)" client-core a_plant_goes_from_ripe_to_growing_to_ripe_to_gone_and_the_forage_area_is_resent_whole <<'PY'
+mutation "9 apply_delta drops the plant changes (Found F)" client-core a_plant_goes_from_ripe_to_growing_to_ripe_to_gone <<'PY'
 import pathlib
 p = pathlib.Path('crates/client-core/src/lib.rs'); s = p.read_text()
 old = '        for change in plants {\n'
@@ -93,12 +93,43 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                protocol::PlantState::Growing => ripe_bush_cell(),\n'))
 PY
 
-mutation "16 the gui forage drag sends no area (AC 10)" gui a_forage_drag_is_one_place_forage_area_over_the_surface <<'PY'
+mutation "16 the gui forage drag sends no mark (AC 10)" gui a_forage_drag_is_one_designate_forage_per_surface_rect <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = '        DesignateMode::Forage => vec![Command::PlaceForageArea {\n            rects: surface.to_vec(),\n        }],\n'
+old = """        DesignateMode::Forage => surface
+            .iter()
+            .map(|rect| Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: *rect,
+            })
+            .collect(),
+"""
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        DesignateMode::Forage => vec![],\n'))
+PY
+
+mutation "18 the bridge sends a forage mark as a cut mark (R2)" simd every_designation_kind_maps_to_its_named_wire_variant <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
+old = '        sim_core::DesignationKind::Forage => protocol::DesignationKind::Forage,\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        sim_core::DesignationKind::Forage => protocol::DesignationKind::Cut,\n'))
+PY
+
+mutation "19 the bridge sends count 1 for every item (R2)" simd an_item_without_a_position_does_not_shift_later_kinds <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/bridge.rs'); s = p.read_text()
+old = '            count: counts[&id],\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            count: 1,\n'))
+PY
+
+mutation "20 food counts the berries items, not their counts (R2)" simd the_end_line_counts_forages_and_stored_berries <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            .map(|(id, _)| counts[&id] as usize)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            .map(|(id, _)| (counts[&id] as usize).min(1))\n'))
 PY
 
 mutation "17 the gui keeps a growing bush on the ripe mesh (AC 10)" gui every_mirror_plant_has_a_bush_in_its_state_and_a_forage_flips_it <<'PY'

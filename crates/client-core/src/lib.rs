@@ -5,15 +5,14 @@
 use std::collections::BTreeMap;
 
 use protocol::{
-    Delta, Designation, Dims, Entity, ForageCell, Goal, Item, ItemKind, PlantState, Rect, Snapshot,
-    Speed, Tile, Zone,
+    Delta, Designation, Dims, Entity, Goal, Item, ItemKind, PlantState, Rect, Snapshot, Speed,
+    Tile, Zone,
 };
 use thiserror::Error;
 
 pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
     match refusal {
         protocol::Refusal::PlaceStockpile { .. } => "stockpile refused: no valid cells",
-        protocol::Refusal::PlaceForageArea { .. } => "forage area refused: no plant in it",
         protocol::Refusal::SetProfession { .. } => "trade refused: no such dwarf",
         // The sim counts a cell skipped at MAX_DESIGNATIONS as not applied, so a full mark cap
         // refuses with these same texts. NOTE: the tui status row clips at the terminal's width
@@ -25,6 +24,9 @@ pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
             }
             protocol::DesignationKind::Channel => {
                 "channel refused: nothing to channel, or the mark limit is reached"
+            }
+            protocol::DesignationKind::Forage => {
+                "forage refused: no ripe bush, or the mark limit is reached"
             }
         },
     }
@@ -225,7 +227,6 @@ pub struct Mirror {
     designations: Vec<Designation>,
     zones: Vec<Zone>,
     plants: BTreeMap<[i32; 3], PlantState>,
-    forage: Vec<ForageCell>,
     items: BTreeMap<u32, Item>,
     speed: Speed,
     tick: u64,
@@ -254,7 +255,6 @@ impl Mirror {
             designations,
             zones,
             plants,
-            forage,
             items,
             speed,
             goals,
@@ -305,7 +305,6 @@ impl Mirror {
                 }
             }
         }
-        self.forage = forage;
         self.items = items.into_iter().map(|item| (item.id, item)).collect();
         self.speed = speed;
         self.goals = goals;
@@ -357,10 +356,6 @@ impl Mirror {
         self.plants.get(&pos).copied()
     }
 
-    pub fn forage(&self) -> &[ForageCell] {
-        &self.forage
-    }
-
     pub fn previous_entity(&self, id: u32) -> Option<&Entity> {
         self.previous_entities.get(&id)
     }
@@ -385,7 +380,6 @@ impl Mirror {
                 .into_iter()
                 .map(|plant| (plant.pos, plant.state))
                 .collect(),
-            forage: snapshot.forage,
             items: snapshot
                 .items
                 .into_iter()
@@ -604,10 +598,6 @@ mod tests {
                 "stockpile refused: no valid cells",
             ),
             (
-                protocol::Refusal::PlaceForageArea { rect },
-                "forage area refused: no plant in it",
-            ),
-            (
                 protocol::Refusal::SetProfession { dwarf: 999 },
                 "trade refused: no such dwarf",
             ),
@@ -631,6 +621,13 @@ mod tests {
                     rect,
                 },
                 "channel refused: nothing to channel, or the mark limit is reached",
+            ),
+            (
+                protocol::Refusal::Designate {
+                    kind: protocol::DesignationKind::Forage,
+                    rect,
+                },
+                "forage refused: no ripe bush, or the mark limit is reached",
             ),
         ] {
             assert_eq!(refusal_text(&refusal), text);
@@ -758,7 +755,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -789,11 +785,11 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: vec![Item {
                 id: 9,
                 pos: [0, 0, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             }],
             speed: Speed::Normal,
             tick: 9,
@@ -816,7 +812,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
 
@@ -852,7 +847,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
 
@@ -967,7 +961,6 @@ mod tests {
             designations: Vec::new(),
             zones: Vec::new(),
             plants: Vec::new(),
-            forage: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
 

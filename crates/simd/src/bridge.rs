@@ -40,7 +40,6 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
                 state: plant_state_out(ripe),
             })
             .collect(),
-        forage: forage_out(world),
         items: items_out(world),
         speed,
         tick: world.tick(),
@@ -95,7 +94,6 @@ pub fn delta(
                 state: ripe.map(plant_state_out),
             })
             .collect(),
-        forage: forage_out(world),
         items: items_out(world),
         speed,
         goals: goals_out(world),
@@ -109,11 +107,6 @@ fn plant_state_out(ripe: bool) -> protocol::PlantState {
     } else {
         protocol::PlantState::Growing
     }
-}
-
-// TODO(13.9 R2): the wire's forage area goes; there is none to send.
-fn forage_out(_world: &sim_core::World) -> Vec<protocol::ForageCell> {
-    Vec::new()
 }
 
 fn goals_out(world: &sim_core::World) -> Vec<protocol::Goal> {
@@ -130,23 +123,26 @@ fn goals_out(world: &sim_core::World) -> Vec<protocol::Goal> {
 }
 
 fn items_out(world: &sim_core::World) -> Vec<protocol::Item> {
-    join_items(world.items(), world.item_kinds())
+    join_items(world.items(), world.item_kinds(), world.item_counts())
 }
 
 /// Joined by id, not by position: `items()` drops an item with no `Pos`, `item_kinds()` keeps it,
 /// so a zip would hand every later item its neighbour's kind. Both read `Item` + `Id`, so every
-/// id in `items` has a kind.
+/// id in `items` has a kind and a count.
 fn join_items(
     items: Vec<(sim_core::Id, sim_core::Pos)>,
     kinds: Vec<(sim_core::Id, sim_core::ItemKind)>,
+    counts: Vec<(sim_core::Id, u32)>,
 ) -> Vec<protocol::Item> {
     let kinds: std::collections::BTreeMap<_, _> = kinds.into_iter().collect();
+    let counts: std::collections::BTreeMap<_, _> = counts.into_iter().collect();
     items
         .into_iter()
         .map(|(id, pos)| protocol::Item {
             id: id.0,
             pos: pos_out(pos),
             kind: item_kind_out(kinds[&id]),
+            count: counts[&id],
         })
         .collect()
 }
@@ -353,6 +349,7 @@ pub(crate) fn designation_kind_in(kind: protocol::DesignationKind) -> sim_core::
         protocol::DesignationKind::Dig => sim_core::DesignationKind::Dig,
         protocol::DesignationKind::Channel => sim_core::DesignationKind::Channel,
         protocol::DesignationKind::Cut => sim_core::DesignationKind::Cut,
+        protocol::DesignationKind::Forage => sim_core::DesignationKind::Forage,
     }
 }
 
@@ -361,8 +358,7 @@ fn designation_kind_out(kind: sim_core::DesignationKind) -> protocol::Designatio
         sim_core::DesignationKind::Dig => protocol::DesignationKind::Dig,
         sim_core::DesignationKind::Channel => protocol::DesignationKind::Channel,
         sim_core::DesignationKind::Cut => protocol::DesignationKind::Cut,
-        // TODO(13.9 R2): the wire gains `forage`; until then a forage mark reads as a cut mark.
-        sim_core::DesignationKind::Forage => protocol::DesignationKind::Cut,
+        sim_core::DesignationKind::Forage => protocol::DesignationKind::Forage,
     }
 }
 
@@ -512,6 +508,7 @@ mod tests {
             (sim_core::DesignationKind::Dig, r#""dig""#),
             (sim_core::DesignationKind::Channel, r#""channel""#),
             (sim_core::DesignationKind::Cut, r#""cut""#),
+            (sim_core::DesignationKind::Forage, r#""forage""#),
         ] {
             assert_eq!(
                 serde_json::to_string(&super::designation_kind_out(value)).unwrap(),
@@ -565,7 +562,6 @@ mod tests {
                 .iter()
                 .all(|plant| plant.state == protocol::PlantState::Ripe)
         );
-        assert!(snap.forage.is_empty());
     }
 
     #[test]
@@ -1002,18 +998,23 @@ mod tests {
             (sim_core::Id(2), sim_core::ItemKind::Wood),
             (sim_core::Id(3), sim_core::ItemKind::Stone),
         ];
+        let counts = vec![
+            (sim_core::Id(1), 1),
+            (sim_core::Id(2), 5),
+            (sim_core::Id(3), 4),
+        ];
 
-        let out = join_items(items, kinds);
+        let out = join_items(items, kinds, counts);
 
         let got: Vec<_> = out
             .iter()
-            .map(|item| (item.id, item.pos, item.kind))
+            .map(|item| (item.id, item.pos, item.kind, item.count))
             .collect();
         assert_eq!(
             got,
             [
-                (1, [1, 0, 0], protocol::ItemKind::Stone),
-                (3, [3, 0, 0], protocol::ItemKind::Stone),
+                (1, [1, 0, 0], protocol::ItemKind::Stone, 1),
+                (3, [3, 0, 0], protocol::ItemKind::Stone, 4),
             ]
         );
     }

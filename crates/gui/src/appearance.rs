@@ -206,6 +206,8 @@ pub fn designation_color(kind: DesignationKind) -> Color {
         // 12.7: a cold cyan-green, 66+ from every TUI mark colour and 50+ from the dig, channel and
         // zone literals above; `mark_colours_are_distinct_cold_literals` holds the floors.
         DesignationKind::Cut => Color::srgb_u8(30, 190, 150),
+        // TODO(13.9 R3): the mark's own colour; the preview slab's berry colour stands in.
+        DesignationKind::Forage => forage_color(),
     }
 }
 

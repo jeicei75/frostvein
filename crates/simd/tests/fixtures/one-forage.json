@@ -1,12 +1,16 @@
 {
   "name": "one-forage",
-  "about": "Test fixture (13.9): DEFAULT_SEED, a one-cell pile beside the camp at tick 5, a forage area over the two bushes at (62,58,10) and (63,58,10) at tick 5, 360 ticks: the first forage lands near t110 and its berries are stored by t340.",
+  "about": "Test fixture (13.9): DEFAULT_SEED, hauler Id 3 retrained to miner at tick 1 so the crew holds one hauler, a one-cell pile beside the camp and forage marks over the two bushes at (62,58,10) and (63,58,10) at tick 5. The one hauler picks both on one trip and carries one berries item of count 2 to the pile, stored by about t300.",
   "start": {
     "seed": 4026891802
   },
-  "ticks": 360,
+  "ticks": 320,
   "speed": "fast4x",
   "commands": [
+    {
+      "at": 1,
+      "command": { "type": "set_profession", "dwarf": 3, "profession": "miner" }
+    },
     {
       "at": 5,
       "command": {
@@ -19,10 +23,9 @@
     {
       "at": 5,
       "command": {
-        "type": "place_forage_area",
-        "rects": [
-          { "min": [62, 58, 10], "max": [63, 58, 10] }
-        ]
+        "type": "designate",
+        "kind": "forage",
+        "rect": { "min": [62, 58, 10], "max": [63, 58, 10] }
       }
     }
   ]
