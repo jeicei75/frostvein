@@ -243,7 +243,7 @@ Wolf sat build `a192ab88` (words on `13-9-signoff/vehicle-card.md`) and ruled a 
   - [x] **R1, sim-core + save + validator (ACs 3–8).** `DesignationKind::Forage` (ripe-only, cell-or-above, refusal); remove `ForageArea` and its commands and `create_forage_jobs`' area logic; `trade(Forage)` = Hauler; nearest-first forage claim inside `claim_jobs` at a forage job's FIFO turn (one multi-goal search over the claimable forage jobs' work cells); trip continuation and the berries count on one carried item; delivery through the haul machinery; plant loss removes the mark; `SaveState.forage` removed, item `count` added; validator arms; seat saves re-patched. Rewrite the area tests as mark tests.
   - [x] **R2, the wire and the instruments (ACs 9, 11, 13).** Protocol per the amended wire diff, bridge, `apply_sim_command`, Mirror counts, serve tests; `food` sums counts; `one-forage.json` uses forage designations.
   - [x] **R3, the clients (ACs 9, 10).** tui forage mark (no `:` area); gui key 6 as a designation mode like cut, the mark on a marked bush, no slab.
-  - [ ] **R4, Opus:** the bench file's opening order as designations, AC 2 strip build (plants + item count), tick-bench, a rewritten `13-9.sh`, the full gate, the seat card's run 2.
+  - [x] **R4, Opus:** the bench file's opening order as designations, AC 2 strip build (plants + item count), tick-bench, a rewritten `13-9.sh`, the full gate, the seat card's run 2.
 
 ## Verification
 
@@ -385,6 +385,8 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
   - New test `a_marked_bush_whose_ground_is_dug_away_takes_its_mark_with_it` digs the tile UNDER a marked bush, with no hauler to forage it first.
   - Row 31 is re-pointed to it, and the re-run (`mutate-13-9-row31-rerun.txt`) is KILLED at its "the lost bush's mark is gone" assert.
 
+- **Gate after the rework:** the full gate at `13259347` is GREEN in 2,154 s: cargo test, the 256² release run, all 17 pixel guards (the AO controls hold at 59/57, so marks do not reach the guard's frame), and the mutation tables.
+
 **Task 12, the gate:**
 - The first full gate at `f80e6e62` was RED on one check only: the AO pixel guard's open-snow medians read LL 59 / LR 57 against controls 60/59. Four bushes stand in the LL window.
 - The cause is attributed: the same build with bush drawing switched off reads 60/59.
@@ -490,3 +492,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 | 2026-11-22 | Task 0 ruled (Wolf): Q1–Q6 all (a), as recommended; no AC amended. Q5's draft is approved as written. Implementer: Sonnet 5.5 subagents, claude-opus-5-5 orchestrates. Status → in-progress. |
 | 2026-11-22 | Tasks 1–10 and 12 done: Sonnet 5.5 subagents for Tasks 1–8 (`7aaf1697`, `cb021528`, `544db973`, `c3f626b0`, `54ce2e1b`, `897b3420`), Opus for Tasks 9–12. Mutation row 8 survived and is now pinned (`f80e6e62`). Wolf ruled the AO guard re-baseline to 59/57 for the bushes (`5963e6d3`). Full gate GREEN at `5963e6d3`. The seat sitting (Task 11, AC 15) is open. |
 | 2026-11-22 | Seat run 1 (Wolf, `a192ab88`): three findings. Redesign ruled as Amendment 1 (Q7–Q12): haulers forage several bushes a trip and carry one counted berries item to the pile; one-time ripe-only marks like cut replace the forage area; the first bush is the nearest. ACs 3–10, 11 and 13 are amended. Point 3's idling was probed and not reproduced; "not the nearest" was reproduced, and Q9 answers it. Status stays in-progress. |
+| 2026-11-22 | Amendment 1 built: R1 `c2aabc7c`, R2 `7f06e9a5`, R3 `7436e558`/`c1f74fca` (Sonnet 5.5), R4 by Opus (`fe7a831c`, `144bd046`, `a2e3e14c`, `13259347`). Mutation row 31 survived and is now pinned. Full gate GREEN at `13259347`. The seat card is rewritten for run 2. |
