@@ -160,3 +160,92 @@ old = 'if mirror.plant(tile) == Some(PlantState::Ripe) {'
 assert s.count(old) == 1
 p.write_text(s.replace(old, 'if mirror.plant(tile).is_some() {'))
 PY
+
+# Amendment 1 (R1) decisions, added by the orchestrator at R4.
+mutation "24 a forage drag marks growing bushes too (AC 3, Q12)" sim-core a_forage_drag_with_no_ripe_bush_is_refused_and_a_growing_bush_takes_no_mark <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                                .filter(ripe)\n                                // A channel already marked on the cell keeps it.\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                                .filter(|cell| plants.contains_key(cell))\n                                // A channel already marked on the cell keeps it.\n'))
+PY
+
+mutation "25 a forage drag on the ground misses the bush above it (AC 3)" sim-core a_forage_drag_marks_the_ripe_bush_on_its_cell_or_directly_above_a_ground_cell <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                                    [\n                                        pos,\n                                        Pos {\n                                            z: pos.z + 1,\n                                            ..pos\n                                        },\n                                    ]\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                                    [pos, pos]\n'))
+PY
+
+mutation "26 the first bush is the oldest, not the nearest (AC 5, Q9)" sim-core the_first_bush_of_a_trip_is_the_nearest_not_the_oldest <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                    .find(|(_, cells)| cells.contains(&end))\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    .find(|(_, cells)| !cells.is_empty())\n'))
+PY
+
+mutation "27 a trip ignores its radius (AC 4, Q10)" sim-core a_bush_beyond_ten_cells_ends_the_trip <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        .filter(|(away, _)| *away <= FORAGE_TRIP_RADIUS)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .filter(|(away, _)| *away <= FORAGE_TRIP_RADIUS * 100)\n'))
+PY
+
+mutation "28 a trip takes a sixth bush (AC 4, Q10)" sim-core a_sixth_bush_in_reach_is_not_picked_on_a_trip_of_five <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            let next = (item_count(ecs, item) < FORAGE_TRIP_BUSHES)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            let next = (item_count(ecs, item) < FORAGE_TRIP_BUSHES + 1)\n'))
+PY
+
+mutation "29 a later bush adds nothing to the load (AC 4, Q11)" sim-core a_trip_of_three_bushes_lands_one_berries_item_of_count_three <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        .expect("a carried berries load has a count")\n                        .0 += 1;\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        .expect("a carried berries load has a count")\n                        .0 += 0;\n'))
+PY
+
+mutation "30 a picked bush keeps its mark (AC 6, Q8)" sim-core a_regrown_bush_is_unmarked_and_not_foraged_again_until_it_is_marked_again <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '            remove_forage_mark(ecs, job.target);\n            if ripe {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if ripe {\n'))
+PY
+
+mutation "31 a lost bush keeps its mark (AC 7)" sim-core a_channel_through_a_bush_removes_it <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '        remove_forage_mark(ecs, pos);\n        let job_ids: Vec<JobId> = ecs\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '        let job_ids: Vec<JobId> = ecs\n'))
+PY
+
+mutation "32 the validator takes an item count of 0 (AC 8)" simd an_item_count_of_zero_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if *count == 0 {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false && *count == 0 {\n'))
+PY
+
+mutation "33 the validator takes a counted stone (AC 8)" simd a_stone_with_a_count_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if *kind != sim_core::ItemKind::Berries && *count != 1 {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false && *kind != sim_core::ItemKind::Berries && *count != 1 {\n'))
+PY
+
+mutation "34 the validator takes a berries load over a trip (AC 8)" simd a_berries_count_over_a_trip_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if *count > sim_core::FORAGE_TRIP_BUSHES {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false && *count > sim_core::FORAGE_TRIP_BUSHES {\n'))
+PY

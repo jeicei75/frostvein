@@ -1,0 +1,37 @@
+# RUNS=5 scripts/tick-bench.sh main HEAD <every committed scenario, main's copy of two-hundred-on-256.json> (2026-11-22, after Amendment 1, HEAD 144bd046)
+# The three save-loaded rows FAIL on main: their saves now hold counted items main cannot read. Measured apart below.
+head 144bd0462a5f2ba87497965c28b161bbbeeb16ac
+control: base again, functions shuffled (--shuffle-sections=*=1)
+runs 5 per build, interleaved; load before: 4.33, 4.37, 5.90
+scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+big-pile                   0.0353     0.0398   +12.7%    -0.1%      10.5%       2.8%       5.4%  differ BEYOND FLOOR
+deep-pit                   0.0204     0.0244   +19.2%    -1.7%      13.7%       3.7%       3.0%  differ BEYOND FLOOR
+dig-loop               FAILED on base, control: scenario dig-loop: could not load /workspace/projects/frostvein/scenarios/saves/12-11-dig-loop-patched.save: trailing characters at line 1 column 7268540
+full-pile-crowd            0.0257     0.0301   +17.0%    +1.2%       4.3%       4.0%       2.7%  differ BEYOND FLOOR
+plan-compact-piles         0.0412     0.0463   +12.4%    -0.6%       5.1%       5.0%       4.2%  differ BEYOND FLOOR
+plan-far-piles             0.0380     0.0438   +15.3%    +4.4%      10.8%      18.3%      28.5%  differ within floor
+plan-spread-piles          0.0498     0.0550   +10.5%    -1.5%      26.5%      41.4%      21.2%  differ within floor
+plan                       0.0375     0.0420   +12.0%    -1.1%      26.7%       8.1%       9.4%  differ within floor
+seat-slow              FAILED on base, control: scenario seat-slow: could not load /workspace/projects/frostvein/scenarios/saves/12-12-seat-slow.save: trailing characters at line 1 column 7268223
+stuck-tunnel           FAILED on base, control: scenario stuck-tunnel: could not load /workspace/projects/frostvein/scenarios/saves/12-12-seat-loop.save: trailing characters at line 1 column 7264284
+they-keep-coming           0.0873     0.1008   +15.5%    +0.1%       4.1%       2.3%       2.1%  differ BEYOND FLOOR
+two-hundred-on-256         5.5249     5.4959    -0.5%    -0.6%       2.2%       1.3%       1.1%  differ within floor
+load after: 1.58, 2.37, 4.53
+tick-bench: 3 of 12 scenarios could not be measured (FAILED rows)
+bench two-hundred-on-256: 5 runs, mean 4.9690..5.0463 ms (spread 1.5%), state identical across 5 runs
+
+[exited with code 0]
+
+# Save-loaded rows, each build on its own saves (main 3c6cf3b7 in a scratch worktree, HEAD here), simd --bench --runs 5, no control:
+== dig-loop main 3c6cf3b7
+bench dig-loop: 5 runs, mean 0.0216..0.0235 ms (spread 8.3%), state identical across 5 runs
+== dig-loop HEAD
+bench dig-loop: 5 runs, mean 0.0230..0.0235 ms (spread 2.1%), state identical across 5 runs
+== seat-slow main 3c6cf3b7
+bench seat-slow: 5 runs, mean 0.0692..0.0727 ms (spread 4.9%), state identical across 5 runs
+== seat-slow HEAD
+bench seat-slow: 5 runs, mean 0.0717..0.0747 ms (spread 4.1%), state identical across 5 runs
+== stuck-tunnel main 3c6cf3b7
+bench stuck-tunnel: 5 runs, mean 0.0256..0.0268 ms (spread 4.8%), state identical across 5 runs
+== stuck-tunnel HEAD
+bench stuck-tunnel: 5 runs, mean 0.0261..0.0270 ms (spread 3.4%), state identical across 5 runs

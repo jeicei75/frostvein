@@ -372,6 +372,14 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - **Reading:** the rows beyond the floor are the generated 128² worlds, each with about 480 bushes. They pay about +5 us a tick, `tend_plants`' full scan (its `// NOTE:`). The three save-loaded rows (dig-loop, seat-slow, stuck-tunnel) hold no plants (Q6) and stay within the floor.
 - **At 256²** (1,892 bushes) the scan is under 1% of a 5.5 ms tick. The forage file's tick is cheaper because woodcutters cut less.
 
+**R4 (Amendment 1), 2026-11-22, Opus 5.5:**
+- **AC 11:** HEAD's `two-hundred-on-256.json` now opens with 9 forage designations at tick 1 over the same 32-bush box (`fe7a831c`). It ends `done=dig:287,cut:96 stored=66 cells=2304 foraged=32 food=31`. Woodcutters cut as on `main` (96); haulers share their time with foraging, so dig falls from 321 to 287.
+- **AC 2:** `13-9-signoff/state-head-fe7a831c.txt`. All 12 committed scenarios end as on `main` plus ` foraged=0 food=0`. A strip build at `fe7a831c` (`plants` skipped, items serialized as `main`'s 3-tuples) reads `state` equal to `main` on all 12.
+- **AC 12:** `13-9-signoff/tick-bench-main-144bd046.txt`.
+  - The generated 128² rows are +10.5% to +19.2%, the same ~5 us/tick bush scan as before the rework; three of them are within floor this time.
+  - The 256² row on `main`'s file is -0.5%, within floor. HEAD's forage file runs at 4.97-5.05 ms (5 runs).
+  - The three save-loaded rows cannot run one file on both builds (counted items), so each build ran its own saves, 5 runs each. The ranges overlap: dig-loop 0.0216-0.0235 (main) vs 0.0230-0.0235 ms (HEAD); seat-slow 0.0692-0.0727 vs 0.0717-0.0747; stuck-tunnel 0.0256-0.0268 vs 0.0261-0.0270.
+
 **Task 12, the gate:**
 - The first full gate at `f80e6e62` was RED on one check only: the AO pixel guard's open-snow medians read LL 59 / LR 57 against controls 60/59. Four bushes stand in the LL window.
 - The cause is attributed: the same build with bush drawing switched off reads 60/59.
