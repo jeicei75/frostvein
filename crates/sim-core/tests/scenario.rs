@@ -6294,6 +6294,50 @@ fn cancelling_the_next_mark_mid_trip_drops_the_load() {
     assert_eq!(ripe(&world, next), Some(true), "the bush was not picked");
 }
 
+/// 13.9 mutation row 31: a MARKED bush whose ground is dug away takes its mark with it. A channel
+/// on the bush's own cell overwrites the mark, so it cannot pin this; a dig of the tile UNDER the
+/// bush leaves the mark's cell alone. With no hauler, nobody forages the bush before the dig.
+#[test]
+fn a_marked_bush_whose_ground_is_dug_away_takes_its_mark_with_it() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    for (dwarf, profession) in world.professions() {
+        if profession == Profession::Hauler {
+            assert_eq!(
+                world.apply_command(SimCommand::SetProfession {
+                    dwarf,
+                    profession: Profession::Miner,
+                }),
+                None
+            );
+        }
+    }
+    let plant = plants_near_camp(&world, 1)[0];
+    assert_eq!(mark_forage(&mut world, plant), None);
+    assert!(
+        forage_marks(&world).contains(&plant),
+        "the fixture holds a mark"
+    );
+    let ground = Pos {
+        z: plant.z - 1,
+        ..plant
+    };
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(ground, ground),
+        }),
+        None
+    );
+    step_until(&mut world, 4_000, "the dig takes the bush's ground", |w| {
+        ripe(w, plant).is_none()
+    });
+    assert!(
+        !forage_marks(&world).contains(&plant),
+        "the lost bush's mark is gone"
+    );
+    assert!(forage_jobs(&world).iter().all(|job| job.target != plant));
+}
+
 #[test]
 fn a_channel_through_a_bush_removes_it() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);

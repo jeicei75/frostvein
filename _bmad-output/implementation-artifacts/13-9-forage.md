@@ -380,6 +380,11 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
   - The 256² row on `main`'s file is -0.5%, within floor. HEAD's forage file runs at 4.97-5.05 ms (5 runs).
   - The three save-loaded rows cannot run one file on both builds (counted items), so each build ran its own saves, 5 runs each. The ranges overlap: dig-loop 0.0216-0.0235 (main) vs 0.0230-0.0235 ms (HEAD); seat-slow 0.0692-0.0727 vs 0.0717-0.0747; stuck-tunnel 0.0256-0.0268 vs 0.0261-0.0270.
 
+- **AC 14 after the rework:** `13-9-signoff/mutate-13-9-a2e3e14c.txt` has 27 of 28 rows KILLED.
+  - Row 31, "a lost bush keeps its mark", SURVIVED: its test channelled the bush, and a channel mark overwrites the forage mark on the same cell.
+  - New test `a_marked_bush_whose_ground_is_dug_away_takes_its_mark_with_it` digs the tile UNDER a marked bush, with no hauler to forage it first.
+  - Row 31 is re-pointed to it, and the re-run (`mutate-13-9-row31-rerun.txt`) is KILLED at its "the lost bush's mark is gone" assert.
+
 **Task 12, the gate:**
 - The first full gate at `f80e6e62` was RED on one check only: the AO pixel guard's open-snow medians read LL 59 / LR 57 against controls 60/59. Four bushes stand in the LL window.
 - The cause is attributed: the same build with bush drawing switched off reads 60/59.

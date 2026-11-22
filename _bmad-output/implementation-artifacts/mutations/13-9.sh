@@ -218,7 +218,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '            if ripe {\n'))
 PY
 
-mutation "31 a lost bush keeps its mark (AC 7)" sim-core a_channel_through_a_bush_removes_it <<'PY'
+mutation "31 a lost bush keeps its mark (AC 7)" sim-core a_marked_bush_whose_ground_is_dug_away_takes_its_mark_with_it <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        remove_forage_mark(ecs, pos);\n        let job_ids: Vec<JobId> = ecs\n'
