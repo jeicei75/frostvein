@@ -2047,3 +2047,129 @@ fn the_goal_row_changes_on_the_delta_that_changes_goals() {
         ]
     );
 }
+
+/// 13.9 AC 13: the `--frame` path prints `forage: z N ripe=A of B growing=A of B berries=A of B
+/// area=A of B` on stderr, A drawn on the map rows and B held in the mirror at that level. `ripe`
+/// and `growing` are read back from the capture's own pixels (glyph and colour), so a growing bush
+/// drawn as a ripe one moves the numbers. The stub serves the world before a forage and the world
+/// after one (that bush `Growing`, its berries on its cell): the sim's own forage is proved in
+/// sim-core, and `--frame` reads only the connect snapshot, so two connections stand for the two
+/// moments.
+fn forage_tally(plants: &[protocol::Plant], items: Vec<protocol::Item>) -> String {
+    const SIDE: usize = 9;
+    // NOTE: the level is the plant's own; a level is never assumed.
+    let z = plants[0].pos[2];
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind forage stub");
+    let port = listener.local_addr().expect("read stub address").port();
+    let child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frame")
+        .arg("--z")
+        .arg(z.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn forage capture");
+
+    let mut tiles = vec![protocol::Tile::Empty; SIDE * SIDE * 2];
+    for tile in &mut tiles[..SIDE * SIDE] {
+        *tile = protocol::Tile::Solid(protocol::Material::Ice);
+    }
+    let snapshot = protocol::Snapshot {
+        msg_type: protocol::MessageType::Snapshot,
+        dims: protocol::Dims {
+            x: SIDE as u32,
+            y: SIDE as u32,
+            z: 2,
+        },
+        tiles,
+        entities: Vec::new(),
+        designations: Vec::new(),
+        zones: Vec::new(),
+        plants: plants.to_vec(),
+        forage: plants
+            .iter()
+            .map(|plant| protocol::ForageCell { pos: plant.pos })
+            .collect(),
+        items,
+        speed: protocol::Speed::Normal,
+        tick: 7,
+        goals: Vec::new(),
+    };
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        stream
+            .write_all(format!("{}\n", serde_json::to_string(&snapshot).unwrap()).as_bytes())
+            .expect("send forage snapshot");
+        thread::sleep(Duration::from_millis(300));
+    });
+    let output = child.wait_with_output().expect("wait for forage capture");
+    server.join().expect("forage stub panicked");
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert!(
+        output.status.success(),
+        "tui exited with {}: {stderr}",
+        output.status
+    );
+    stderr
+        .lines()
+        .find(|line| line.starts_with("forage:"))
+        .unwrap_or_else(|| panic!("no forage: line in {stderr:?}"))
+        .to_string()
+}
+
+/// The drawn count of one `key=A of B` field on a `forage:` line, and the held count.
+fn drawn_of_held(line: &str, key: &str) -> (usize, usize) {
+    let words: Vec<&str> = line.split_whitespace().collect();
+    let at = words
+        .iter()
+        .position(|word| {
+            *word == format!("{key}=").as_str() || word.starts_with(&format!("{key}="))
+        })
+        .unwrap_or_else(|| panic!("no {key}= in {line:?}"));
+    let drawn = words[at]
+        .strip_prefix(&format!("{key}="))
+        .unwrap()
+        .parse()
+        .unwrap();
+    let held = words[at + 2].parse().unwrap();
+    (drawn, held)
+}
+
+#[test]
+fn the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear() {
+    let bush = |x: i32, y: i32, state| protocol::Plant {
+        pos: [x, y, 1],
+        state,
+    };
+    let (a, b, c) = ([2, 3, 1], [5, 3, 1], [6, 6, 1]);
+    let before = forage_tally(
+        &[
+            bush(a[0], a[1], protocol::PlantState::Ripe),
+            bush(b[0], b[1], protocol::PlantState::Ripe),
+            bush(c[0], c[1], protocol::PlantState::Ripe),
+        ],
+        Vec::new(),
+    );
+    assert_eq!(drawn_of_held(&before, "ripe"), (3, 3), "{before}");
+    assert_eq!(drawn_of_held(&before, "growing"), (0, 0), "{before}");
+    assert_eq!(drawn_of_held(&before, "berries"), (0, 0), "{before}");
+    // The bushes are painted over their area cells, so the area is held but not drawn.
+    assert_eq!(drawn_of_held(&before, "area"), (0, 3), "{before}");
+
+    let after = forage_tally(
+        &[
+            bush(a[0], a[1], protocol::PlantState::Growing),
+            bush(b[0], b[1], protocol::PlantState::Ripe),
+            bush(c[0], c[1], protocol::PlantState::Ripe),
+        ],
+        vec![protocol::Item {
+            id: 40,
+            pos: [a[0], a[1] + 1, 1],
+            kind: protocol::ItemKind::Berries,
+        }],
+    );
+    assert_eq!(drawn_of_held(&after, "growing"), (1, 1), "{after}");
+    assert_eq!(drawn_of_held(&after, "ripe"), (2, 2), "{after}");
+    assert_eq!(drawn_of_held(&after, "berries"), (1, 1), "{after}");
+}

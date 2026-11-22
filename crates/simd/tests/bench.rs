@@ -175,6 +175,30 @@ fn a_finished_dig_is_counted_as_done_and_as_a_changed_cell() {
     assert!(cells >= 1, "a dug cell differs from the start world: {end}");
 }
 
+/// 13.9 AC 13: the end line's `foraged=` and `food=` (after `arriving=`, so `done=dig:N,cut:M` still
+/// splits on `,cut:`). The one-dig fixture forages nothing; the one-forage fixture (a pile and an
+/// area over two bushes) forages and hauls at least one berry home inside 360 ticks.
+#[test]
+fn the_end_line_counts_forages_and_stored_berries() {
+    let dig = stdout(&bench(Path::new(FIXTURE), 1));
+    let end = end_line(&dig);
+    assert_eq!(field(&end, "foraged"), "0", "{end}");
+    assert_eq!(field(&end, "food"), "0", "{end}");
+    let forage = stdout(&bench(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/one-forage.json"),
+        1,
+    ));
+    let end = end_line(&forage);
+    let foraged: usize = field(&end, "foraged").parse().unwrap();
+    let food: usize = field(&end, "food").parse().unwrap();
+    assert!(foraged >= 1, "a woodcutter foraged a bush: {end}");
+    assert!(food >= 1, "and a hauler stored the berries: {end}");
+    assert!(
+        end.find("arriving=") < end.find("foraged="),
+        "new fields follow arriving=, outside done=: {end}"
+    );
+}
+
 /// 13.6 review: a Dig whose target a channel above has already opened is dropped by the sim with no
 /// work done. Channel (73,64,12) and dig (73,64,11) land together; the channel's miner opens the
 /// cell, the dig's miner finds air. Both marks go, but only the channel yields (one item, the two

@@ -1,0 +1,29 @@
+{
+  "name": "one-forage",
+  "about": "Test fixture (13.9): DEFAULT_SEED, a one-cell pile beside the camp at tick 5, a forage area over the two bushes at (62,58,10) and (63,58,10) at tick 5, 360 ticks: the first forage lands near t110 and its berries are stored by t340.",
+  "start": {
+    "seed": 4026891802
+  },
+  "ticks": 360,
+  "speed": "fast4x",
+  "commands": [
+    {
+      "at": 5,
+      "command": {
+        "type": "place_stockpile",
+        "rects": [
+          { "min": [65, 64, 9], "max": [65, 64, 9] }
+        ]
+      }
+    },
+    {
+      "at": 5,
+      "command": {
+        "type": "place_forage_area",
+        "rects": [
+          { "min": [62, 58, 10], "max": [63, 58, 10] }
+        ]
+      }
+    }
+  ]
+}

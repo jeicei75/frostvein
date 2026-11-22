@@ -4324,6 +4324,15 @@ impl World {
         split_stored(&self.ecs).0.len()
     }
 
+    /// The stored items (`stored_count`'s rule) that are `Berries`: the bench's `food=`.
+    pub fn stored_berries_count(&self) -> usize {
+        let stored = split_stored(&self.ecs).0;
+        self.item_kinds()
+            .into_iter()
+            .filter(|(id, kind)| *kind == ItemKind::Berries && stored.contains(&id.0))
+            .count()
+    }
+
     /// Sorted ascending by `Pos`.
     pub fn zones(&self) -> Vec<Pos> {
         self.ecs.resource::<Zones>().0.iter().copied().collect()

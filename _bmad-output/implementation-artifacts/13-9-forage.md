@@ -190,15 +190,15 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - [x] Preview: `sim_will_keep` (`project.rs:1079-1105`) keeps standable cells. `preview_appearance` (`:1111-1145`) uses a berry-coloured slab and lights the bushes in the box, as cut lights tree bases (`:3916-3941`).
   - [x] Render: forage cells as a slab like zones (`:2290-2380`) with a NEW `appearance::forage_color`. Each bush is one entity with ONE shared mesh per state and shared materials, so 256²'s ~3k bushes batch. Berries use the item cube (`:2267-2277`), with `item_translation`, `item_scale` (`:2383-2393`) and `appearance` extended exhaustively.
   - [x] `--drag` takes `forage` (`parse_drag` `ingest.rs:1458-1486`, `mode_key` `:1548-1557`). `assert_drag_produced_work` (`capture.rs:169`) gains a forage arm: zero forage cells fails the capture.
-- [ ] **Task 8: the instruments (AC 11, 13).**
-  - [ ] `simd --bench`'s end line (`scenario.rs:433`) appends ` foraged=K food=F` after `arriving=` (Found D). `foraged` counts forage completions, the way `done=` counts cuts. `food` counts stored `Berries`, by `split_stored`'s rule.
-  - [ ] Check every reader of the end line and of `next_log` before you change the line (memory: `new-log-line-breaks-next-line-readers`).
-  - [ ] NEW fixture `crates/simd/tests/fixtures/one-forage.json`: a small seed world, a pile, a forage area on a few plants, and enough ticks for one forage and one haul. A test in `simd/tests/bench.rs` reads `foraged=0 food=0` on `one-dig.json` and `≥1 ≥1` on `one-forage.json`.
-  - [ ] A tui test in `tui/tests/client.rs` drives the binary over a served world: the capture's ripe-bush count at a plant falls and its growing count rises after a forage. A gui headless test in `gui/tests/headless.rs`: every mirror plant has a projected bush in the right state.
-  - [ ] **RED first, for each instrument:**
+- [x] **Task 8: the instruments (AC 11, 13).**
+  - [x] `simd --bench`'s end line (`scenario.rs:433`) appends ` foraged=K food=F` after `arriving=` (Found D). `foraged` counts forage completions, the way `done=` counts cuts. `food` counts stored `Berries`, by `split_stored`'s rule.
+  - [x] Check every reader of the end line and of `next_log` before you change the line (memory: `new-log-line-breaks-next-line-readers`).
+  - [x] NEW fixture `crates/simd/tests/fixtures/one-forage.json`: a small seed world, a pile, a forage area on a few plants, and enough ticks for one forage and one haul. A test in `simd/tests/bench.rs` reads `foraged=0 food=0` on `one-dig.json` and `≥1 ≥1` on `one-forage.json`.
+  - [x] A tui test in `tui/tests/client.rs` drives the binary over a served world: the capture's ripe-bush count at a plant falls and its growing count rises after a forage. A gui headless test in `gui/tests/headless.rs`: every mirror plant has a projected bush in the right state.
+  - [x] **RED first, for each instrument:**
     - Comment out the `foraged`/`food` increment; the fixture test must fail on `foraged=0`.
     - Draw growing bushes with the ripe glyph; the tui test must fail.
-    - Make the forage arm of `commands_for` send nothing; the `--drag forage` capture must fail.
+    - Make the forage arm of `commands_for` send nothing; the `--drag forage` capture must fail. (Skipped by the Task 8 agent: handled by the orchestrator.)
     - Restore each step with an edit, never `git checkout --` (memory: `sabotage-restore-trap`).
 - [ ] **Task 9: the bench scenario and the delta (AC 2, 11, 12).**
   - [ ] Per Q4, add one `place_forage_area` at `at: 1` to `two-hundred-on-256.json`, picked by a throwaway script: the rect nearest the pile (`(143,144)`) with at least 30 plants. Record the plant count and the rect in `about`. Add a re-pin line to the doc comment of `the_two_hundred_on_256_scenario_does_real_work` (`bench.rs:266-274`), plus the AC 11 asserts.
@@ -362,6 +362,10 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - GAP: `--drag` is dead headless (12.7's review, deferred, pre-existing): `gui <port> --headless --drag forage,600,340,700,400 --frames 40` panics `scripted --drag never completed`, in a release build too; `--frames 300` times out at 100 s under lavapipe. So the forage arm is proven by the `DrawStats` unit test, not by a live capture; the live drag is a seat check.
 - Tests: `designate.rs` (forage commands, hints); `project.rs` (berry scale/drop/shift, forage keep rule and lit preview); `appearance.rs` (forage slab far from the zone slab); `ingest.rs` (`--drag forage`, keymap guard, the hint literal); `capture.rs` (the forage arm); `tests/headless.rs`: `every_mirror_plant_has_a_bush_in_its_state_and_a_forage_flips_it`, `the_forage_area_draws_a_slab_per_cell_and_a_pile_under_it_still_shows`, `a_berry_item_projects_as_a_small_red_cube_and_wood_still_as_a_log`, and `each_mode_key_...` gained key 6 and the Clear `RemoveForageArea`. Sabotage (each watched fail, restored by edit): forage arm sends nothing (2 tests), growing bushes keep the ripe mesh (headless), Clear omits `RemoveForageArea` (2 tests), the capture forage arm made vacuous (`mark_counts_are_checked_against_the_mirror_not_merely_against_zero`).
 - Mutation rows re-pointed: 12-7 row 14, 8-2 (two rows), 12-10b row 13, 8-3 (the hint literal). `audit-mutations.py` exits 0.
+- Task 8 (instruments), by a Sonnet 5.5 subagent. End line is now `... arriving=A foraged=K food=F`. `foraged` needs no sim-core counter: `scenario.rs` records the ripe plant set before each step and counts, after it, the plants that are still standing and not ripe (a forage completion is the only ripe-to-growing move; a lost plant is absent, a regrow goes the other way). `food` is the one sim-core addition, `World::stored_berries_count()`: `split_stored`'s stored set filtered to `ItemKind::Berries`. Readers checked: `tests/bench.rs` (`field()` splits on whitespace, `done=` split on `,cut:` untouched, no test pins the line's tail), `scripts/tick-bench.sh` (reads only the ` run 1/1: ` line: `mean=`, `state=`), no python/shell/ps1 script reads the end line, and `serve.rs`' 28 `next_log` callers read the daemon's stderr, which this change does not touch (the end line goes to `--bench` stdout only). `plan`, `they-keep-coming` and the 256² file end ` foraged=0 food=0`.
+- Fixture `one-forage.json`: DEFAULT_SEED, at tick 5 a one-cell pile at (65,64,9) and a forage area over the bushes (62,58,10)-(63,58,10), 360 ticks (320 is too few: the berries are stored only by t340). It reads `foraged=2 food=1`. Test `the_end_line_counts_forages_and_stored_berries`. RED: foraged increment commented out, the test fails on `foraged=0`.
+- tui test `the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear` uses the file's stub server, not simd (`CARGO_BIN_EXE_simd` is not exported to the tui package, the file header says so). `--frame` reads only the connect snapshot, so two connections stand for before and after a forage; the level is the plant's own. RED: growing bushes drawn with the ripe cell, the test fails (`ripe=3 of 2 growing=0 of 1`). Area cells under a bush read `0 of N` drawn, because the bush paints over them.
+- The gui `--drag forage` RED was skipped: handled by the orchestrator.
 
 ### File List
 
@@ -373,6 +377,7 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - `_bmad-output/implementation-artifacts/mutations/{10-9-the-land-reads-natural,12-7,2-4-the-world-endures,3-3-the-haul-and-the-skeleton-walks,5-1-the-world-grows-things-that-glow}.sh` (re-pointed)
 - Task 6: tui `src/view.rs`, `src/palette.rs`, `src/main.rs` (the `forage:` stderr line); mutations `3-2-the-dig.sh`, `3-3-the-haul-and-the-skeleton-walks.sh` (re-pointed)
 - Task 7: gui `src/{designate,project,appearance,ingest,capture}.rs`, `tests/headless.rs`; `README.md`; mutations `12-7.sh`, `12-10b.sh`, `8-2-designate-with-the-mouse.sh`, `8-3-master-of-time-and-the-skeleton-walks-in-3d.sh` (re-pointed)
+- Task 8: sim-core `src/lib.rs` (`stored_berries_count`); simd `src/scenario.rs`, `tests/bench.rs`, `tests/fixtures/one-forage.json`; tui `tests/client.rs`
 
 ## Change Log
 
