@@ -77,6 +77,22 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - (a) **Recommended:** patch each with `"plants": []` and `"forage": []`, as data, with a throwaway script as 13.8 did. Their worlds then stay plant-free and the #203, #204 and #206 reproducers keep their outcome.
   - (b) Regenerate their plants from the seed. Their outcome is unchanged either way (Q1 a), but each save grows by about 900 entries.
 
+## Amendment 1 — seat run 1 (2026-11-22): haulers forage on trips, one-time marks
+
+Wolf sat build `a192ab88` (words on `13-9-signoff/vehicle-card.md`) and ruled a redesign. This section **supersedes Task 0 Q1's "blocks nothing" note only where it says so, Q3 entirely, and Q2's trade**. The ACs below are rewritten to match; the old Tasks 1–10 stand as history.
+
+- **Q7. Who forages:** haulers, several bushes a trip (Wolf: "haulers could probably do foraging also. No need to forage and haul separately but collect some amount and carry then to pile"). Woodcutters no longer forage.
+- **Q8. Marks:** one-time marks exactly like cut (Wolf: "should work like cutting"). `DesignationKind::Forage`; a mark is used up when its bush is picked; a regrown bush must be marked again. The forage AREA goes, end to end: `ForageArea`, `PlaceForageArea`/`RemoveForageArea`, `Refusal::PlaceForageArea`, `ForageCell`, `Snapshot/Delta.forage`, `SaveState.forage`, the gui slab, the tui `:`.
+- **Q9. First bush of a trip:** the nearest marked bush the hauler can reach. Only forage is special-cased in the claim step; every other kind keeps AD-12's oldest-first.
+- **Q10. Trip size:** `FORAGE_TRIP_BUSHES = 5`, `FORAGE_TRIP_RADIUS = 10` (cells, Manhattan in 3D, from where the hauler stands).
+- **Q11. The load:** one `Berries` item with a count, as Dwarf Fortress's herbalist gathers "a stack of 1-5 plants" and carries it to the food stockpile itself (DF wiki, Herbalist, v53.17). Each item now carries a `count` (1 for every non-berries item). A load lands on ONE pile cell. `food` sums the counts.
+- **Q12. Which bushes take a mark:** ripe ones only. A drag over growing bushes or bare ground marks nothing there; a drag with no ripe bush is refused.
+- **Probe (point 3, "idled with forageable bushes"):** not reproduced. Fresh 256² game, crew 5 + arrivals, a 41x41 area over 32 bushes, 6,000 ticks: the woodcutter never idled more than 1 tick between bushes. "Not the nearest" reproduced: job ids followed the area's cell order, so FIFO walked him 20 cells west past a bush 6 cells from camp. Q9 answers it.
+
+**Wire diff (amended):** keep `ItemKind::Berries`, `PlantState`, `Plant`, `PlantChange`, `Snapshot.plants`, `Delta.plants`, `DwarfJob::Forage`. ADD `DesignationKind::Forage` (wire `forage`) and `Item.count: u32`. REMOVE `ForageCell`, `Snapshot.forage`, `Delta.forage`, `Command::PlaceForageArea`, `Command::RemoveForageArea`, `Refusal::PlaceForageArea`.
+
+**Saved fields (amended):** `SaveState.plants` stays; `SaveState.forage` goes; each saved item gains a required `count`. Forage marks save as designations.
+
 ## Found at creation (2026-11-21, `main` `3c6cf3b7`)
 
 - **A. Nothing plant-shaped exists, and neither existing store fits an area.**
@@ -101,42 +117,41 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
    - Every pin in `tests/worldgen.rs` passes unchanged, the terrain fingerprint (`:502`) included.
    - Every committed scenario run as on `main` (bench file per Q4) has the same end line as `main`, except for the new end-line fields.
    - A throwaway build that drops `plants` and `forage` from the encoding reads `state` `same` against `main` on all of those rows.
-3. **A forage area is placed, removed and refused (FR58, NFR11).**
-   - `PlaceForageArea` keeps the standable cells of its rects.
-   - An area holding no plant is refused with `Refusal::PlaceForageArea` naming the bounding rect, and that includes a rect with no standable cell. The tui status row and the gui refusal line show `forage area refused: no plant in it`.
-   - `RemoveForageArea` removes cells. A forage job whose plant leaves every area is retired and its holder released within one tick.
-4. **Woodcutters forage, haulers store (FR58).**
-   - Every ripe plant inside an area, with no job and no uncarried item on its cell, has exactly one `Forage` job.
-   - Only woodcutters claim it. The worker works from a walkable side neighbour for `FORAGE_WORK_TICKS`. The plant then turns `Growing` and one `Berries` item lies on the plant's cell.
-   - With a pile placed, a hauler stores the berries.
-5. **Cuts and forages share one FIFO (FR58; mechanism AC: AD-12's single claiming system).**
-   - One woodcutter, a cut mark, then a forage area: he cuts first, then forages.
-   - The reverse order: he forages first.
-6. **Regrowth (FR58).**
-   - A foraged plant is ripe again `REGROW_TICKS` after its forage, and is foraged again while the area stands. A scenario test forages the same plant twice, and the second forage starts no earlier than `REGROW_TICKS` after the first.
-   - With the area removed between the two, the plant is not foraged again.
-   - **Cut line** (epic): if regrowth is cut, this AC drops and plants are a one-off harvest.
-7. **A plant whose ground goes is gone.** A channel (or a dig of the tile under it) removes the plant. Its job is retired and the clients see it disappear.
-8. **Determinism and save (NFR9, AD-11, standing AC 12).**
-   - A world saved with a plant mid-regrowth, berries on the ground and a forage job held, loaded and stepped 300 ticks, equals the never-saved world. That includes the new `plants()` and `forage_area()` readers.
-   - A save missing the `plants` or `forage` key is refused, with a positive control.
-   - The three committed seat saves are patched (Q6), and their scenarios load and keep their end lines.
-   - `simd`'s load validator refuses an out-of-bounds plant or forage cell, a Forage job whose target holds no plant, and a reused Forage target, each naming the cause.
-9. **Both clients show it (NFR10).**
-   - `client-core::Mirror` tracks a plant from ripe to growing to ripe to gone across deltas, and holds the forage cells.
-   - The tui draws ripe bushes, growing bushes, berries and forage cells, each distinguishable (Q5), with no TUI regression. The TUI gains no input.
-10. **The gui forage mode and the look, plain (standing AC 16, 17).**
-    - Key 6 enters the mode Wolf approved (Q5). A drag sends `PlaceForageArea`, the preview lights the bushes in the box, a refusal shows on the refusal line, and Clear removes the area.
-    - Bushes draw in two states and berries draw as an item. The area draws as a slab distinct from a pile.
+3. **Forage marks (amended, Q8, Q12; FR58, NFR11).**
+   - `Designate { kind: Forage, rect }` marks each RIPE bush whose cell is in the rect or directly above a cell of it, so a drag on the ground reaches the bush standing on it. Growing bushes and bare ground take no mark.
+   - A rect with no ripe bush is refused with `Refusal::Designate { kind: Forage, rect }`; both clients show it on their refusal line.
+   - Marks count against `MAX_DESIGNATIONS`. `CancelDesignation` removes a forage mark in its rect or directly above it.
+4. **Haulers forage on trips (amended, Q7, Q10, Q11; FR58).**
+   - A forage mark makes one `Forage` job, `trade` Hauler. The hauler works from a walkable side neighbour for `FORAGE_WORK_TICKS`; the bush turns `Growing`, its mark is removed, and the hauler now carries one `Berries` item with `count` 1.
+   - While the count is under `FORAGE_TRIP_BUSHES`, the hauler goes on to the nearest other ripe marked bush within `FORAGE_TRIP_RADIUS` whose job nobody holds, and each bush adds 1 to the same item.
+   - Then it carries the item to the pile and it lands on one pile cell. With no pile, or none reachable, the existing abnormal exit drops it where the hauler stands, and an ordinary haul job takes it later.
+   - At all times a hauler carrying berries holds a job (the claim invariant: a free dwarf carries nothing).
+5. **The first bush is the nearest (amended, Q9; mechanism AC: AD-12's single claiming system).**
+   - Two marked bushes, the older one far: a free hauler goes to the near one first.
+   - Kinds keep FIFO: a haul job older than a forage mark is taken first by the only hauler.
+6. **Regrowth (amended).**
+   - A picked bush is ripe again `REGROW_TICKS` later, unmarked, and is announced to the clients on that tick. It is foraged again only if it is marked again.
+7. **A plant whose ground goes is gone.** A channel (or a dig of the tile under it) removes the plant and its mark. A held forage job is retired and its holder released (dropping any load where it stands). The clients see the bush disappear.
+8. **Determinism and save (amended; NFR9, AD-11, standing AC 12).**
+   - A world saved mid-trip (a hauler carrying berries with count 2 and holding a forage job, a bush mid-regrowth), loaded and stepped through the regrowth, equals the never-saved world, the `plants()` reader and item counts included.
+   - A save missing `plants` or an item's `count` is refused, with a positive control.
+   - The three committed seat saves are re-patched (no `forage` key; `count: 1` on every item), and their scenarios keep their end lines.
+   - `simd`'s load validator refuses an out-of-bounds plant, a Forage job whose target holds no plant or no forage mark, a reused target, and an item count of 0, a non-berries count other than 1, or a berries count over `FORAGE_TRIP_BUSHES`, each naming the cause.
+9. **Both clients show it (amended; NFR10).**
+   - `client-core::Mirror` tracks a plant from ripe to growing to ripe to gone, and each item's count.
+   - The tui draws ripe and growing bushes, berries, and a forage mark, each distinguishable, with no TUI regression and no TUI input.
+10. **The gui forage mode (amended; standing AC 16, 17).**
+    - Key 6 is a designation mode like cut: a drag sends `Designate { kind: Forage }` per surface rect, the preview lights the ripe bushes in the box, a refusal shows on the refusal line, and Clear cancels marks.
+    - Bushes draw in two states, a marked bush shows a mark the way a marked tree does, and berries draw as an item.
 11. **The fortress forages by itself on the bench (FR67, standing AC 14).**
-    - `two-hundred-on-256` (Q4) ends with `foraged=K food=F`, both ≥ 1. `food` is stored berries on the pile, by 3.3's rule. No order is given after the scenario's opening commands.
+    - `two-hundred-on-256` (Q4) ends with `foraged=K food=F`, both ≥ 1. `food` sums the counts of stored berries, by 3.3's stored rule (amended: Q11). Its opening forage order is now forage designations at tick 1 over the same box. No order is given after the scenario's opening commands.
     - The `#[ignore]` release test `the_two_hundred_on_256_scenario_does_real_work` asserts both.
     - If `food=0`, the run is recorded and Wolf rules (Found C).
 12. **The bench delta is recorded (standing AC 10).** `RUNS=5 scripts/tick-bench.sh main HEAD` runs over the committed files, with `main`'s copy of the bench file (Q4). Each row's delta is recorded against its floor, and the forage file is recorded as a HEAD-only row.
 13. **The instruments are tested (standing AC 8).**
     - The bench end line's `foraged=` and `food=` read `0 0` on the one-dig fixture and `≥1 ≥1` on a small forage fixture, driven through the binary.
     - The tui capture shows a ripe bush turning into a growing one.
-    - The gui `--drag forage,…` capture fails when no forage cell resulted.
+    - The gui forage drag is pinned by unit and headless tests: `--drag` is dead headless (12.7's deferral), so no live capture.
 14. **The mutation table kills** (Task 10), and `python3 scripts/audit-mutations.py` exits 0.
 15. **The seat (standing AC 16, 17).**
     - Wolf marks a forage area in a fresh game and watches woodcutters forage, berries hauled, and a bush regrow.
@@ -224,6 +239,12 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - the sitting, recorded in Wolf's words.
 - [x] **Task 12: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).
 
+- [ ] **Amendment 1 rework (Q7–Q12).** Sonnet 5.5 subagents for R1–R3 in turn on one tree; Opus does R4.
+  - [ ] **R1, sim-core + save + validator (ACs 3–8).** `DesignationKind::Forage` (ripe-only, cell-or-above, refusal); remove `ForageArea` and its commands and `create_forage_jobs`' area logic; `trade(Forage)` = Hauler; nearest-first forage claim inside `claim_jobs` at a forage job's FIFO turn (one multi-goal search over the claimable forage jobs' work cells); trip continuation and the berries count on one carried item; delivery through the haul machinery; plant loss removes the mark; `SaveState.forage` removed, item `count` added; validator arms; seat saves re-patched. Rewrite the area tests as mark tests.
+  - [ ] **R2, the wire and the instruments (ACs 9, 11, 13).** Protocol per the amended wire diff, bridge, `apply_sim_command`, Mirror counts, serve tests; `food` sums counts; `one-forage.json` uses forage designations.
+  - [ ] **R3, the clients (ACs 9, 10).** tui forage mark (no `:` area); gui key 6 as a designation mode like cut, the mark on a marked bush, no slab.
+  - [ ] **R4, Opus:** the bench file's opening order as designations, AC 2 strip build (plants + item count), tick-bench, a rewritten `13-9.sh`, the full gate, the seat card's run 2.
+
 ## Verification
 
 Nothing here can run at creation, because the feature does not exist. Each line states the obligation the dev inherits: the exact command, the non-zero observation, and the RED that must be seen first.
@@ -264,8 +285,8 @@ The seat run lives on the vehicle card (Task 11), in the seat's form: WSL `simd 
 ## Dev Notes
 
 ### Scope guardrails (do NOT)
-- No eating, hunger or food consumption (13.10). No cooking or meals (13.20). No new trade: forage is the woodcutter's.
-- No change to `claim_jobs`' logic or ordering (AD-12). The only claim-side change is `trade()`'s new arm.
+- No eating, hunger or food consumption (13.10). No cooking or meals (13.20). No new trade: forage is the hauler's (Amendment 1 Q7; was the woodcutter's).
+- No change to `claim_jobs`' ordering (AD-12) except Amendment 1 Q9: at a forage job's FIFO turn a free hauler claims the NEAREST claimable forage job. Every other kind is untouched.
 - No haul change, even if `food=0` on the bench (#235 owns slow hauls; Found C).
 - No #172 fix, no #214 off-map fix, no #170 cap fix. No TUI input (NFR10).
 - No art rounds. The bushes are plain primitives, and look tuning waits for a concrete defect judged at the seat (memory: `art-gates-visual-judgement`).
@@ -420,3 +441,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 | 2026-11-21 | Story created (Opus 5.5) on `story-13-9-forage` off `main` `3c6cf3b7`. Task 0 Q1–Q6 open for Wolf; Q5 holds the forage-mode draft (standing AC 16). Status → ready-for-dev. |
 | 2026-11-22 | Task 0 ruled (Wolf): Q1–Q6 all (a), as recommended; no AC amended. Q5's draft is approved as written. Implementer: Sonnet 5.5 subagents, claude-opus-5-5 orchestrates. Status → in-progress. |
 | 2026-11-22 | Tasks 1–10 and 12 done: Sonnet 5.5 subagents for Tasks 1–8 (`7aaf1697`, `cb021528`, `544db973`, `c3f626b0`, `54ce2e1b`, `897b3420`), Opus for Tasks 9–12. Mutation row 8 survived and is now pinned (`f80e6e62`). Wolf ruled the AO guard re-baseline to 59/57 for the bushes (`5963e6d3`). Full gate GREEN at `5963e6d3`. The seat sitting (Task 11, AC 15) is open. |
+| 2026-11-22 | Seat run 1 (Wolf, `a192ab88`): three findings. Redesign ruled as Amendment 1 (Q7–Q12): haulers forage several bushes a trip and carry one counted berries item to the pile; one-time ripe-only marks like cut replace the forage area; the first bush is the nearest. ACs 3–10, 11 and 13 are amended. Point 3's idling was probed and not reproduced; "not the nearest" was reproduced, and Q9 answers it. Status stays in-progress. |

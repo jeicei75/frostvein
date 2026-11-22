@@ -51,4 +51,8 @@ fixed in this story if it is concrete; anything else goes to an issue.
 
 ## Sitting
 
-(not yet run)
+**Run 1, 2026-11-22, build `a192ab88` (Wolf).** His words: "hmmm... maybe few things to fix.. 1) haulers could
+probably do foraging also. No need to forage and haul separately but collect some amount and carry then to pile
+2) forage are stays after selection fully even rejected area .. should work like cutting 3 there might be some
+issues were woodcutter did not forage the nearest bush and actually even though there were forageable bushes just
+continued idling .."
