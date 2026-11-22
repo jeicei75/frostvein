@@ -77,3 +77,9 @@ several levels broke the wire's single-level rule: simd drops such a rect with o
 so nothing reached the sim. My run-2 fix was tested at the command builder only, never against the daemon. Fixed: one
 single-level command per level holding a ripe bush. Live-probed on a real daemon (`seat3-forage-levels-probe.txt`): the
 old command is dropped, and the new commands mark both bushes.
+
+**Run 4, 2026-11-22, build `9d252bee` (Wolf).** His words: "ok works now .. performance issue is back when a lot of
+dwarves and digging happening .. but let's continue tomorrow". Forage marking across levels works. The performance
+regression under many dwarves and digging is open for the next session: measure first (13.8b's seat-like scenario and
+tap, `main` vs this branch), and suspect 13.9's per-tick work first (the forage claim turn, `next_trip_job` searches,
+`tend_plants`) before the known debts (#224 gui fps, #235 haul).
