@@ -200,11 +200,11 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
     - Draw growing bushes with the ripe glyph; the tui test must fail.
     - Make the forage arm of `commands_for` send nothing; the `--drag forage` capture must fail. (Skipped by the Task 8 agent: handled by the orchestrator.)
     - Restore each step with an edit, never `git checkout --` (memory: `sabotage-restore-trap`).
-- [ ] **Task 9: the bench scenario and the delta (AC 2, 11, 12).**
-  - [ ] Per Q4, add one `place_forage_area` at `at: 1` to `two-hundred-on-256.json`, picked by a throwaway script: the rect nearest the pile (`(143,144)`) with at least 30 plants. Record the plant count and the rect in `about`. Add a re-pin line to the doc comment of `the_two_hundred_on_256_scenario_does_real_work` (`bench.rs:266-274`), plus the AC 11 asserts.
-  - [ ] AC 2: run every committed scenario's end line on `main` and HEAD, and save both to `13-9-signoff/state-{main,head}-<sha>.txt`. Run the strip build in a scratch worktree (memory: `mutation-run-poisons-concurrent-builds`).
-  - [ ] AC 12: save `RUNS=5 scripts/tick-bench.sh main HEAD` to `13-9-signoff/tick-bench-main-<sha>.txt`. Record the delta table in the Debug Log, in 13.8's form.
-- [ ] **Task 10: mutation table (AC 14).** NEW `_bmad-output/implementation-artifacts/mutations/13-9.sh`, with count-guarded anchors, and save the run to `13-9-signoff/`. At least one row each for:
+- [x] **Task 9: the bench scenario and the delta (AC 2, 11, 12).**
+  - [x] Per Q4, add one `place_forage_area` at `at: 1` to `two-hundred-on-256.json`, picked by a throwaway script: the rect nearest the pile (`(143,144)`) with at least 30 plants. Record the plant count and the rect in `about`. Add a re-pin line to the doc comment of `the_two_hundred_on_256_scenario_does_real_work` (`bench.rs:266-274`), plus the AC 11 asserts.
+  - [x] AC 2: run every committed scenario's end line on `main` and HEAD, and save both to `13-9-signoff/state-{main,head}-<sha>.txt`. Run the strip build in a scratch worktree (memory: `mutation-run-poisons-concurrent-builds`).
+  - [x] AC 12: save `RUNS=5 scripts/tick-bench.sh main HEAD` to `13-9-signoff/tick-bench-main-<sha>.txt`. Record the delta table in the Debug Log, in 13.8's form.
+- [x] **Task 10: mutation table (AC 14).** NEW `_bmad-output/implementation-artifacts/mutations/13-9.sh`, with count-guarded anchors, and save the run to `13-9-signoff/`. At least one row each for:
   - the area refusal;
   - `trade(Forage)`;
   - the item-on-cell skip;
@@ -350,6 +350,8 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 
 - **Reading:** the rows beyond the floor are the generated 128² worlds, each with about 480 bushes. They pay about +5 us a tick, `tend_plants`' full scan (its `// NOTE:`). The three save-loaded rows (dig-loop, seat-slow, stuck-tunnel) hold no plants (Q6) and stay within the floor.
 - **At 256²** (1,892 bushes) the scan is under 1% of a 5.5 ms tick. The forage file's tick is cheaper because woodcutters cut less.
+
+**Task 10, AC 14:** `13-9-signoff/mutate-13-9-cae33344.txt` has 16 of 17 rows KILLED. Row 8, "a regrown plant is never announced", SURVIVED: no test read the regrowth's `PlantChange`. Ripeness is derived from the tick, so without the announcement both clients would draw a regrown bush as growing for ever. New test `a_regrown_plant_is_announced_on_the_tick_it_ripens` (`tests/scenario.rs`). Row 8 is re-pointed to it, and the re-run is KILLED at that test's assert (`mutate-13-9-row8-rerun.txt`). `audit-mutations.py` exits 0 (1,055 rows).
 
 ### Completion Notes List
 

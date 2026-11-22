@@ -61,7 +61,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                        .ripe_at = tick + REGROW_TICKS;\n'))
 PY
 
-mutation "8 a regrown plant is never announced (AC 6, 9)" sim-core a_foraged_plant_is_foraged_again_no_earlier_than_regrow_ticks_after <<'PY'
+mutation "8 a regrown plant is never announced (AC 6, 9)" sim-core a_regrown_plant_is_announced_on_the_tick_it_ripens <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '        if plant.ripe_at == tick.0 {\n'

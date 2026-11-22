@@ -1,0 +1,11 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 8 a regrown plant is never announced (AC 6, 9) ===
+thread 'a_regrown_plant_is_announced_on_the_tick_it_ripens' (202564) panicked at crates/sim-core/tests/scenario.rs:5907:13:
+assertion `left == right` failed: the regrowth is announced
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 0.09s
+
+================ MUTATION RESULTS ================
+8 a regrown plant is never announced (AC 6, 9)               KILLED
+
+All mutations killed.

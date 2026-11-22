@@ -5878,6 +5878,42 @@ fn a_foraged_plant_is_foraged_again_no_earlier_than_regrow_ticks_after() {
     assert_eq!(world.stored_count() + berries_at(&world, plant), 2);
 }
 
+/// 13.9 mutation row 8: the clients hear about a regrowth on the tick it happens. Ripeness is
+/// derived from the tick, so nothing changes in `Plants` when a bush ripens; without the
+/// announcement the tui and gui would draw it growing for ever while the sim forages it again.
+#[test]
+fn a_regrown_plant_is_announced_on_the_tick_it_ripens() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    place_pile(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    let first = forage_and_haul_away(&mut world, plant);
+    // No second forage, so the only change left for this plant is the regrowth.
+    world.apply_command(SimCommand::RemoveForageArea {
+        rect: rect(plant, plant),
+    });
+    world.drain_plant_changes();
+    while world.tick() < first + sim_core::REGROW_TICKS {
+        world.step();
+        let changes = world.drain_plant_changes();
+        let mine: Vec<_> = changes.iter().filter(|(pos, _)| *pos == plant).collect();
+        if world.tick() < first + sim_core::REGROW_TICKS {
+            assert!(
+                mine.is_empty(),
+                "announced early, tick {}: {mine:?}",
+                world.tick()
+            );
+        } else {
+            assert_eq!(
+                mine,
+                vec![&(plant, Some(true))],
+                "the regrowth is announced"
+            );
+        }
+    }
+    assert_eq!(ripe(&world, plant), Some(true));
+}
+
 #[test]
 fn a_plant_whose_area_is_removed_is_not_foraged_again() {
     let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);

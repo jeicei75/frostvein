@@ -1,0 +1,101 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 1 the forage area is never refused (AC 3) ===
+thread 'a_forage_area_holding_no_plant_is_refused_naming_the_bounding_rect_and_places_nothing' (187649) panicked at crates/sim-core/tests/scenario.rs:5654:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.01s
+
+=== 2 trade(Forage) is the miner's (AC 5) ===
+thread 'every_ripe_plant_in_the_area_has_one_forage_job_and_only_the_woodcutter_holds_it' (188278) panicked at crates/sim-core/tests/scenario.rs:5695:17:
+assertion `left == right` failed: Id(2) holds a forage job
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.01s
+
+=== 3 a forage job ignores berries lying on the bush (Found E) ===
+thread 'berries_still_lying_on_a_bush_keep_it_from_a_new_forage_job' (188881) panicked at crates/sim-core/tests/scenario.rs:5775:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.09s
+
+=== 4 removing the area leaves its forage jobs standing (AC 3) ===
+thread 'removing_the_area_retires_a_held_forage_job_within_one_tick' (189486) panicked at crates/sim-core/tests/scenario.rs:5914:5:
+assertion failed: forage_jobs(&world).is_empty()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.01s
+
+=== 5 a forage regrows next tick, not after REGROW_TICKS (AC 6) ===
+thread 'a_foraged_plant_is_foraged_again_no_earlier_than_regrow_ticks_after' (190078) panicked at crates/sim-core/tests/scenario.rs:5859:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.02s
+
+=== 6 tend_plants never removes a plant whose ground went (AC 7) ===
+thread 'a_plant_whose_ground_goes_is_gone_with_its_job_and_the_clients_are_told' (190693) panicked at crates/sim-core/tests/scenario.rs:5940:5:
+assertion `left == right` failed: the plant is gone
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.01s
+
+=== 7 a forage does not mark its plant changed (AC 4, 9) ===
+thread 'a_forage_turns_the_plant_growing_and_leaves_one_berries_on_its_cell' (191334) panicked at crates/sim-core/tests/scenario.rs:5734:5:
+assertion `left == right` failed: the wire is told the plant is growing
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.01s
+
+=== 8 a regrown plant is never announced (AC 6, 9) ===
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 132 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 26 filtered out; finished in 0.00s
+
+=== 9 apply_delta drops the plant changes (Found F) ===
+thread 'a_plant_goes_from_ripe_to_growing_to_ripe_to_gone_and_the_forage_area_is_resent_whole' (192267) panicked at crates/client-core/tests/mirror.rs:179:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+=== 10 a save without plants still loads (AC 8) ===
+thread 'a_save_missing_a_plants_or_forage_key_is_refused' (192879) panicked at crates/sim-core/tests/save_load.rs:1365:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.39s
+
+=== 11 a save without the forage area still loads (AC 8) ===
+thread 'a_save_missing_a_plants_or_forage_key_is_refused' (193475) panicked at crates/sim-core/tests/save_load.rs:1365:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.46s
+
+=== 12 the validator takes a forage job over no plant (Found H) ===
+thread 'a_forage_job_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking' (194586) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 91 filtered out; finished in 2.51s
+
+=== 13 the bench never counts a forage (AC 11, 13) ===
+thread 'the_end_line_counts_forages_and_stored_berries' (195688) panicked at crates/simd/tests/bench.rs:194:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.47s
+
+=== 14 food counts stored wood, not berries (AC 11, 13) ===
+thread 'the_end_line_counts_forages_and_stored_berries' (196792) panicked at crates/simd/tests/bench.rs:195:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.47s
+
+=== 15 the tui draws a growing bush as ripe (AC 9, 13) ===
+thread 'the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear' (197476) panicked at crates/tui/tests/client.rs:2172:5:
+assertion `left == right` failed: forage: z 1 ripe=3 of 2 growing=0 of 1 berries=1 of 1 area=0 of 3
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out; finished in 0.62s
+
+=== 16 the gui forage drag sends no area (AC 10) ===
+thread 'designate::tests::a_forage_drag_is_one_place_forage_area_over_the_surface' (199204) panicked at crates/gui/src/designate.rs:530:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 248 filtered out; finished in 0.00s
+
+=== 17 the gui keeps a growing bush on the ripe mesh (AC 10) ===
+thread 'every_mirror_plant_has_a_bush_in_its_state_and_a_forage_flips_it' (200833) panicked at crates/gui/tests/headless.rs:6292:5:
+assertion `left != right` failed: ripe and growing are different meshes
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 129 filtered out; finished in 0.02s
+
+================ MUTATION RESULTS ================
+1 the forage area is never refused (AC 3)                    KILLED
+2 trade(Forage) is the miner's (AC 5)                        KILLED
+3 a forage job ignores berries lying on the bush (Found E)   KILLED
+4 removing the area leaves its forage jobs standing (AC 3)   KILLED
+5 a forage regrows next tick, not after REGROW_TICKS (AC 6)  KILLED
+6 tend_plants never removes a plant whose ground went (AC 7) KILLED
+7 a forage does not mark its plant changed (AC 4, 9)         KILLED
+8 a regrown plant is never announced (AC 6, 9)               SURVIVED
+9 apply_delta drops the plant changes (Found F)              KILLED
+10 a save without plants still loads (AC 8)                  KILLED
+11 a save without the forage area still loads (AC 8)         KILLED
+12 the validator takes a forage job over no plant (Found H)  KILLED
+13 the bench never counts a forage (AC 11, 13)               KILLED
+14 food counts stored wood, not berries (AC 11, 13)          KILLED
+15 the tui draws a growing bush as ripe (AC 9, 13)           KILLED
+16 the gui forage drag sends no area (AC 10)                 KILLED
+17 the gui keeps a growing bush on the ripe mesh (AC 10)     KILLED
+
+1 mutation(s) did not KILL. SURVIVED = the test is not pinning what it claims.
+NO-COMPILE / NO-COLLECT / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.
