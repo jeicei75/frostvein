@@ -325,6 +325,32 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 
 ### Debug Log References
 
+**Task 9, AC 2 (2026-11-22, Opus 5.5):** `13-9-signoff/state-main-3c6cf3b7.txt` and `state-head-6de6fe11.txt`. All 12 committed scenarios (the 256² row on `main`'s copy of its file) end exactly as on `main` plus ` foraged=0 food=0`. A throwaway build at `6de6fe11` with `#[serde(skip_serializing)]` on `SaveState.plants` and `.forage` reads `state` equal to `main` on all 12.
+
+**Task 9, AC 11:** HEAD's `two-hundred-on-256.json` ends `done=dig:286,cut:22 stored=17 cells=770 foraged=32 food=9` (main's file on `main`: `done=dig:321,cut:96 stored=36 cells=2343`). The forage jobs sit first in the woodcutters' FIFO (Found B), so cuts fall from 96 to 22 in the window.
+- **Area pick deviates from "nearest the pile":** 54 of this world's 1,892 bushes stand on pile cells. Their berries land on the pile and count as stored with no haul, so an area holding them would make `food` vacuous. The area is the nearest 30-bush box that touches neither the pile nor a dig or cut mark: (166,151)-(195,180) on levels 11-19, 32 bushes.
+
+**Task 9, AC 12:** `13-9-signoff/tick-bench-main-a11e21d6.txt` (RUNS=5, mean ms).
+
+| scenario | main | HEAD | delta | control | verdict |
+|---|---|---|---|---|---|
+| big-pile | 0.0333 | 0.0389 | +16.9% | +4.5% | beyond floor |
+| deep-pit | 0.0203 | 0.0240 | +18.2% | +3.0% | beyond floor |
+| dig-loop | 0.0218 | 0.0228 | +4.8% | +4.0% | within floor |
+| full-pile-crowd | 0.0256 | 0.0305 | +19.1% | +5.7% | beyond floor |
+| plan-compact-piles | 0.0416 | 0.0462 | +11.3% | +0.1% | beyond floor |
+| plan-far-piles | 0.0361 | 0.0410 | +13.4% | +1.9% | beyond floor |
+| plan-spread-piles | 0.0418 | 0.0467 | +11.7% | +1.6% | beyond floor |
+| plan | 0.0349 | 0.0398 | +14.1% | +1.9% | beyond floor |
+| seat-slow | 0.0695 | 0.0709 | +2.0% | +1.1% | within floor |
+| stuck-tunnel | 0.0260 | 0.0266 | +2.3% | +0.9% | within floor |
+| they-keep-coming | 0.0875 | 0.1026 | +17.2% | +0.6% | beyond floor |
+| two-hundred-on-256 (main's file) | 5.5499 | 5.5863 | +0.7% | -1.3% | within floor |
+| two-hundred-on-256 (HEAD's file, HEAD only) | | 4.28-4.38 | | | 5 runs, spread 2.3% |
+
+- **Reading:** the rows beyond the floor are the generated 128² worlds, each with about 480 bushes. They pay about +5 us a tick, `tend_plants`' full scan (its `// NOTE:`). The three save-loaded rows (dig-loop, seat-slow, stuck-tunnel) hold no plants (Q6) and stay within the floor.
+- **At 256²** (1,892 bushes) the scan is under 1% of a 5.5 ms tick. The forage file's tick is cheaper because woodcutters cut less.
+
 ### Completion Notes List
 
 - Tasks 1-3 (sim-core), by a Sonnet 5.5 subagent. Plants are `Plants { by_pos, changed }`, the area is `ForageArea`; neither touches `set_tile`, `clear_paths` or the id counter, and every existing pin and scenario passed unchanged (AC 2's sim half).
