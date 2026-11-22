@@ -296,6 +296,9 @@ fn stored_counts_one_item_per_zone_tile_as_the_sim_does() {
 /// 13.7 (2026-11-02, `641dbc7b`) reads `done=dig:234,cut:90 stored=27 cells=2146`: claim searches
 /// now run on a world-sized budget and complete, where 238 of them used to exhaust on the camp's
 /// 64,300-cell area, so dwarves claim different jobs at different ticks. Not a regression.
+/// 13.9 (2026-11-22, `897b3420` plus the forage area) reads `done=dig:286,cut:22 stored=17
+/// cells=770 foraged=32 food=9`: the file now opens with a 32-bush forage area at tick 1, so the
+/// woodcutters forage ahead of their cuts (FIFO by job id).
 #[test]
 #[ignore = "release: steps 256² crew 200 for 2500 ticks"]
 fn the_two_hundred_on_256_scenario_does_real_work() {
@@ -327,6 +330,14 @@ fn the_two_hundred_on_256_scenario_does_real_work() {
     assert!(
         count(&field(&end, "cells")) >= 1,
         "the world changed: {end}"
+    );
+    assert!(
+        count(&field(&end, "foraged")) >= 1,
+        "a woodcutter foraged a bush: {end}"
+    );
+    assert!(
+        count(&field(&end, "food")) >= 1,
+        "a hauler stored berries on the pile: {end}"
     );
 }
 
