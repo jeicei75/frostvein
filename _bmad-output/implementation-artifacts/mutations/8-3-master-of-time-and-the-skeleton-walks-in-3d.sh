@@ -52,9 +52,10 @@ mutation "the hint drops the time and save keys" gui the_production_wiring_runs_
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
 # Re-pointed 2026-10-05 (12.7): the no-mode hint names key 5 (cut); the sabotage still drops the time and save keys.
-old = '"1 dig  2 channel  3 stockpile  4 clear  5 cut   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"'
+# Re-pointed 2026-11-22 (13.9): the hint also names key 6 (forage).
+old = '"1 dig  2 channel  3 stockpile  4 clear  5 cut  6 forage   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '"1 dig  2 channel  3 stockpile  4 clear  5 cut"'))
+p.write_text(s.replace(old, '"1 dig  2 channel  3 stockpile  4 clear  5 cut  6 forage"'))
 PY
 
 mutation "the stockpile count ignores the stockpile" gui the_haul_instrument_counts_stones_on_stockpile_tiles <<'PY'

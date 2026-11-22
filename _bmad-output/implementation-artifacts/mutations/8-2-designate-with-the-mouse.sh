@@ -291,9 +291,10 @@ PY
 mutation "channel and stockpile designate the solid cell the ray hit" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/designate.rs'); s = p.read_text()
-old = 'DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Clear => {'
+# Re-pointed 2026-11-22 (13.9 Task 7): the arm also names Forage, and rustfmt splits it over four lines.
+old = '        DesignateMode::Channel\n        | DesignateMode::Stockpile\n        | DesignateMode::Forage\n        | DesignateMode::Clear => {'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Clear if false => {'))
+p.write_text(s.replace(old, '        DesignateMode::Channel\n        | DesignateMode::Stockpile\n        | DesignateMode::Forage\n        | DesignateMode::Clear if false => {'))
 PY
 
 mutation "clear stops reaching the cell the ray hit" gui each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts <<'PY'
@@ -435,9 +436,10 @@ PY
 mutation "the preview stops following the ground with the send path" gui a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        DesignateMode::Channel | DesignateMode::Stockpile => client_core::surface_targets(\n'
+# Re-pointed 2026-11-22 (13.9 Task 7): the arm also names Forage.
+old = '        DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Forage => {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        DesignateMode::Stockpile => client_core::surface_targets(\n'))
+p.write_text(s.replace(old, '        DesignateMode::Stockpile | DesignateMode::Forage => {\n'))
 PY
 
 # AC18's readout. Found 2026-08-27 while testing the recipe rather than shipping it: `tui --frame`

@@ -142,9 +142,10 @@ PY
 mutation "13 the channel preview skips the sim filter" gui a_channel_drag_over_the_campfire_does_not_light_its_tile <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-old = '        .into_iter()\n        .filter(|tile| sim_will_keep(mirror, *tile, mode))\n        .collect(),\n'
+# Re-pointed 2026-11-22 (13.9 Task 7): the surface arm is a block now (it also serves Forage), so the chain sits four deeper.
+old = '            .into_iter()\n            .filter(|tile| sim_will_keep(mirror, *tile, mode))\n            .collect()\n        }\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        .into_iter()\n        .collect(),\n'))
+p.write_text(s.replace(old, '            .into_iter()\n            .collect()\n        }\n'))
 PY
 
 # 12.10b review run 2 patch (#195): a dwarf on the target is counted on the target again, which the

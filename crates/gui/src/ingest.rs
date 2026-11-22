@@ -1467,7 +1467,8 @@ fn parse_drag(value: OsString) -> anyhow::Result<ScriptedDragSpec> {
         "stockpile" => DesignateMode::Stockpile,
         "clear" => DesignateMode::Clear,
         "cut" => DesignateMode::Cut,
-        _ => bail!("invalid --drag mode; expected dig,channel,stockpile,clear,cut"),
+        "forage" => DesignateMode::Forage,
+        _ => bail!("invalid --drag mode; expected dig,channel,stockpile,clear,cut,forage"),
     };
     let parse_coordinate = |name: &str, value: &str| -> anyhow::Result<f32> {
         let value: f32 = value
@@ -1552,6 +1553,7 @@ fn mode_key(mode: DesignateMode) -> KeyCode {
         DesignateMode::Stockpile => KeyCode::Digit3,
         DesignateMode::Clear => KeyCode::Digit4,
         DesignateMode::Cut => KeyCode::Digit5,
+        DesignateMode::Forage => KeyCode::Digit6,
         DesignateMode::None => unreachable!("a scripted drag always names an active mode"),
     }
 }
@@ -3030,6 +3032,8 @@ pub fn reconcile_projection(
         &ProjectedDesignationKind,
     )>,
     zones: Query<(bevy::prelude::Entity, &ProjectedZone)>,
+    forage: Query<(bevy::prelude::Entity, &crate::project::ProjectedForage)>,
+    plants: Query<(bevy::prelude::Entity, &crate::project::ProjectedPlant)>,
     terrain: TerrainQuery,
     trees: TreeMeshQuery,
     chips: DigChipQuery,
@@ -3057,6 +3061,8 @@ pub fn reconcile_projection(
         &projected,
         &designations,
         &zones,
+        &forage,
+        &plants,
         &terrain,
         &trees,
         &chips,
@@ -5056,6 +5062,15 @@ mod tests {
         );
     }
 
+    /// 13.9: `--drag forage,...` names the forage mode and presses key 6.
+    #[test]
+    fn a_scripted_drag_can_name_the_forage_mode() {
+        use super::{DesignateMode, mode_key, parse_drag};
+        let spec = parse_drag(OsString::from("forage,10,20,30,40")).expect("forage is a drag mode");
+        assert_eq!(spec.mode, DesignateMode::Forage);
+        assert_eq!(mode_key(DesignateMode::Forage), KeyCode::Digit6);
+    }
+
     /// No control of ours may sit on a key something else has already claimed.
     ///
     /// This is the check that did not exist when 11.2 put dof and haze on F1 and F2 -- keys
@@ -5139,6 +5154,7 @@ mod tests {
             (KeyCode::Digit3, "designate stockpile (designate.rs)"),
             (KeyCode::Digit4, "designate clear (designate.rs)"),
             (KeyCode::Digit5, "designate cut (designate.rs)"),
+            (KeyCode::Digit6, "designate forage (designate.rs)"),
         ] {
             bound.push((key, site.to_string()));
         }
@@ -6447,7 +6463,7 @@ mod tests {
                     .resource::<crate::slice::SliceLevel>()
                     .readout(false, None)
             ),
-            "1 dig  2 channel  3 stockpile  4 clear  5 cut   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
+            "1 dig  2 channel  3 stockpile  4 clear  5 cut  6 forage   Space pause  +/- speed  Ctrl+S save  Ctrl+L load".to_string(),
             "22:00   elapsed 0d 00:00   speed normal".to_string(),
             "".to_string(),
             // The selected dwarf's name line, empty with no selection.

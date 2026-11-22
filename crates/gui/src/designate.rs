@@ -28,6 +28,7 @@ pub enum DesignateMode {
     Stockpile,
     Clear,
     Cut,
+    Forage,
 }
 
 /// The cell a drag was anchored at, WITH the face its ray entered.
@@ -84,7 +85,7 @@ pub fn update_refusal_hint(
 pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
     match (mode, dragging) {
         (DesignateMode::None, _) => {
-            "1 dig  2 channel  3 stockpile  4 clear  5 cut   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"
+            "1 dig  2 channel  3 stockpile  4 clear  5 cut  6 forage   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"
         }
         (DesignateMode::Dig, false) => "dig: drag to designate  Esc leave",
         (DesignateMode::Dig, true) => "dig: release to designate  Esc abort",
@@ -96,6 +97,8 @@ pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
         (DesignateMode::Clear, true) => "clear: release to remove  Esc abort",
         (DesignateMode::Cut, false) => "cut: drag over the foot of the trees  Esc leave",
         (DesignateMode::Cut, true) => "cut: release to mark  Esc abort",
+        (DesignateMode::Forage, false) => "forage: drag over the bushes  Esc leave",
+        (DesignateMode::Forage, true) => "forage: release to mark  Esc abort",
     }
 }
 
@@ -158,6 +161,8 @@ pub fn designation_input(
         *mode = DesignateMode::Clear;
     } else if keys.just_pressed(KeyCode::Digit5) {
         *mode = DesignateMode::Cut;
+    } else if keys.just_pressed(KeyCode::Digit6) {
+        *mode = DesignateMode::Forage;
     }
 
     let abort = keys.just_pressed(KeyCode::Escape) || mouse.just_pressed(MouseButton::Right);
@@ -236,7 +241,10 @@ pub fn designation_target(mirror: &Mirror, cell: PickedCell, mode: DesignateMode
         // Clear is here because it must REACH the standable cell to remove a channel or a
         // stockpile. Its other half — the dig at the cell the ray hit — is covered by the second
         // rect `commands_for` receives, so clear is the one mode that needs both.
-        DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Clear => {
+        DesignateMode::Channel
+        | DesignateMode::Stockpile
+        | DesignateMode::Forage
+        | DesignateMode::Clear => {
             // `render_to_world` is the single axis conversion, per AC2 — the face normal is a
             // render-space unit vector and must not be re-derived by hand here.
             let [dx, dy, dz] = render_to_world(cell.face.normal());
@@ -322,6 +330,14 @@ fn commands_for(
         DesignateMode::Stockpile => vec![Command::PlaceStockpile {
             rects: surface.to_vec(),
         }],
+        // Same shape as the stockpile: one command per drag, and an empty surface still reaches
+        // the sim so the refusal line shows ("no plant in it").
+        DesignateMode::Forage if surface.is_empty() => vec![Command::PlaceForageArea {
+            rects: vec![picked_rect],
+        }],
+        DesignateMode::Forage => vec![Command::PlaceForageArea {
+            rects: surface.to_vec(),
+        }],
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -335,6 +351,7 @@ fn commands_for(
                 [
                     Command::CancelDesignation { rect: *rect },
                     Command::RemoveStockpile { rect: *rect },
+                    Command::RemoveForageArea { rect: *rect },
                 ]
             }))
             .chain(std::iter::once(Command::CancelDesignation {
@@ -431,6 +448,9 @@ mod tests {
                 Command::RemoveStockpile {
                     rect: standable_rect
                 },
+                Command::RemoveForageArea {
+                    rect: standable_rect
+                },
                 Command::CancelDesignation { rect: cut_rect },
             ]
         );
@@ -494,6 +514,50 @@ mod tests {
     }
 
     #[test]
+    fn a_forage_drag_is_one_place_forage_area_over_the_surface() {
+        let picked = Rect {
+            min: [62, 62, 9],
+            max: [62, 66, 9],
+        };
+        let surface = [
+            Rect {
+                min: [62, 62, 9],
+                max: [62, 63, 9],
+            },
+            Rect {
+                min: [62, 64, 10],
+                max: [62, 66, 10],
+            },
+        ];
+        assert_eq!(
+            commands_for(DesignateMode::Forage, picked, &surface, picked),
+            vec![Command::PlaceForageArea {
+                rects: surface.to_vec()
+            }]
+        );
+        // An empty surface still reaches the sim, which refuses it on the refusal line.
+        assert_eq!(
+            commands_for(DesignateMode::Forage, picked, &[], picked),
+            vec![Command::PlaceForageArea {
+                rects: vec![picked]
+            }]
+        );
+    }
+
+    #[test]
+    fn the_forage_hints_name_the_mode_and_the_key() {
+        assert!(designation_hint(DesignateMode::None, false).contains("6 forage"));
+        assert_eq!(
+            designation_hint(DesignateMode::Forage, false),
+            "forage: drag over the bushes  Esc leave"
+        );
+        assert_eq!(
+            designation_hint(DesignateMode::Forage, true),
+            "forage: release to mark  Esc abort"
+        );
+    }
+
+    #[test]
     fn every_hint_is_ascii() {
         for mode in [
             DesignateMode::None,
@@ -502,6 +566,7 @@ mod tests {
             DesignateMode::Stockpile,
             DesignateMode::Clear,
             DesignateMode::Cut,
+            DesignateMode::Forage,
         ] {
             for dragging in [false, true] {
                 assert!(designation_hint(mode, dragging).is_ascii());

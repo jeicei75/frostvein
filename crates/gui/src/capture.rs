@@ -50,6 +50,9 @@ pub struct DrawStats {
     /// the draw set, on the same principle as `expected_cut_face` above.
     expected_designations: usize,
     expected_zones: usize,
+    /// The forage cells the mirror holds at or below the cut. Set by `with_expected_forage`, so
+    /// the eight-count `new` and its many callers stay as they are.
+    expected_forage: usize,
 }
 
 /// The live state that a headless capture must report before it may save its PNG.
@@ -93,7 +96,13 @@ impl DrawStats {
             zones,
             expected_designations,
             expected_zones,
+            expected_forage: 0,
         }
+    }
+
+    fn with_expected_forage(mut self, expected_forage: usize) -> Self {
+        self.expected_forage = expected_forage;
+        self
     }
 
     /// `terrain_tiles > 0` alone cannot fail for this story's own defect. World-boundary tiles are
@@ -178,6 +187,12 @@ impl DrawStats {
                 self.expected_zones > 0,
                 "scripted --drag placed no stockpile: the mirror holds no zones at or below z \
                  {}. A stockpile rect on non-standable ground is silently dropped by the sim",
+                self.level
+            ),
+            DesignateMode::Forage => assert!(
+                self.expected_forage > 0,
+                "scripted --drag placed no forage area: the mirror holds no forage cells at or \
+                 below z {}. The sim refuses an area with no plant in it",
                 self.level
             ),
             // Clear REMOVES; a correct clear legitimately ends with nothing to count.
@@ -321,6 +336,13 @@ fn collect_draw_stats(
             .zones()
             .iter()
             .filter(|zone| zone.pos[2] <= level)
+            .count(),
+    )
+    .with_expected_forage(
+        mirror
+            .forage()
+            .iter()
+            .filter(|cell| cell.pos[2] <= level)
             .count(),
     )
 }
@@ -2190,6 +2212,16 @@ mod tests {
             "a cut drag that produced no designation must fail, not pass silently"
         );
         DrawStats::new(4, 12, 5, 5, 1, 0, 1, 0).assert_drag_produced_work(DesignateMode::Cut);
+        // 13.9: a forage drag that left no forage cell must fail, and one that left a cell passes.
+        assert!(
+            std::panic::catch_unwind(|| DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0)
+                .assert_drag_produced_work(DesignateMode::Forage))
+            .is_err(),
+            "a forage drag that produced no forage cell must fail, not pass silently"
+        );
+        DrawStats::new(4, 12, 5, 5, 0, 0, 0, 0)
+            .with_expected_forage(1)
+            .assert_drag_produced_work(DesignateMode::Forage);
     }
 
     #[test]

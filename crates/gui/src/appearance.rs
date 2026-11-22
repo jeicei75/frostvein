@@ -244,6 +244,38 @@ pub fn wood_item_color() -> Color {
     Color::srgb_u8(164, 116, 66)
 }
 
+/// A berry: a small red cube lying on the ground. Same red family as the TUI's `%`
+/// (`crates/tui/src/palette.rs`), carried by value because `gui` never depends on `tui`.
+pub fn berry_item_color() -> Color {
+    Color::srgb_u8(222, 70, 84)
+}
+
+/// A berry item is a small cube, a little smaller than a stone.
+pub const BERRY_ITEM_SCALE: f32 = 0.24;
+
+/// A berry rests on the cell floor like a stone does: centre at floor + half its height.
+pub const BERRY_ITEM_DROP: f32 = -0.5 + BERRY_ITEM_SCALE / 2.0;
+
+/// A berry lies to one side of its cell's centre, because it drops on the bush's own cell and the
+/// bush's block would otherwise swallow it (13.9: a bush blocks nothing, and berries land on it).
+pub const BERRY_ITEM_SHIFT: f32 = 0.3;
+
+/// The forage-area slab: a berry-crimson, warm where every other mark is cold, and unlike the
+/// zone slab's slate-teal so a pile under the area still reads as a pile (13.9 Q5).
+pub fn forage_color() -> Color {
+    Color::srgb_u8(176, 64, 96)
+}
+
+/// A bush's leaf block, shared by both states. Same green as the TUI's growing bush.
+pub fn bush_color() -> Color {
+    Color::srgb_u8(58, 112, 66)
+}
+
+/// The red dots on a ripe bush.
+pub fn bush_berry_color() -> Color {
+    Color::srgb_u8(214, 62, 62)
+}
+
 /// How far each further item on one cell is lifted above the one before it: one log height
 /// (`WOOD_ITEM_SCALE.y`), for every kind (12.7 Task 0.2).
 // NOTE: a stone is 0.4 tall, so two stones on one cell overlap by 0.12; they still draw at two
@@ -473,12 +505,14 @@ pub fn dwarf_tunic_color(colour: protocol::DwarfColour) -> Color {
 #[cfg(test)]
 mod tests {
     use bevy::color::ColorToPacked;
+    use bevy::prelude::Color;
     use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
     use super::{
-        RIM_LEVELS, day_lighting, day_weight, designation_color, entity_appearance,
-        foliage_snow_color, hover_highlight_color, light_properties, lighting_at, material_color,
-        night_lighting, rim_dissolved_color, snow_cap_color, zone_color,
+        RIM_LEVELS, bush_berry_color, bush_color, day_lighting, day_weight, designation_color,
+        entity_appearance, foliage_snow_color, forage_color, hover_highlight_color,
+        light_properties, lighting_at, material_color, night_lighting, rim_dissolved_color,
+        snow_cap_color, zone_color,
     };
 
     #[test]
@@ -704,6 +738,16 @@ mod tests {
                 "{colour:?}"
             );
         }
+    }
+
+    /// 13.9 Q5: the forage slab must not read as the pile's slab beneath it, nor as a berry item.
+    #[test]
+    fn the_forage_slab_is_far_from_the_zone_slab() {
+        let rgb = |color: Color| color.to_srgba().to_u8_array_no_alpha();
+        assert!(channel_distance(rgb(forage_color()), rgb(zone_color())) >= MIN_MARK_SEPARATION);
+        assert!(
+            channel_distance(rgb(bush_color()), rgb(bush_berry_color())) >= MIN_MARK_SEPARATION
+        );
     }
 
     #[test]

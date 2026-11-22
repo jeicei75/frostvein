@@ -219,7 +219,7 @@ target/release/simd 7451 --scenario scenarios/plan.json
 | LMB | select the dwarf under the cursor and follow him (with no designate mode armed) |
 | `Esc` | release the selection, or abort a designation |
 | `T` | with a dwarf selected, change his trade: miner → hauler → woodcutter → miner |
-| `1` `2` `3` `4` `5` | designate dig / channel / stockpile / clear / cut — then LMB-drag a rectangle. A cut marks every pine the drag catches, once each, at the foot of its trunk; a woodcutter fells the whole tree and leaves one log per trunk cell. `4` over a pine's foot clears its cut mark. In cut mode the pointer stops at the pine you point at, crown or trunk, and sits at its foot; while you drag, every cell of the box shows a hover slab and the pines it catches turn flat green. A marked pine stays flat green, with its mark slab at the foot, until it is felled or cleared |
+| `1` `2` `3` `4` `5` `6` | designate dig / channel / stockpile / clear / cut / forage — then LMB-drag a rectangle. A cut marks every pine the drag catches, once each, at the foot of its trunk; a woodcutter fells the whole tree and leaves one log per trunk cell. `4` over a pine's foot clears its cut mark. In cut mode the pointer stops at the pine you point at, crown or trunk, and sits at its foot; while you drag, every cell of the box shows a hover slab and the pines it catches turn flat green. A marked pine stays flat green, with its mark slab at the foot, until it is felled or cleared. `6` marks a forage area on the standable cells of the drag, like a stockpile; woodcutters pick the ripe berry bushes in it again and again, and `4` removes the area. While you drag, the bushes in the box light red |
 | `ctrl` + `S` / `ctrl` + `L` | save / load the world (the daemon writes `frostvein.save` and says `saved tick N`; a load snaps every client back). While `ctrl` is held the keyboard camera keys do nothing, so the chord never moves the view |
 | `H` | hide / show the whole HUD: fps overlay, readouts, hint |
 | `space` | pause / resume the sim |
@@ -291,7 +291,7 @@ panics with exit 101 *after* saving the PNG, naming the framing it was taken at.
 | `--capture <path>` | save a PNG, validate its ranges, then exit |
 | `--clock <hour>` | pin the displayed hour (`0 ≤ hour < 24`); without it the clock follows the daemon tick, except every `--capture` defaults to a 22:00 pin |
 | `--frames N` / `--at-tick N` | when to capture |
-| `--drag <mode,x0,y0,x1,y1>` | perform one designation drag between two viewport points (pixels) before the capture, as LMB would, and fail the capture if it designated nothing; `mode` is `dig`, `channel`, `stockpile`, `clear` or `cut` |
+| `--drag <mode,x0,y0,x1,y1>` | perform one designation drag between two viewport points (pixels) before the capture, as LMB would, and fail the capture if it designated nothing; `mode` is `dig`, `channel`, `stockpile`, `clear`, `cut` or `forage` |
 | `--camera <yaw,pitch,distance,fx,fy,fz>` | open at a framing; works interactively too |
 | `--distance <d>` | zoom only, capture only — mutually exclusive with `--camera`, which carries its own |
 | `--select <id>` | start with dwarf `<id>` selected, as if clicked; an explicit `--distance` keeps its zoom, and an id that is not a dwarf in the daemon's snapshot fails the run |

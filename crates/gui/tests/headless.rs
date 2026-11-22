@@ -4191,7 +4191,7 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
         min: tile,
         max: tile,
     };
-    let expected: [(KeyCode, Vec<protocol::Command>); 5] = [
+    let expected: [(KeyCode, Vec<protocol::Command>); 6] = [
         (
             KeyCode::Digit1,
             vec![protocol::Command::Designate {
@@ -4225,6 +4225,10 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
                 protocol::Command::RemoveStockpile {
                     rect: at(standable),
                 },
+                // 13.9: and the forage area on the same surface.
+                protocol::Command::RemoveForageArea {
+                    rect: at(standable),
+                },
                 // 12.7: and the cut-target rect, which over bare ground is the cell above it.
                 protocol::Command::CancelDesignation {
                     rect: at(standable),
@@ -4237,6 +4241,13 @@ fn each_mode_key_sends_its_own_command_at_the_cell_the_sim_accepts() {
             vec![protocol::Command::Designate {
                 kind: DesignationKind::Cut,
                 rect: at(standable),
+            }],
+        ),
+        // 13.9: key 6 places a forage area on the standable surface, one command like a stockpile.
+        (
+            KeyCode::Digit6,
+            vec![protocol::Command::PlaceForageArea {
+                rects: vec![at(standable)],
             }],
         ),
     ];
@@ -6153,6 +6164,220 @@ fn a_wood_item_projects_as_a_log_and_a_stone_still_as_a_stone() {
         material_rgb(&app, &stone_material),
         material_rgb(&app, &log_material),
         "wood must not be drawn in stone's material"
+    );
+}
+
+/// 13.9 AC10: a berry is a small red cube on the floor beside the cell centre, not wood's log.
+#[test]
+fn a_berry_item_projects_as_a_small_red_cube_and_wood_still_as_a_log() {
+    let mut start = snapshot_with_dims(
+        Dims { x: 2, y: 1, z: 1 },
+        vec![Tile::Empty, Tile::Empty],
+        Vec::new(),
+    );
+    start.items = vec![
+        Item {
+            id: 1,
+            pos: [0, 0, 0],
+            kind: protocol::ItemKind::Berries,
+        },
+        Item {
+            id: 2,
+            pos: [1, 0, 0],
+            kind: protocol::ItemKind::Wood,
+        },
+    ];
+    let mut app = headless_app(start);
+    // Twice: the second update lets the blend write over what the spawn set.
+    app.update();
+    app.update();
+
+    let (berry, berry_material) = projected_item_pose(&mut app, 1);
+    let (log, log_material) = projected_item_pose(&mut app, 2);
+    assert_eq!(berry.scale, Vec3::splat(0.24), "a small cube");
+    assert_eq!(log.scale, Vec3::new(0.7, 0.28, 0.28));
+    assert!(
+        (berry.translation.y - (world_to_render([0, 0, 0]).y - 0.38)).abs() < 1e-6,
+        "the berry lies on the floor after the blend too: {}",
+        berry.translation.y
+    );
+    assert!(
+        (berry.translation.x - (world_to_render([0, 0, 0]).x + 0.3)).abs() < 1e-6,
+        "the berry lies beside the cell centre, where a bush cannot hide it"
+    );
+    assert_eq!(material_rgb(&app, &berry_material), [222, 70, 84]);
+    assert_ne!(
+        material_rgb(&app, &berry_material),
+        material_rgb(&app, &log_material),
+        "berries must not be drawn in wood's material"
+    );
+}
+
+/// The bushes the projection holds, by the cell each stands on: its state, mesh handle and the
+/// vertex count of that mesh, read off the live `Assets<Mesh>` rather than from `project.rs`.
+fn projected_bushes(
+    app: &mut App,
+) -> BTreeMap<[i32; 3], (protocol::PlantState, bevy::prelude::Handle<Mesh>, usize)> {
+    let found = app
+        .world_mut()
+        .query::<(&gui::project::ProjectedPlant, &Mesh3d)>()
+        .iter(app.world())
+        .map(|(plant, mesh)| (plant.pos, plant.state, mesh.0.clone()))
+        .collect::<Vec<_>>();
+    let meshes = app.world().resource::<Assets<Mesh>>();
+    let mut bushes = BTreeMap::new();
+    for (pos, state, handle) in found {
+        let vertices = meshes
+            .get(&handle)
+            .expect("a bush mesh is live")
+            .count_vertices();
+        assert!(
+            bushes.insert(pos, (state, handle, vertices)).is_none(),
+            "one bush entity per plant, two at {pos:?}"
+        );
+    }
+    bushes
+}
+
+/// 13.9 AC10: every plant in the mirror has exactly one projected bush, in its state; a ripe bush
+/// is a different (bigger) shared mesh than a growing one; a forage flips the bush in place to the
+/// growing mesh; a plant that leaves the mirror is despawned.
+#[test]
+fn every_mirror_plant_has_a_bush_in_its_state_and_a_forage_flips_it() {
+    use protocol::{Plant, PlantChange, PlantState};
+    let dims = Dims { x: 4, y: 1, z: 3 };
+    let mut tiles = vec![Tile::Empty; 12];
+    for tile in tiles.iter_mut().take(4) {
+        *tile = Tile::Solid(Material::Snow);
+    }
+    let mut start = snapshot_with_dims(dims, tiles, Vec::new());
+    start.plants = vec![
+        Plant {
+            pos: [0, 0, 1],
+            state: PlantState::Ripe,
+        },
+        Plant {
+            pos: [1, 0, 1],
+            state: PlantState::Ripe,
+        },
+        Plant {
+            pos: [2, 0, 1],
+            state: PlantState::Growing,
+        },
+    ];
+    let mut app = headless_app(start);
+    app.update();
+
+    let check = |app: &mut App| {
+        let mirror_plants = app
+            .world()
+            .resource::<MirrorResource>()
+            .0
+            .plants()
+            .collect::<Vec<_>>();
+        let bushes = projected_bushes(app);
+        assert_eq!(bushes.len(), mirror_plants.len(), "one bush per plant");
+        for (pos, state) in &mirror_plants {
+            assert_eq!(
+                bushes[pos].0, *state,
+                "the bush at {pos:?} is drawn in its state"
+            );
+        }
+        bushes
+    };
+    let bushes = check(&mut app);
+    let ripe = &bushes[&[0, 0, 1]];
+    let growing = &bushes[&[2, 0, 1]];
+    assert_eq!(ripe.1, bushes[&[1, 0, 1]].1, "ripe bushes share ONE mesh");
+    assert_ne!(ripe.1, growing.1, "ripe and growing are different meshes");
+    assert!(
+        ripe.2 > growing.2,
+        "a ripe bush carries its berry dots on top of the leaf block ({} vs {} vertices)",
+        ripe.2,
+        growing.2
+    );
+
+    // The forage: the plant at [0,0,1] turns growing.
+    let mut message = delta(Vec::new(), Vec::new());
+    message.plants = vec![PlantChange {
+        pos: [0, 0, 1],
+        state: Some(PlantState::Growing),
+    }];
+    apply_delta(&mut app, message);
+    app.update();
+    let bushes = check(&mut app);
+    assert_eq!(
+        bushes[&[0, 0, 1]].1,
+        bushes[&[2, 0, 1]].1,
+        "it wears the growing mesh now"
+    );
+    assert_ne!(
+        bushes[&[0, 0, 1]].1,
+        bushes[&[1, 0, 1]].1,
+        "its neighbour is still ripe"
+    );
+
+    // The ground goes: the plant is removed and its bush with it.
+    let mut message = delta_at(2, Vec::new(), Vec::new());
+    message.plants = vec![PlantChange {
+        pos: [1, 0, 1],
+        state: None,
+    }];
+    apply_delta(&mut app, message);
+    app.update();
+    let bushes = check(&mut app);
+    assert!(
+        !bushes.contains_key(&[1, 0, 1]),
+        "a removed plant's bush is despawned"
+    );
+}
+
+/// 13.9 AC10: the forage area draws as a slab per cell, and over a pile the slab is raised and
+/// inset so the pile's own slab still shows (Q5: a pile under the area reads as a pile).
+#[test]
+fn the_forage_area_draws_a_slab_per_cell_and_a_pile_under_it_still_shows() {
+    use protocol::ForageCell;
+    let dims = Dims { x: 3, y: 1, z: 3 };
+    let mut tiles = vec![Tile::Empty; 9];
+    for tile in tiles.iter_mut().take(3) {
+        *tile = Tile::Solid(Material::Snow);
+    }
+    let mut start = snapshot_with_dims(dims, tiles, Vec::new());
+    start.forage = vec![ForageCell { pos: [0, 0, 1] }, ForageCell { pos: [1, 0, 1] }];
+    start.zones = vec![Zone { pos: [1, 0, 1] }];
+    let mut app = headless_app(start);
+    app.update();
+
+    let slabs = app
+        .world_mut()
+        .query::<(&gui::project::ProjectedForage, &Transform)>()
+        .iter(app.world())
+        .map(|(slab, transform)| (slab.0, *transform))
+        .collect::<BTreeMap<_, _>>();
+    assert_eq!(
+        slabs.keys().copied().collect::<Vec<_>>(),
+        vec![[0, 0, 1], [1, 0, 1]],
+        "one slab per forage cell"
+    );
+    let zone = app
+        .world_mut()
+        .query::<(&ProjectedZone, &Transform)>()
+        .iter(app.world())
+        .find_map(|(zone, transform)| (zone.0 == [1, 0, 1]).then_some(*transform))
+        .expect("the pile's own slab stays");
+    let bare = slabs[&[0, 0, 1]];
+    let over_pile = slabs[&[1, 0, 1]];
+    assert!(
+        over_pile.scale.x < zone.scale.x,
+        "the slab over a pile is inset, so the pile's rim shows"
+    );
+    assert!(
+        over_pile.translation.y > zone.translation.y,
+        "and raised, so it does not z-fight the pile"
+    );
+    assert_eq!(
+        bare.scale, zone.scale,
+        "off a pile it is a full slab like a zone"
     );
 }
 
