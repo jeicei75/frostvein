@@ -22,7 +22,9 @@ pub struct SaveState {
     pub next_job_id: u32,
     // NOTE: deliberately no `#[serde(default)]` on the kind: a pre-12.7 save fails to decode and
     // simd refuses it.
-    pub items: Vec<(u32, Pos, ItemKind)>,
+    // 13.9 Amendment 1: the fourth element is the item's count (1 unless berries), and a 3-element
+    // item fails to decode, so a pre-amendment save is refused.
+    pub items: Vec<(u32, Pos, ItemKind, u32)>,
     pub emitters: Vec<(u32, Pos, LightKind)>,
     // NOTE: deliberately no `#[serde(default)]`, like `items`: a pre-12.12 save fails to decode and
     // simd refuses it. The count is of `GOALS` done, in order; simd refuses one beyond the chain.
@@ -33,8 +35,6 @@ pub struct SaveState {
     // NOTE: deliberately no `#[serde(default)]`, like `arrivals` (13.9): a pre-13.9 save fails to
     // decode and simd refuses it. Each plant's cell and the tick it is ripe from.
     pub plants: Vec<(Pos, u64)>,
-    // NOTE: deliberately no `#[serde(default)]`, like `plants`: the forage-area cells.
-    pub forage: Vec<Pos>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

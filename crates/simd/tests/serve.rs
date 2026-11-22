@@ -1328,6 +1328,7 @@ fn out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking() {
         10,
         sim_core::Pos { x: 0, y: -1, z: 0 },
         sim_core::ItemKind::Stone,
+        1,
     ));
     fs::write(
         daemon.save_path(),
@@ -1358,6 +1359,7 @@ fn duplicate_item_entity_id_save_is_logged_and_the_daemon_keeps_ticking() {
         state.dwarves[0].id,
         state.dwarves[0].pos,
         sim_core::ItemKind::Stone,
+        1,
     ));
 
     assert_save_is_rejected_without_stopping_ticks(state, "save reuses entity id 0");
@@ -1389,6 +1391,7 @@ fn item_id_at_next_id_save_is_logged_and_the_daemon_keeps_ticking() {
         state.next_id,
         state.dwarves[0].pos,
         sim_core::ItemKind::Stone,
+        1,
     ));
 
     assert_save_is_rejected_without_stopping_ticks(
@@ -1499,7 +1502,7 @@ fn save_with_items(count: u32) -> sim_core::SaveState {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
     let pos = state.dwarves[0].pos;
     state.items = (0..count)
-        .map(|index| (10 + index, pos, sim_core::ItemKind::Stone))
+        .map(|index| (10 + index, pos, sim_core::ItemKind::Stone, 1))
         .collect();
     state.next_id = 10 + count;
     state
@@ -1630,7 +1633,9 @@ fn mid_clear_save() -> (sim_core::SaveState, usize, u32) {
     let site = sim_core::Pos { x: 61, y: 62, z: 9 };
     let stone = state.next_id;
     state.next_id += 1;
-    state.items.push((stone, site, sim_core::ItemKind::Stone));
+    state
+        .items
+        .push((stone, site, sim_core::ItemKind::Stone, 1));
     let mut world = sim_core::World::from_save(state);
     world.apply_command(sim_core::SimCommand::Designate {
         kind: sim_core::DesignationKind::Channel,
@@ -1705,9 +1710,12 @@ fn a_clearing_save_carrying_another_stone_than_it_clears_is_logged_and_the_daemo
     let (mut state, carrier, stone) = mid_clear_save();
     let other = state.next_id;
     state.next_id += 1;
-    state
-        .items
-        .push((other, state.dwarves[carrier].pos, sim_core::ItemKind::Stone));
+    state.items.push((
+        other,
+        state.dwarves[carrier].pos,
+        sim_core::ItemKind::Stone,
+        1,
+    ));
     state.dwarves[carrier]
         .clearing
         .as_mut()
@@ -1823,21 +1831,25 @@ fn overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking() {
     );
 }
 
-/// A default world with a forage area over its two nearest plants, stepped until a forage job
-/// stands, so its save holds plants, a forage area and a Forage job (and no item).
+/// A default world with forage marks on its two nearest plants, stepped until a forage job
+/// stands, so its save holds plants, forage marks and a Forage job (and no item).
 fn forage_save() -> sim_core::SaveState {
     let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
     let camp = world.camp_origin();
     let mut plants: Vec<_> = world.plants().into_iter().map(|(pos, _)| pos).collect();
     plants.sort_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos));
-    let rects: Vec<_> = plants[..2]
-        .iter()
-        .map(|pos| sim_core::Rect {
-            min: *pos,
-            max: *pos,
-        })
-        .collect();
-    assert_eq!(world.place_forage_area(&rects), None);
+    for pos in &plants[..2] {
+        assert_eq!(
+            world.apply_command(sim_core::SimCommand::Designate {
+                kind: sim_core::DesignationKind::Forage,
+                rect: sim_core::Rect {
+                    min: *pos,
+                    max: *pos,
+                },
+            }),
+            None
+        );
+    }
     while !world
         .jobs()
         .iter()
@@ -1848,13 +1860,13 @@ fn forage_save() -> sim_core::SaveState {
     }
     let state = world.to_save();
     assert!(state.plants.len() > 1);
-    assert_eq!(state.forage.len(), 2);
+    assert_eq!(state.designations.len(), 2);
     assert!(state.items.is_empty(), "the fixture holds no item");
     state
 }
 
 /// 13.9 AC 8, positive control (13.6 #226's lesson: the validator can be tighter than the sim):
-/// the live Load takes a save holding plants, a forage area and a Forage job, and no item.
+/// the live Load takes a save holding plants, forage marks and a Forage job, and no item.
 #[test]
 fn the_live_load_takes_a_save_holding_a_forage_job() {
     let daemon = Daemon::spawn();
@@ -1886,21 +1898,6 @@ fn out_of_bounds_plant_save_is_logged_and_the_daemon_keeps_ticking() {
 }
 
 #[test]
-fn out_of_bounds_forage_cell_save_is_logged_and_the_daemon_keeps_ticking() {
-    let mut state = forage_save();
-    state.forage.push(sim_core::Pos {
-        x: 0,
-        y: 9999,
-        z: 1,
-    });
-
-    assert_save_is_rejected_without_stopping_ticks(
-        state,
-        "save forage position 0,9999,1 is outside dims",
-    );
-}
-
-#[test]
 fn a_forage_job_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = forage_save();
     let target = state
@@ -1914,6 +1911,36 @@ fn a_forage_job_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking() {
     assert_save_is_rejected_without_stopping_ticks(
         state,
         &format!("has no plant at {},{},{}", target.x, target.y, target.z),
+    );
+}
+
+#[test]
+fn a_forage_job_over_no_forage_mark_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    let target = state
+        .jobs
+        .iter()
+        .find(|job| job.kind == sim_core::JobKind::Forage)
+        .expect("a forage job")
+        .target;
+    // Gone, and then a mark of another kind in its place: both are refused by name.
+    state.designations.retain(|(pos, _)| *pos != target);
+    assert_save_is_rejected_without_stopping_ticks(
+        state.clone(),
+        &format!(
+            "has no forage mark at {},{},{}",
+            target.x, target.y, target.z
+        ),
+    );
+    state
+        .designations
+        .push((target, sim_core::DesignationKind::Cut));
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!(
+            "has no forage mark at {},{},{}",
+            target.x, target.y, target.z
+        ),
     );
 }
 
@@ -1939,31 +1966,100 @@ fn a_reused_forage_target_save_is_logged_and_the_daemon_keeps_ticking() {
     );
 }
 
-#[test]
-fn more_forage_jobs_than_plants_save_is_logged_and_the_daemon_keeps_ticking() {
-    let mut state = forage_save();
-    let job = *state
-        .jobs
-        .iter()
-        .find(|job| job.kind == sim_core::JobKind::Forage)
-        .expect("a forage job");
-    state.plants = vec![(job.target, 0)];
-    let mut other = job;
-    other.id = sim_core::JobId(state.next_job_id);
-    other.target.x += 1;
-    state.next_job_id += 1;
-    state.jobs.push(other);
-    let forage_jobs = state
-        .jobs
-        .iter()
-        .filter(|job| job.kind == sim_core::JobKind::Forage)
-        .count();
-    assert!(forage_jobs > 1);
+/// 13.9 AC 8 (amended): one stone-or-berries save, so the count is the only thing that differs.
+fn counted_item_save(kind: sim_core::ItemKind, count: u32) -> sim_core::SaveState {
+    let mut state = save_with_items(1);
+    state.items[0].2 = kind;
+    state.items[0].3 = count;
+    state
+}
 
+/// Positive control for the three count refusals: a full trip's load of berries loads, so none of
+/// the refusals below is the validator being tighter than the sim.
+#[test]
+fn the_live_load_takes_a_berries_load_of_a_full_trip() {
+    let daemon = Daemon::spawn();
+    let state = counted_item_save(sim_core::ItemKind::Berries, sim_core::FORAGE_TRIP_BUSHES);
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode berries save fixture"),
+    )
+    .expect("write berries save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+    assert_eq!(loaded.tick, state.tick);
+}
+
+#[test]
+fn an_item_count_of_zero_save_is_logged_and_the_daemon_keeps_ticking() {
     assert_save_is_rejected_without_stopping_ticks(
-        state,
-        &format!("save has {forage_jobs} forage jobs; limit is 1 plant(s)"),
+        counted_item_save(sim_core::ItemKind::Berries, 0),
+        "save item 10 has a count of 0",
     );
+}
+
+#[test]
+fn a_stone_with_a_count_save_is_logged_and_the_daemon_keeps_ticking() {
+    assert_save_is_rejected_without_stopping_ticks(
+        counted_item_save(sim_core::ItemKind::Stone, 2),
+        "save item 10 is not berries but has a count of 2",
+    );
+}
+
+#[test]
+fn a_berries_count_over_a_trip_save_is_logged_and_the_daemon_keeps_ticking() {
+    assert_save_is_rejected_without_stopping_ticks(
+        counted_item_save(
+            sim_core::ItemKind::Berries,
+            sim_core::FORAGE_TRIP_BUSHES + 1,
+        ),
+        &format!(
+            "save item 10 has a count of {}; a trip carries at most {}",
+            sim_core::FORAGE_TRIP_BUSHES + 1,
+            sim_core::FORAGE_TRIP_BUSHES
+        ),
+    );
+}
+
+/// 13.9 AC 8 (amended): an item saved without its count is refused at decode.
+#[test]
+fn a_save_with_an_uncounted_item_is_logged_and_the_daemon_keeps_ticking() {
+    let daemon = Daemon::spawn();
+    let state = counted_item_save(sim_core::ItemKind::Berries, 2);
+    let mut value = serde_json::to_value(&state).expect("encode save fixture");
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(value.clone()).is_ok(),
+        "positive control: the counted save must decode"
+    );
+    for item in value["items"].as_array_mut().expect("items array") {
+        item.as_array_mut().unwrap().pop();
+    }
+    assert!(serde_json::from_value::<sim_core::SaveState>(value.clone()).is_err());
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&value).expect("encode uncounted save fixture"),
+    )
+    .expect("write uncounted save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let snapshot = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let log = daemon.next_log();
+    assert!(
+        log.contains("could not decode frostvein.save"),
+        "unexpected uncounted save log: {log}"
+    );
+
+    let first = read_delta(&mut reader).tick;
+    let second = read_delta(&mut reader).tick;
+    assert!(snapshot.tick < first && first < second);
 }
 
 #[test]
@@ -3156,14 +3252,15 @@ fn a_save_from_before_item_kinds_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
     let pos = state.dwarves[0].pos;
     state.next_id = 13;
-    state.items = vec![(12, pos, sim_core::ItemKind::Stone)];
+    state.items = vec![(12, pos, sim_core::ItemKind::Stone, 1)];
     let mut value = serde_json::to_value(&state).expect("encode save fixture");
     assert!(
         serde_json::from_value::<sim_core::SaveState>(value.clone()).is_ok(),
         "positive control: the save with item kinds must decode"
     );
-    // A pre-12.7 item is `[id, pos]`: drop the kind from every entry.
+    // A pre-12.7 item is `[id, pos]`: drop the kind and the count from every entry.
     for item in value["items"].as_array_mut().expect("items array") {
+        item.as_array_mut().unwrap().pop();
         item.as_array_mut().unwrap().pop();
     }
     assert!(serde_json::from_value::<sim_core::SaveState>(value.clone()).is_err());
@@ -3274,6 +3371,7 @@ fn a_clearing_miner_reads_haul_on_the_wire_and_his_own_job_before_and_after() {
             z: second[2],
         },
         sim_core::ItemKind::Stone,
+        1,
     ));
     fs::write(
         daemon.save_path(),
@@ -3335,7 +3433,9 @@ fn a_save_taken_mid_clear_loads_and_the_clear_finishes() {
     let mut state = world.to_save();
     let stone = state.next_id;
     state.next_id += 1;
-    state.items.push((stone, site, sim_core::ItemKind::Stone));
+    state
+        .items
+        .push((stone, site, sim_core::ItemKind::Stone, 1));
     world = sim_core::World::from_save(state);
     world.apply_command(sim_core::SimCommand::Designate {
         kind: sim_core::DesignationKind::Channel,
@@ -3442,9 +3542,9 @@ fn a_loaded_pile_reports_its_stored_count_as_goal_progress_in_the_snapshot_and_t
     state.zones = vec![first, second];
     // Wood 10 and 11 are a stacked pair on `first`; tetrahedrite 12 is alone on `second`.
     state.items = vec![
-        (10, first, sim_core::ItemKind::Wood),
-        (11, first, sim_core::ItemKind::Wood),
-        (12, second, sim_core::ItemKind::Tetrahedrite),
+        (10, first, sim_core::ItemKind::Wood, 1),
+        (11, first, sim_core::ItemKind::Wood, 1),
+        (12, second, sim_core::ItemKind::Tetrahedrite, 1),
     ];
     state.next_id = 13;
     fs::write(
@@ -3627,6 +3727,7 @@ fn send_forage_area(writer: &mut TcpStream, cells: &[[i32; 3]]) {
 /// The plants are read from the snapshot, never hardcoded: the five nearest the camp are marked,
 /// because any one of them may be unreachable and the test is about the wire, not the path.
 #[test]
+#[ignore = "13.9 R2: the wire still carries a forage area; R2 moves it to forage marks"]
 fn a_forage_area_reaches_the_client_and_a_forage_streams_a_growing_plant_and_berries() {
     use protocol::{DwarfJob, ItemKind, PlantState};
 

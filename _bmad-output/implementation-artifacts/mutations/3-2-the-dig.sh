@@ -30,7 +30,9 @@ old = '''                        _ => positions()
                                             ..*pos
                                         })
                                 }
-                                DesignationKind::Cut => unreachable!("handled above"),
+                                DesignationKind::Cut | DesignationKind::Forage => {
+                                    unreachable!("handled above")
+                                }
                             })
                             // 12.10b: a channel's step opens two cells down (D2: none at z < 2) and
                             // never under a fire (D3, #188).
@@ -92,10 +94,11 @@ PY
 mutation "from_save discards items" sim-core save_round_trip_preserves_items_and_current_job <<'PY'
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 items carry a kind (`(id, pos, kind)`).
+# Re-pointed 13.9 Amendment 1: and a count.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        for (id, pos, kind) in items {\n'
+old = '        for (id, pos, kind, count) in items {\n'
 assert old in s
-p.write_text(s.replace(old, '        for (id, pos, kind) in Vec::<(u32, Pos, ItemKind)>::new() {\n'))
+p.write_text(s.replace(old, '        for (id, pos, kind, count) in Vec::<(u32, Pos, ItemKind, u32)>::new() {\n'))
 PY
 
 mutation "from_save discards current_job" sim-core save_round_trip_preserves_items_and_current_job <<'PY'
@@ -202,9 +205,9 @@ PY
 mutation "load accepts an out-of-bounds item" simd out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 the item tuple gained a kind: `(id, pos, _)`.
+# Re-pointed 13.9 Amendment 1: and a count, whose checks stay; only the bounds check goes.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        for (id, pos, _) in &save.items {
-            if !in_bounds(*pos) {
+old = '''            if !in_bounds(*pos) {
                 bail!(
                     "save item {id} position {},{},{} is outside dims {}x{}x{}",
                     pos.x,
@@ -215,9 +218,8 @@ old = '''        for (id, pos, _) in &save.items {
                     save.dims.z
                 );
             }
-        }
 '''
-assert old in s
+assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 

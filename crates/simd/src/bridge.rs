@@ -111,12 +111,9 @@ fn plant_state_out(ripe: bool) -> protocol::PlantState {
     }
 }
 
-fn forage_out(world: &sim_core::World) -> Vec<protocol::ForageCell> {
-    world
-        .forage_area()
-        .into_iter()
-        .map(|pos| protocol::ForageCell { pos: pos_out(pos) })
-        .collect()
+// TODO(13.9 R2): the wire's forage area goes; there is none to send.
+fn forage_out(_world: &sim_core::World) -> Vec<protocol::ForageCell> {
+    Vec::new()
 }
 
 fn goals_out(world: &sim_core::World) -> Vec<protocol::Goal> {
@@ -364,6 +361,8 @@ fn designation_kind_out(kind: sim_core::DesignationKind) -> protocol::Designatio
         sim_core::DesignationKind::Dig => protocol::DesignationKind::Dig,
         sim_core::DesignationKind::Channel => protocol::DesignationKind::Channel,
         sim_core::DesignationKind::Cut => protocol::DesignationKind::Cut,
+        // TODO(13.9 R2): the wire gains `forage`; until then a forage mark reads as a cut mark.
+        sim_core::DesignationKind::Forage => protocol::DesignationKind::Cut,
     }
 }
 
@@ -384,9 +383,6 @@ fn rect_out(rect: sim_core::Rect) -> protocol::Rect {
 pub(crate) fn refusal_out(refusal: sim_core::Refusal) -> protocol::Refusal {
     match refusal {
         sim_core::Refusal::PlaceStockpile { rect } => protocol::Refusal::PlaceStockpile {
-            rect: rect_out(rect),
-        },
-        sim_core::Refusal::PlaceForageArea { rect } => protocol::Refusal::PlaceForageArea {
             rect: rect_out(rect),
         },
         sim_core::Refusal::SetProfession { dwarf } => {
@@ -861,7 +857,7 @@ mod tests {
                 sim_core::ItemKind::Tetrahedrite
             };
             save.zones.push(pos);
-            save.items.push((save.next_id, pos, kind));
+            save.items.push((save.next_id, pos, kind, 1));
             save.next_id += 1;
         }
         save.goals_completed = 1;

@@ -70,8 +70,7 @@ const STEP_REST_TICKS: u32 = WANDER_REST_TICKS;
 /// (13.8b).
 const SQUEEZE_WAIT_TICKS: u64 = STEP_REST_TICKS as u64;
 // NOTE: 13.6's 256² crew-200 scenario holds 1,800 marks, under this cap. Past it a designate
-// drops cells silently (#170). Forage jobs are not marks: they come from the forage area's ripe
-// plants (13.9), so they never count here; the plant count bounds them.
+// drops cells silently (#170). Forage marks (13.9) count here like any mark.
 pub const MAX_DESIGNATIONS: usize = 4096;
 // NOTE: bounds `astar()`, `route_to_nearest` and `stranded` only; `claim_jobs` and the
 // `execute_jobs` re-plan size their budget to the world (13.7; the re-plan AMENDED 2026-11-02 by
@@ -98,6 +97,11 @@ pub(crate) const PLANT_ONE_IN: u32 = 16;
 pub const FORAGE_WORK_TICKS: u32 = 30;
 /// Ticks from a forage until the bush is ripe again: 5 min at 1x, 75 s at fast4x.
 pub const REGROW_TICKS: u64 = 3_000;
+/// 13.9 Amendment 1 (Q10): a forage trip gathers at most this many bushes into one berries item.
+pub const FORAGE_TRIP_BUSHES: u32 = 5;
+/// 13.9 Amendment 1 (Q10): a trip goes on only to bushes within this many cells (Manhattan, 3D) of
+/// where the hauler stands.
+pub const FORAGE_TRIP_RADIUS: u32 = 10;
 const RETRY_COOLDOWN: u64 = 20;
 
 /// The first-session goal chain (12.12, FR47), in order: store this many of each kind.
@@ -148,6 +152,8 @@ pub enum DesignationKind {
     Dig,
     Channel,
     Cut,
+    /// 13.9: the mark sits on a ripe bush's own cell.
+    Forage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,14 +169,11 @@ pub enum SimCommand {
     PlaceStockpile { rect: Rect },
     RemoveStockpile { rect: Rect },
     SetProfession { dwarf: Id, profession: Profession },
-    PlaceForageArea { rect: Rect },
-    RemoveForageArea { rect: Rect },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
     PlaceStockpile { rect: Rect },
-    PlaceForageArea { rect: Rect },
     SetProfession { dwarf: Id },
     Designate { kind: DesignationKind, rect: Rect },
 }
@@ -215,6 +218,11 @@ pub enum ItemKind {
 
 #[derive(Component)]
 struct Item(ItemKind);
+
+/// 13.9 Amendment 1 (Q11): how many of its kind an item stands for. Absent means 1: only a berries
+/// load from a forage trip holds more (up to `FORAGE_TRIP_BUSHES`).
+#[derive(Component)]
+struct ItemCount(u32);
 
 /// What digging a cell of `material` yields: ore its own kind, everything else stone (12.10).
 fn yield_of(material: Material) -> ItemKind {
@@ -373,7 +381,7 @@ pub enum JobKind {
     Dig,
     Channel,
     Cut,
-    /// 13.9: `target` is the bush's cell. Not a designation: derived from the forage area.
+    /// 13.9: `target` is the bush's cell, marked by a `DesignationKind::Forage` designation.
     Forage,
     // NOTE: `item` is the identity. `Job.target` for a Haul is only the stone's position at
     // creation, kept so load validation can bounds-check every job the same way. Claiming and
@@ -502,6 +510,7 @@ fn create_jobs(tick: Res<Tick>, designations: Res<Designations>, mut jobs: ResMu
             DesignationKind::Dig => JobKind::Dig,
             DesignationKind::Channel => JobKind::Channel,
             DesignationKind::Cut => JobKind::Cut,
+            DesignationKind::Forage => JobKind::Forage,
         };
         let inserted = jobs.insert(Job {
             id,
@@ -568,86 +577,62 @@ fn advance_goals(ecs: &mut EcsWorld) {
     ecs.resource_mut::<GoalsCompleted>().0 = done;
 }
 
-/// 13.9: one Forage job per ripe plant in the forage area that has no job and no uncarried item on
-/// its cell (#154, #162: berries never stack on a bush), after the designation jobs so their ids
-/// keep their order. Retires, with a release, each Forage job whose plant is gone, unripe or
-/// outside every area. Exclusive, like `create_haul_jobs`, because a retire calls `release_claim`.
-fn create_forage_jobs(ecs: &mut EcsWorld) {
+/// 13.9: a plant whose ground is gone is gone, and a plant that ripens this tick is announced.
+/// A lost plant takes its forage mark and job with it, and the job's holder lets go (dropping any
+/// load where he stands). Chained after `execute_jobs`, so a channel's tile change is seen the same
+/// tick. Exclusive, because retiring a claimed job calls `release_claim`.
+// NOTE: a full scan of the plants per tick (about 3k at 256²); fine at that count, AC 12 measures it.
+fn tend_plants(ecs: &mut EcsWorld) {
     let tick = ecs.resource::<Tick>().0;
-    let retired: Vec<_> = {
-        let plants = &ecs.resource::<Plants>().by_pos;
-        let area = &ecs.resource::<ForageArea>().0;
-        ecs.resource::<Jobs>()
-            .iter()
-            .filter(|job| job.kind == JobKind::Forage)
-            .filter(|job| {
-                !area.contains(&job.target)
-                    || plants
-                        .get(&job.target)
-                        .is_none_or(|plant| tick < plant.ripe_at)
-            })
-            .map(|job| job.id)
-            .collect()
-    };
-    for job_id in retired {
-        ecs.resource_mut::<Jobs>().remove(job_id);
-        let holders: Vec<_> = ecs
-            .iter_entities()
-            .filter(|entity| {
-                entity.get::<CurrentJob>().and_then(|current| current.0) == Some(job_id)
-            })
-            .map(|entity| entity.id())
-            .collect();
-        for holder in holders {
-            release_claim(ecs, holder);
-        }
-    }
-
-    // NOTE: a full scan of the area per tick; fine at 256²'s few thousand plants.
-    let wanted: Vec<Pos> = {
-        let plants = &ecs.resource::<Plants>().by_pos;
-        let jobs = ecs.resource::<Jobs>();
-        let area = &ecs.resource::<ForageArea>().0;
-        if area.is_empty() {
-            return;
-        }
-        let lying = uncarried_stones(ecs);
-        let lying: BTreeSet<Pos> = lying.into_values().collect();
-        area.iter()
-            .filter(|pos| plants.get(pos).is_some_and(|plant| tick >= plant.ripe_at))
-            .filter(|pos| !jobs.targets.contains(pos) && !lying.contains(pos))
+    let lost: Vec<Pos> = {
+        let terrain = ecs.resource::<Terrain>();
+        ecs.resource::<Plants>()
+            .by_pos
+            .keys()
+            .filter(|pos| !terrain.is_standable(**pos))
             .copied()
             .collect()
     };
-    for target in wanted {
-        let id = ecs.resource_mut::<Jobs>().next_job_id();
-        let inserted = ecs.resource_mut::<Jobs>().insert(Job {
-            id,
-            kind: JobKind::Forage,
-            target,
-            created_tick: tick,
-            retry_after: 0,
-        });
-        debug_assert!(inserted, "target and id were checked before insertion");
+    for pos in lost {
+        {
+            let mut plants = ecs.resource_mut::<Plants>();
+            plants.by_pos.remove(&pos);
+            plants.changed.insert(pos);
+        }
+        remove_forage_mark(ecs, pos);
+        let job_ids: Vec<JobId> = ecs
+            .resource::<Jobs>()
+            .iter()
+            .filter(|job| job.kind == JobKind::Forage && job.target == pos)
+            .map(|job| job.id)
+            .collect();
+        for job_id in job_ids {
+            ecs.resource_mut::<Jobs>().remove(job_id);
+            let holders: Vec<_> = ecs
+                .iter_entities()
+                .filter(|entity| {
+                    entity.get::<CurrentJob>().and_then(|current| current.0) == Some(job_id)
+                })
+                .map(|entity| entity.id())
+                .collect();
+            for holder in holders {
+                release_claim(ecs, holder);
+            }
+        }
+    }
+    let plants = &mut *ecs.resource_mut::<Plants>();
+    for (pos, plant) in &plants.by_pos {
+        if plant.ripe_at == tick {
+            plants.changed.insert(*pos);
+        }
     }
 }
 
-/// 13.9: a plant whose ground is gone is gone, and a plant that ripens this tick is announced.
-/// Chained after `execute_jobs`, so a channel's tile change is seen the same tick.
-// NOTE: a full scan of the plants per tick (about 3k at 256²); fine at that count, AC 12 measures it.
-fn tend_plants(tick: Res<Tick>, terrain: Res<Terrain>, mut plants: ResMut<Plants>) {
-    let plants = &mut *plants;
-    plants.by_pos.retain(|pos, _| {
-        let stands = terrain.is_standable(*pos);
-        if !stands {
-            plants.changed.insert(*pos);
-        }
-        stands
-    });
-    for (pos, plant) in &plants.by_pos {
-        if plant.ripe_at == tick.0 {
-            plants.changed.insert(*pos);
-        }
+/// Removes the forage mark at `pos`, and only a forage mark: a channel marked over a bush stays.
+fn remove_forage_mark(ecs: &mut EcsWorld, pos: Pos) {
+    let mut designations = ecs.resource_mut::<Designations>();
+    if designations.0.get(&pos) == Some(&DesignationKind::Forage) {
+        designations.0.remove(&pos);
     }
 }
 
@@ -723,7 +708,9 @@ fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
 fn trade(kind: JobKind) -> Profession {
     match kind {
         JobKind::Dig | JobKind::Channel => Profession::Miner,
-        JobKind::Cut | JobKind::Forage => Profession::Woodcutter,
+        JobKind::Cut => Profession::Woodcutter,
+        // 13.9 Amendment 1 (Q7): haulers forage, carrying what they gather to the pile themselves.
+        JobKind::Forage => Profession::Hauler,
         JobKind::Haul { .. } => Profession::Hauler,
     }
 }
@@ -796,6 +783,7 @@ fn claim_jobs(
     // The pile's free cells read only terrain, `blocked` and zones, all fixed for this call: found
     // by the first haul job, shared by every other.
     let mut pile = None;
+    let mut forage_turn_done = false;
     for job in jobs_in_order {
         if claimed.contains(&job.id) || tick.0 < job.retry_after {
             continue;
@@ -804,6 +792,102 @@ fn claim_jobs(
         if !dwarves.iter().any(|(_, id, _, current, _, profession)| {
             can_try(&job, **id, **profession, current.0.is_none())
         }) {
+            continue;
+        }
+        // 13.9 Amendment 1 (Q9): forage is the one kind that is not oldest-first. At its first
+        // forage job's turn, each free hauler searches ONCE to the union of the work cells of every
+        // forage job he may try, and claims the job whose cells the path ends in (lowest `JobId`
+        // on a tie): the nearest bush by path, not the oldest mark. That turn serves every forage
+        // job, so later ones are skipped. A job gets a cooldown only when a search failed for it
+        // and no hauler's search succeeded with it among his goals.
+        if job.kind == JobKind::Forage {
+            if forage_turn_done {
+                continue;
+            }
+            forage_turn_done = true;
+            let forage: Vec<(Job, BTreeSet<Pos>)> = jobs
+                .iter()
+                .filter(|other| {
+                    other.kind == JobKind::Forage
+                        && !claimed.contains(&other.id)
+                        && tick.0 >= other.retry_after
+                })
+                .map(|other| {
+                    #[cfg(test)]
+                    CLAIM_SET_BUILDS.with(|n| n.set(n.get() + 1));
+                    let cells = work_positions_with(
+                        &terrain, &blocked, &zones.0, &items, *other, None, &mut pile,
+                    );
+                    (*other, cells)
+                })
+                .collect();
+            let mut failed = BTreeSet::new();
+            let mut reached = BTreeSet::new();
+            for (entity, id, pos, current, load, profession) in dwarves.iter_mut() {
+                debug_assert!(
+                    current.0.is_some() || load.0.is_none(),
+                    "a dwarf holding no job must be carrying nothing"
+                );
+                if current.0.is_some() {
+                    continue;
+                }
+                let tryable: Vec<&(Job, BTreeSet<Pos>)> = forage
+                    .iter()
+                    .filter(|(other, _)| {
+                        !claimed.contains(&other.id) && can_try(other, **id, **profession, true)
+                    })
+                    .collect();
+                if tryable.is_empty() {
+                    continue;
+                }
+                let goals: BTreeSet<Pos> = tryable
+                    .iter()
+                    .flat_map(|(_, cells)| cells.iter().copied())
+                    .collect();
+                if components
+                    .iter()
+                    .any(|component| component.contains(*pos) && goals.is_disjoint(component))
+                {
+                    failed.extend(tryable.iter().map(|(other, _)| other.id));
+                    continue;
+                }
+                let mut nodes = terrain.tiles.len();
+                let path = match astar_with_budget(&terrain, &blocked, **pos, &goals, &mut nodes) {
+                    (Some(path), false, _) => path,
+                    (None, false, explored) => {
+                        components.push(explored);
+                        failed.extend(tryable.iter().map(|(other, _)| other.id));
+                        continue;
+                    }
+                    (_, true, _) => {
+                        unreachable!("a forage search sized to the world cannot run out")
+                    }
+                };
+                let end = path.last().copied().unwrap_or(**pos);
+                let chosen = tryable
+                    .iter()
+                    .find(|(_, cells)| cells.contains(&end))
+                    .expect("the path ends in one of the goals")
+                    .0
+                    .id;
+                reached.extend(tryable.iter().map(|(other, _)| other.id));
+                current.0 = Some(chosen);
+                commands
+                    .entity(*entity)
+                    .insert((Path(path), WorkProgress(0)));
+                claimed.insert(chosen);
+            }
+            let cooldown_until = tick.0.saturating_add(RETRY_COOLDOWN);
+            for (other, _) in &forage {
+                if failed.contains(&other.id)
+                    && !reached.contains(&other.id)
+                    && !claimed.contains(&other.id)
+                {
+                    jobs.get_mut(other.id)
+                        .expect("iterated job still exists")
+                        .retry_after = cooldown_until;
+                }
+            }
             continue;
         }
         // A claimable dwarf holds no job, and by AC10 therefore carries nothing — so one goal
@@ -952,10 +1036,6 @@ struct Plants {
     by_pos: BTreeMap<Pos, Plant>,
     changed: BTreeSet<Pos>,
 }
-
-/// The cells the player marked for foraging, shaped like `Zones`.
-#[derive(Resource, Default)]
-struct ForageArea(BTreeSet<Pos>);
 
 /// The tile grid lives in the ECS so systems can read it; `World` delegates.
 #[derive(Resource)]
@@ -1869,6 +1949,58 @@ fn first_standable_down_column(terrain: &Terrain, mut cell: Pos) -> Pos {
         cell.z -= 1;
     }
     cell
+}
+
+/// How many of its kind item `item` stands for: 1 unless it holds an `ItemCount`.
+fn item_count(ecs: &EcsWorld, item: u32) -> u32 {
+    item_entity(ecs, item)
+        .and_then(|entity| ecs.get::<ItemCount>(entity))
+        .map_or(1, |count| count.0)
+}
+
+/// 13.9 Q10: where a forage trip goes next: the nearest marked, ripe bush within
+/// `FORAGE_TRIP_RADIUS` (Manhattan, 3D) of `from` whose job nobody holds and that the hauler can
+/// reach, ties to the lowest `JobId`. Its job is returned, still unclaimed.
+fn next_trip_job(ecs: &EcsWorld, blocked: &BTreeSet<Pos>, from: Pos) -> Option<JobId> {
+    let tick = ecs.resource::<Tick>().0;
+    let held: BTreeSet<JobId> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| entity.get::<CurrentJob>()?.0)
+        .collect();
+    let plants = &ecs.resource::<Plants>().by_pos;
+    let distance =
+        |cell: Pos| from.x.abs_diff(cell.x) + from.y.abs_diff(cell.y) + from.z.abs_diff(cell.z);
+    let mut candidates: Vec<(u32, Job)> = ecs
+        .resource::<Jobs>()
+        .iter()
+        .filter(|job| job.kind == JobKind::Forage)
+        .filter(|job| !held.contains(&job.id) && tick >= job.retry_after)
+        .filter(|job| {
+            plants
+                .get(&job.target)
+                .is_some_and(|plant| tick >= plant.ripe_at)
+        })
+        .map(|job| (distance(job.target), *job))
+        .filter(|(away, _)| *away <= FORAGE_TRIP_RADIUS)
+        .collect();
+    candidates.sort_by_key(|(away, job)| (*away, job.id));
+    let terrain = ecs.resource::<Terrain>();
+    let zones = &ecs.resource::<Zones>().0;
+    candidates.into_iter().find_map(|(_, job)| {
+        let goals = work_positions_with(
+            terrain,
+            blocked,
+            zones,
+            &BTreeMap::new(),
+            job,
+            None,
+            &mut None,
+        );
+        let mut nodes = terrain.tiles.len();
+        let (path, _, _) = astar_with_budget(terrain, blocked, from, &goals, &mut nodes);
+        path.map(|_| job.id)
+    })
 }
 
 fn release_claim(ecs: &mut EcsWorld, entity: Entity) {
@@ -2969,31 +3101,78 @@ fn execute_jobs(ecs: &mut EcsWorld) {
         }
 
         if job.kind == JobKind::Forage {
-            // A plant lost or unripe while he worked: nothing to gather, the job is spent.
+            // The bush is picked: it regrows, its mark and job are used up, and the hauler's one
+            // berries item gains one (a new item when he carries nothing yet).
             let tick = ecs.resource::<Tick>().0;
+            // A plant lost or unripe while he worked: nothing to gather, the job is spent.
             let ripe = ecs
                 .resource::<Plants>()
                 .by_pos
                 .get(&job.target)
                 .is_some_and(|plant| tick >= plant.ripe_at);
             if ripe {
-                {
-                    let mut plants = ecs.resource_mut::<Plants>();
-                    plants
-                        .by_pos
-                        .get_mut(&job.target)
-                        .expect("ripe was read from this plant")
-                        .ripe_at = tick + REGROW_TICKS;
-                    plants.changed.insert(job.target);
-                }
-                // No `clear_paths`: nothing walkable changed. The berries block the plant's cell
-                // like any uncarried item.
-                stale = true;
-                let item_id = ecs.resource_mut::<IdAllocator>().allocate();
-                ecs.spawn((Item(ItemKind::Berries), item_id, job.target));
+                let mut plants = ecs.resource_mut::<Plants>();
+                plants
+                    .by_pos
+                    .get_mut(&job.target)
+                    .expect("ripe was read from this plant")
+                    .ripe_at = tick + REGROW_TICKS;
+                plants.changed.insert(job.target);
             }
             ecs.resource_mut::<Jobs>().remove(job.id);
-            release_claim(ecs, entity);
+            remove_forage_mark(ecs, job.target);
+            if ripe {
+                match carrying {
+                    None => {
+                        let item_id = ecs.resource_mut::<IdAllocator>().allocate();
+                        ecs.spawn((Item(ItemKind::Berries), ItemCount(1), item_id, pos));
+                        ecs.get_mut::<Carrying>(entity)
+                            .expect("every dwarf has a carrying slot")
+                            .0 = Some(item_id.0);
+                    }
+                    Some(item) => {
+                        ecs.get_mut::<ItemCount>(
+                            item_entity(ecs, item).expect("a carried item"),
+                        )
+                        .expect("a carried berries load has a count")
+                        .0 += 1;
+                    }
+                }
+            }
+            let Some(item) = ecs.get::<Carrying>(entity).and_then(|carrying| carrying.0) else {
+                release_claim(ecs, entity);
+                continue;
+            };
+            let next = (item_count(ecs, item) < FORAGE_TRIP_BUSHES)
+                .then(|| next_trip_job(ecs, &blocked, pos))
+                .flatten();
+            let next = match next {
+                // The trip goes on: the claim moves to the next bush and the path is re-planned.
+                Some(next) => next,
+                // The trip is over: a haul job for the load, held by the one carrying it, walks it
+                // to the pile through the haul machinery (`release_claim` drops it where he stands
+                // when no pile can be reached).
+                None => {
+                    let mut jobs = ecs.resource_mut::<Jobs>();
+                    let id = jobs.next_job_id();
+                    let inserted = jobs.insert(Job {
+                        id,
+                        kind: JobKind::Haul { item },
+                        target: pos,
+                        created_tick: tick,
+                        retry_after: 0,
+                    });
+                    debug_assert!(inserted, "a carried load has no haul job yet");
+                    id
+                }
+            };
+            ecs.get_mut::<CurrentJob>(entity)
+                .expect("every dwarf has a current job")
+                .0 = Some(next);
+            ecs.entity_mut(entity).insert(WorkProgress(0));
+            ecs.entity_mut(entity).remove::<Path>();
+            *ecs.get_mut::<JobState>(entity)
+                .expect("every dwarf has a job state") = JobState::Walk;
             continue;
         }
 
@@ -3463,7 +3642,6 @@ fn assemble(
     goals_completed: u32,
     arrivals: bool,
     plants: BTreeMap<Pos, Plant>,
-    forage: BTreeSet<Pos>,
 ) -> World {
     let mut ecs = EcsWorld::new();
     ecs.insert_resource(Tick(tick));
@@ -3477,7 +3655,6 @@ fn assemble(
         by_pos: plants,
         changed: BTreeSet::new(),
     });
-    ecs.insert_resource(ForageArea(forage));
     ecs.insert_resource(GoalsCompleted(goals_completed));
     ecs.insert_resource(Arrivals(arrivals));
     ecs.insert_resource(jobs);
@@ -3493,7 +3670,6 @@ fn assemble(
         (
             advance_tick,
             create_jobs,
-            create_forage_jobs,
             create_haul_jobs,
             claim_jobs,
             execute_jobs,
@@ -3565,7 +3741,6 @@ impl World {
             0,
             false,
             plants,
-            BTreeSet::new(),
         );
         // Identity has its own stream so it never shifts a spawn position.
         let mut identity_rng = ChaCha8Rng::seed_from_u64(seed ^ STREAM_IDENTITY);
@@ -3697,10 +3872,11 @@ impl World {
         let jobs = self.jobs();
         let job_resource = self.ecs.resource::<Jobs>();
         let kinds: BTreeMap<Id, ItemKind> = self.item_kinds().into_iter().collect();
+        let counts: BTreeMap<Id, u32> = self.item_counts().into_iter().collect();
         let items = self
             .items()
             .into_iter()
-            .map(|(id, pos)| (id.0, pos, kinds[&id]))
+            .map(|(id, pos)| (id.0, pos, kinds[&id], counts[&id]))
             .collect();
         let emitters = self
             .emitters()
@@ -3734,7 +3910,6 @@ impl World {
                 .iter()
                 .map(|(pos, plant)| (*pos, plant.ripe_at))
                 .collect(),
-            forage: self.forage_area(),
         }
     }
 
@@ -3757,7 +3932,6 @@ impl World {
             goals_completed,
             arrivals,
             plants,
-            forage,
         } = save;
         let mut job_resource = Jobs {
             next_id: next_job_id,
@@ -3787,7 +3961,6 @@ impl World {
                 .into_iter()
                 .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
                 .collect(),
-            forage.into_iter().collect(),
         );
         for dwarf in dwarves {
             let current_job = dwarf.current_job.map(JobId);
@@ -3838,8 +4011,8 @@ impl World {
                 });
             }
         }
-        for (id, pos, kind) in items {
-            world.ecs.spawn((Item(kind), Id(id), pos));
+        for (id, pos, kind, count) in items {
+            world.ecs.spawn((Item(kind), ItemCount(count), Id(id), pos));
         }
         for (id, pos, light) in emitters {
             world.ecs.spawn((Emitter(light), Id(id), pos));
@@ -3927,75 +4100,6 @@ impl World {
             .collect()
     }
 
-    /// The forage area's cells, ascending by `Pos`.
-    pub fn forage_area(&self) -> Vec<Pos> {
-        self.ecs
-            .resource::<ForageArea>()
-            .0
-            .iter()
-            .copied()
-            .collect()
-    }
-
-    /// One player's forage drag, several rects because plants sit on hills as the forest does. It
-    /// keeps the standable cells of its rects and is refused, naming the bounding box, only when
-    /// no kept cell holds a plant. Nothing is placed on a refusal.
-    ///
-    /// NOTE: the refusal's rect can span levels; nothing reads it beyond the command it names.
-    pub fn place_forage_area(&mut self, rects: &[Rect]) -> Option<Refusal> {
-        let first = rects.first()?;
-        let dims = self.dims();
-        let blocked = blocked_cells(self.emitters().iter().map(|(_, pos, _)| pos));
-        let kept: BTreeSet<Pos> = {
-            let terrain = self.ecs.resource::<Terrain>();
-            rects
-                .iter()
-                .flat_map(|rect| {
-                    let lo = |a: i32, b: i32| a.min(b).max(0);
-                    let hi = |a: i32, b: i32, n: u32| a.max(b).min(n as i32 - 1);
-                    let (x0, x1) = (
-                        lo(rect.min.x, rect.max.x),
-                        hi(rect.min.x, rect.max.x, dims.x),
-                    );
-                    let (y0, y1) = (
-                        lo(rect.min.y, rect.max.y),
-                        hi(rect.min.y, rect.max.y, dims.y),
-                    );
-                    let (z0, z1) = (
-                        lo(rect.min.z, rect.max.z),
-                        hi(rect.min.z, rect.max.z, dims.z),
-                    );
-                    (z0..=z1).flat_map(move |z| {
-                        (y0..=y1).flat_map(move |y| (x0..=x1).map(move |x| Pos { x, y, z }))
-                    })
-                })
-                .filter(|pos| is_walkable(terrain, &blocked, *pos))
-                .collect()
-        };
-        let has_plant = {
-            let plants = &self.ecs.resource::<Plants>().by_pos;
-            kept.iter().any(|pos| plants.contains_key(pos))
-        };
-        if !has_plant {
-            return Some(Refusal::PlaceForageArea {
-                rect: rects.iter().fold(*first, |bounds, rect| Rect {
-                    min: Pos {
-                        x: bounds.min.x.min(rect.min.x.min(rect.max.x)),
-                        y: bounds.min.y.min(rect.min.y.min(rect.max.y)),
-                        z: bounds.min.z.min(rect.min.z.min(rect.max.z)),
-                    },
-                    max: Pos {
-                        x: bounds.max.x.max(rect.min.x.max(rect.max.x)),
-                        y: bounds.max.y.max(rect.min.y.max(rect.max.y)),
-                        z: bounds.max.z.max(rect.min.z.max(rect.max.z)),
-                    },
-                }),
-            });
-        }
-        self.ecs.resource_mut::<ForageArea>().0.extend(kept);
-        None
-    }
-
     /// One player's stockpile drag, which is several rects over uneven ground. It is refused only
     /// when no rect in it holds a valid cell: a drag that zones the ring around the campfire has
     /// not been refused just because the fire's own cell was left alone in one of its rects.
@@ -4037,17 +4141,13 @@ impl World {
         if let SimCommand::SetProfession { dwarf, profession } = command {
             return self.set_profession(dwarf, profession);
         }
-        if let SimCommand::PlaceForageArea { rect } = command {
-            return self.place_forage_area(&[rect]);
-        }
         let dims = self.dims();
         let rect = match command {
             SimCommand::Designate { rect, .. }
             | SimCommand::CancelDesignation { rect }
             | SimCommand::PlaceStockpile { rect }
-            | SimCommand::RemoveStockpile { rect }
-            | SimCommand::RemoveForageArea { rect } => rect,
-            SimCommand::SetProfession { .. } | SimCommand::PlaceForageArea { .. } => {
+            | SimCommand::RemoveStockpile { rect } => rect,
+            SimCommand::SetProfession { .. } => {
                 unreachable!("dispatched before the rect prelude")
             }
         };
@@ -4102,6 +4202,37 @@ impl World {
                         )
                     };
                     match kind {
+                        // 13.9 Q12: a ripe bush whose cell is in the rect or directly above a cell
+                        // of it (a drag on the ground reaches the bush on it), marked on its own
+                        // cell. A growing bush and bare ground take no mark.
+                        DesignationKind::Forage => {
+                            let tick = self.tick();
+                            let plants = &self.ecs.resource::<Plants>().by_pos;
+                            let designations = &self.ecs.resource::<Designations>().0;
+                            let ripe = |cell: &Pos| {
+                                plants.get(cell).is_some_and(|plant| tick >= plant.ripe_at)
+                            };
+                            positions()
+                                .flat_map(|pos| {
+                                    [
+                                        pos,
+                                        Pos {
+                                            z: pos.z + 1,
+                                            ..pos
+                                        },
+                                    ]
+                                })
+                                .filter(ripe)
+                                // A channel already marked on the cell keeps it.
+                                .filter(|cell| {
+                                    designations
+                                        .get(cell)
+                                        .is_none_or(|kind| *kind == DesignationKind::Forage)
+                                })
+                                .collect::<BTreeSet<_>>()
+                                .into_iter()
+                                .collect()
+                        }
                         // One mark per distinct tree base, in ascending order.
                         DesignationKind::Cut => positions()
                             .filter_map(|pos| tree_of(terrain, pos).map(|(base, _)| base))
@@ -4127,7 +4258,9 @@ impl World {
                                             ..*pos
                                         })
                                 }
-                                DesignationKind::Cut => unreachable!("handled above"),
+                                DesignationKind::Cut | DesignationKind::Forage => {
+                                    unreachable!("handled above")
+                                }
                             })
                             // 12.10b: a channel's step opens two cells down (D2: none at z < 2) and
                             // never under a fire (D3, #188).
@@ -4178,6 +4311,23 @@ impl World {
                         .map(|(base, _)| *base)
                         .collect()
                 };
+                // 13.9: a forage mark sits on its bush's own cell, which a clear drag on the
+                // ground below never reaches: the rect also cancels a mark directly above it.
+                let forage_marks: Vec<Pos> = self
+                    .ecs
+                    .resource::<Designations>()
+                    .0
+                    .iter()
+                    .filter(|(_, kind)| **kind == DesignationKind::Forage)
+                    .filter(|(mark, _)| {
+                        targets.contains(&Pos {
+                            z: mark.z - 1,
+                            ..**mark
+                        })
+                    })
+                    .map(|(mark, _)| *mark)
+                    .collect();
+                let cut_bases: Vec<Pos> = cut_bases.into_iter().chain(forage_marks).collect();
                 let mut targets = targets;
                 {
                     let mut designations = self.ecs.resource_mut::<Designations>();
@@ -4195,7 +4345,10 @@ impl World {
                     .resource::<Jobs>()
                     .iter()
                     .filter(|job| {
-                        matches!(job.kind, JobKind::Dig | JobKind::Channel | JobKind::Cut)
+                        matches!(
+                            job.kind,
+                            JobKind::Dig | JobKind::Channel | JobKind::Cut | JobKind::Forage
+                        )
                     })
                     .filter(|job| targets.contains(&job.target))
                     .map(|job| job.id)
@@ -4241,14 +4394,7 @@ impl World {
                     zones.0.remove(&pos);
                 }
             }
-            // Forage jobs of cells that leave the area are retired next tick, by `create_forage_jobs`.
-            SimCommand::RemoveForageArea { .. } => {
-                let mut area = self.ecs.resource_mut::<ForageArea>();
-                for pos in positions() {
-                    area.0.remove(&pos);
-                }
-            }
-            SimCommand::SetProfession { .. } | SimCommand::PlaceForageArea { .. } => {
+            SimCommand::SetProfession { .. } => {
                 unreachable!("dispatched before the rect prelude")
             }
         }
@@ -4324,13 +4470,16 @@ impl World {
         split_stored(&self.ecs).0.len()
     }
 
-    /// The stored items (`stored_count`'s rule) that are `Berries`: the bench's `food=`.
+    /// The berries in the stored items (`stored_count`'s rule), each item counting its `count`:
+    /// the bench's `food=`.
     pub fn stored_berries_count(&self) -> usize {
         let stored = split_stored(&self.ecs).0;
+        let counts: BTreeMap<Id, u32> = self.item_counts().into_iter().collect();
         self.item_kinds()
             .into_iter()
             .filter(|(id, kind)| *kind == ItemKind::Berries && stored.contains(&id.0))
-            .count()
+            .map(|(id, _)| counts[&id] as usize)
+            .sum()
     }
 
     /// Sorted ascending by `Pos`.
@@ -4434,6 +4583,21 @@ impl World {
             .collect();
         kinds.sort_by_key(|(id, _)| *id);
         kinds
+    }
+
+    /// Sorted ascending by `Id`. Every item has a count: 1, unless it is a berries load.
+    pub fn item_counts(&self) -> Vec<(Id, u32)> {
+        let mut counts: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Item>())
+            .filter_map(|entity| {
+                let count = entity.get::<ItemCount>().map_or(1, |count| count.0);
+                Some((*entity.get::<Id>()?, count))
+            })
+            .collect();
+        counts.sort_by_key(|(id, _)| *id);
+        counts
     }
 
     /// Sorted ascending by `Id`.
@@ -4968,80 +5132,6 @@ mod tests {
         world.apply_command(super::SimCommand::PlaceStockpile {
             rect: super::Rect { min: pos, max: pos },
         });
-    }
-
-    /// 13.9: a bush blocks nothing, so a dwarf can stand on it as the berries land. The berries then
-    /// lie under him; he must still get off, and they must still be hauled.
-    #[test]
-    fn a_dwarf_on_the_bush_as_the_berries_land_walks_off_and_they_are_hauled() {
-        let mut world = World::generate(super::DEFAULT_SEED, Dims::DEFAULT);
-        let camp = world.camp_origin();
-        world.apply_command(super::SimCommand::PlaceStockpile {
-            rect: super::Rect {
-                min: Pos {
-                    x: camp.x + 1,
-                    y: camp.y + 1,
-                    ..camp
-                },
-                max: Pos {
-                    x: camp.x + 3,
-                    y: camp.y + 3,
-                    ..camp
-                },
-            },
-        });
-        let pile: BTreeSet<Pos> = world.zones().into_iter().collect();
-        assert_eq!(pile.len(), 9);
-        let plant = world
-            .plants()
-            .into_iter()
-            .map(|(pos, _)| pos)
-            .min_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos))
-            .expect("plants");
-        assert_eq!(
-            world.place_forage_area(&[super::Rect {
-                min: plant,
-                max: plant
-            }]),
-            None
-        );
-        let hauler = world
-            .professions()
-            .into_iter()
-            .find_map(|(id, profession)| (profession == super::Profession::Hauler).then_some(id))
-            .expect("a hauler");
-        let entity = dwarf_entity(&world, hauler.0);
-        // Held on the bush, idle, until the berries land under him.
-        for _ in 0..3_000 {
-            *world.ecs.get_mut::<Pos>(entity).unwrap() = plant;
-            {
-                let mut wander = world.ecs.get_mut::<super::Wander>(entity).unwrap();
-                // Home moves with him: `wander` only steps within `WANDER_RADIUS` of it.
-                wander.cooldown = 1_000;
-                wander.home = plant;
-            }
-            world.step();
-            if !world.items().is_empty() {
-                break;
-            }
-        }
-        assert_eq!(world.items().len(), 1, "the berries never landed");
-        assert_eq!(
-            *world.ecs.get::<Pos>(entity).unwrap(),
-            plant,
-            "the control: he stands on the berries"
-        );
-        world.ecs.get_mut::<super::Wander>(entity).unwrap().cooldown = 0;
-        let mut walked_off = false;
-        for _ in 0..3_000 {
-            world.step();
-            walked_off |= *world.ecs.get::<Pos>(entity).unwrap() != plant;
-            if walked_off && world.stored_count() == 1 {
-                break;
-            }
-        }
-        assert!(walked_off, "he never left the bush");
-        assert_eq!(world.stored_count(), 1, "the berries were not hauled");
     }
 
     fn dwarf_entity(world: &World, id: u32) -> super::Entity {

@@ -400,7 +400,8 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                     match kind {
                         sim_core::DesignationKind::Dig => dug += 1,
                         sim_core::DesignationKind::Cut => cut += 1,
-                        sim_core::DesignationKind::Channel => {}
+                        // A forage mark never changes its tile, so it is never counted here.
+                        sim_core::DesignationKind::Channel | sim_core::DesignationKind::Forage => {}
                     }
                 }
             }

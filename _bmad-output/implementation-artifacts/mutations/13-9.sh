@@ -5,68 +5,44 @@
 # NOTE: the gui `--drag forage` capture cannot run headless (12.7's deferral), so row 16 is killed
 # by the commands_for unit test, not by the capture.
 
-mutation "1 the forage area is never refused (AC 3)" sim-core a_forage_area_holding_no_plant_is_refused_naming_the_bounding_rect_and_places_nothing <<'PY'
+mutation "2 trade(Forage) is the miner's (AC 5)" sim-core only_haulers_hold_forage_jobs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if !has_plant {\n            return Some(Refusal::PlaceForageArea {\n'
+old = '        JobKind::Forage => Profession::Hauler,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if false && !has_plant {\n            return Some(Refusal::PlaceForageArea {\n'))
+p.write_text(s.replace(old, '        JobKind::Forage => Profession::Miner,\n'))
 PY
 
-mutation "2 trade(Forage) is the miner's (AC 5)" sim-core every_ripe_plant_in_the_area_has_one_forage_job_and_only_the_woodcutter_holds_it <<'PY'
+mutation "5 a forage regrows next tick, not after REGROW_TICKS (AC 6)" sim-core a_regrown_bush_is_unmarked_and_not_foraged_again_until_it_is_marked_again <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        JobKind::Cut | JobKind::Forage => Profession::Woodcutter,\n'
+old = '                    .ripe_at = tick + REGROW_TICKS;\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        JobKind::Cut => Profession::Woodcutter,\n        JobKind::Forage => Profession::Miner,\n'))
+p.write_text(s.replace(old, '                    .ripe_at = tick + 1;\n'))
 PY
 
-mutation "3 a forage job ignores berries lying on the bush (Found E)" sim-core berries_still_lying_on_a_bush_keep_it_from_a_new_forage_job <<'PY'
+mutation "6 tend_plants never removes a plant whose ground went (AC 7)" sim-core losing_the_next_bush_mid_trip_drops_the_load <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            .filter(|pos| !jobs.targets.contains(pos) && !lying.contains(pos))\n'
+old = '            .filter(|pos| !terrain.is_standable(**pos))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            .filter(|pos| !jobs.targets.contains(pos) && (lying.is_empty() || true))\n'))
+p.write_text(s.replace(old, '            .filter(|_| false)\n'))
 PY
 
-mutation "4 removing the area leaves its forage jobs standing (AC 3)" sim-core removing_the_area_retires_a_held_forage_job_within_one_tick <<'PY'
+mutation "7 a forage does not mark its plant changed (AC 4, 9)" sim-core a_forage_turns_the_plant_growing_and_the_hauler_carries_one_berries <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                !area.contains(&job.target)\n                    ||'
+old = '                plants.changed.insert(job.target);\n            }\n            ecs.resource_mut::<Jobs>().remove(job.id);\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                false\n                    ||'))
-PY
-
-mutation "5 a forage regrows next tick, not after REGROW_TICKS (AC 6)" sim-core a_foraged_plant_is_foraged_again_no_earlier_than_regrow_ticks_after <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        .ripe_at = tick + REGROW_TICKS;\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '                        .ripe_at = tick + 1;\n'))
-PY
-
-mutation "6 tend_plants never removes a plant whose ground went (AC 7)" sim-core a_plant_whose_ground_goes_is_gone_with_its_job_and_the_clients_are_told <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            plants.changed.insert(*pos);\n        }\n        stands\n    });\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '            plants.changed.insert(*pos);\n        }\n        true\n    });\n'))
-PY
-
-mutation "7 a forage does not mark its plant changed (AC 4, 9)" sim-core a_forage_turns_the_plant_growing_and_leaves_one_berries_on_its_cell <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        .ripe_at = tick + REGROW_TICKS;\n                    plants.changed.insert(job.target);\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '                        .ripe_at = tick + REGROW_TICKS;\n'))
+p.write_text(s.replace(old, '            }\n            ecs.resource_mut::<Jobs>().remove(job.id);\n'))
 PY
 
 mutation "8 a regrown plant is never announced (AC 6, 9)" sim-core a_regrown_plant_is_announced_on_the_tick_it_ripens <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if plant.ripe_at == tick.0 {\n'
+old = '        if plant.ripe_at == tick {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if false && plant.ripe_at == tick.0 {\n'))
+p.write_text(s.replace(old, '        if false && plant.ripe_at == tick {\n'))
 PY
 
 mutation "9 apply_delta drops the plant changes (Found F)" client-core a_plant_goes_from_ripe_to_growing_to_ripe_to_gone_and_the_forage_area_is_resent_whole <<'PY'
@@ -77,20 +53,12 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '        for change in plants.into_iter().take(0) {\n'))
 PY
 
-mutation "10 a save without plants still loads (AC 8)" sim-core a_save_missing_a_plants_or_forage_key_is_refused <<'PY'
+mutation "10 a save without plants still loads (AC 8)" sim-core a_save_missing_a_plants_key_or_an_item_count_is_refused <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/save.rs'); s = p.read_text()
 old = '    pub plants: Vec<(Pos, u64)>,\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '    #[serde(default)]\n    pub plants: Vec<(Pos, u64)>,\n'))
-PY
-
-mutation "11 a save without the forage area still loads (AC 8)" sim-core a_save_missing_a_plants_or_forage_key_is_refused <<'PY'
-import pathlib
-p = pathlib.Path('crates/sim-core/src/save.rs'); s = p.read_text()
-old = '    pub forage: Vec<Pos>,\n'
-assert s.count(old) == 1
-p.write_text(s.replace(old, '    #[serde(default)]\n    pub forage: Vec<Pos>,\n'))
 PY
 
 mutation "12 the validator takes a forage job over no plant (Found H)" simd a_forage_job_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking <<'PY'

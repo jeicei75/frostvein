@@ -37,10 +37,10 @@ PY
 mutation "4 a cut is a miner's job" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-# Re-pointed 13.9: forage is the woodcutter's too.
-old = '        JobKind::Cut | JobKind::Forage => Profession::Woodcutter,\n'
+# Re-pointed 13.9 Amendment 1: forage is the hauler's now, so the woodcutter's arm is the cut alone.
+old = '        JobKind::Cut => Profession::Woodcutter,\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        JobKind::Cut | JobKind::Forage => Profession::Miner,\n'))
+p.write_text(s.replace(old, '        JobKind::Cut => Profession::Miner,\n'))
 PY
 
 mutation "5 the wood spawns as stone" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'
@@ -125,9 +125,10 @@ PY
 mutation "9 cancel leaves the cut job" sim-core a_cancel_touching_a_marked_tree_removes_its_mark_and_releases_the_woodcutter <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                        matches!(job.kind, JobKind::Dig | JobKind::Channel | JobKind::Cut)\n'
+# Re-pointed 13.9 Amendment 1: the filter now also names Forage, on its own line.
+old = '                            JobKind::Dig | JobKind::Channel | JobKind::Cut | JobKind::Forage\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                        matches!(job.kind, JobKind::Dig | JobKind::Channel)\n'))
+p.write_text(s.replace(old, '                            JobKind::Dig | JobKind::Channel | JobKind::Forage\n'))
 PY
 
 mutation "10 the bridge sends wood as stone" simd a_cut_fells_one_whole_tree_into_wood_and_a_cut_over_nothing_is_refused <<'PY'
@@ -141,9 +142,10 @@ PY
 mutation "11 the save drops the kind (wood reloads as stone)" sim-core a_world_saved_mid_cut_with_wood_on_the_ground_loads_and_steps_identically <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '            world.ecs.spawn((Item(kind), Id(id), pos));\n'
+# Re-pointed 13.9 Amendment 1: the saved item carries its count.
+old = '            world.ecs.spawn((Item(kind), ItemCount(count), Id(id), pos));\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '            let _ = kind;\n            world.ecs.spawn((Item(ItemKind::Stone), Id(id), pos));\n'))
+p.write_text(s.replace(old, '            let _ = kind;\n            world.ecs.spawn((Item(ItemKind::Stone), ItemCount(count), Id(id), pos));\n'))
 PY
 
 mutation "12 gui cut mode sends dig" gui a_cut_drag_over_a_trunk_writes_one_designate_cut_at_the_trunks_level <<'PY'

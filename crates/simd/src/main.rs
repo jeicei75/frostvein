@@ -538,16 +538,26 @@ fn apply_sim_command(
             });
             None
         }
+        // TODO(13.9 R2): the wire's forage area becomes `Designate { kind: forage }`. Until then a
+        // forage drag marks the ripe bushes in its rects, and is refused when none does.
         protocol::Command::PlaceForageArea { rects } => {
-            let rects: Vec<_> = rects.into_iter().map(bridge::rect_in).collect();
-            world.place_forage_area(&rects).map(bridge::refusal_out)
+            let first = *rects.first()?;
+            let total = rects.len();
+            let refused = rects
+                .into_iter()
+                .filter(|rect| {
+                    world
+                        .apply_command(sim_core::SimCommand::Designate {
+                            kind: sim_core::DesignationKind::Forage,
+                            rect: bridge::rect_in(*rect),
+                        })
+                        .is_some()
+                })
+                .count();
+            (refused == total).then_some(protocol::Refusal::PlaceForageArea { rect: first })
         }
-        protocol::Command::RemoveForageArea { rect } => {
-            world.apply_command(sim_core::SimCommand::RemoveForageArea {
-                rect: bridge::rect_in(rect),
-            });
-            None
-        }
+        // TODO(13.9 R2): there is no area to remove; a Clear's `CancelDesignation` takes the marks.
+        protocol::Command::RemoveForageArea { .. } => None,
         protocol::Command::SetProfession { dwarf, profession } => world
             .apply_command(sim_core::SimCommand::SetProfession {
                 dwarf: sim_core::Id(dwarf),
@@ -682,22 +692,10 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 );
             }
         }
-        for pos in &save.forage {
-            if !in_bounds(*pos) {
-                bail!(
-                    "save forage position {},{},{} is outside dims {}x{}x{}",
-                    pos.x,
-                    pos.y,
-                    pos.z,
-                    save.dims.x,
-                    save.dims.y,
-                    save.dims.z
-                );
-            }
-        }
         let plant_cells: BTreeSet<_> = save.plants.iter().map(|(pos, _)| *pos).collect();
         let designation_kinds: BTreeMap<_, _> = save.designations.iter().copied().collect();
-        // Tile jobs come from designations and are bounded by the designation budget. Haul jobs
+        // Tile jobs (a forage job among them: it comes from a mark) come from designations and are
+        // bounded by the designation budget. Haul jobs
         // name a stone instead, so their bound is the number of stones in the save. Counting
         // first means an absurd haul count is refused as a count rather than as the first
         // missing item it happens to name.
@@ -707,7 +705,10 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
             .filter(|job| {
                 matches!(
                     job.kind,
-                    sim_core::JobKind::Dig | sim_core::JobKind::Channel | sim_core::JobKind::Cut
+                    sim_core::JobKind::Dig
+                        | sim_core::JobKind::Channel
+                        | sim_core::JobKind::Cut
+                        | sim_core::JobKind::Forage
                 )
             })
             .count();
@@ -717,20 +718,7 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 sim_core::MAX_DESIGNATIONS
             );
         }
-        // Forage jobs come from the area's ripe plants, not from designations, so they count
-        // against neither bound: the plant count bounds them (message quality, like haul below).
-        let forage_jobs = save
-            .jobs
-            .iter()
-            .filter(|job| matches!(job.kind, sim_core::JobKind::Forage))
-            .count();
-        if forage_jobs > save.plants.len() {
-            bail!(
-                "save has {forage_jobs} forage jobs; limit is {} plant(s)",
-                save.plants.len()
-            );
-        }
-        let haul_jobs = save.jobs.len() - tile_jobs - forage_jobs;
+        let haul_jobs = save.jobs.len() - tile_jobs;
         // MESSAGE QUALITY ONLY, not the real bound — raised at 3.3's review. Unique-by-item plus
         // item-exists below already imply this by pigeonhole, so this check can never reject a save
         // those two would accept; it only decides WHICH complaint the log carries. Do not read its
@@ -773,7 +761,8 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                         );
                     }
                 }
-                // Shares `seen_job_targets` with the tile jobs: the sim keeps one target per job.
+                // Shares `seen_job_targets` with the tile jobs: the sim keeps one target per job. A
+                // forage job stands on a bush and its forage mark.
                 sim_core::JobKind::Forage => {
                     if !seen_job_targets.insert(job.target) {
                         bail!(
@@ -786,6 +775,17 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     if !plant_cells.contains(&job.target) {
                         bail!(
                             "save forage job {} has no plant at {},{},{}",
+                            job.id.0,
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                    if designation_kinds.get(&job.target)
+                        != Some(&sim_core::DesignationKind::Forage)
+                    {
+                        bail!(
+                            "save forage job {} has no forage mark at {},{},{}",
                             job.id.0,
                             job.target.x,
                             job.target.y,
@@ -816,7 +816,20 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 id.0
             );
         }
-        for (id, pos, _) in &save.items {
+        for (id, pos, kind, count) in &save.items {
+            // 13.9 Amendment 1 (Q11): every item has a count, 1 unless it is a berries load.
+            if *count == 0 {
+                bail!("save item {id} has a count of 0");
+            }
+            if *kind != sim_core::ItemKind::Berries && *count != 1 {
+                bail!("save item {id} is not berries but has a count of {count}");
+            }
+            if *count > sim_core::FORAGE_TRIP_BUSHES {
+                bail!(
+                    "save item {id} has a count of {count}; a trip carries at most {}",
+                    sim_core::FORAGE_TRIP_BUSHES
+                );
+            }
             if !in_bounds(*pos) {
                 bail!(
                     "save item {id} position {},{},{} is outside dims {}x{}x{}",
