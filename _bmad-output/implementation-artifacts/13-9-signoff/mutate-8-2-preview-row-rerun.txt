@@ -1,0 +1,11 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== the preview stops following the ground with the send path ===
+thread 'project::tests::a_channel_preview_across_a_step_follows_the_ground' (592991) panicked at crates/gui/src/project.rs:4619:9:
+assertion `left == right` failed: a channel preview across a step must light the ground at both heights
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 249 filtered out; finished in 0.02s
+
+================ MUTATION RESULTS ================
+the preview stops following the ground with the send path    KILLED
+
+All mutations killed.

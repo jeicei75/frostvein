@@ -4587,6 +4587,42 @@ mod tests {
         );
     }
 
+    /// 8.2's follow-the-ground ruling, for the PREVIEW. A channel drag across a step lights the
+    /// standable cell at BOTH heights, as the send path designates them
+    /// (`tests/headless.rs::a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level`
+    /// pins the send path only). On one level it would light the low cell alone.
+    #[test]
+    fn a_channel_preview_across_a_step_follows_the_ground() {
+        use crate::{designate::DesignateMode, pick::Face};
+        let dims = Dims { x: 2, y: 1, z: 6 };
+        let mut tiles = vec![Tile::Empty; 12];
+        let at = |x: usize, z: usize| x + z * 2;
+        for z in 0..=3 {
+            tiles[at(0, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        for z in 0..=2 {
+            tiles[at(1, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        let mirror = world(dims, tiles);
+        let cell = |tile| crate::pick::PickedCell {
+            tile,
+            face: Face::Top,
+        };
+        let mut lit = preview_cells(
+            &mirror,
+            5,
+            cell([0, 0, 3]),
+            cell([1, 0, 2]),
+            DesignateMode::Channel,
+        );
+        lit.sort();
+        assert_eq!(
+            lit,
+            vec![[0, 0, 4], [1, 0, 3]],
+            "a channel preview across a step must light the ground at both heights"
+        );
+    }
+
     /// 12.10b review run 2: the sim refuses a channel over a tree tile (a cell standing on a
     /// trunk), so the preview does not light it; the cell beside it, on stone, stays lit.
     #[test]

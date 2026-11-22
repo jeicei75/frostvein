@@ -437,7 +437,7 @@ p.write_text(s.replace(old, """            Some(last) => {
             }"""))
 PY
 
-mutation "the preview stops following the ground with the send path" gui a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level <<'PY'
+mutation "the preview stops following the ground with the send path" gui a_channel_preview_across_a_step_follows_the_ground <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
 # Re-pointed 2026-11-22 (13.9 seat run 2): Forage rejoined the surface arm.
