@@ -330,12 +330,25 @@ fn commands_for(
         DesignateMode::Stockpile => vec![Command::PlaceStockpile {
             rects: surface.to_vec(),
         }],
-        // Like cut: ONE command on the single-z rect at the cut-target level, so a drag raises at
-        // most one refusal and never a spurious one for a part of the box (12.1).
-        DesignateMode::Forage => vec![Command::Designate {
-            kind: DesignationKind::Forage,
-            rect: cut_rect,
-        }],
+        // Like cut, ONE command, so a drag raises at most one refusal (12.1). Unlike cut, its
+        // levels span the followed ground: a bush is one cell tall, so the cut-target level alone
+        // missed every bush up or down a slope (13.9 seat run 2: "dragging works only in the
+        // surface level it was initiated"). Bushes stand only on a column's top, so the taller
+        // box catches nothing underground.
+        DesignateMode::Forage => {
+            let (low, high) = surface
+                .iter()
+                .fold((cut_rect.min[2], cut_rect.max[2]), |(low, high), rect| {
+                    (low.min(rect.min[2]), high.max(rect.max[2]))
+                });
+            vec![Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: Rect {
+                    min: [cut_rect.min[0], cut_rect.min[1], low],
+                    max: [cut_rect.max[0], cut_rect.max[1], high],
+                },
+            }]
+        }
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -507,10 +520,11 @@ mod tests {
         );
     }
 
-    /// Like cut: one `designate forage` on the cut-target rect, whatever the ground does, so a
-    /// drag over uneven ground raises at most one refusal.
+    /// One `designate forage` per drag, so a drag over uneven ground raises at most one refusal,
+    /// spanning every level the followed ground touches (13.9 seat run 2), and the cut-target
+    /// rect alone when no ground was followed.
     #[test]
-    fn a_forage_drag_is_one_designate_forage_on_the_cut_target_rect() {
+    fn a_forage_drag_is_one_designate_forage_spanning_the_followed_ground() {
         let picked = Rect {
             min: [62, 62, 9],
             max: [62, 66, 9],
@@ -529,17 +543,23 @@ mod tests {
                 max: [62, 66, 10],
             },
         ];
-        let expected = vec![Command::Designate {
-            kind: DesignationKind::Forage,
-            rect: cut_rect,
-        }];
         assert_eq!(
             commands_for(DesignateMode::Forage, picked, &surface, cut_rect),
-            expected
+            vec![Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: Rect {
+                    min: [62, 62, 9],
+                    max: [62, 66, 10],
+                },
+            }],
+            "the box spans the followed ground's levels, 9 and 10"
         );
         assert_eq!(
             commands_for(DesignateMode::Forage, picked, &[], cut_rect),
-            expected
+            vec![Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: cut_rect,
+            }]
         );
     }
 

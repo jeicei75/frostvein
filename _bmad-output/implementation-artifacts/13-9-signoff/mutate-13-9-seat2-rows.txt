@@ -1,0 +1,29 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 13 the channel preview skips the sim filter ===
+thread 'project::tests::a_channel_drag_over_the_campfire_does_not_light_its_tile' (504999) panicked at crates/gui/src/project.rs:4577:9:
+assertion `left == right` failed: the channel preview lights the cells beside the fire, never the fire
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 248 filtered out; finished in 0.00s
+
+=== the preview stops following the ground with the send path ===
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 249 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== 16 the gui forage drag sends a cut mark (AC 10) ===
+thread 'designate::tests::a_forage_drag_is_one_designate_forage_spanning_the_followed_ground' (508725) panicked at crates/gui/src/designate.rs:546:9:
+assertion `left == right` failed: the box spans the followed ground's levels, 9 and 10
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 248 filtered out; finished in 0.00s
+
+=== 35 the gui forage drag stays on one level (seat run 2) ===
+thread 'designate::tests::a_forage_drag_is_one_designate_forage_spanning_the_followed_ground' (510418) panicked at crates/gui/src/designate.rs:546:9:
+assertion `left == right` failed: the box spans the followed ground's levels, 9 and 10
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 248 filtered out; finished in 0.00s
+
+================ MUTATION RESULTS ================
+13 the channel preview skips the sim filter                  KILLED
+the preview stops following the ground with the send path    SURVIVED
+16 the gui forage drag sends a cut mark (AC 10)              KILLED
+35 the gui forage drag stays on one level (seat run 2)       KILLED
+
+1 mutation(s) did not KILL. SURVIVED = the test is not pinning what it claims.
+NO-COMPILE / NO-COLLECT / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.

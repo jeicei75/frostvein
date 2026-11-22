@@ -387,6 +387,12 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 
 - **Gate after the rework:** the full gate at `13259347` is GREEN in 2,154 s: cargo test, the 256² release run, all 17 pixel guards (the AO controls hold at 59/57, so marks do not reach the guard's frame), and the mutation tables.
 
+- **Seat run 2 (Wolf, `48aba96a`):** "well dragging works only in the surface level it was initiated".
+  - Cause: R3 sent one forage `Designate` on the cut-target level, and a bush is one cell tall.
+  - Fix: one command spanning the followed ground's levels; the preview follows the ground (`designate.rs`, `project.rs`).
+  - Mutation row 35 pins the span and is KILLED. Rows 16 (13-9), 13 (12-10b) and "the preview stops following the ground with the send path" (8-2) are re-pointed (`mutate-13-9-seat2-rows.txt`).
+  - **Pre-existing, not 13.9's:** that 8-2 row SURVIVES. It sabotages `preview_cells`, but its test (`a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level`) reads only the queued commands. On `main` the row and test are identical, and `designate.rs` never calls `preview_cells`, so it has pinned nothing since 8.2 (`e01e7ffd`, 2026-08-27). For Wolf: issue or fix.
+
 **Task 12, the gate:**
 - The first full gate at `f80e6e62` was RED on one check only: the AO pixel guard's open-snow medians read LL 59 / LR 57 against controls 60/59. Four bushes stand in the LL window.
 - The cause is attributed: the same build with bush drawing switched off reads 60/59.
@@ -493,3 +499,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 | 2026-11-22 | Tasks 1–10 and 12 done: Sonnet 5.5 subagents for Tasks 1–8 (`7aaf1697`, `cb021528`, `544db973`, `c3f626b0`, `54ce2e1b`, `897b3420`), Opus for Tasks 9–12. Mutation row 8 survived and is now pinned (`f80e6e62`). Wolf ruled the AO guard re-baseline to 59/57 for the bushes (`5963e6d3`). Full gate GREEN at `5963e6d3`. The seat sitting (Task 11, AC 15) is open. |
 | 2026-11-22 | Seat run 1 (Wolf, `a192ab88`): three findings. Redesign ruled as Amendment 1 (Q7–Q12): haulers forage several bushes a trip and carry one counted berries item to the pile; one-time ripe-only marks like cut replace the forage area; the first bush is the nearest. ACs 3–10, 11 and 13 are amended. Point 3's idling was probed and not reproduced; "not the nearest" was reproduced, and Q9 answers it. Status stays in-progress. |
 | 2026-11-22 | Amendment 1 built: R1 `c2aabc7c`, R2 `7f06e9a5`, R3 `7436e558`/`c1f74fca` (Sonnet 5.5), R4 by Opus (`fe7a831c`, `144bd046`, `a2e3e14c`, `13259347`). Mutation row 31 survived and is now pinned. Full gate GREEN at `13259347`. The seat card is rewritten for run 2. |
+| 2026-11-22 | Seat run 2 (Wolf, `48aba96a`): the forage drag marked only its start level. Fixed: one command spanning the followed ground's levels (mutation row 35). Found a pre-existing dead mutation row in `8-2` (preview vs send path), recorded for Wolf. |

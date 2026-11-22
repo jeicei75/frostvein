@@ -1104,21 +1104,22 @@ fn preview_cells(
     mode: DesignateMode,
 ) -> Vec<[i32; 3]> {
     match mode {
-        DesignateMode::Channel | DesignateMode::Stockpile => client_core::surface_targets(
-            mirror,
-            level,
-            designation_target(mirror, anchor, mode),
-            designation_target(mirror, release, mode),
-        )
-        .into_iter()
-        .filter(|tile| sim_will_keep(mirror, *tile, mode))
-        .collect(),
+        // Forage follows the ground too (13.9 seat run 2), and lights the ripe bushes on it.
+        DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Forage => {
+            client_core::surface_targets(
+                mirror,
+                level,
+                designation_target(mirror, anchor, mode),
+                designation_target(mirror, release, mode),
+            )
+            .into_iter()
+            .filter(|tile| sim_will_keep(mirror, *tile, mode))
+            .collect()
+        }
         _ => {
-            // Cut's and forage's single level is the cut-target level, the one the release sends.
+            // Cut's single level is the cut-target level, the one the release sends.
             let z = match mode {
-                DesignateMode::Cut | DesignateMode::Forage => {
-                    designation_target(mirror, anchor, mode)[2]
-                }
+                DesignateMode::Cut => designation_target(mirror, anchor, mode)[2],
                 _ => anchor.tile[2],
             };
             let rect = client_core::rect_on_level(

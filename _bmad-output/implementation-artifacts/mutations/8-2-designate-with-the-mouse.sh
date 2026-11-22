@@ -440,10 +440,10 @@ PY
 mutation "the preview stops following the ground with the send path" gui a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level <<'PY'
 import pathlib
 p = pathlib.Path('crates/gui/src/project.rs'); s = p.read_text()
-# Re-pointed 2026-11-22 (13.9 R3): Forage left the surface arm (it previews like cut).
-old = '        DesignateMode::Channel | DesignateMode::Stockpile => client_core::surface_targets(\n'
+# Re-pointed 2026-11-22 (13.9 seat run 2): Forage rejoined the surface arm.
+old = '        DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Forage => {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        DesignateMode::Stockpile => client_core::surface_targets(\n'))
+p.write_text(s.replace(old, '        DesignateMode::Stockpile | DesignateMode::Forage => {\n'))
 PY
 
 # AC18's readout. Found 2026-08-27 while testing the recipe rather than shipping it: `tui --frame`

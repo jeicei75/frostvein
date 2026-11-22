@@ -65,3 +65,8 @@ probably do foraging also. No need to forage and haul separately but collect som
 2) forage are stays after selection fully even rejected area .. should work like cutting 3 there might be some
 issues were woodcutter did not forage the nearest bush and actually even though there were forageable bushes just
 continued idling .."
+
+**Run 2, 2026-11-22, build `48aba96a` (Wolf).** His words: "well dragging works only in the surface level it was
+initiated". Cause: R3 sent forage like cut, one `Designate` on the cut-target level, and a bush is one cell tall, so a
+drag missed every bush up or down a slope. Fixed: still ONE command (one refusal at most), now spanning every level
+the followed ground touches; the preview follows the ground too.
