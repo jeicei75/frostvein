@@ -39,9 +39,11 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
-            // TODO(13.9 Task 4): plants and the forage area are saved.
-            BTreeMap::new(),
-            BTreeSet::new(),
+            plants
+                .into_iter()
+                .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
+                .collect(),
+            forage.into_iter().collect(),
         );
         for dwarf in dwarves {
 '''
@@ -49,9 +51,11 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
-            // TODO(13.9 Task 4): plants and the forage area are saved.
-            BTreeMap::new(),
-            BTreeSet::new(),
+            plants
+                .into_iter()
+                .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
+                .collect(),
+            forage.into_iter().collect(),
         );
         world.schedule = Schedule::default();
         world.schedule.add_systems(advance_tick);
@@ -67,12 +71,16 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            emitters,
             goals_completed,
             arrivals,
+            plants,
+            forage,
         } = save;
 '''
 assert s.count(old) == 1
 p.write_text(s.replace(old, '''            emitters,
             goals_completed,
             arrivals,
+            plants,
+            forage,
         } = save;
         let tiles = World::generate(seed, dims).to_save().tiles;
 '''))
@@ -94,9 +102,11 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
-            // TODO(13.9 Task 4): plants and the forage area are saved.
-            BTreeMap::new(),
-            BTreeSet::new(),
+            plants
+                .into_iter()
+                .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
+                .collect(),
+            forage.into_iter().collect(),
         );
         for dwarf in dwarves {
 '''
@@ -104,9 +114,11 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
-            // TODO(13.9 Task 4): plants and the forage area are saved.
-            BTreeMap::new(),
-            BTreeSet::new(),
+            plants
+                .into_iter()
+                .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
+                .collect(),
+            forage.into_iter().collect(),
         );
         {
             let mut terrain = world.ecs.resource_mut::<Terrain>();

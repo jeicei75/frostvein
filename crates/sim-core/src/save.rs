@@ -30,6 +30,11 @@ pub struct SaveState {
     // NOTE: deliberately no `#[serde(default)]`, like `goals_completed`: a pre-13.8 save fails to
     // decode and simd refuses it. Arrivals are a world setting, saved with the world.
     pub arrivals: bool,
+    // NOTE: deliberately no `#[serde(default)]`, like `arrivals` (13.9): a pre-13.9 save fails to
+    // decode and simd refuses it. Each plant's cell and the tick it is ripe from.
+    pub plants: Vec<(Pos, u64)>,
+    // NOTE: deliberately no `#[serde(default)]`, like `plants`: the forage-area cells.
+    pub forage: Vec<Pos>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

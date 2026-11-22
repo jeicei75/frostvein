@@ -729,7 +729,9 @@ import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: the surrounding code grew (rect validation, haul jobs, a `path`
 # argument, a larger save ceiling) and this anchor rotted with it. The seam is unchanged.
-old = '''                    if !seen_job_targets.insert(job.target) {
+# Re-pointed 13.9: the Forage arm repeats this check, so the anchor starts at the tile-job arm.
+old = '''                sim_core::JobKind::Dig | sim_core::JobKind::Channel | sim_core::JobKind::Cut => {
+                    if !seen_job_targets.insert(job.target) {
                         bail!(
                             "save reuses job target {},{},{}",
                             job.target.x,
@@ -738,8 +740,9 @@ old = '''                    if !seen_job_targets.insert(job.target) {
                         );
                     }
 '''
+pre = old.split('\n')[0] + '\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    seen_job_targets.insert(job.target);\n'))
+p.write_text(s.replace(old, pre + '                    seen_job_targets.insert(job.target);\n'))
 PY
 
 mutation "load accepts job id at next_job_id" simd job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'

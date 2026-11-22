@@ -1823,6 +1823,149 @@ fn overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking() {
     );
 }
 
+/// A default world with a forage area over its two nearest plants, stepped until a forage job
+/// stands, so its save holds plants, a forage area and a Forage job (and no item).
+fn forage_save() -> sim_core::SaveState {
+    let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let mut plants: Vec<_> = world.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos));
+    let rects: Vec<_> = plants[..2]
+        .iter()
+        .map(|pos| sim_core::Rect {
+            min: *pos,
+            max: *pos,
+        })
+        .collect();
+    assert_eq!(world.place_forage_area(&rects), None);
+    while !world
+        .jobs()
+        .iter()
+        .any(|job| job.kind == sim_core::JobKind::Forage)
+    {
+        assert!(world.tick() < 100, "no forage job ever stood");
+        world.step();
+    }
+    let state = world.to_save();
+    assert!(state.plants.len() > 1);
+    assert_eq!(state.forage.len(), 2);
+    assert!(state.items.is_empty(), "the fixture holds no item");
+    state
+}
+
+/// 13.9 AC 8, positive control (13.6 #226's lesson: the validator can be tighter than the sim):
+/// the live Load takes a save holding plants, a forage area and a Forage job, and no item.
+#[test]
+fn the_live_load_takes_a_save_holding_a_forage_job() {
+    let daemon = Daemon::spawn();
+    let state = forage_save();
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(&state).expect("encode forage save fixture"),
+    )
+    .expect("write forage save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+    assert_eq!(loaded.tick, state.tick);
+}
+
+#[test]
+fn out_of_bounds_plant_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    state.plants.push((sim_core::Pos { x: -1, y: 0, z: 1 }, 0));
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save plant position -1,0,1 is outside dims",
+    );
+}
+
+#[test]
+fn out_of_bounds_forage_cell_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    state.forage.push(sim_core::Pos {
+        x: 0,
+        y: 9999,
+        z: 1,
+    });
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save forage position 0,9999,1 is outside dims",
+    );
+}
+
+#[test]
+fn a_forage_job_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    let target = state
+        .jobs
+        .iter()
+        .find(|job| job.kind == sim_core::JobKind::Forage)
+        .expect("a forage job")
+        .target;
+    state.plants.retain(|(pos, _)| *pos != target);
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!("has no plant at {},{},{}", target.x, target.y, target.z),
+    );
+}
+
+#[test]
+fn a_reused_forage_target_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    let mut twin = *state
+        .jobs
+        .iter()
+        .find(|job| job.kind == sim_core::JobKind::Forage)
+        .expect("a forage job");
+    let target = twin.target;
+    twin.id = sim_core::JobId(state.next_job_id);
+    state.next_job_id += 1;
+    state.jobs.push(twin);
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!(
+            "save reuses job target {},{},{}",
+            target.x, target.y, target.z
+        ),
+    );
+}
+
+#[test]
+fn more_forage_jobs_than_plants_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    let job = *state
+        .jobs
+        .iter()
+        .find(|job| job.kind == sim_core::JobKind::Forage)
+        .expect("a forage job");
+    state.plants = vec![(job.target, 0)];
+    let mut other = job;
+    other.id = sim_core::JobId(state.next_job_id);
+    other.target.x += 1;
+    state.next_job_id += 1;
+    state.jobs.push(other);
+    let forage_jobs = state
+        .jobs
+        .iter()
+        .filter(|job| job.kind == sim_core::JobKind::Forage)
+        .count();
+    assert!(forage_jobs > 1);
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!("save has {forage_jobs} forage jobs; limit is 1 plant(s)"),
+    );
+}
+
 #[test]
 fn out_of_bounds_zone_save_is_logged_and_the_daemon_keeps_ticking() {
     let daemon = Daemon::spawn();

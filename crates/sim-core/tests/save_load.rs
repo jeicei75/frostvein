@@ -183,6 +183,8 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.emitters(), control.emitters());
         assert_eq!(loaded.designations(), control.designations());
         assert_eq!(loaded.zones(), control.zones());
+        assert_eq!(loaded.plants(), control.plants());
+        assert_eq!(loaded.forage_area(), control.forage_area());
     }
 }
 
@@ -1262,6 +1264,104 @@ fn a_save_missing_an_arrivals_key_is_refused() {
     };
     for key in ["epithet", "arriving", "arrivals"] {
         let refused = serde_json::from_value::<sim_core::SaveState>(strip(key));
+        assert!(refused.is_err(), "a save without `{key}` loaded");
+    }
+}
+
+/// 13.9 AC 8: saved while one plant regrows, berries lie on the ground, a forage job is held and
+/// the area stands. The load must regrow the plant on the very tick the never-saved world does.
+#[test]
+fn a_world_saved_mid_regrowth_with_a_forage_held_loads_and_steps_identically() {
+    let mut saved = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = saved.camp_origin();
+    let mut plants: Vec<Pos> = saved.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos));
+    let rects: Vec<Rect> = plants[..2]
+        .iter()
+        .map(|pos| Rect {
+            min: *pos,
+            max: *pos,
+        })
+        .collect();
+    assert_eq!(saved.place_forage_area(&rects), None);
+    let mut control = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    assert_eq!(control.place_forage_area(&rects), None);
+
+    let holds_a_forage = |world: &World| {
+        world.claims().iter().any(|(_, held)| {
+            world
+                .jobs()
+                .iter()
+                .any(|job| Some(job.id) == *held && job.kind == JobKind::Forage)
+        })
+    };
+    let growing = |world: &World| world.plants().iter().filter(|(_, ripe)| !ripe).count();
+    while !(growing(&saved) == 1 && holds_a_forage(&saved)) {
+        assert!(saved.tick() < 3_000, "never one growing with a forage held");
+        saved.step();
+        control.step();
+    }
+    // THE GUARD: the round trip below covers a plant mid-regrowth, berries on the ground, a held
+    // forage job and a standing area, and the regrow still lies ahead.
+    assert_eq!(growing(&saved), 1);
+    assert!(
+        saved
+            .item_kinds()
+            .iter()
+            .any(|(_, k)| *k == ItemKind::Berries)
+    );
+    assert!(holds_a_forage(&saved));
+    assert_eq!(saved.forage_area().len(), 2);
+
+    let mut loaded = World::from_save(saved.to_save());
+    assert_eq!(loaded.plants(), saved.plants());
+    assert_eq!(loaded.forage_area(), saved.forage_area());
+    // Pending plant changes are not saved (a load starts clean, like dirty tiles), so the control
+    // forgets its own; the regrow's change must then land on the same tick in both.
+    control.drain_plant_changes();
+    let mut regrew = false;
+    for _ in 0..(sim_core::REGROW_TICKS + 100) {
+        let before = growing(&loaded);
+        loaded.step();
+        control.step();
+        regrew |= growing(&loaded) < before;
+        assert_eq!(loaded.plants(), control.plants());
+        assert_eq!(loaded.forage_area(), control.forage_area());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.item_kinds(), control.item_kinds());
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.drain_plant_changes(), control.drain_plant_changes());
+    }
+    assert!(regrew, "no plant regrew after the load");
+}
+
+/// 13.9 AC 8: `plants` and `forage` are required keys, and the unstripped save is the control.
+#[test]
+fn a_save_missing_a_plants_or_forage_key_is_refused() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = world.plants()[0].0;
+    assert_eq!(
+        world.place_forage_area(&[Rect {
+            min: plant,
+            max: plant
+        }]),
+        None
+    );
+    let json: serde_json::Value = serde_json::to_value(world.to_save()).unwrap();
+    assert!(
+        !json["plants"].as_array().unwrap().is_empty()
+            && !json["forage"].as_array().unwrap().is_empty()
+    );
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(json.clone()).is_ok(),
+        "the control must load"
+    );
+    for key in ["plants", "forage"] {
+        let mut json = json.clone();
+        json.as_object_mut().unwrap().remove(key).expect("a key");
+        let refused = serde_json::from_value::<sim_core::SaveState>(json);
         assert!(refused.is_err(), "a save without `{key}` loaded");
     }
 }

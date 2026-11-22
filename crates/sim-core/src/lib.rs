@@ -3727,6 +3727,14 @@ impl World {
             emitters,
             goals_completed: self.ecs.resource::<GoalsCompleted>().0,
             arrivals: self.ecs.resource::<Arrivals>().0,
+            plants: self
+                .ecs
+                .resource::<Plants>()
+                .by_pos
+                .iter()
+                .map(|(pos, plant)| (*pos, plant.ripe_at))
+                .collect(),
+            forage: self.forage_area(),
         }
     }
 
@@ -3748,6 +3756,8 @@ impl World {
             emitters,
             goals_completed,
             arrivals,
+            plants,
+            forage,
         } = save;
         let mut job_resource = Jobs {
             next_id: next_job_id,
@@ -3773,9 +3783,11 @@ impl World {
             zones.into_iter().collect(),
             goals_completed,
             arrivals,
-            // TODO(13.9 Task 4): plants and the forage area are saved.
-            BTreeMap::new(),
-            BTreeSet::new(),
+            plants
+                .into_iter()
+                .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
+                .collect(),
+            forage.into_iter().collect(),
         );
         for dwarf in dwarves {
             let current_job = dwarf.current_job.map(JobId);

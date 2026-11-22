@@ -657,6 +657,33 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 );
             }
         }
+        for (pos, _) in &save.plants {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save plant position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        for pos in &save.forage {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save forage position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        let plant_cells: BTreeSet<_> = save.plants.iter().map(|(pos, _)| *pos).collect();
         let designation_kinds: BTreeMap<_, _> = save.designations.iter().copied().collect();
         // Tile jobs come from designations and are bounded by the designation budget. Haul jobs
         // name a stone instead, so their bound is the number of stones in the save. Counting
@@ -678,7 +705,20 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 sim_core::MAX_DESIGNATIONS
             );
         }
-        let haul_jobs = save.jobs.len() - tile_jobs;
+        // Forage jobs come from the area's ripe plants, not from designations, so they count
+        // against neither bound: the plant count bounds them (message quality, like haul below).
+        let forage_jobs = save
+            .jobs
+            .iter()
+            .filter(|job| matches!(job.kind, sim_core::JobKind::Forage))
+            .count();
+        if forage_jobs > save.plants.len() {
+            bail!(
+                "save has {forage_jobs} forage jobs; limit is {} plant(s)",
+                save.plants.len()
+            );
+        }
+        let haul_jobs = save.jobs.len() - tile_jobs - forage_jobs;
         // MESSAGE QUALITY ONLY, not the real bound — raised at 3.3's review. Unique-by-item plus
         // item-exists below already imply this by pigeonhole, so this check can never reject a save
         // those two would accept; it only decides WHICH complaint the log carries. Do not read its
@@ -721,8 +761,26 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                         );
                     }
                 }
-                // TODO(13.9 Task 4): a Forage job gets its own validation arm.
-                sim_core::JobKind::Forage => bail!("save holds a forage job"),
+                // Shares `seen_job_targets` with the tile jobs: the sim keeps one target per job.
+                sim_core::JobKind::Forage => {
+                    if !seen_job_targets.insert(job.target) {
+                        bail!(
+                            "save reuses job target {},{},{}",
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                    if !plant_cells.contains(&job.target) {
+                        bail!(
+                            "save forage job {} has no plant at {},{},{}",
+                            job.id.0,
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                }
                 sim_core::JobKind::Haul { item } => {
                     if !item_ids.contains(&item) {
                         bail!("save haul job {} names missing item {item}", job.id.0);
@@ -977,7 +1035,7 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 // A haul job names a stone, not a tile: it has no designation and never had
                 // one. Its own rules live with the haul validation below.
                 sim_core::JobKind::Haul { .. } => continue,
-                // TODO(13.9 Task 4): refused by the arm above until then.
+                // A forage job names a plant, not a designation: validated with the jobs above.
                 sim_core::JobKind::Forage => continue,
             };
             if designation_kinds.get(&job.target) != Some(&expected_designation) {

@@ -171,11 +171,11 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - [x] NEW system `tend_plants`, chained after `execute_jobs` (`:3337-3353`), which skips while paused (AD-2). It removes each plant whose cell is no longer standable and marks it changed, and it marks changed each plant whose `ripe_at == tick`.
   - [x] `ItemKind::Berries` (`:197`). `yield_of` (`:208`) is unaffected, because berries come from no material. `goal_kind_text` and the GOALS count by kind are unchanged.
   - [x] Scenario tests in `tests/scenario.rs` for AC 3–7, built on the timber helpers (`:2445-2510`) and `a_cut_is_hauled_to_the_pile_as_wood` (`:2579`). Find a plant near `camp_origin()` from `world.plants()`; never hardcode one.
-- [ ] **Task 4: save and the load validator (AC 8).** UPDATE `src/save.rs`, `lib.rs` (`to_save` `:3486-3571`, `from_save` `:3573-3591`), and `crates/simd/src/main.rs`.
-  - [ ] `SaveState.plants` and `SaveState.forage`, with no `#[serde(default)]`.
-  - [ ] Validator (`main.rs:594`): bounds checks for plants and forage cells. Forage jobs get their own arm (Found H): unique target, a plant at the target, and a count bound of the plant count, kept out of both the tile-job and the haul counts. Refusal tests go in `simd/tests/serve.rs`.
-  - [ ] `tests/save_load.rs`: add the two readers to the per-tick equality list (`:170-188`), a mid-regrowth variant modelled on `:298-365` with its guard, and the missing-key tests modelled on `:1222-1267`.
-  - [ ] Patch `scenarios/saves/*.save` per Q6 with a throwaway script, not committed.
+- [x] **Task 4: save and the load validator (AC 8).** UPDATE `src/save.rs`, `lib.rs` (`to_save` `:3486-3571`, `from_save` `:3573-3591`), and `crates/simd/src/main.rs`.
+  - [x] `SaveState.plants` and `SaveState.forage`, with no `#[serde(default)]`.
+  - [x] Validator (`main.rs:594`): bounds checks for plants and forage cells. Forage jobs get their own arm (Found H): unique target, a plant at the target, and a count bound of the plant count, kept out of both the tile-job and the haul counts. Refusal tests go in `simd/tests/serve.rs`.
+  - [x] `tests/save_load.rs`: add the two readers to the per-tick equality list (`:170-188`), a mid-regrowth variant modelled on `:298-365` with its guard, and the missing-key tests modelled on `:1222-1267`.
+  - [x] Patch `scenarios/saves/*.save` per Q6 with a throwaway script, not committed.
 - [ ] **Task 5: the wire (AC 9).** UPDATE `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs` and `main.rs`, and `crates/client-core/src/lib.rs`.
   - [ ] The protocol types from the Wire diff, with snake_case names pinned in the wire-literal test (`protocol :346`).
   - [ ] Bridge: `snapshot()` and `delta()` (`bridge.rs:1-90`). `item_kind_out`, `refusal_out` (`:348-361`). Pin Cut, Berries and the plant states in the wire-name tests (`:429-487`, Found G).
@@ -335,12 +335,17 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 - A Forage job shares `Jobs.targets` with Dig/Channel/Cut, so a Channel marked on a cell whose Forage job already stands waits for that job (tile-job uniqueness, as the story says). Not changed.
 - `from_save` passes empty plants and forage with a `TODO(13.9 Task 4)`; a loaded world has no plants until Task 4. simd has `TODO(13.9 Task 4/5)` arms: `bridge.rs` (`item_kind_out`, `dwarf_job`, `refusal_out`: `unreachable!`) and `main.rs` (load validator: a Forage job is refused).
 - Mutation rows re-pointed in the same commit: 10-9 (lake exclusion) and 5-1 (camp clearing) now count 2 matches and mutate the first (the trees'); 12-7 row 4 (`trade`); 3-3 `carry_items runs before settle` (`tend_plants` in the schedule); 2-4 `loaded world schedule omits wander` and `from_save marks every tile dirty` (`assemble` call tail). Task 4 will move the 2-4 anchors again.
+- Task 4 (save and validator), by a Sonnet 5.5 subagent. `SaveState.plants: Vec<(Pos, u64)>` and `forage: Vec<Pos>` have no `#[serde(default)]`; a missing `Vec` key errors by itself, and `a_save_missing_a_plants_or_forage_key_is_refused` proves it with a control that holds non-empty values. Plant `changed` is not saved (a load starts clean, like dirty tiles); the mid-regrowth test drains the control's pending changes and then asserts the regrow change lands on the same tick.
+- The validator: bounds for plants and forage cells; a Forage arm (shares `seen_job_targets` with the tile jobs, as the sim shares `Jobs.targets`; a plant at the target; count <= plant count, message-quality like the haul bound), kept out of the tile-job and haul counts. Refusal tests in `simd/tests/serve.rs` go through a real daemon Load, with a positive control that the live Load takes a save holding a Forage job and no item (that control is what dies if Forage is counted as a haul). Not tested: Forage counted against `MAX_DESIGNATIONS` (would need 4097 plants with jobs).
+- The three seat saves were patched as data (`"plants":[],"forage":[]` appended, single line, no trailing newline kept). `dig-loop`, `seat-slow` and `stuck-tunnel` bench end lines are byte-identical to 13.8b's. No test pins a state hash, so none was re-pinned.
+- Mutation rows re-pointed: 2-4 (`assemble` call tail, and the `from_save` destructure anchor), 3-2 `load accepts duplicate job targets` (the Forage arm repeats the check, so the anchor now starts at the tile-job arm).
 - Tests: `tests/worldgen.rs` (3), `tests/scenario.rs` (13), `lib.rs` `a_dwarf_on_the_bush_as_the_berries_land_walks_off_and_they_are_hauled` (needs ecs access: a hand-built world cannot hold plants before Task 4).
 
 ### File List
 
 - `crates/sim-core/src/lib.rs`, `src/worldgen.rs`, `tests/worldgen.rs`, `tests/scenario.rs`
 - `crates/simd/src/bridge.rs`, `src/main.rs` (TODO arms only)
+- Task 4: `crates/sim-core/src/save.rs`, `src/lib.rs` (`to_save`, `from_save`), `tests/save_load.rs`; `crates/simd/src/main.rs` (validator), `tests/serve.rs`; `scenarios/saves/*.save` (3, data patch); mutations `2-4-the-world-endures.sh`, `3-2-the-dig.sh` (re-pointed)
 - `_bmad-output/implementation-artifacts/mutations/{10-9-the-land-reads-natural,12-7,2-4-the-world-endures,3-3-the-haul-and-the-skeleton-walks,5-1-the-world-grows-things-that-glow}.sh` (re-pointed)
 
 ## Change Log
