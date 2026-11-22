@@ -39,6 +39,9 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            // TODO(13.9 Task 4): plants and the forage area are saved.
+            BTreeMap::new(),
+            BTreeSet::new(),
         );
         for dwarf in dwarves {
 '''
@@ -46,6 +49,9 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            // TODO(13.9 Task 4): plants and the forage area are saved.
+            BTreeMap::new(),
+            BTreeSet::new(),
         );
         world.schedule = Schedule::default();
         world.schedule.add_systems(advance_tick);
@@ -88,6 +94,9 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            // TODO(13.9 Task 4): plants and the forage area are saved.
+            BTreeMap::new(),
+            BTreeSet::new(),
         );
         for dwarf in dwarves {
 '''
@@ -95,6 +104,9 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            // TODO(13.9 Task 4): plants and the forage area are saved.
+            BTreeMap::new(),
+            BTreeSet::new(),
         );
         {
             let mut terrain = world.ecs.resource_mut::<Terrain>();

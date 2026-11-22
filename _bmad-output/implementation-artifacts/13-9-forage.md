@@ -146,31 +146,31 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
 ## Tasks / Subtasks
 
 - [x] **Task 0: Wolf's rulings (Q1–Q6).** Record the answers in the Change Log and amend the ACs they name. Q5's answer is the approved draft. Then ASK which implementer to use (memory: `dev-implementer-is-sonnet-not-codex`).
-- [ ] **Task 1: plants in worldgen (AC 1, 2).** UPDATE `crates/sim-core/src/worldgen.rs` and `src/lib.rs`.
-  - [ ] Add `STREAM_PLANTS` (ASCII `"PLANTS__"`) beside the streams (`lib.rs:31-38`), and the constants `PLANT_ONE_IN = 16`, `FORAGE_WORK_TICKS = 30` and `REGROW_TICKS = 3_000` beside `CUT_WORK_TICKS` (`:86-93`).
-  - [ ] NEW `pub(crate) fn place_plants(dims, tiles: &[Tile], camp, rng) -> BTreeMap<Pos, Plant>` in `worldgen.rs`, modelled on `place_trees` (`:375-443`). Call it in `generate` after `place_trees` (`lib.rs:3392-3393`) with `ChaCha8Rng::seed_from_u64(seed ^ STREAM_PLANTS)`. Find the top tile by scanning the column, because heights are not kept. A tree column holds a `TreeTrunk`.
-  - [ ] NEW resource `Plants { by_pos: BTreeMap<Pos, Plant>, changed: BTreeSet<Pos> }` with `pub struct Plant { pub ripe_at: u64 }`. `assemble` (`:3305-3318`) takes it. Add the public readers `World::plants() -> Vec<(Pos, bool /*ripe*/)>` and `World::drain_plant_changes() -> Vec<(Pos, Option<bool>)>`, the second shaped like `drain_dirty` (`:3724`).
-  - [ ] Tests in `tests/worldgen.rs`: the AC 1 band, eligibility, and same/different seed. Do not touch the existing pins; AC 2 needs them to pass as they are.
-- [ ] **Task 2: the forage area (AC 3).** UPDATE `lib.rs`.
-  - [ ] NEW `SimCommand::PlaceForageArea { rect }` / `RemoveForageArea { rect }`, and `Refusal::PlaceForageArea { rect }` (`:152-161`). NEW `World::place_forage_area(&[Rect]) -> Option<Refusal>`, the twin of `place_stockpile` (`:3734`): refused only when no rect keeps a plant cell, naming the bounding box.
-  - [ ] NEW resource `ForageArea(BTreeSet<Pos>)`, beside `Zones` (`:841`). Cells are kept by the stockpile's standable test (`:3947-3960`). Add the reader `World::forage_area() -> Vec<Pos>`.
-  - [ ] Rewrite the stale `MAX_DESIGNATIONS` comment (`:71-72`, Found A).
-- [ ] **Task 3: forage jobs, regrowth, plant loss (AC 4–7).** UPDATE `lib.rs`.
-  - [ ] `JobKind::Forage` (`:360`). Extend every exhaustive site:
+- [x] **Task 1: plants in worldgen (AC 1, 2).** UPDATE `crates/sim-core/src/worldgen.rs` and `src/lib.rs`.
+  - [x] Add `STREAM_PLANTS` (ASCII `"PLANTS__"`) beside the streams (`lib.rs:31-38`), and the constants `PLANT_ONE_IN = 16`, `FORAGE_WORK_TICKS = 30` and `REGROW_TICKS = 3_000` beside `CUT_WORK_TICKS` (`:86-93`).
+  - [x] NEW `pub(crate) fn place_plants(dims, tiles: &[Tile], camp, rng) -> BTreeMap<Pos, Plant>` in `worldgen.rs`, modelled on `place_trees` (`:375-443`). Call it in `generate` after `place_trees` (`lib.rs:3392-3393`) with `ChaCha8Rng::seed_from_u64(seed ^ STREAM_PLANTS)`. Find the top tile by scanning the column, because heights are not kept. A tree column holds a `TreeTrunk`.
+  - [x] NEW resource `Plants { by_pos: BTreeMap<Pos, Plant>, changed: BTreeSet<Pos> }` with `pub struct Plant { pub ripe_at: u64 }`. `assemble` (`:3305-3318`) takes it. Add the public readers `World::plants() -> Vec<(Pos, bool /*ripe*/)>` and `World::drain_plant_changes() -> Vec<(Pos, Option<bool>)>`, the second shaped like `drain_dirty` (`:3724`).
+  - [x] Tests in `tests/worldgen.rs`: the AC 1 band, eligibility, and same/different seed. Do not touch the existing pins; AC 2 needs them to pass as they are.
+- [x] **Task 2: the forage area (AC 3).** UPDATE `lib.rs`.
+  - [x] NEW `SimCommand::PlaceForageArea { rect }` / `RemoveForageArea { rect }`, and `Refusal::PlaceForageArea { rect }` (`:152-161`). NEW `World::place_forage_area(&[Rect]) -> Option<Refusal>`, the twin of `place_stockpile` (`:3734`): refused only when no rect keeps a plant cell, naming the bounding box.
+  - [x] NEW resource `ForageArea(BTreeSet<Pos>)`, beside `Zones` (`:841`). Cells are kept by the stockpile's standable test (`:3947-3960`). Add the reader `World::forage_area() -> Vec<Pos>`.
+  - [x] Rewrite the stale `MAX_DESIGNATIONS` comment (`:71-72`, Found A).
+- [x] **Task 3: forage jobs, regrowth, plant loss (AC 4–7).** UPDATE `lib.rs`.
+  - [x] `JobKind::Forage` (`:360`). Extend every exhaustive site:
     - `trade()` (`:624`) maps it to `Woodcutter`. That is all AC 5 needs; `claim_jobs` itself does not change (AD-12).
     - `Jobs::insert/remove` (`:430`, `:450`) treat it as a tile job, unique by target.
     - `work_positions_with` (`:1593`) joins the `Dig | Cut` arm's walkable side neighbours, without the Dig-only item fallback.
     - The work-time match (`:2733-2737`) and the `unreachable!` at `:2889`.
     - The CancelDesignation job filter (`:3921`) leaves Forage alone; an area is removed by `RemoveForageArea`.
-  - [ ] In `create_jobs` (`:479`), after the designation loop: create a Forage job for each ripe plant in the area whose cell is not in `jobs.targets` and holds no uncarried item (Found E). Also retire, with a release, each Forage job whose plant is gone, unripe or outside every area (the `create_haul_jobs` retire shape, `:558-575`).
-  - [ ] Forage completion, beside cut completion (`:2853-2861`):
+  - [x] In `create_jobs` (`:479`), after the designation loop: create a Forage job for each ripe plant in the area whose cell is not in `jobs.targets` and holds no uncarried item (Found E). Also retire, with a release, each Forage job whose plant is gone, unripe or outside every area (the `create_haul_jobs` retire shape, `:558-575`).
+  - [x] Forage completion, beside cut completion (`:2853-2861`):
     - set `ripe_at = tick + REGROW_TICKS` and mark the plant changed;
     - spawn `Item(Berries)` at the plant cell with `ids.allocate()`;
     - remove the job and `release_claim`.
     - No `clear_paths`: nothing walkable changed.
-  - [ ] NEW system `tend_plants`, chained after `execute_jobs` (`:3337-3353`), which skips while paused (AD-2). It removes each plant whose cell is no longer standable and marks it changed, and it marks changed each plant whose `ripe_at == tick`.
-  - [ ] `ItemKind::Berries` (`:197`). `yield_of` (`:208`) is unaffected, because berries come from no material. `goal_kind_text` and the GOALS count by kind are unchanged.
-  - [ ] Scenario tests in `tests/scenario.rs` for AC 3–7, built on the timber helpers (`:2445-2510`) and `a_cut_is_hauled_to_the_pile_as_wood` (`:2579`). Find a plant near `camp_origin()` from `world.plants()`; never hardcode one.
+  - [x] NEW system `tend_plants`, chained after `execute_jobs` (`:3337-3353`), which skips while paused (AD-2). It removes each plant whose cell is no longer standable and marks it changed, and it marks changed each plant whose `ripe_at == tick`.
+  - [x] `ItemKind::Berries` (`:197`). `yield_of` (`:208`) is unaffected, because berries come from no material. `goal_kind_text` and the GOALS count by kind are unchanged.
+  - [x] Scenario tests in `tests/scenario.rs` for AC 3–7, built on the timber helpers (`:2445-2510`) and `a_cut_is_hauled_to_the_pile_as_wood` (`:2579`). Find a plant near `camp_origin()` from `world.plants()`; never hardcode one.
 - [ ] **Task 4: save and the load validator (AC 8).** UPDATE `src/save.rs`, `lib.rs` (`to_save` `:3486-3571`, `from_save` `:3573-3591`), and `crates/simd/src/main.rs`.
   - [ ] `SaveState.plants` and `SaveState.forage`, with no `#[serde(default)]`.
   - [ ] Validator (`main.rs:594`): bounds checks for plants and forage cells. Forage jobs get their own arm (Found H): unique target, a plant at the target, and a count bound of the plant count, kept out of both the tile-job and the haul counts. Refusal tests go in `simd/tests/serve.rs`.
@@ -327,7 +327,21 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 
 ### Completion Notes List
 
+- Tasks 1-3 (sim-core), by a Sonnet 5.5 subagent. Plants are `Plants { by_pos, changed }`, the area is `ForageArea`; neither touches `set_tile`, `clear_paths` or the id counter, and every existing pin and scenario passed unchanged (AC 2's sim half).
+- Forage jobs are derived by a new exclusive system `create_forage_jobs` chained right after `create_jobs` (not inside it: the retire needs `release_claim`, which `create_jobs`' `Res` signature cannot do). Designation jobs keep their ids.
+- `place_forage_area(&[Rect])` is the one place logic; `SimCommand::PlaceForageArea` calls it with one rect. A refused call places nothing. `RemoveForageArea` goes through the rect prelude.
+- Berries are Item(Berries) spawned at the plant cell, `ids.allocate()`d only on a completed forage; a forage whose plant is lost or unripe at completion spawns nothing.
+- Lake exclusion in `place_plants` is redundant with the snow rule (lake tops are ice), so no test can kill removing it; kept because the story names it.
+- A Forage job shares `Jobs.targets` with Dig/Channel/Cut, so a Channel marked on a cell whose Forage job already stands waits for that job (tile-job uniqueness, as the story says). Not changed.
+- `from_save` passes empty plants and forage with a `TODO(13.9 Task 4)`; a loaded world has no plants until Task 4. simd has `TODO(13.9 Task 4/5)` arms: `bridge.rs` (`item_kind_out`, `dwarf_job`, `refusal_out`: `unreachable!`) and `main.rs` (load validator: a Forage job is refused).
+- Mutation rows re-pointed in the same commit: 10-9 (lake exclusion) and 5-1 (camp clearing) now count 2 matches and mutate the first (the trees'); 12-7 row 4 (`trade`); 3-3 `carry_items runs before settle` (`tend_plants` in the schedule); 2-4 `loaded world schedule omits wander` and `from_save marks every tile dirty` (`assemble` call tail). Task 4 will move the 2-4 anchors again.
+- Tests: `tests/worldgen.rs` (3), `tests/scenario.rs` (13), `lib.rs` `a_dwarf_on_the_bush_as_the_berries_land_walks_off_and_they_are_hauled` (needs ecs access: a hand-built world cannot hold plants before Task 4).
+
 ### File List
+
+- `crates/sim-core/src/lib.rs`, `src/worldgen.rs`, `tests/worldgen.rs`, `tests/scenario.rs`
+- `crates/simd/src/bridge.rs`, `src/main.rs` (TODO arms only)
+- `_bmad-output/implementation-artifacts/mutations/{10-9-the-land-reads-natural,12-7,2-4-the-world-endures,3-3-the-haul-and-the-skeleton-walks,5-1-the-world-grows-things-that-glow}.sh` (re-pointed)
 
 ## Change Log
 

@@ -5483,3 +5483,487 @@ fn joint_ring_pile(fire: Pos) -> Vec<Pos> {
 fn two_piles_that_ring_ground_together_still_fill_every_cell() {
     assert_ring_fills(joint_ring_pile, &[]);
 }
+
+// ---- Story 13.9: forage (plants come from `world.plants()`, never a hardcoded position) ----
+
+/// The `n` plants nearest the camp, nearest first.
+fn plants_near_camp(world: &World, n: usize) -> Vec<Pos> {
+    let camp = world.camp_origin();
+    let mut plants: Vec<Pos> = world.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos));
+    plants.truncate(n);
+    assert_eq!(plants.len(), n, "too few plants");
+    plants
+}
+
+fn forage_area_over(world: &mut World, cells: &[Pos]) {
+    let rects: Vec<Rect> = cells.iter().map(|pos| rect(*pos, *pos)).collect();
+    assert_eq!(world.place_forage_area(&rects), None);
+}
+
+fn forage_jobs(world: &World) -> Vec<Job> {
+    world
+        .jobs()
+        .into_iter()
+        .filter(|job| job.kind == JobKind::Forage)
+        .collect()
+}
+
+fn ripe(world: &World, pos: Pos) -> Option<bool> {
+    world
+        .plants()
+        .into_iter()
+        .find_map(|(at, ripe)| (at == pos).then_some(ripe))
+}
+
+fn berries_at(world: &World, pos: Pos) -> usize {
+    kinds_at(world, pos, ItemKind::Berries)
+}
+
+fn step_until(world: &mut World, limit: u32, what: &str, mut done: impl FnMut(&World) -> bool) {
+    for _ in 0..limit {
+        world.step();
+        if done(world) {
+            return;
+        }
+    }
+    panic!("{what}: not within {limit} ticks (tick {})", world.tick());
+}
+
+/// A 3x3 pile on the camp's level, found as `a_cut_is_hauled_to_the_pile_as_wood` finds it.
+fn place_pile(world: &mut World) -> BTreeSet<Pos> {
+    let camp = world.camp_origin();
+    let pile = (3..12)
+        .flat_map(|r| {
+            [
+                (camp.x - r - 2, camp.y),
+                (camp.x, camp.y + r),
+                (camp.x, camp.y - r - 2),
+                (camp.x + r, camp.y),
+            ]
+        })
+        .find(|(px, py)| {
+            (*px..*px + 3)
+                .all(|x| (*py..*py + 3).all(|y| is_standable(world, Pos { x, y, z: camp.z })))
+        })
+        .expect("a 3x3 standable pile near the camp");
+    let corner = Pos {
+        x: pile.0,
+        y: pile.1,
+        z: camp.z,
+    };
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            corner,
+            Pos {
+                x: corner.x + 2,
+                y: corner.y + 2,
+                ..corner
+            },
+        ),
+    });
+    world.zones().into_iter().collect()
+}
+
+#[test]
+fn a_forage_area_keeps_the_standable_cells_of_its_rects_and_a_removal_takes_cells_away() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    // A 5x5 box two levels tall: only the standable cells of it are kept, not the air over them.
+    let around = rect(
+        Pos {
+            x: plant.x - 2,
+            y: plant.y - 2,
+            z: plant.z,
+        },
+        Pos {
+            x: plant.x + 2,
+            y: plant.y + 2,
+            z: plant.z + 1,
+        },
+    );
+    assert_eq!(world.place_forage_area(&[around]), None);
+    let expected: BTreeSet<Pos> = (plant.x - 2..=plant.x + 2)
+        .flat_map(|x| {
+            (plant.y - 2..=plant.y + 2)
+                .flat_map(move |y| (plant.z..=plant.z + 1).map(move |z| Pos { x, y, z }))
+        })
+        .filter(|pos| is_standable(&world, *pos))
+        .collect();
+    assert!(expected.contains(&plant) && expected.len() >= 2);
+    assert_eq!(
+        world.forage_area().into_iter().collect::<BTreeSet<_>>(),
+        expected,
+        "the area is the standable cells, and nothing above them"
+    );
+
+    // Take the plant's own column away: its cell leaves, the rest stay.
+    world.apply_command(SimCommand::RemoveForageArea {
+        rect: rect(plant, plant),
+    });
+    let left: BTreeSet<Pos> = world.forage_area().into_iter().collect();
+    assert_eq!(left.len(), expected.len() - 1);
+    assert!(!left.contains(&plant));
+}
+
+#[test]
+fn a_forage_area_holding_no_plant_is_refused_naming_the_bounding_rect_and_places_nothing() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    // The camp box holds no plant by construction: standable cells, no bush.
+    let a = rect(
+        Pos {
+            x: camp.x - 3,
+            y: camp.y - 3,
+            ..camp
+        },
+        Pos {
+            x: camp.x - 2,
+            y: camp.y - 2,
+            ..camp
+        },
+    );
+    let b = rect(
+        Pos {
+            x: camp.x + 2,
+            y: camp.y + 2,
+            ..camp
+        },
+        Pos {
+            x: camp.x + 3,
+            y: camp.y + 3,
+            ..camp
+        },
+    );
+    let rock = rect(
+        Pos {
+            z: camp.z - 3,
+            ..camp
+        },
+        Pos {
+            x: camp.x + 1,
+            z: camp.z - 3,
+            ..camp
+        },
+    );
+    assert!(
+        a.min.x <= a.max.x && is_standable(&world, a.min),
+        "the control: rect a holds standable ground"
+    );
+    let bounds = rect(a.min, b.max);
+    assert_eq!(
+        world.place_forage_area(&[a, b]),
+        Some(Refusal::PlaceForageArea { rect: bounds })
+    );
+    assert_eq!(
+        world.apply_command(SimCommand::PlaceForageArea { rect: a }),
+        Some(Refusal::PlaceForageArea { rect: a })
+    );
+    // A rect with no standable cell at all is refused the same way.
+    assert_eq!(
+        world.apply_command(SimCommand::PlaceForageArea { rect: rock }),
+        Some(Refusal::PlaceForageArea { rect: rock })
+    );
+    assert!(world.forage_area().is_empty(), "a refusal places nothing");
+
+    // Positive control: the same call with a plant in reach is accepted.
+    let plant = plants_near_camp(&world, 1)[0];
+    assert_eq!(world.place_forage_area(&[a, rect(plant, plant)]), None);
+    assert!(world.forage_area().contains(&plant));
+}
+
+#[test]
+fn every_ripe_plant_in_the_area_has_one_forage_job_and_only_the_woodcutter_holds_it() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plants = plants_near_camp(&world, 4);
+    forage_area_over(&mut world, &plants);
+    world.step();
+    let jobs = forage_jobs(&world);
+    assert_eq!(
+        jobs.iter().map(|job| job.target).collect::<BTreeSet<_>>(),
+        plants.iter().copied().collect::<BTreeSet<_>>()
+    );
+    assert_eq!(jobs.len(), plants.len(), "exactly one job per plant");
+
+    let cutter = woodcutter(&world);
+    let mut held = false;
+    for _ in 0..400 {
+        world.step();
+        let forage_ids: BTreeSet<JobId> = forage_jobs(&world).iter().map(|job| job.id).collect();
+        for (id, job) in world.claims() {
+            if job.is_some_and(|job| forage_ids.contains(&job)) {
+                assert_eq!(id, cutter, "{id:?} holds a forage job");
+                held = true;
+            }
+        }
+    }
+    assert!(held, "the woodcutter never took a forage job");
+}
+
+/// Wolf's reading of AC 4: the worker works `FORAGE_WORK_TICKS`, the plant turns growing, one
+/// Berries lies on its cell, and the clients are told through the plant changes.
+#[test]
+fn a_forage_turns_the_plant_growing_and_leaves_one_berries_on_its_cell() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    assert_eq!(ripe(&world, plant), Some(true));
+    world.drain_plant_changes();
+
+    let mut claimed_at = None;
+    let mut ticks = 0;
+    while ripe(&world, plant) == Some(true) {
+        world.step();
+        ticks += 1;
+        assert!(ticks < 3_000, "never foraged");
+        if claimed_at.is_none() && holder_of(&world, JobKind::Forage).is_some() {
+            claimed_at = Some(world.tick());
+        }
+    }
+    let claimed_at = claimed_at.expect("a forage job was held before the plant turned");
+    assert!(
+        world.tick() - claimed_at >= u64::from(sim_core::FORAGE_WORK_TICKS),
+        "foraged after {} ticks of holding",
+        world.tick() - claimed_at
+    );
+    assert_eq!(ripe(&world, plant), Some(false));
+    assert_eq!(berries_at(&world, plant), 1);
+    assert_eq!(world.items().len(), 1);
+    assert!(forage_jobs(&world).is_empty(), "the job is spent");
+    assert!(world.claims().iter().all(|(_, held)| held.is_none()));
+    assert_eq!(
+        world.drain_plant_changes(),
+        vec![(plant, Some(false))],
+        "the wire is told the plant is growing"
+    );
+}
+
+#[test]
+fn a_hauler_stores_the_berries_on_the_pile() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let zones = place_pile(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    step_until(&mut world, 4_000, "the berries reach the pile", |w| {
+        w.stored_count() == 1
+    });
+    let items = world.items();
+    assert_eq!(items.len(), 1);
+    assert!(
+        zones.contains(&items[0].1),
+        "{:?} is off the pile",
+        items[0]
+    );
+    assert_eq!(
+        world.item_kinds(),
+        vec![(items[0].0, ItemKind::Berries)],
+        "the stored item is the berries"
+    );
+}
+
+#[test]
+fn berries_still_lying_on_a_bush_keep_it_from_a_new_forage_job() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    // No pile: nobody hauls, so the berries stay where they fell.
+    step_until(&mut world, 3_000, "the first forage", |w| {
+        berries_at(w, plant) == 1
+    });
+    for _ in 0..sim_core::REGROW_TICKS + 100 {
+        world.step();
+        assert!(
+            forage_jobs(&world).is_empty(),
+            "a forage job stands over lying berries at tick {}",
+            world.tick()
+        );
+    }
+    assert_eq!(ripe(&world, plant), Some(true), "the bush has regrown");
+    assert_eq!(world.items().len(), 1, "no second berries stacked");
+}
+
+/// One woodcutter, busy with a first cut so both new jobs wait: when he is free he takes the lower
+/// `JobId` of the two, cut or forage (AD-12's one FIFO).
+fn first_taken_after_a_busy_cut(forage_first: bool) -> &'static str {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    let (a_base, _) = tree_tiles(&world, TREE_A);
+    let (b_base, _) = tree_tiles(&world, TREE_B);
+    let cutter = woodcutter(&world);
+    assert_eq!(cut(&mut world, b_base), None);
+    let held = |w: &World| -> Option<Job> {
+        let job = w
+            .claims()
+            .into_iter()
+            .find_map(|(id, job)| (id == cutter).then_some(job))??;
+        w.jobs().into_iter().find(|j| j.id == job)
+    };
+    step_until(&mut world, 600, "the woodcutter takes the first cut", |w| {
+        held(w).is_some_and(|job| job.target == b_base)
+    });
+    if forage_first {
+        forage_area_over(&mut world, &[plant]);
+        world.step();
+        assert_eq!(cut(&mut world, a_base), None);
+    } else {
+        assert_eq!(cut(&mut world, a_base), None);
+        world.step();
+        forage_area_over(&mut world, &[plant]);
+    }
+    world.step();
+    assert!(
+        held(&world).is_some_and(|job| job.target == b_base),
+        "he is still busy when both are queued"
+    );
+    let mut first = None;
+    step_until(&mut world, 4_000, "he takes one of the two", |w| {
+        first = held(w).and_then(|job| match job.kind {
+            JobKind::Forage => Some("forage"),
+            JobKind::Cut if job.target == a_base => Some("cut"),
+            _ => None,
+        });
+        first.is_some()
+    });
+    first.unwrap()
+}
+
+#[test]
+fn a_cut_marked_before_a_forage_area_is_cut_first() {
+    assert_eq!(first_taken_after_a_busy_cut(false), "cut");
+}
+
+#[test]
+fn a_forage_area_placed_before_a_cut_mark_is_foraged_first() {
+    assert_eq!(first_taken_after_a_busy_cut(true), "forage");
+}
+
+/// Forages once and has the berries hauled away, returning the tick the plant turned growing.
+fn forage_and_haul_away(world: &mut World, plant: Pos) -> u64 {
+    step_until(world, 4_000, "the forage", |w| {
+        ripe(w, plant) == Some(false)
+    });
+    let at = world.tick();
+    step_until(world, 4_000, "the berries leave the bush", |w| {
+        berries_at(w, plant) == 0
+    });
+    at
+}
+
+#[test]
+fn a_foraged_plant_is_foraged_again_no_earlier_than_regrow_ticks_after() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    place_pile(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    let first = forage_and_haul_away(&mut world, plant);
+    assert_eq!(ripe(&world, plant), Some(false));
+    // Not ripe again, and no job, until REGROW_TICKS have passed.
+    while world.tick() < first + sim_core::REGROW_TICKS {
+        world.step();
+        if world.tick() < first + sim_core::REGROW_TICKS {
+            assert_eq!(
+                ripe(&world, plant),
+                Some(false),
+                "ripe early, tick {}",
+                world.tick()
+            );
+            assert!(forage_jobs(&world).is_empty());
+        }
+    }
+    assert_eq!(ripe(&world, plant), Some(true));
+    step_until(&mut world, 1_000, "the second forage", |w| {
+        ripe(w, plant) == Some(false)
+    });
+    assert!(world.tick() - first >= sim_core::REGROW_TICKS);
+    assert_eq!(world.stored_count() + berries_at(&world, plant), 2);
+}
+
+#[test]
+fn a_plant_whose_area_is_removed_is_not_foraged_again() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    place_pile(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    let first = forage_and_haul_away(&mut world, plant);
+    world.apply_command(SimCommand::RemoveForageArea {
+        rect: rect(plant, plant),
+    });
+    while world.tick() < first + sim_core::REGROW_TICKS + 300 {
+        world.step();
+        assert!(
+            forage_jobs(&world).is_empty(),
+            "a job stands without an area"
+        );
+    }
+    assert_eq!(ripe(&world, plant), Some(true), "regrown and left alone");
+    assert_eq!(world.items().len(), 1, "only the first berries exist");
+}
+
+#[test]
+fn removing_the_area_retires_a_held_forage_job_within_one_tick() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    step_until(&mut world, 600, "the job is held", |w| {
+        holder_of(w, JobKind::Forage).is_some()
+    });
+    world.apply_command(SimCommand::RemoveForageArea {
+        rect: rect(plant, plant),
+    });
+    world.step();
+    assert!(forage_jobs(&world).is_empty());
+    assert!(
+        world.claims().iter().all(|(_, held)| held.is_none()),
+        "the holder is released"
+    );
+    assert_eq!(ripe(&world, plant), Some(true), "nothing was gathered");
+}
+
+#[test]
+fn a_plant_whose_ground_goes_is_gone_with_its_job_and_the_clients_are_told() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    forage_area_over(&mut world, &[plant]);
+    step_until(&mut world, 600, "the job is held", |w| {
+        holder_of(w, JobKind::Forage).is_some()
+    });
+    world.drain_plant_changes();
+    // The ground under the bush is dug out from beneath the worker.
+    assert!(world.set_tile(
+        Pos {
+            z: plant.z - 1,
+            ..plant
+        },
+        Tile::Empty
+    ));
+    world.step();
+    assert_eq!(ripe(&world, plant), None, "the plant is gone");
+    assert_eq!(world.drain_plant_changes(), vec![(plant, None)]);
+    world.step();
+    assert!(forage_jobs(&world).is_empty(), "its job is retired");
+    assert!(world.claims().iter().all(|(_, held)| held.is_none()));
+    assert!(world.items().is_empty(), "no berries from a lost plant");
+}
+
+#[test]
+fn a_channel_through_a_bush_removes_it() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    let others = plants_near_camp(&world, 3);
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(plant, plant),
+        }),
+        None
+    );
+    forage_area_over(&mut world, &others);
+    step_until(&mut world, 4_000, "the channel opens under the bush", |w| {
+        ripe(w, plant).is_none()
+    });
+    assert!(forage_jobs(&world).iter().all(|job| job.target != plant));
+    assert!(
+        ripe(&world, others[1]).is_some() && ripe(&world, others[2]).is_some(),
+        "the other bushes stand"
+    );
+}

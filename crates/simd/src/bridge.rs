@@ -126,6 +126,8 @@ fn item_kind_out(kind: sim_core::ItemKind) -> protocol::ItemKind {
         sim_core::ItemKind::Wood => protocol::ItemKind::Wood,
         sim_core::ItemKind::Tetrahedrite => protocol::ItemKind::Tetrahedrite,
         sim_core::ItemKind::Bloodstone => protocol::ItemKind::Bloodstone,
+        // TODO(13.9 Task 5): berries get a wire name. Nothing forages over the wire until then.
+        sim_core::ItemKind::Berries => unreachable!("no wire berries yet"),
     }
 }
 
@@ -217,6 +219,8 @@ fn dwarf_job(job: sim_core::Job) -> protocol::DwarfJob {
         sim_core::JobKind::Dig => protocol::DwarfJob::Dig { target },
         sim_core::JobKind::Channel => protocol::DwarfJob::Channel { target },
         sim_core::JobKind::Cut => protocol::DwarfJob::Cut { target },
+        // TODO(13.9 Task 5): a forage job gets a wire shape. No forage area exists over the wire yet.
+        sim_core::JobKind::Forage => unreachable!("no wire forage yet"),
         // NOTE: a haul's `target` is the stone's position at creation and goes stale at pick-up,
         // so it is not on the wire.
         sim_core::JobKind::Haul { .. } => protocol::DwarfJob::Haul,
@@ -350,6 +354,8 @@ pub(crate) fn refusal_out(refusal: sim_core::Refusal) -> protocol::Refusal {
         sim_core::Refusal::PlaceStockpile { rect } => protocol::Refusal::PlaceStockpile {
             rect: rect_out(rect),
         },
+        // TODO(13.9 Task 5): the forage refusal gets a wire shape.
+        sim_core::Refusal::PlaceForageArea { .. } => unreachable!("no wire forage yet"),
         sim_core::Refusal::SetProfession { dwarf } => {
             protocol::Refusal::SetProfession { dwarf: dwarf.0 }
         }

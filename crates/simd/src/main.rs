@@ -721,6 +721,8 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                         );
                     }
                 }
+                // TODO(13.9 Task 4): a Forage job gets its own validation arm.
+                sim_core::JobKind::Forage => bail!("save holds a forage job"),
                 sim_core::JobKind::Haul { item } => {
                     if !item_ids.contains(&item) {
                         bail!("save haul job {} names missing item {item}", job.id.0);
@@ -975,6 +977,8 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 // A haul job names a stone, not a tile: it has no designation and never had
                 // one. Its own rules live with the haul validation below.
                 sim_core::JobKind::Haul { .. } => continue,
+                // TODO(13.9 Task 4): refused by the arm above until then.
+                sim_core::JobKind::Forage => continue,
             };
             if designation_kinds.get(&job.target) != Some(&expected_designation) {
                 bail!(

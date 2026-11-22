@@ -202,12 +202,13 @@ mutation "carry_items runs before settle" sim-core a_carried_stone_tracks_its_ca
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            execute_jobs,
+            tend_plants,
             settle,
             wander,
             carry_items,
 '''
 assert old in s
-p.write_text(s.replace(old, '            execute_jobs,\n            carry_items,\n            settle,\n            wander,\n'))
+p.write_text(s.replace(old, '            execute_jobs,\n            tend_plants,\n            carry_items,\n            settle,\n            wander,\n'))
 PY
 
 mutation "release_claim does not drop the carried stone" sim-core release_claim_drops_the_carried_stone_beside_the_dwarf <<'PY'

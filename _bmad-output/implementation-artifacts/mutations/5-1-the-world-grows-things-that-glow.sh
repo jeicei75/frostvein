@@ -14,8 +14,9 @@ old = '''            if (x as i32 - camp.x).abs() <= camp_radius + 1
                 continue;
             }
 '''
-assert s.count(old) == 1
-p.write_text(s.replace(old, ''))
+# 13.9: `place_plants` repeats this block after `place_trees`; the first match is the trees'.
+assert s.count(old) == 2
+p.write_text(s.replace(old, '', 1))
 PY
 
 mutation "trees consume the worldgen stream" sim-core spawn_positions_for_seed_42_are_pinned <<'PY'

@@ -93,8 +93,9 @@ p = pathlib.Path('crates/sim-core/src/worldgen.rs'); s = p.read_text()
 old = '''            if biome_at(dims, x, y) == Biome::Lake {
                 continue;
             }'''
-assert s.count(old) == 1
-p.write_text(s.replace(old, '            if false { continue; }'))
+# 13.9: `place_plants` repeats this block after `place_trees`; the first match is the trees'.
+assert s.count(old) == 2
+p.write_text(s.replace(old, '            if false { continue; }', 1))
 PY
 
 mutation "rebased real-world control rejects a stale quad count" py scripts.tests.test_resolution_bench.ResolutionGeometryTests.test_control_check_requires_the_real_world_literals <<'PY'
