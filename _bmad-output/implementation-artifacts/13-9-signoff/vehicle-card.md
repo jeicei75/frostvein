@@ -99,3 +99,27 @@ scripts/tick-bench.sh 3c6cf3b7 4251c099` on seat-like: mean 3.328 ms on `main`, 
 
 Still open: the gui's frame cost with about 1,900 bush entities (one per plant, reconciled with the designations each
 pass), the wire, and whatever run 4's world was. That run saved no perf log or save that this devpod can read.
+
+**Run 5 setup (2026-11-23): the measured run.** Wolf on run 4: "not sure .. well fps dropped that's for sure .. but
+not even haze off helped". The sim measures the same as `main`, so this run looks at the gui. It repeats 13.8b's
+run 5 with files (`13-8b-signoff/13-8b-seat-like-run5.csv`, build `1a50406b`, same scenario, same seat), so the two
+gui logs compare bucket by bucket at the same crew size. The only world difference is this branch's ~1,900 bushes.
+
+```bash
+# WSL, from the repo, at the branch HEAD. 2> keeps the timer's lines.
+cargo build --release -p simd
+target/release/simd 7451 --scenario _bmad-output/implementation-artifacts/13-8-signoff/prototypes/seat-like.json 2> /mnt/d/Workspace/frostvein/.bin/13-9-simd-stderr-seat-run5.txt
+```
+
+```powershell
+# PowerShell, from the Windows checkout, at the branch HEAD
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-9-seat-like-run5.csv')
+# a second PowerShell window, once the gui shows the world
+python scripts\bench\wire_tap.py D:\Workspace\frostvein\.bin\13-9-wire-tap-seat-run5.csv
+```
+
+Run at Normal to tick 30,000 (about 50 minutes), with the camera framed the way 13.8b's run 5 was. No forage
+needed. Press the mark key when the fps drops. Ctrl+C the tap and the daemon at the end. All three files, please.
+
+**Question:** compared with 13.8b's run 5 ("fps drops between 20-30 some times"): the same, or worse?
+
