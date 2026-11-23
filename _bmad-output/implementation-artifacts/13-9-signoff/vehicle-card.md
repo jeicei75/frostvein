@@ -83,3 +83,19 @@ dwarves and digging happening .. but let's continue tomorrow". Forage marking ac
 regression under many dwarves and digging is open for the next session: measure first (13.8b's seat-like scenario and
 tap, `main` vs this branch), and suspect 13.9's per-tick work first (the forage claim turn, `next_trip_job` searches,
 `tend_plants`) before the known debts (#224 gui fps, #235 haul).
+
+**Load measurement, 2026-11-23 (Opus, headless, release).** The sim is not the regression. `RUNS=3
+scripts/tick-bench.sh 3c6cf3b7 4251c099` on seat-like: mean 3.328 ms on `main`, 3.328 on this branch, -0.0%
+(control -1.4%, floors 1.7% / 2.3%); `state` differs because the branch's world has bushes
+(`tick-bench-seatlike-main-vs-4251c099.txt`). For forage under load, seat-like gains forage marks on every ripe bush in
+(60..200)², z 5..27 (about 1,100 marks; `prototypes/seat-like-forage-*.json`), one run each on this branch
+(`seat-like-forage-bench-4251c099.txt`):
+
+| seat-like variant | mean ms | p99 | max | over10 | foraged |
+|---|---|---|---|---|---|
+| no forage | 3.32 | 35.2 | 84 | 2,209 | 0 |
+| marks at t7 | 3.49 | 38.3 | 106 | 2,225 | 567 |
+| marks at the big dig (t17000) | 2.91 | 31.3 | 76 | 1,948 | 547 |
+
+Still open: the gui's frame cost with about 1,900 bush entities (one per plant, reconciled with the designations each
+pass), the wire, and whatever run 4's world was. That run saved no perf log or save that this devpod can read.

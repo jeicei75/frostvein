@@ -1,0 +1,11 @@
+building 3c6cf3b7c0f48c78a7db1e266a939280a77a3ea2 ...
+building 4251c099a9be8d10624962f0dbeb3c47e8668809 ...
+building control (3c6cf3b7c0f48c78a7db1e266a939280a77a3ea2) ...
+base 3c6cf3b7c0f48c78a7db1e266a939280a77a3ea2
+head 4251c099a9be8d10624962f0dbeb3c47e8668809
+control: base again, functions shuffled (--shuffle-sections=*=1)
+runs 3 per build, interleaved; load before: 5.18, 2.69, 1.15
+scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+seat-like                  3.3282     3.3275    -0.0%    -1.4%       1.7%       2.3%       0.5%  differ within floor
+load after: 1.83, 1.97, 1.63
+exit=0
