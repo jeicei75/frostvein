@@ -339,7 +339,7 @@ fn the_two_hundred_on_256_scenario_does_real_work() {
     );
     assert!(
         count(&field(&end, "foraged")) >= 1,
-        "a woodcutter foraged a bush: {end}"
+        "a hauler foraged a bush: {end}"
     );
     assert!(
         count(&field(&end, "food")) >= 1,
