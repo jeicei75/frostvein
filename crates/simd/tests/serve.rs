@@ -1834,6 +1834,15 @@ fn overflowing_work_progress_save_is_logged_and_the_daemon_keeps_ticking() {
 /// A default world with forage marks on its two nearest plants, stepped until a forage job
 /// stands, so its save holds plants, forage marks and a Forage job (and no item).
 fn forage_save() -> sim_core::SaveState {
+    let state = forage_world().to_save();
+    assert!(state.plants.len() > 1);
+    assert_eq!(state.designations.len(), 2);
+    assert!(state.items.is_empty(), "the fixture holds no item");
+    state
+}
+
+/// `forage_save`'s world, before it is saved.
+fn forage_world() -> sim_core::World {
     let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
     let camp = world.camp_origin();
     let mut plants: Vec<_> = world.plants().into_iter().map(|(pos, _)| pos).collect();
@@ -1858,11 +1867,7 @@ fn forage_save() -> sim_core::SaveState {
         assert!(world.tick() < 100, "no forage job ever stood");
         world.step();
     }
-    let state = world.to_save();
-    assert!(state.plants.len() > 1);
-    assert_eq!(state.designations.len(), 2);
-    assert!(state.items.is_empty(), "the fixture holds no item");
-    state
+    world
 }
 
 /// 13.9 AC 8, positive control (13.6 #226's lesson: the validator can be tighter than the sim):
@@ -1964,6 +1969,151 @@ fn a_reused_forage_target_save_is_logged_and_the_daemon_keeps_ticking() {
             target.x, target.y, target.z
         ),
     );
+}
+
+/// Loads `state` through the live `Load`, which must take it.
+fn assert_live_load_takes(state: &sim_core::SaveState) {
+    let daemon = Daemon::spawn();
+    fs::write(
+        daemon.save_path(),
+        serde_json::to_vec(state).expect("encode save fixture"),
+    )
+    .expect("write save fixture");
+    let stream = daemon.connect();
+    let mut writer = stream.try_clone().expect("client write half must clone");
+    let mut reader = BufReader::new(stream);
+    let _ = read_snapshot(&mut reader);
+
+    send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+    let loaded = read_snapshot_after_load(&mut reader);
+    assert_eq!(loaded.tick, state.tick);
+}
+
+/// 13.9 #244: a save the SIM wrote mid-trip. Dwarf 0, a hauler, has picked at least one of three
+/// marked bushes in reach of each other, so he carries a berries load and already holds the
+/// Forage job of his next bush. Returns the save and that dwarf's index in `dwarves`.
+fn mid_trip_save() -> (sim_core::SaveState, usize) {
+    let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let mut plants: Vec<_> = world.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos));
+    let near = |a: &sim_core::Pos, b: &sim_core::Pos| {
+        a.x.abs_diff(b.x) + a.y.abs_diff(b.y) + a.z.abs_diff(b.z) <= 8
+    };
+    let group: Vec<_> = plants
+        .iter()
+        .find_map(|first| {
+            let group: Vec<_> = plants
+                .iter()
+                .filter(|other| near(first, other))
+                .copied()
+                .take(3)
+                .collect();
+            (group.len() == 3 && group.iter().all(|a| group.iter().all(|b| near(a, b))))
+                .then_some(group)
+        })
+        .expect("three bushes in reach of each other");
+    // Dwarf 0 is the only hauler, so no other hauler takes the trip's next bush.
+    for (index, (dwarf, ..)) in world.dwarves().into_iter().enumerate() {
+        let profession = if index == 0 {
+            sim_core::Profession::Hauler
+        } else {
+            sim_core::Profession::Miner
+        };
+        assert_eq!(
+            world.apply_command(sim_core::SimCommand::SetProfession { dwarf, profession }),
+            None
+        );
+    }
+    for pos in &group {
+        assert_eq!(
+            world.apply_command(sim_core::SimCommand::Designate {
+                kind: sim_core::DesignationKind::Forage,
+                rect: sim_core::Rect {
+                    min: *pos,
+                    max: *pos,
+                },
+            }),
+            None
+        );
+    }
+    let mid_trip = |world: &sim_core::World| {
+        let forage: std::collections::BTreeSet<_> = world
+            .jobs()
+            .into_iter()
+            .filter(|job| job.kind == sim_core::JobKind::Forage)
+            .map(|job| job.id)
+            .collect();
+        let claims: std::collections::BTreeMap<_, _> = world.claims().into_iter().collect();
+        world.carrying().into_iter().any(|(dwarf, item)| {
+            item.is_some() && claims[&dwarf].is_some_and(|job| forage.contains(&job))
+        })
+    };
+    while !mid_trip(&world) {
+        assert!(
+            world.tick() < 3_000,
+            "the hauler never carried and held a forage"
+        );
+        world.step();
+    }
+    let state = world.to_save();
+    let index = state
+        .dwarves
+        .iter()
+        .position(|dwarf| dwarf.carrying.is_some() && dwarf.current_job.is_some())
+        .expect("the mid-trip dwarf");
+    let item = state.dwarves[index].carrying.expect("carrying");
+    assert!(
+        state
+            .items
+            .iter()
+            .any(|(id, _, kind, _)| *id == item && *kind == sim_core::ItemKind::Berries),
+        "the load is berries"
+    );
+    (state, index)
+}
+
+/// 13.9 #244, the side the fix was written for: simd takes the mid-trip save the sim wrote.
+#[test]
+fn the_live_load_takes_a_save_the_sim_wrote_mid_forage_trip() {
+    let (state, _) = mid_trip_save();
+    assert_live_load_takes(&state);
+}
+
+/// 13.9 #244, the other side: a forage trip excuses only a BERRIES load, and only one no haul
+/// job names. Either way the old refusal stands.
+#[test]
+fn a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking() {
+    let (state, index) = mid_trip_save();
+    let dwarf = state.dwarves[index].id;
+    let item = state.dwarves[index].carrying.expect("carrying");
+    let expected = format!("save dwarf {dwarf} carries item {item} without holding its haul job");
+
+    let mut stone = state.clone();
+    stone
+        .items
+        .iter_mut()
+        .find(|(id, ..)| *id == item)
+        .expect("the load")
+        .2 = sim_core::ItemKind::Tetrahedrite;
+    stone
+        .items
+        .iter_mut()
+        .find(|(id, ..)| *id == item)
+        .expect("the load")
+        .3 = 1;
+    assert_save_is_rejected_without_stopping_ticks(stone, &expected);
+
+    let mut hauled = state;
+    hauled.jobs.push(sim_core::Job {
+        id: sim_core::JobId(hauled.next_job_id),
+        kind: sim_core::JobKind::Haul { item },
+        target: hauled.dwarves[index].pos,
+        created_tick: hauled.tick,
+        retry_after: 0,
+    });
+    hauled.next_job_id += 1;
+    assert_save_is_rejected_without_stopping_ticks(hauled, &expected);
 }
 
 /// 13.9 AC 8 (amended): one stone-or-berries save, so the count is the only thing that differs.

@@ -709,6 +709,12 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
             );
         }
         let item_ids: BTreeSet<_> = save.items.iter().map(|(id, ..)| *id).collect();
+        let berries_ids: BTreeSet<_> = save
+            .items
+            .iter()
+            .filter(|(_, _, kind, _)| *kind == sim_core::ItemKind::Berries)
+            .map(|(id, ..)| *id)
+            .collect();
         let mut seen_job_ids = BTreeSet::new();
         let mut seen_job_targets = BTreeSet::new();
         let mut seen_haul_items = BTreeSet::new();
@@ -914,7 +920,14 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     haul_job_for_item.get(&item),
                     Some(job_id) if dwarf.current_job == Some(*job_id)
                 );
-                if !holds_haul && !miner_clearing {
+                // 13.9 #244: a hauler mid-trip carries his berries load while holding the next
+                // bush's Forage job. The load has no haul job until the trip ends.
+                let forage_trip = berries_ids.contains(&item)
+                    && !haul_job_for_item.contains_key(&item)
+                    && save.jobs.iter().any(|job| {
+                        dwarf.current_job == Some(job.id.0) && job.kind == sim_core::JobKind::Forage
+                    });
+                if !holds_haul && !miner_clearing && !forage_trip {
                     bail!(
                         "save dwarf {} carries item {item} without holding its haul job",
                         dwarf.id

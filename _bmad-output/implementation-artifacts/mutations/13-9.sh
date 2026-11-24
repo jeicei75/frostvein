@@ -264,3 +264,29 @@ old = '                    min: [cut_rect.min[0], cut_rect.min[1], z],\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    min: [cut_rect.min[0], cut_rect.min[1], z - 1],\n'))
 PY
+
+# 13.9 review round 1, #244: simd refused a save the sim wrote mid-trip (a berries load in hand, the next
+# bush's Forage job held). Positive control: a save the sim wrote; negatives: a stone, a hauled load.
+mutation "37 the validator refuses a save made mid forage trip (#244)" simd the_live_load_takes_a_save_the_sim_wrote_mid_forage_trip <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                if !holds_haul && !miner_clearing && !forage_trip {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                if !holds_haul && !miner_clearing {\n'))
+PY
+
+mutation "38 a forage trip excuses a carried stone (#244)" simd a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                let forage_trip = berries_ids.contains(&item)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                let forage_trip = (true || berries_ids.contains(&item))\n'))
+PY
+
+mutation "39 a forage trip excuses a load a haul job names (#244)" simd a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                    && !haul_job_for_item.contains_key(&item)\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    && (true || !haul_job_for_item.contains_key(&item))\n'))
+PY
