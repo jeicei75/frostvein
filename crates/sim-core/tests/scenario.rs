@@ -5195,6 +5195,7 @@ fn at3((x, y, z): (i32, i32, i32)) -> Pos {
 fn stored_by_kind(world: &World) -> BTreeMap<ItemKind, u32> {
     let carried: BTreeSet<u32> = world.carrying().iter().filter_map(|(_, c)| *c).collect();
     let kinds: BTreeMap<Id, ItemKind> = world.item_kinds().into_iter().collect();
+    let counts: BTreeMap<Id, u32> = world.item_counts().into_iter().collect();
     let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
     let mut occupied = BTreeSet::new();
     let mut stored = BTreeMap::new();
@@ -5202,7 +5203,8 @@ fn stored_by_kind(world: &World) -> BTreeMap<ItemKind, u32> {
         if carried.contains(&id.0) || !zones.contains(&pos) || !occupied.insert(pos) {
             continue;
         }
-        *stored.entry(kinds[&id]).or_insert(0) += 1;
+        // 13.9 review: a stored item counts its `count` (1 unless it is a berries load).
+        *stored.entry(kinds[&id]).or_insert(0) += counts[&id];
     }
     stored
 }
@@ -5247,11 +5249,14 @@ fn the_default_world_completes_the_goal_chain_with_scripted_commands() {
         vec![
             (ItemKind::Wood, 10),
             (ItemKind::Tetrahedrite, 10),
-            (ItemKind::Bloodstone, 1)
+            (ItemKind::Bloodstone, 1),
+            (ItemKind::Berries, 20)
         ]
     );
 
-    let mut done_at: [Option<u64>; 3] = [None; 3];
+    // NOTE: the scripted commands order no forage, so the chain's 4th goal (berries, 13.9) stays
+    // open here; `the_berries_goal_counts_each_stored_loads_count` completes it.
+    let mut done_at: [Option<u64>; 4] = [None; 4];
     while world.tick() < CHAIN_BOUND_TICK && done_at[2].is_none() {
         world.step();
         let goals = world.goals();
@@ -5302,10 +5307,52 @@ fn the_default_world_completes_the_goal_chain_with_scripted_commands() {
     }
     assert_eq!(world.tick(), done_tick + 200, "the tick has climbed");
     assert!(
-        world.goals().iter().all(|g| g.completed),
+        world.goals()[..3].iter().all(|g| g.completed),
         "a goal un-completed after the chain: {:?}",
         world.goals()
     );
+    assert!(
+        !world.goals()[3].completed,
+        "no forage was ordered, yet the berries goal completed: {:?}",
+        world.goals()
+    );
+}
+
+/// 13.9 review (Wolf, 2026-11-24): berries are the 4th goal, 20 of them, and a stored load counts
+/// its `count`, not 1. Three loads of 5 are 15 food (counting items would say 3), and a fourth
+/// makes 20 and completes the goal. The bench's `food=` reads the same figure.
+#[test]
+fn the_berries_goal_counts_each_stored_loads_count() {
+    let at = |x: i32| Pos { x, y: 0, z: 1 };
+    for (loads, food, done) in [(3, 15, false), (4, 20, true)] {
+        let mut save = World::generate(42, Dims::DEFAULT).to_save();
+        save.goals_completed = 3;
+        let mut id = save.next_id;
+        for x in 0..loads {
+            save.items.push((id, at(x), ItemKind::Berries, 5));
+            save.zones.push(at(x));
+            id += 1;
+        }
+        save.next_id = id;
+        let mut world = World::from_save(save);
+        world.step();
+
+        let goals = world.goals();
+        assert_eq!(goals.len(), 4, "{goals:?}");
+        assert_eq!((goals[3].kind, goals[3].target), (ItemKind::Berries, 20));
+        assert_eq!(
+            stored_by_kind(&world)[&ItemKind::Berries],
+            food,
+            "the oracle"
+        );
+        assert_eq!(goals[3].progress, food, "{loads} loads of 5: {goals:?}");
+        assert_eq!(goals[3].completed, done, "{loads} loads of 5: {goals:?}");
+        assert_eq!(
+            world.stored_berries_count(),
+            food as usize,
+            "food= reads the goal's figure"
+        );
+    }
 }
 
 // ---- 12.12 Task 2b: a pile round walkable ground it does not zone ----

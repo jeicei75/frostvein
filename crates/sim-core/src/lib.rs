@@ -105,10 +105,13 @@ pub const FORAGE_TRIP_RADIUS: u32 = 10;
 const RETRY_COOLDOWN: u64 = 20;
 
 /// The first-session goal chain (12.12, FR47), in order: store this many of each kind.
-pub const GOALS: [(ItemKind, u32); 3] = [
+/// 13.9 review (Wolf): berries, the first food, go LAST, so a saved `goals_completed` keeps its
+/// meaning.
+pub const GOALS: [(ItemKind, u32); 4] = [
     (ItemKind::Wood, 10),
     (ItemKind::Tetrahedrite, 10),
     (ItemKind::Bloodstone, 1),
+    (ItemKind::Berries, 20),
 ];
 
 /// One goal as the wire reads it. `progress` is the STORED count of `kind` (3.3's rule), live.
@@ -549,7 +552,8 @@ fn split_stored(ecs: &EcsWorld) -> (BTreeSet<u32>, Vec<(u32, Pos)>) {
 #[derive(Resource)]
 struct GoalsCompleted(u32);
 
-/// The stored count (`split_stored`) of every item kind.
+/// The stored count (`split_stored`) of every item kind. Each stored item counts its `ItemCount`
+/// (13.9 review: a berries load of 5 is 5 food; every other item is 1).
 fn stored_by_kind(ecs: &EcsWorld) -> BTreeMap<ItemKind, u32> {
     let (stored, _) = split_stored(ecs);
     let mut counts = BTreeMap::new();
@@ -557,7 +561,8 @@ fn stored_by_kind(ecs: &EcsWorld) -> BTreeMap<ItemKind, u32> {
         if let (Some(item), Some(id)) = (entity.get::<Item>(), entity.get::<Id>())
             && stored.contains(&id.0)
         {
-            *counts.entry(item.0).or_insert(0) += 1;
+            *counts.entry(item.0).or_insert(0) +=
+                entity.get::<ItemCount>().map_or(1, |count| count.0);
         }
     }
     counts
@@ -10220,7 +10225,7 @@ mod tests {
         *world.ecs.get_mut::<Pos>(entity).unwrap() = pile[3];
         assert_eq!(
             goal_progress(&world),
-            vec![(2, false), (1, false), (0, false)],
+            vec![(2, false), (1, false), (0, false), (0, false)],
             "a carried item on a pile cell is not stored"
         );
 
@@ -10228,7 +10233,7 @@ mod tests {
 
         assert_eq!(
             goal_progress(&world),
-            vec![(2, false), (1, false), (0, false)],
+            vec![(2, false), (1, false), (0, false), (0, false)],
             "progress is the stored count of each kind"
         );
     }
@@ -10278,7 +10283,7 @@ mod tests {
         // Bloodstone is stored and its count is met, yet nothing ahead of it is done.
         assert_eq!(
             goal_progress(&world),
-            vec![(0, false), (10, false), (1, false)],
+            vec![(0, false), (10, false), (1, false), (0, false)],
             "bloodstone stored first must not complete"
         );
     }
@@ -10299,7 +10304,7 @@ mod tests {
         world.step();
         assert_eq!(
             goal_progress(&world),
-            vec![(9, false), (10, false), (1, false)]
+            vec![(9, false), (10, false), (1, false), (0, false)]
         );
 
         // The tenth wood lands on the last pile cell: all three complete on that one tick (D2).
@@ -10307,7 +10312,7 @@ mod tests {
         world.step();
         assert_eq!(
             goal_progress(&world),
-            vec![(10, true), (10, true), (1, true)],
+            vec![(10, true), (10, true), (1, true), (0, false)],
             "goal 1 meeting its target completes goals 2 and 3, whose stock is already there"
         );
     }

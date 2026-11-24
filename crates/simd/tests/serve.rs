@@ -3784,7 +3784,7 @@ fn a_loaded_pile_reports_its_stored_count_as_goal_progress_in_the_snapshot_and_t
     let loaded = read_snapshot_after_load(&mut reader);
 
     use protocol::ItemKind::{Tetrahedrite, Wood};
-    assert_eq!(loaded.goals.len(), 3);
+    assert_eq!(loaded.goals.len(), 4);
     assert_eq!(
         progress(&loaded.goals, Wood),
         1,

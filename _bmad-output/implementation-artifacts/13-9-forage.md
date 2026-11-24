@@ -117,6 +117,7 @@ Wolf sat build `a192ab88` (words on `13-9-signoff/vehicle-card.md`) and ruled a 
    - Every pin in `tests/worldgen.rs` passes unchanged, the terrain fingerprint (`:502`) included.
    - Every committed scenario run as on `main` (bench file per Q4) has the same end line as `main`, except for the new end-line fields.
    - A throwaway build that drops `plants` and `forage` from the encoding reads `state` `same` against `main` on all of those rows.
+   - Amended at review round 1 (Wolf, 2026-11-24: berries are the 4th goal): every end line's `goals=` also gains a fourth entry, the stored berries count.
 3. **Forage marks (amended, Q8, Q12; FR58, NFR11).**
    - `Designate { kind: Forage, rect }` marks each RIPE bush whose cell is in the rect or directly above a cell of it, so a drag on the ground reaches the bush standing on it. Growing bushes and bare ground take no mark.
    - A rect with no ripe bush is refused with `Refusal::Designate { kind: Forage, rect }`; both clients show it on their refusal line.

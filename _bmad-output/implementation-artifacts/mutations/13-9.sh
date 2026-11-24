@@ -325,3 +325,20 @@ old = '            if *kind == sim_core::DesignationKind::Forage && !plant_cells
 assert s.count(old) == 1
 p.write_text(s.replace(old, '            if false && *kind == sim_core::DesignationKind::Forage && !plant_cells.contains(pos) {\n'))
 PY
+
+# 13.9 review round 1 (Wolf: "let's add it to goals in this story"): berries 20, the 4th goal, by summed counts.
+mutation "44 the berries goal's target is not 20 (review)" sim-core the_berries_goal_counts_each_stored_loads_count <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '    (ItemKind::Berries, 20),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '    (ItemKind::Berries, 2),\n'))
+PY
+
+mutation "45 the goals count stored items, not their counts (review)" sim-core the_berries_goal_counts_each_stored_loads_count <<'PY'
+import pathlib
+p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
+old = '                entity.get::<ItemCount>().map_or(1, |count| count.0);\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                1;\n'))
+PY

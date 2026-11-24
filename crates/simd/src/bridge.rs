@@ -868,6 +868,7 @@ mod tests {
             goal(protocol::ItemKind::Wood, 10, 10, true),
             goal(protocol::ItemKind::Tetrahedrite, 10, 1, false),
             goal(protocol::ItemKind::Bloodstone, 1, 0, false),
+            goal(protocol::ItemKind::Berries, 20, 0, false),
         ];
         assert_eq!(snapshot(&world, protocol::Speed::Normal).goals, expected);
         assert_eq!(
