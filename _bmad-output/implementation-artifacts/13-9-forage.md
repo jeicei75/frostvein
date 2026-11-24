@@ -10,7 +10,7 @@ Status: in-progress
 ## Story
 
 As the boss,
-I want woodcutters to gather food from plants in an area I mark, again and again as the plants regrow,
+I want haulers to gather food from the ripe bushes I mark, and to mark a bush again once it regrows,
 so that the fortress has its first food.
 
 ## Branch
@@ -45,7 +45,7 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
     - The plant is a berry bush. The item is `ItemKind::Berries` (wire `berries`), the first raw food; later stories add carcass, fish and meal.
     - Placement: one in 16 eligible columns, uniform, on its own stream `STREAM_PLANTS`.
     - Eligible means: the column's top tile is `Solid(Snow)`, the cell above it is empty, and the column is outside the lake, outside the camp box (`CAMP_RADIUS + 1`, as the trees use), off the edge ring, and not a tree column. At least one side neighbour of the bush's cell must be standable at generation, so that no bush is born unforageable.
-    - `FORAGE_WORK_TICKS = 30`; `REGROW_TICKS = 3_000` (5 min at 1x, 75 s at fast4x); one `Berries` per forage.
+    - `FORAGE_WORK_TICKS = 30`; `REGROW_TICKS = 3_000` (5 min at 1x, 15 s at fast4x); one `Berries` per forage.
   - (b) Other numbers or names. Patches (clustered bushes) instead of uniform placement are a later look call at the seat, not this story.
 - **Q3. What is a forage area?**
   - (a) **Recommended:** a saved cell set of its own, `ForageArea(BTreeSet<Pos>)`, shaped like the stockpile.
@@ -154,7 +154,7 @@ Wolf sat build `a192ab88` (words on `13-9-signoff/vehicle-card.md`) and ruled a 
     - The gui forage drag is pinned by unit and headless tests: `--drag` is dead headless (12.7's deferral), so no live capture.
 14. **The mutation table kills** (Task 10), and `python3 scripts/audit-mutations.py` exits 0.
 15. **The seat (standing AC 16, 17).**
-    - Wolf marks a forage area in a fresh game and watches woodcutters forage, berries hauled, and a bush regrow.
+    - Wolf marks ripe bushes (key 6) in a fresh game and watches a hauler forage them on one trip, carry the berries to the pile, and a bush regrow.
     - He judges the plain look. His words are recorded.
     - The gui frame rate at 256² is recorded beside seat run 5's (NFR13). A miss is measured and ruled.
 
@@ -234,7 +234,7 @@ Wolf sat build `a192ab88` (words on `13-9-signoff/vehicle-card.md`) and ruled a 
   Run `audit-mutations.py` before the first code commit, so that rows against code you rewrite are re-pointed in the same commit (memory: `deleting-code-retires-rows-in-the-same-commit`).
 - [ ] **Task 11: the seat card (AC 15).** NEW `13-9-signoff/vehicle-card.md` in 13.8b's skeleton:
   - the run in the seat's form (persistent fact: `launch-gui.ps1`, `simd 7451`), with `--perf-log` to an absolute `D:\Workspace\frostvein\.bin\` path;
-  - what to do: mark an area at key 6, watch a forage, a haul and, at fast4x, a regrowth;
+  - what to do: mark ripe bushes at key 6, watch a hauler's forage trip, its load reach the pile and, at fast4x, a regrowth;
   - one question;
   - the sitting, recorded in Wolf's words.
 - [x] **Task 12: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).

@@ -13,7 +13,7 @@ The world grows berry bushes on snow (about 1 in 16 snow columns; a fresh 256² 
   the pile (the load's count is the number of bushes; it takes one pile cell). Woodcutters no longer forage.
 - **Marks work like cut.** Key 6 marks only the RIPE bushes in the drag, nothing on bare ground or on growing
   bushes. A drag with no ripe bush is refused: "forage refused: no ripe bush, or the mark limit is reached". A
-  mark is used up when its bush is picked. A bush regrows after 3,000 ticks (5 minutes at Normal, 75 s at
+  mark is used up when its bush is picked. A bush regrows after 3,000 ticks (5 minutes at Normal, 15 s at
   fast4x) unmarked; mark it again to forage it again. Clear (key 4) removes marks.
 - **Point 3 (idling):** I could not reproduce it in a probe (the woodcutter never idled more than 1 tick between
   bushes). "Not the nearest" did reproduce, and nearest-first answers it. If you see a hauler idle beside marked
@@ -44,7 +44,7 @@ target/release/simd 7451
 2. Press 6, drag over a patch with several bushes near the camp, and release. Only the ripe bushes glow.
 3. Watch a hauler go to the nearest marked bush, then on to the next ones, and carry one load to the pile.
 4. Try a drag over bare ground with no bush. It should be refused.
-5. Switch to fast4x and wait about 75 s: a picked bush regrows its berries but is not marked. Mark it again
+5. Switch to fast4x and wait about 15 s: a picked bush regrows its berries but is not marked. Mark it again
    and a hauler comes back.
 
 The perf log is compared with 13.8b seat run 5 (`13-8b-signoff/13-8b-seat-like-run5.csv`: p50 47-59 fps by
@@ -121,5 +121,11 @@ python scripts\bench\wire_tap.py D:\Workspace\frostvein\.bin\13-9-wire-tap-seat-
 Run at Normal to tick 30,000 (about 50 minutes), with the camera framed the way 13.8b's run 5 was. No forage
 needed. Press the mark key when the fps drops. Ctrl+C the tap and the daemon at the end. All three files, please.
 
-**Question:** compared with 13.8b's run 5 ("fps drops between 20-30 some times"): the same, or worse?
+After tick 30,000 (so the perf log above stays comparable), press 6 and drag over a few ripe bushes. A marked bush
+glows amber in the gui and shows as an amber `&` in the tui. No approved draft covered this look; the implementer
+chose it (review round 1), so it is yours to judge here.
+
+**Question 1:** compared with 13.8b's run 5 ("fps drops between 20-30 some times"): the same, or worse?
+
+**Question 2:** does a marked bush read as marked, the amber glow in the gui and the amber `&` in the tui?
 
