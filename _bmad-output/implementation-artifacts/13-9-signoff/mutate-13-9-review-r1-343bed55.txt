@@ -1,0 +1,61 @@
+
+=== 37 the validator refuses a save made mid forage trip (#244) ===
+thread 'the_live_load_takes_a_save_the_sim_wrote_mid_forage_trip' (97557) panicked at crates/simd/tests/serve.rs:236:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 10.55s
+
+=== 38 a forage trip excuses a carried stone (#244) ===
+thread 'a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking' (98796) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 2.52s
+
+=== 39 a forage trip excuses a load a haul job names (#244) ===
+thread 'a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking' (100373) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 3.24s
+
+=== 40 the validator refuses a forage job under a channel mark (review MED) ===
+thread 'the_live_load_takes_a_save_with_a_channel_marked_over_a_standing_forage_job' (101853) panicked at crates/simd/tests/serve.rs:236:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 10.56s
+
+=== 41 the validator takes a forage job under any mark or none (review MED) ===
+thread 'a_forage_job_over_no_forage_mark_save_is_logged_and_the_daemon_keeps_ticking' (103434) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 2.61s
+
+=== 42 the validator collapses a reused plant cell (review LOW) ===
+thread 'a_reused_plant_cell_save_is_logged_and_the_daemon_keeps_ticking' (104917) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 2.52s
+
+=== 43 the validator takes a forage mark over no plant (review LOW) ===
+thread 'a_forage_mark_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking' (106397) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 0.72s
+
+=== 44 the berries goal's target is not 20 (review) ===
+thread 'the_berries_goal_counts_each_stored_loads_count' (107480) panicked at crates/sim-core/tests/scenario.rs:5342:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 105 filtered out; finished in 0.01s
+
+=== 45 the goals count stored items, not their counts (review) ===
+thread 'the_berries_goal_counts_each_stored_loads_count' (108453) panicked at crates/sim-core/tests/scenario.rs:5348:9:
+assertion `left == right` failed: 3 loads of 5: [Goal { kind: Wood, target: 10, progress: 0, completed: true }, Goal { kind: Tetrahedrite, target: 10, progress: 0, completed: true }, Goal { kind: Bloodstone, target: 1, progress: 0, completed: true }, Goal { kind: Berries, target: 20, progress: 3, completed: false }]
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 105 filtered out; finished in 0.01s
+
+=== 12 simd's save validation refuses a clearing miner (Task 3) ===
+thread 'a_save_taken_mid_clear_loads_and_the_clear_finishes' (109771) panicked at crates/simd/tests/serve.rs:236:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 10.70s
+
+=== load_world lets a carrying dwarf hold someone else's job ===
+thread 'carrying_dwarf_without_the_matching_haul_job_save_is_logged_and_the_daemon_keeps_ticking' (111311) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 1.54s
+
+================ MUTATION RESULTS ================
+37 the validator refuses a save made mid forage trip (#244)  KILLED
+38 a forage trip excuses a carried stone (#244)              KILLED
+39 a forage trip excuses a load a haul job names (#244)      KILLED
+40 the validator refuses a forage job under a channel mark (review MED) KILLED
+41 the validator takes a forage job under any mark or none (review MED) KILLED
+42 the validator collapses a reused plant cell (review LOW)  KILLED
+43 the validator takes a forage mark over no plant (review LOW) KILLED
+44 the berries goal's target is not 20 (review)              KILLED
+45 the goals count stored items, not their counts (review)   KILLED
+12 simd's save validation refuses a clearing miner (Task 3)  KILLED
+load_world lets a carrying dwarf hold someone else's job     KILLED
+
+All mutations killed.
