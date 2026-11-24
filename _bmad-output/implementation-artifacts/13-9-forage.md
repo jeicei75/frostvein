@@ -245,6 +245,50 @@ Wolf sat build `a192ab88` (words on `13-9-signoff/vehicle-card.md`) and ruled a 
   - [x] **R3, the clients (ACs 9, 10).** tui forage mark (no `:` area); gui key 6 as a designation mode like cut, the mark on a marked bush, no slab.
   - [x] **R4, Opus:** the bench file's opening order as designations, AC 2 strip build (plants + item count), tick-bench, a rewritten `13-9.sh`, the full gate, the seat card's run 2.
 
+### Review Findings
+
+Round 1 (2026-11-24, fresh session, four layers, diff `3c6cf3b7..9accc328 -- crates/`). Layers: Blind Hunter (Sonnet; sim-core, client-core, gui `project.rs`/`appearance.rs`), Edge Case Hunter (Sonnet; shells and all tests), Acceptance Auditor (Opus; whole diff), Feature Auditor (Opus; whole diff). All four ran the binaries and none timed out, so there is no coverage hole. Each finding below is tagged `layer, SEVERITY, RAN|read`. Review cost $22.42 / 414 turns (78% in the four layers). Reaped 36.8 GB of layer caches under /tmp afterwards (18.4 GB of free space reclaimed). Wolf left the 8 patches as action items for a fresh `bmad-review-patch` session.
+
+- [x] [Review][Decision → measure first] **gui frame-rate suspects: 1,892 bush meshes cast shadows, and the bush reconcile rebuilds three maps every frame** — blind+feature, MED, read (reconcile measured).
+  - No bush carries `NotShadowCaster` (`crates/gui/src/project.rs` bush spawn in `reconcile`). The sun has shadow maps (`ingest.rs:1693`) and the campfire has a 6-face shadow map (`project.rs:1277`), so every bush is culled and queued in the main view plus every shadow view.
+  - The bush block of `reconcile` (`project.rs:2465-2519`) has no change gate and runs every frame. A release micro-benchmark of its shape cost 0.23 ms/frame, about 1% of a 20 ms frame.
+  - Neither cost is measured in the gui.
+  - The shadow change is a LOOK change, so it falls under memory `art-gates-visual-judgement`.
+  - **Wolf, 2026-11-24: measure first.** Seat run 5 runs as carded, and no patch touches gui rendering. If fps misses 13.8b's run 5, the first follow-up compares bushes with and without shadows.
+- [x] [Review][Decision → patch below] **The boss cannot see how much food there is** — feature, MED, read. `Item.count` reaches the Mirror, but no gui or tui code reads it, and berries are not a goal. A load of 5 looks the same as a load of 1. No AC asks for a display. **Wolf, 2026-11-24: "let's add it to goals in this story"; 4th goal, berries 20.**
+- [x] [Review][Decision → patch below] **The forage-mark look was never in an approved draft** — acceptance, LOW, read. Q5's draft covered only the removed `:` area. The tui amber `&` and the gui amber glow on a marked bush were chosen by the R3 subagent. Wolf sat runs 2-4 without objecting. **Wolf, 2026-11-24: judge it at run 5.**
+- [ ] [Review][Patch] **simd refuses a save made mid-trip: a hauler carrying berries while holding his next Forage job (issue #244)** [crates/simd/src/main.rs:901] — acceptance, HIGH, RAN.
+  - A scratch probe stopped the `a_world_saved_mid_trip…` setup at t195 (dwarf 0 carries item 10, count 2, holds a Forage job). Loaded through `start.save` + release `simd --bench`, it fails with `save dwarf 0 carries item 10 without holding its haul job`. Control: the same world one stage later (holding the Haul job) loads.
+  - The sim-core test goes through `World::from_save`. The serve positive control `the_live_load_takes_a_save_holding_a_forage_job` uses a save with no item.
+  - The fix must be proven through simd's loader, with a save the sim itself wrote mid-trip, plus a mutation row on the new arm.
+- [ ] [Review][Patch] **A Channel or Dig mark over a forage-marked bush leaves the Forage job standing, and simd refuses that save** [crates/simd/src/main.rs:753-766] — acceptance+blind, MED, RAN.
+  - The sim lets the channel take the mark (`designations.0.insert`). The held Forage job finishes, and `remove_forage_mark` (`lib.rs:632`) leaves the channel mark alone, so the channel job follows. This is consistent with the Forage arm's own "a channel already marked on the cell keeps it".
+  - The validator still demands a Forage mark at every Forage job's target: `save forage job N has no forage mark at x,y,z`.
+  - Fix: make the validator match the sim. Prove it with a save the sim wrote in that state.
+- [ ] [Review][Patch] **The load validator silently collapses duplicate plant cells and accepts a forage mark with no plant** [crates/simd/src/main.rs:673] — edge, LOW, RAN. Hand-edited saves only, but both are silent: last `ripe_at` wins, and a plantless mark counts against `MAX_DESIGNATIONS` forever. Patched because the function is already being edited.
+- [ ] [Review][Patch] **The seat card and Q2 say regrowth takes "75 s at fast4x"; it is 15 s** [13-9-signoff/vehicle-card.md:16,47; this file :48] — feature, LOW, RAN. `FAST4X_TICK_PERIOD` is 5 ms, which is 200 ticks/s, and the daemon log showed 1,000 ticks in 5.1-5.2 s. Seat run 5 reads this card.
+- [ ] [Review][Patch] **The AC 11 assert message says "a woodcutter foraged a bush"** [crates/simd/tests/bench.rs:342] — acceptance, LOW, read. Haulers forage now (Q7). It is a misreported failure message.
+- [ ] [Review][Patch] **The story statement, AC 15 and Task 11 still say "woodcutters" and "a forage area"** [this file :12-14, AC 15, Task 11] — acceptance, LOW, read. AC 15 is the next live gate and asks for something that no longer exists (memory `stale-record-fabricates-scope`).
+- [ ] [Review][Patch] **A fourth goal, berries 20, whose progress sums item counts (Wolf's ruling above)** [crates/sim-core/src/lib.rs:108, :553] — feature, MED.
+  - `GOALS` gains `(ItemKind::Berries, 20)` at the END, so saved `goals_completed` values keep their meaning.
+  - `stored_by_kind` sums `ItemCount` (1 for every non-berries item), so a stored load of 5 is 5 food. That makes `advance_goals`, `World::goals()` and the bench's `food=` read the same figure.
+  - Both clients already draw every goal from the wire, so there is no wire change: `Goal.kind` already carries `berries`.
+  - AC 2 is amended: every scenario end line's `goals=` gains a fourth entry. The pinned goal tests and the gui/tui goal readouts take the new line.
+- [ ] [Review][Patch] **The run 5 card asks Wolf to judge the marked-bush look (tui amber `&`, gui amber glow) under AC 15** [13-9-signoff/vehicle-card.md] — acceptance, LOW (Wolf's ruling above).
+- [x] [Review][Defer] **`tend_plants` walks every plant every tick** [crates/sim-core/src/lib.rs:585] — blind, LOW, read — deferred. Two O(P) passes, about 1.9k plants at 256²; the sim tick is measured equal to main on seat-like.
+- [x] [Review][Defer] **`next_trip_job` scans every entity and every job per bush picked** [crates/sim-core/src/lib.rs:1964] — blind, LOW, read — deferred. It runs once per forage; it grows with the number of marks and is not a cost today.
+- [x] [Review][Defer] **The validator accepts a plant on a non-standable cell** [crates/simd/src/main.rs:673] — edge, LOW, RAN — deferred. `tend_plants` removes it on tick 1, so the first snapshot shows a phantom bush that a delta then removes. This is self-healing, the same reasoning as the carried-stone position note at `:908`.
+- [x] [Review][Defer] **A rect spanning `i32::MIN..i32::MAX` is refused although it holds ripe bushes; ±100000 marks them** [crates/sim-core/src/lib.rs `apply_command`] — edge, LOW, RAN — deferred. Crafted input only, and the gui never sends it.
+- [x] [Review][Defer] **A multi-level, inverted or bad-kind client command is dropped with only a daemon stderr line** [crates/simd/src/main.rs `read_inbound`] — edge, LOW, RAN — deferred, pre-existing (memory `wire-rect-single-level`). Only the gui forage drag was fixed in `9d252bee`.
+
+Dismissed (6):
+- blind: `from_save` accepts bad counts. simd's validator refuses them; edge RAN all three.
+- blind: the trip skips `can_try`. Trade is guaranteed (every Forage job is Hauler), "free" does not apply mid-trip, and the reaction delay deliberately does not re-apply between bushes.
+- blind: a full pile litters berries. Pre-existing stone behaviour, owned by #204 and #235.
+- edge: a loose berries item is accepted on load. That is a legitimate state (the no-pile drop, AC 4).
+- edge: a forage box marks every ripe bush in its x/y box. Bushes stand only on column tops, so the box is the drag, and the preview agrees with the sim.
+- feature: marked bushes wait behind older hauls (the first pick came 2,049 ticks late under a log backlog). This is AC 5's FIFO by design. If Wolf reads it as idling at the seat, FIFO is the cause.
+
 ## Verification
 
 Nothing here can run at creation, because the feature does not exist. Each line states the obligation the dev inherits: the exact command, the non-zero observation, and the RED that must be seen first.
