@@ -308,3 +308,20 @@ old = '                    if !matches!(\n                        designation_ki
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    if false && !matches!(\n                        designation_kinds.get(&job.target),\n'))
 PY
+
+# 13.9 review round 1 (LOW, same function): two hand-edit states the validator took silently.
+mutation "42 the validator collapses a reused plant cell (review LOW)" simd a_reused_plant_cell_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if !plant_cells.insert(*pos) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if !plant_cells.insert(*pos) && false {\n'))
+PY
+
+mutation "43 the validator takes a forage mark over no plant (review LOW)" simd a_forage_mark_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '            if *kind == sim_core::DesignationKind::Forage && !plant_cells.contains(pos) {\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '            if false && *kind == sim_core::DesignationKind::Forage && !plant_cells.contains(pos) {\n'))
+PY

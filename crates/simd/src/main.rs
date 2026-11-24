@@ -670,8 +670,23 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 );
             }
         }
-        let plant_cells: BTreeSet<_> = save.plants.iter().map(|(pos, _)| *pos).collect();
+        let mut plant_cells = BTreeSet::new();
+        for (pos, _) in &save.plants {
+            if !plant_cells.insert(*pos) {
+                bail!("save reuses plant cell {},{},{}", pos.x, pos.y, pos.z);
+            }
+        }
         let designation_kinds: BTreeMap<_, _> = save.designations.iter().copied().collect();
+        for (pos, kind) in &designation_kinds {
+            if *kind == sim_core::DesignationKind::Forage && !plant_cells.contains(pos) {
+                bail!(
+                    "save forage mark at {},{},{} has no plant",
+                    pos.x,
+                    pos.y,
+                    pos.z
+                );
+            }
+        }
         // Tile jobs (a forage job among them: it comes from a mark) come from designations and are
         // bounded by the designation budget. Haul jobs
         // name a stone instead, so their bound is the number of stones in the save. Counting

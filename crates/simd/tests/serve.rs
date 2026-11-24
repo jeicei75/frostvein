@@ -1912,6 +1912,14 @@ fn a_forage_job_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking() {
         .expect("a forage job")
         .target;
     state.plants.retain(|(pos, _)| *pos != target);
+    // A channel took the cell's mark (the sim allows it), so only the JOB lacks its plant; a
+    // forage mark there would be refused first, as a mark over no plant.
+    state
+        .designations
+        .iter_mut()
+        .find(|(pos, _)| *pos == target)
+        .expect("the job's mark")
+        .1 = sim_core::DesignationKind::Channel;
 
     assert_save_is_rejected_without_stopping_ticks(
         state,
@@ -2152,6 +2160,33 @@ fn the_live_load_takes_a_save_with_a_channel_marked_over_a_standing_forage_job()
         "the forage job stands under the channel"
     );
     assert_live_load_takes(&state);
+}
+
+#[test]
+fn a_reused_plant_cell_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    let (pos, ripe_at) = state.plants[0];
+    state.plants.push((pos, ripe_at + 1));
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!("save reuses plant cell {},{},{}", pos.x, pos.y, pos.z),
+    );
+}
+
+#[test]
+fn a_forage_mark_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = forage_save();
+    let mark = state.designations[0].0;
+    state.plants.retain(|(pos, _)| *pos != mark);
+
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!(
+            "save forage mark at {},{},{} has no plant",
+            mark.x, mark.y, mark.z
+        ),
+    );
 }
 
 /// 13.9 AC 8 (amended): one stone-or-berries save, so the count is the only thing that differs.
