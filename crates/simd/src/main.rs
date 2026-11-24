@@ -746,7 +746,8 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     }
                 }
                 // Shares `seen_job_targets` with the tile jobs: the sim keeps one target per job. A
-                // forage job stands on a bush and its forage mark.
+                // forage job stands on a bush and its forage mark, or on a channel mark that took
+                // the cell after the job stood (`remove_forage_mark` leaves the channel).
                 sim_core::JobKind::Forage => {
                     if !seen_job_targets.insert(job.target) {
                         bail!(
@@ -765,11 +766,14 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                             job.target.z
                         );
                     }
-                    if designation_kinds.get(&job.target)
-                        != Some(&sim_core::DesignationKind::Forage)
-                    {
+                    if !matches!(
+                        designation_kinds.get(&job.target),
+                        Some(
+                            sim_core::DesignationKind::Forage | sim_core::DesignationKind::Channel
+                        )
+                    ) {
                         bail!(
-                            "save forage job {} has no forage mark at {},{},{}",
+                            "save forage job {} has no forage or channel mark at {},{},{}",
                             job.id.0,
                             job.target.x,
                             job.target.y,

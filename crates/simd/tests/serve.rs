@@ -1933,7 +1933,7 @@ fn a_forage_job_over_no_forage_mark_save_is_logged_and_the_daemon_keeps_ticking(
     assert_save_is_rejected_without_stopping_ticks(
         state.clone(),
         &format!(
-            "has no forage mark at {},{},{}",
+            "has no forage or channel mark at {},{},{}",
             target.x, target.y, target.z
         ),
     );
@@ -1943,7 +1943,7 @@ fn a_forage_job_over_no_forage_mark_save_is_logged_and_the_daemon_keeps_ticking(
     assert_save_is_rejected_without_stopping_ticks(
         state,
         &format!(
-            "has no forage mark at {},{},{}",
+            "has no forage or channel mark at {},{},{}",
             target.x, target.y, target.z
         ),
     );
@@ -2114,6 +2114,44 @@ fn a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_k
     });
     hauled.next_job_id += 1;
     assert_save_is_rejected_without_stopping_ticks(hauled, &expected);
+}
+
+/// 13.9 review (MED): the sim lets a channel mark take a bush cell whose Forage job stands, and the
+/// job stays (`remove_forage_mark` keeps the channel). simd takes the save the sim wrote.
+#[test]
+fn the_live_load_takes_a_save_with_a_channel_marked_over_a_standing_forage_job() {
+    let mut world = forage_world();
+    let target = world
+        .jobs()
+        .into_iter()
+        .find(|job| job.kind == sim_core::JobKind::Forage)
+        .expect("a forage job")
+        .target;
+    assert_eq!(
+        world.apply_command(sim_core::SimCommand::Designate {
+            kind: sim_core::DesignationKind::Channel,
+            rect: sim_core::Rect {
+                min: target,
+                max: target,
+            },
+        }),
+        None
+    );
+    let state = world.to_save();
+    assert!(
+        state
+            .designations
+            .contains(&(target, sim_core::DesignationKind::Channel)),
+        "the channel took the bush's cell"
+    );
+    assert!(
+        state
+            .jobs
+            .iter()
+            .any(|job| job.kind == sim_core::JobKind::Forage && job.target == target),
+        "the forage job stands under the channel"
+    );
+    assert_live_load_takes(&state);
 }
 
 /// 13.9 AC 8 (amended): one stone-or-berries save, so the count is the only thing that differs.

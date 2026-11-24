@@ -290,3 +290,21 @@ old = '                    && !haul_job_for_item.contains_key(&item)\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '                    && (true || !haul_job_for_item.contains_key(&item))\n'))
 PY
+
+# 13.9 review round 1 (MED): a channel marked over a bush whose Forage job stands takes the cell's mark and
+# the job stays; simd must take that save, and still refuse any other mark (or none) under a Forage job.
+mutation "40 the validator refuses a forage job under a channel mark (review MED)" simd the_live_load_takes_a_save_with_a_channel_marked_over_a_standing_forage_job <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = 'sim_core::DesignationKind::Forage | sim_core::DesignationKind::Channel'
+assert s.count(old) == 1
+p.write_text(s.replace(old, 'sim_core::DesignationKind::Forage'))
+PY
+
+mutation "41 the validator takes a forage job under any mark or none (review MED)" simd a_forage_job_over_no_forage_mark_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                    if !matches!(\n                        designation_kinds.get(&job.target),\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                    if false && !matches!(\n                        designation_kinds.get(&job.target),\n'))
+PY
