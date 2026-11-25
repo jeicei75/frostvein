@@ -160,7 +160,7 @@ If it hiccups, run the same thing once more with both checkouts on `main`, the s
 
 **Question 3:** after t1800, does this branch hiccup, and does `main` hiccup the same?
 
-**Run 5b result (2026-11-25): Question 1 answered, the same.** Three seat runs of `seat-dig-short.json`, each 551
+**Run 5b result (2026-11-25).** This is #245's dig-hiccup measurement, not the answer to Question 1 (Wolf, 2026-11-25). Three seat runs of `seat-dig-short.json`, each 551
 edit frames with the first dig at about 192 s. The idle phase is before the first dig; the dig phase is the 290 s after it.
 
 | log | build (gui and simd) | idle p50 | dig p50 / p95 / p99 | edit frame p50 | dig frames >= 50 ms |
@@ -176,6 +176,9 @@ edit frames with the first dig at about 192 s. The idle phase is before the firs
   repeat reads above `main` late in the dig (480-600 s).
 
 The dig cost is filed as #245 (on `main`, not 13.9's).
+
+**Question 1 answered (Wolf, 2026-11-25): "with haze on it was maybe between 20-50".** Beside 13.8b's run 5
+("fps drops between 20-30 some times").
 
 **Question 2 answered (Wolf, 2026-11-25): yes.** A marked bush reads as marked, in both the amber gui glow and the
 amber `&` in the tui. AC 15's seat questions are all answered.
