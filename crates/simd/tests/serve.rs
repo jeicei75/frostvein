@@ -2088,8 +2088,8 @@ fn the_live_load_takes_a_save_the_sim_wrote_mid_forage_trip() {
     assert_live_load_takes(&state);
 }
 
-/// 13.9 #244, the other side: a forage trip excuses only a BERRIES load, and only one no haul
-/// job names. Either way the old refusal stands.
+/// 13.9 #244, the other side: a forage trip excuses only a BERRIES load, only one no haul job
+/// names, and only while its carrier holds a Forage job. Otherwise the old refusal stands.
 #[test]
 fn a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking() {
     let (state, index) = mid_trip_save();
@@ -2111,6 +2111,31 @@ fn a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_k
         .expect("the load")
         .3 = 1;
     assert_save_is_rejected_without_stopping_ticks(stone, &expected);
+
+    // Round 2 (rework): the berries carrier holds no job at all.
+    let mut jobless = state.clone();
+    jobless.dwarves[index].current_job = None;
+    assert_save_is_rejected_without_stopping_ticks(jobless, &expected);
+
+    // Round 2 (rework): the berries carrier holds a non-Forage job, the haul of a loose stone.
+    let mut other_job = state.clone();
+    let stone_id = other_job.next_id;
+    other_job.next_id += 1;
+    let at = other_job.dwarves[index].pos;
+    other_job
+        .items
+        .push((stone_id, at, sim_core::ItemKind::Tetrahedrite, 1));
+    let haul = other_job.next_job_id;
+    other_job.next_job_id += 1;
+    other_job.jobs.push(sim_core::Job {
+        id: sim_core::JobId(haul),
+        kind: sim_core::JobKind::Haul { item: stone_id },
+        target: at,
+        created_tick: other_job.tick,
+        retry_after: 0,
+    });
+    other_job.dwarves[index].current_job = Some(haul);
+    assert_save_is_rejected_without_stopping_ticks(other_job, &expected);
 
     let mut hauled = state;
     hauled.jobs.push(sim_core::Job {

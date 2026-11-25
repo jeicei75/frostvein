@@ -291,6 +291,27 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '                    && (true || !haul_job_for_item.contains_key(&item))\n'))
 PY
 
+# 13.9 review round 2 (MED, rework of #244): the trip's job clause was unpinned, so a berries carrier
+# holding no job, or a non-Forage job, loaded under a mutant. Both now refused by name.
+mutation "46 a forage trip excuses a carrier holding no forage job (review r2)" simd a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                    && save.jobs.iter().any(|job| {\n                        dwarf.current_job == Some(job.id.0) && job.kind == sim_core::JobKind::Forage\n'
+assert s.count(old) == 1
+end = '                    });\n                if !holds_haul && !miner_clearing && !forage_trip {\n'
+assert s.count(end) == 1
+s = s.replace(old, '                    && (true || save.jobs.iter().any(|job| {\n                        dwarf.current_job == Some(job.id.0) && job.kind == sim_core::JobKind::Forage\n')
+p.write_text(s.replace(end, '                    }));\n                if !holds_haul && !miner_clearing && !forage_trip {\n'))
+PY
+
+mutation "47 a forage trip excuses a carrier holding any job (review r2)" simd a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
+import pathlib
+p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
+old = '                        dwarf.current_job == Some(job.id.0) && job.kind == sim_core::JobKind::Forage\n'
+assert s.count(old) == 1
+p.write_text(s.replace(old, '                        dwarf.current_job == Some(job.id.0)\n'))
+PY
+
 # 13.9 review round 1 (MED): a channel marked over a bush whose Forage job stands takes the cell's mark and
 # the job stays; simd must take that save, and still refuse any other mark (or none) under a Forage job.
 mutation "40 the validator refuses a forage job under a channel mark (review MED)" simd the_live_load_takes_a_save_with_a_channel_marked_over_a_standing_forage_job <<'PY'
