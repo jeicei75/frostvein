@@ -313,7 +313,7 @@ pub struct PlantChange {
     pub state: Option<PlantState>,
 }
 
-/// One step of the goal chain (12.12). All three are sent on every message, in chain order.
+/// One step of the goal chain (12.12). All four are sent on every message, in chain order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Goal {
     pub kind: ItemKind,
