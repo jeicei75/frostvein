@@ -2204,6 +2204,21 @@ fn a_forage_mark_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking() {
     let mut state = forage_save();
     let mark = state.designations[0].0;
     state.plants.retain(|(pos, _)| *pos != mark);
+    // Round 2 (rework): drop the mark's job and its claim too, so the plantless MARK is the only
+    // thing left to refuse (the job arm's own no-plant check would otherwise refuse it first).
+    let dropped: Vec<_> = state
+        .jobs
+        .iter()
+        .filter(|job| job.target == mark)
+        .map(|job| job.id.0)
+        .collect();
+    state.jobs.retain(|job| job.target != mark);
+    for dwarf in &mut state.dwarves {
+        if dwarf.current_job.is_some_and(|job| dropped.contains(&job)) {
+            dwarf.current_job = None;
+            dwarf.work_progress = 0;
+        }
+    }
 
     assert_save_is_rejected_without_stopping_ticks(
         state,
