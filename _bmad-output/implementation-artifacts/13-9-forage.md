@@ -233,7 +233,7 @@ Wolf sat build `a192ab88` (words on `13-9-signoff/vehicle-card.md`) and ruled a 
   - the validator's Forage arm.
 
   Run `audit-mutations.py` before the first code commit, so that rows against code you rewrite are re-pointed in the same commit (memory: `deleting-code-retires-rows-in-the-same-commit`).
-- [ ] **Task 11: the seat card (AC 15).** NEW `13-9-signoff/vehicle-card.md` in 13.8b's skeleton:
+- [x] **Task 11: the seat card (AC 15).** NEW `13-9-signoff/vehicle-card.md` in 13.8b's skeleton:
   - the run in the seat's form (persistent fact: `launch-gui.ps1`, `simd 7451`), with `--perf-log` to an absolute `D:\Workspace\frostvein\.bin\` path;
   - what to do: mark ripe bushes at key 6, watch a hauler's forage trip, its load reach the pile and, at fast4x, a regrowth;
   - one question;
@@ -573,3 +573,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 | 2026-11-22 | Seat run 3 (Wolf, `bb687047`): marks still only on the start level. The run-2 rect spanned levels and simd dropped it. Fixed with one single-level forage command per ripe level; headless test, mutation rows 35/36 and a live daemon probe. |
 | 2026-11-22 | Seat run 4 (Wolf, `9d252bee`): "ok works now .. performance issue is back when a lot of dwarves and digging happening .. but let's continue tomorrow". Forage works. A performance regression under load is open: measure `main` vs the branch on seat-like before any fix. Full gate GREEN at `9d252bee` (2,331 s). |
 | 2026-11-24 | Review round 1 patch pass (fresh session, Opus 5.5): all 8 patches landed, `db9b6274`..`343bed55`. #244 and the channel-mark refusal are fixed in simd's load validator, each proved with a save the sim wrote; two silent hand-edit states are now refused; berries 20 is the 4th goal, and stored loads count their `count` (AC 2 amended). Mutation rows 37-45 plus two re-pointed older rows: all KILLED. Full gate GREEN at `343bed55` (2,232 s). Seat run 5 (AC 15) is still unrun. |
+| 2026-11-25 | Seat run 5b (AC 15). Wolf's run 5 attempt hiccuped once a dig was ordered. The sim is cleared: on seat-like, this branch and `main` read p99 34.6 vs 34.2 ms and max 83 vs 80 ms, under Normal's 100 ms. A 10-minute `seat-dig-short.json` was sat three times: the branch twice, then `main` (`3c6cf3b7`). Dig p50 28.0 / 28.9 vs 27.5 ms on `main`; a terrain-edit frame costs 43.0 / 44.6 vs 43.1 ms. The dig hiccup is `main`'s, filed as #245 on Wolf's yes. The worst stretch of the first log was the monitor switched to another input. Question 2, Wolf: "yes", the marked bush reads as marked. AC 15 met; Task 11 done. |

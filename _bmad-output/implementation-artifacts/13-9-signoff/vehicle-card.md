@@ -175,4 +175,7 @@ edit frames with the first dig at about 192 s. The idle phase is before the firs
 - The two same-build runs differ by up to 2.2 ms at p50 (idle), so one run per build cannot resolve the 2-3 ms the
   repeat reads above `main` late in the dig (480-600 s).
 
-Question 2 (the marked-bush look) is still open.
+The dig cost is filed as #245 (on `main`, not 13.9's).
+
+**Question 2 answered (Wolf, 2026-11-25): yes.** A marked bush reads as marked, in both the amber gui glow and the
+amber `&` in the tui. AC 15's seat questions are all answered.
