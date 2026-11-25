@@ -129,3 +129,33 @@ chose it (review round 1), so it is yours to judge here.
 
 **Question 2:** does a marked bush read as marked, the amber glow in the gui and the amber `&` in the tui?
 
+
+**Run 5b setup (2026-11-25): the short dig run.** Wolf, on a run 5 attempt: he came back about 18 minutes in, with
+the crew arrived and idle, and the hiccups started when he designated digging. The sim is not the cause: on
+seat-like, this branch and `main` do the same work (1,486 dug, 538 stored) with the same slow ticks (p99 34.6 vs
+34.2 ms, max 83 vs 80 ms). At Normal a tick has 100 ms, so none of them overrun. That leaves the gui: the terrain
+rebuild for each dug tile at `--subdiv 4` (on `main` too) or this branch's ~1,900 bushes.
+
+`seat-dig-short.json` (in this folder) is seat-like in 10 minutes: seat-like's seed and dims, but all 200 dwarves at
+the start, seat-like's stockpile at t6, idle until t1800 (3 minutes, the baseline), then all of seat-like's cut and
+dig marks at once (30 cut, 1,600 dig). It ends at t6000. On the devpod it digs 571 tiles by then, with a slowest tick
+of 60 ms.
+
+```bash
+# WSL, from the repo, at the branch HEAD. Copy the file first so the main run below reads the same one.
+cp _bmad-output/implementation-artifacts/13-9-signoff/seat-dig-short.json /mnt/d/Workspace/frostvein/.bin/
+cargo build --release -p simd
+target/release/simd 7451 --scenario /mnt/d/Workspace/frostvein/.bin/seat-dig-short.json 2> /mnt/d/Workspace/frostvein/.bin/13-9-simd-stderr-short.txt
+```
+
+```powershell
+# PowerShell, from the Windows checkout, at the branch HEAD
+.\scripts\launch-gui.ps1 -GuiArgs @('--subdiv','4','--perf-log','D:\Workspace\frostvein\.bin\13-9-short.csv')
+```
+
+Leave the camera on the camp, at Normal, until t6000. Press the mark key at the first hiccup. No forage needed.
+
+If it hiccups, run the same thing once more with both checkouts on `main`, the same file, and the names
+`13-9-simd-stderr-short-main.txt` and `13-9-short-main.csv`. Only the bushes differ between the two runs.
+
+**Question 3:** after t1800, does this branch hiccup, and does `main` hiccup the same?
