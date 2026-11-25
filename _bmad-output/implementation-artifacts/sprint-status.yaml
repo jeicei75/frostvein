@@ -2903,6 +2903,8 @@ development_status:
   # 13.9 CREATED 2026-11-21 (claude-opus-5-5) on branch story-13-9-forage (off main 3c6cf3b7; first commit b99f881e = 13.8b
   # close-out). Task 0 Q1-Q6 open for Wolf (plant model, constants, forage area, bench file, key-6 mode draft, seat saves).
   # TASK 0 RULED 2026-11-22 (Wolf): Q1-Q6 all (a). Implementer: Sonnet 5.5 subagents, claude-opus-5-5 orchestrates.
+  # REVIEW R2 PATCH PASS 2026-11-25 (Opus 5.5): 6/6 landed 43f0d2c3..47feb38b, full gate GREEN at 47feb38b. AC 15 met; audit
+  # ended at r2 (0 HIGH). Stays in-progress until the PR (Wolf's yes) merges.
   13-10-hungry-and-miserable: backlog
   13-11-idle-at-the-fire: backlog
   # 13.11 carries #227 too (13.6 run 2, Wolf 2026-11-01): idle dwarves never move from crew ~50 up (wander home = camp,
