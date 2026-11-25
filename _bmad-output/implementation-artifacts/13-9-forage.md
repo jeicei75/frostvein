@@ -369,6 +369,8 @@ cargo test -p sim-core
 # AC 2, 11: end lines, main vs HEAD (release, every committed scenario)
 for f in $(git ls-files 'scenarios/*.json'); do target/release/simd --bench "$f" --runs 1 | rg ' end '; done
 #   expect HEAD: every row except two-hundred-on-256 equals main's line up to the new ' foraged=0 food=0'
+#     and a 4th goals= entry, berries (review r1): goals=a/b/c on main reads goals=a/b/c/0 on HEAD
+#     (13-9-signoff/state-head-7afc35d8.txt; its state= hashes equal state-head-fe7a831c.txt's on all 11)
 #   expect HEAD two-hundred-on-256: foraged>=1 food>=1 (if food=0, record it and Wolf rules)
 #   RED: comment out the food increment -> food=0 on one-forage.json and the fixture test fails; restore by edit
 
