@@ -159,3 +159,20 @@ If it hiccups, run the same thing once more with both checkouts on `main`, the s
 `13-9-simd-stderr-short-main.txt` and `13-9-short-main.csv`. Only the bushes differ between the two runs.
 
 **Question 3:** after t1800, does this branch hiccup, and does `main` hiccup the same?
+
+**Run 5b result (2026-11-25): Question 1 answered, the same.** Three seat runs of `seat-dig-short.json`, each 551
+edit frames with the first dig at about 192 s. The idle phase is before the first dig; the dig phase is the 290 s after it.
+
+| log | build (gui and simd) | idle p50 | dig p50 / p95 / p99 | edit frame p50 | dig frames >= 50 ms |
+|---|---|---:|---:|---:|---:|
+| `13-9-short.csv` | `acce6385` | 19.8 ms | 28.0 / 37.6 / 50.0 ms | 43.0 ms | 100 |
+| `13-9-short-repeat.csv` | `acce6385` | 22.0 ms | 28.9 / 39.5 / 52.6 ms | 44.6 ms | 143 |
+| `13-9-short-main.csv` | `3c6cf3b7` (`main`) | 19.6 ms | 27.5 / 36.8 / 48.2 ms | 43.1 ms | 85 |
+
+- The hiccups after a dig order are `main`'s cost at `--subdiv 4`: a 20 -> 28 ms median and ~43 ms terrain-rebuild
+  frames, with or without the bushes.
+- `13-9-short.csv` from 480 s on is not a measurement: Wolf switched the monitor to another input (vsync on).
+- The two same-build runs differ by up to 2.2 ms at p50 (idle), so one run per build cannot resolve the 2-3 ms the
+  repeat reads above `main` late in the dig (480-600 s).
+
+Question 2 (the marked-bush look) is still open.
