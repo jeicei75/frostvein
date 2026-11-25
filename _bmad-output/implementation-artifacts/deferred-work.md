@@ -2850,3 +2850,7 @@ story) and #194 (`route:undecided`); they are not repeated here.
 - **The simd load validator accepts a plant on a non-standable cell** (`crates/simd/src/main.rs:673`; edge, RAN). `tend_plants` removes it on tick 1, so it is a one-snapshot phantom bush. Self-healing, like the carried-stone position note at `:908`.
 - **A rect spanning `i32::MIN..i32::MAX` is refused although it holds ripe bushes** (`crates/sim-core/src/lib.rs` `apply_command`; edge, RAN). ±100000 marks all of them. Crafted input only; the refusal text is misleading.
 - **A multi-level, inverted or bad-kind client command is dropped with only a daemon stderr line** (`crates/simd/src/main.rs` `read_inbound`; edge, RAN). Pre-existing (memory `wire-rect-single-level`). The client gets nothing; only the gui forage drag was made to avoid it (`9d252bee`).
+
+## Deferred from: code review round 2 of 13-9-forage (2026-11-25)
+
+- **The simd load validator's `forage_trip` excuse does not check the carrier's profession** (`crates/simd/src/main.rs:942`; edge, read). A Miner or Woodcutter carrying berries while holding a Forage job is accepted. Hand-edit only: `set_profession` releases the claim, so the sim cannot write it, and the Forage-job arm has no profession check either. Pre-existing gap.

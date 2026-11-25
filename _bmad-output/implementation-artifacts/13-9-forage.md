@@ -307,6 +307,56 @@ Dismissed (6):
 - edge: a forage box marks every ripe bush in its x/y box. Bushes stand only on column tops, so the box is the drag, and the preview agrees with the sim.
 - feature: marked bushes wait behind older hauls (the first pick came 2,049 ticks late under a log backlog). This is AC 5's FIFO by design. If Wolf reads it as idling at the seat, FIFO is the cause.
 
+Round 2 (2026-11-25, fresh session, four layers, diff `9accc328..HEAD -- crates/ _bmad-output/implementation-artifacts/mutations/`, i.e. the round-1 patch pass). Layers and territories are the same as round 1. All four ran cargo 1.97.1 and the binaries, and none timed out, so there is no coverage hole. Feature drove 4,569 sim-written saves through a live simd Load, every mid-trip and channel moment included, and 0 were refused; the same fuzz against pre-patch `9accc328` refused 83 of 106. Edge loaded 382 more: 0 refused. Review cost $18.82 / 365 turns (85% in the four layers). Reaped 15.4 GB of layer caches under /tmp afterwards (8.7 GB of free space reclaimed). Wolf left the 6 patches as action items for a fresh `bmad-review-patch` session.
+
+**Delta vs round 1:**
+- NEW: 6 findings (1 MED, 5 LOW).
+- REWORK: 3 round-1 fixes found half-closed (#244's job clause, the row 43 fixture, the "woodcutter" words). 2 of them converged across layers.
+- HIGH: 0. **Stopping rule: no new finding is HIGH, so the static audit ends here.** The next spend goes to the full gate at PR. AC 15's seat is already sat.
+
+- [x] [Review][Decision → accepted] **The tui never shows the food count until goals 1-3 are done** — feature, MED, RAN.
+  - Where: `goal_row_text` (`crates/client-core/src/lib.rs:157`) draws the first open goal plus the done ones, never a later goal. The tui row (`crates/tui/src/view.rs:521`) uses it.
+  - Live: a sim-written save at t3818 with 39 berries stored and goals 1-3 open printed only `goal 1 of 4: wood 0/10`.
+  - The gui's `goal_lines` draws every goal, so the patch pass's "both clients already draw every goal" holds for the gui only.
+  - Also LOW, feature, read: in the gui, berries reads `[ ] berries 77 / 20` in the grey "later goal" colour, because the chain completes in order. That is working as designed, but it looks broken at the seat.
+  - Options:
+    - (a) Accept: berries is shown when it becomes the current goal.
+    - (b) Make the tui row always show the berries count after the current goal, e.g. `food 39`, in `goal_row_text`.
+    - (c) Something else.
+  - **Wolf, 2026-11-25: (a) accept.** Berries shows when it becomes the current goal.
+- [x] [Review][Decision → patch below] **AC 15's NFR13 comparison: run 5b stood in for the carded run 5, and "Question 1 answered, the same" is not quoted from Wolf** — acceptance, LOW, read.
+  - AC 15 asks for fps recorded beside 13.8b's run 5. The card's Run 5b compares the branch against `main` on a 10-minute dig scenario instead (`13-9-signoff/vehicle-card.md:163`).
+  - Its dig frames ≥ 50 ms read 100 and 143 on the branch against 85 on `main`. The record calls this unresolvable with one run per build, not a ruled miss.
+  - Question 2 carries Wolf's quote ("yes"). Question 1 does not.
+  - Needs one line from Wolf: 5b's branch-vs-main stands as AC 15's NFR13 record, or not.
+  - **Wolf, 2026-11-25: (b), it does not stand: "with haze on it was maybe between 20-50".** His seat reading is the Question 1 answer, beside 13.8b's run 5 ("fps drops between 20-30 some times"). 5b remains the dig-hiccup measurement (#245).
+- [ ] [Review][Patch] **Record Wolf's Question 1 answer in his words on the card and in the change log, replacing "Question 1 answered, the same"** [13-9-signoff/vehicle-card.md:163; this file Change Log 2026-11-25] — acceptance, LOW (Wolf's ruling above).
+- [ ] [Review][Patch] **REWORK of #244: the `forage_trip` excuse's job clause is unpinned, so a berries carrier holding no job, or a non-Forage job, would load** [crates/simd/src/main.rs:944] — edge+acceptance, MED, RAN.
+  - Both layers replaced the `save.jobs.iter().any(… job.kind == Forage)` clause with `true` in a scratch copy. Every serve filter stayed green (`carr`, `forage`, `haul`, `clear`, `miner`, `save` 60, plus 47 bin units).
+  - Acceptance's probe: `mid_trip_save()` with the carrier's `current_job = None` is refused at HEAD and loads under the mutant.
+  - Rows 38 and 39 pin only "the load is berries" and "no haul job names it". Closure row 1's other side tested a stone and a hauled load, and both of those carriers hold a Forage job.
+  - Fix:
+    - Add a berries carrier holding no job, and one holding a non-Forage job, to `a_forage_trip_carrying_stone_or_a_hauled_load…`, each refused with "carries item … without holding its haul job".
+    - Add a mutation row on the `.any` clause and one on `job.kind == sim_core::JobKind::Forage`. Re-mutate after the strengthening.
+- [ ] [Review][Patch] **REWORK of closure row 3: the plantless-forage-mark fixture still holds a Forage job, which the older job check already refused, so row 43 is killed by message text only** [crates/simd/tests/serve.rs `a_forage_mark_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking`] — acceptance, LOW, RAN. Edge agrees on the mechanism: "another bail has the wrong text".
+  - The finding's own state is a plantless mark with NO job, which "counts against `MAX_DESIGNATIONS` forever". Under mutant 43 that state loads silently, and no test holds it.
+  - This is a latent silent failure, so it is patched despite being LOW.
+  - Fix: the fixture drops the job and the claimant's `current_job` as well as the plant, so the new check is the only one that can refuse it.
+- [ ] [Review][Patch] **REWORK of the words patch: "forage goes to the existing woodcutter" survives in the Branch section** [this file :20] — acceptance, LOW, read. Q7 moved forage to haulers. This is the round-1 words row half-done.
+- [ ] [Review][Patch] **AC 2's record: no end-line file shows the 4 goals, and the Verification runbook expects "equals main's line"** [this file Verification `# AC 2, 11` block; `13-9-signoff/`] — acceptance, LOW, RAN.
+  - The newest state file (`fe7a831c`) shows 3 goals.
+  - At HEAD all 12 committed scenarios end with 4 goals, and every `state=` hash equals `fe7a831c`'s, so the 4th goal moves no outcome. Two-hundred-on-256 reads `goals=29/0/0/31 … foraged=32 food=31`.
+  - A verifier following the runbook would see `goals=` differ from main on every row (memory `stale-record-fabricates-scope`).
+  - Fix: commit the HEAD end lines as a state file, and amend the runbook's expectation to name the 4th `goals=` entry.
+- [ ] [Review][Patch] **The protocol doc comment says "All three are sent on every message"** [crates/protocol/src/lib.rs:316] — feature, LOW, read. Four are sent now. The comment was made wrong by this story's 4th goal; one word.
+- [x] [Review][Defer] **The `forage_trip` excuse does not check the carrier's profession** [crates/simd/src/main.rs:942] — edge, LOW, read — deferred, pre-existing.
+  - A Miner carrying berries while holding a Forage job is accepted. That is a hand-edit acceptance only: `set_profession` releases the claim, so the sim cannot produce it.
+  - The validator's Forage-job arm has no profession check either.
+
+Dismissed (2):
+- blind: a pre-13.9 save with `goals_completed = 3` now shows berries open. That is Wolf's append-last ruling, by design.
+- blind: `stored_by_kind` scans every entity per call, every tick. Not new; the sim tick is measured equal to main.
+
 ## Verification
 
 Nothing here can run at creation, because the feature does not exist. Each line states the obligation the dev inherits: the exact command, the non-zero observation, and the RED that must be seen first.
