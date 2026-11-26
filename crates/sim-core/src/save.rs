@@ -35,6 +35,9 @@ pub struct SaveState {
     // NOTE: deliberately no `#[serde(default)]`, like `arrivals` (13.9): a pre-13.9 save fails to
     // decode and simd refuses it. Each plant's cell and the tick it is ripe from.
     pub plants: Vec<(Pos, u64)>,
+    // NOTE: deliberately no `#[serde(default)]`, like `arrivals` (13.10): a pre-13.10 save fails to
+    // decode and simd refuses it. The world's hunger setting.
+    pub hunger: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +75,9 @@ pub struct SavedDwarf {
     // is walking to and its wait count; `None` once its walk-in is over.
     #[serde(deserialize_with = "Option::deserialize")]
     pub arriving: Option<SavedArriving>,
+    // NOTE: deliberately no `#[serde(default)]`, like `profession` (13.10): a pre-13.10 save fails
+    // to decode and simd refuses it. Ticks since the dwarf last ate; 0 with the setting off.
+    pub hunger: u32,
 }
 
 /// An arrival's walk-in (13.8): the cell it walks to, and how many ticks it has waited on an

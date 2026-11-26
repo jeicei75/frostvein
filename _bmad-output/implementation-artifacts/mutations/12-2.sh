@@ -40,9 +40,10 @@ mutation "tui never draws the roster" tui the_roster_row_names_each_dwarf_in_his
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 # Re-pointed 2026-10-02 (12.4): the roster now pairs each identity with the dwarf's profession.
-old = '                .identity\n                .map(|identity| (identity, entity.profession))\n'
+# Re-pointed 2026-11-26 (13.10): the roster pairs each identity with the dwarf's need too.
+old = '                .identity\n                .map(|identity| (identity, entity.profession, client_core::need_text(entity)))\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                .identity\n                .filter(|_| false)\n                .map(|identity| (identity, entity.profession))\n'))
+p.write_text(s.replace(old, '                .identity\n                .filter(|_| false)\n                .map(|identity| (identity, entity.profession, client_core::need_text(entity)))\n'))
 PY
 
 mutation "one material for all dwarves" gui a_dwarfs_tunic_material_follows_his_identity_and_a_swap_swaps_it <<'PY'
@@ -96,9 +97,10 @@ PY
 mutation "named tui dwarf drawn as the emoji-capable smiley" tui a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour <<'PY'
 import pathlib
 p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
-old = "                        glyph: '☻',\n                        fg: dwarf_colour(identity.colour),\n"
+# Re-pointed 2026-11-26 (13.10): the tunic colour gives way to the misery colour.
+old = "                        glyph: '☻',\n                        fg: if entity.miserable == Some(true) {\n"
 assert s.count(old) == 1
-p.write_text(s.replace(old, "                        glyph: '☺',\n                        fg: dwarf_colour(identity.colour),\n"))
+p.write_text(s.replace(old, "                        glyph: '☺',\n                        fg: if entity.miserable == Some(true) {\n"))
 PY
 
 mutation "deselect keeps the selected focal distance" gui depth_of_field_focuses_the_selected_dwarf_not_the_rigs_aim_point <<'PY'

@@ -16,7 +16,7 @@
 mutation "trade check removed" sim-core hauling_starts_while_the_dig_backlog_is_still_queued <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        trade(job.kind) == profession\n'
+old = '        trade(job.kind) == Some(profession)\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        true\n'))
 PY
@@ -28,9 +28,9 @@ PY
 mutation "trade maps Haul to Miner" sim-core each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        JobKind::Haul { .. } => Profession::Hauler,\n'
+old = '        JobKind::Haul { .. } => Some(Profession::Hauler),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        JobKind::Haul { .. } => Profession::Miner,\n'))
+p.write_text(s.replace(old, '        JobKind::Haul { .. } => Some(Profession::Miner),\n'))
 PY
 
 mutation "professions drawn from the spawn stream" sim-core spawn_positions_for_seed_42_are_pinned <<'PY'

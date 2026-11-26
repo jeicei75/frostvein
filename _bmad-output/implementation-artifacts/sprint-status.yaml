@@ -2906,7 +2906,7 @@ development_status:
   # REVIEW R2 PATCH PASS 2026-11-25 (Opus 5.5): 6/6 landed 43f0d2c3..47feb38b, full gate GREEN at 47feb38b. AC 15 met; audit
   # ended at r2 (0 HIGH). Stays in-progress until the PR (Wolf's yes) merges.
   # 13.9 MERGED 2026-11-26 as PR #243 (0465969f), closed no issue by keyword; #244 closed by hand; #245 open. -> done.
-  13-10-hungry-and-miserable: ready-for-dev
+  13-10-hungry-and-miserable: in-progress
   # 13.10 CREATED 2026-11-26 (claude-opus-5-5) on branch story-13-10-hungry-and-miserable (off main 0465969f; first commit
   # de1940cf = 13.9 close-out). Task 0 Q1-Q7 open for Wolf (setting, constants, bench food, eat job, slump, tui look, FR67 marks).
   # Task 0 RULED 2026-11-26: all (a); Q4/Q7 widened: every hungry dwarf eats stored berries, else nearest unmarked ripe

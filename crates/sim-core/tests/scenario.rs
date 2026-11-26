@@ -1640,6 +1640,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             clearing: None,
             squeeze: None,
             arriving: None,
+            hunger: 0,
         },
         SavedDwarf {
             id: 1,
@@ -1660,6 +1661,7 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             clearing: None,
             squeeze: None,
             arriving: None,
+            hunger: 0,
         },
     ];
     save.items = vec![
@@ -4642,6 +4644,7 @@ fn a_miner_caged_by_one_stone_carries_it_out_and_cuts() {
         clearing: None,
         squeeze: None,
         arriving: None,
+        hunger: 0,
     }];
     save.items = vec![(1, exit, ItemKind::Stone, 1)];
     save.next_id = 2;
@@ -6405,4 +6408,371 @@ fn a_channel_through_a_bush_removes_it() {
     });
     assert!(forage_jobs(&world).iter().all(|job| job.target != plant));
     assert!(!forage_marks(&world).contains(&plant));
+}
+
+// ---- 13.10: hungry and miserable ----
+
+/// The world as a save, edited, and loaded again: how a test reaches a hungry state without
+/// stepping 12,000 ticks.
+fn edited(world: World, edit: impl FnOnce(&mut sim_core::SaveState)) -> World {
+    let mut save = world.to_save();
+    edit(&mut save);
+    World::from_save(save)
+}
+
+/// Every dwarf's hunger set by `hunger(id)`.
+fn with_hungers(world: World, hunger: impl Fn(u32) -> u32) -> World {
+    edited(world, |save| {
+        for dwarf in &mut save.dwarves {
+            dwarf.hunger = hunger(dwarf.id);
+        }
+    })
+}
+
+/// A stored berries item of `count` on `cell` (a free pile cell), and its id.
+fn add_berries(world: World, cell: Pos, count: u32) -> (World, u32) {
+    let mut id = 0;
+    let world = edited(world, |save| {
+        id = save.next_id;
+        save.items.push((id, cell, ItemKind::Berries, count));
+        save.next_id += 1;
+    });
+    (world, id)
+}
+
+fn hunger_of(world: &World, dwarf: Id) -> u32 {
+    world
+        .hunger()
+        .into_iter()
+        .find_map(|(id, hunger)| (id == dwarf).then_some(hunger))
+        .expect("the dwarf exists")
+}
+
+fn is_meal(kind: JobKind) -> bool {
+    matches!(kind, JobKind::Eat { .. } | JobKind::EatPlant)
+}
+
+fn count_of(world: &World, item: u32) -> Option<u32> {
+    world
+        .item_counts()
+        .into_iter()
+        .find_map(|(id, count)| (id.0 == item).then_some(count))
+}
+
+/// A miner of `backlog_world` holding a dig and carrying nothing, in a world with hunger on where
+/// nobody is hungry yet and no plant grows, so the only food is what a test puts on the pile.
+fn digging_miner() -> (World, BTreeSet<Pos>, Id, Job) {
+    let (world, zones) = backlog_world();
+    let mut world = with_hungers(world.with_hunger(), |_| 0);
+    world = edited(world, |save| save.plants.clear());
+    for _ in 0..3000 {
+        world.step();
+        let carrying: BTreeMap<Id, Option<u32>> = world.carrying().into_iter().collect();
+        if let Some((miner, job)) = world.claims().into_iter().find_map(|(id, job)| {
+            let job = world.jobs().into_iter().find(|j| Some(j.id) == job)?;
+            (job.kind == JobKind::Dig && carrying[&id].is_none()).then_some((id, job))
+        }) {
+            return (world, zones, miner, job);
+        }
+    }
+    panic!("no miner took a dig");
+}
+
+/// A free pile cell of `backlog_world`'s pile: no item on it.
+fn free_pile_cell(world: &World, zones: &BTreeSet<Pos>) -> Pos {
+    let taken: BTreeSet<Pos> = world.items().into_iter().map(|(_, pos)| pos).collect();
+    *zones
+        .iter()
+        .find(|cell| !taken.contains(cell))
+        .expect("a free pile cell")
+}
+
+/// AC 1: at `EAT_AT` a dwarf with empty hands lets go of his trade job, which stays queued and is
+/// done later, walks to the stored berries, eats one, and his hunger is 0.
+#[test]
+fn a_hungry_miner_leaves_his_dig_eats_a_stored_berry_and_the_dig_is_done_later() {
+    let (world, zones, miner, dig) = digging_miner();
+    let cell = free_pile_cell(&world, &zones);
+    let (world, item) = add_berries(world, cell, 2);
+    let mut world = with_hungers(world, |id| {
+        if id == miner.0 {
+            sim_core::EAT_AT - 1
+        } else {
+            0
+        }
+    });
+    step_until(&mut world, 25, "the hungry miner takes a meal", |w| {
+        holds(w, miner, is_meal).is_some()
+    });
+    let meal = holds(&world, miner, is_meal).expect("a meal");
+    assert_eq!(
+        meal.kind,
+        JobKind::Eat { item },
+        "stored berries, not a bush"
+    );
+    assert!(
+        world.jobs().iter().any(|job| job.id == dig.id),
+        "the dig he let go of stays queued"
+    );
+    step_until(&mut world, 600, "the miner eats", |w| {
+        hunger_of(w, miner) == 0
+    });
+    assert_eq!(count_of(&world, item), Some(1), "one berry eaten");
+    assert!(holds(&world, miner, is_meal).is_none());
+    step_until(&mut world, 5000, "someone digs the released mark", |w| {
+        w.jobs().iter().all(|job| job.id != dig.id)
+    });
+}
+
+/// AC 1, 3 (Wolf, Task 0 Q4/Q7): with no stored food a hungry dwarf eats the nearest ripe bush no
+/// job or mark names, and the bush regrows. A bush the player marked is never eaten, even on the
+/// tick the mark lands, before its forage job exists.
+#[test]
+fn with_no_stored_food_a_hungry_dwarf_eats_an_unmarked_bush_and_never_a_marked_one() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).with_hunger();
+    let dwarves: Vec<Id> = world.dwarves().into_iter().map(|(id, ..)| id).collect();
+    for id in &dwarves {
+        set_profession(&mut world, *id, Profession::Miner);
+    }
+    let eater = dwarves[0];
+    let mut world = with_hungers(world, |id| if id == eater.0 { sim_core::EAT_AT } else { 0 });
+    let at = dwarf_pos(&world, eater);
+    let mut plants: Vec<Pos> = world.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| (distance(*pos, at), *pos));
+    let marked = plants[0];
+    // The eater's next look is the next tick, which runs before the mark has its job.
+    while !(world.tick() + 1 + u64::from(eater.0)).is_multiple_of(20) {
+        world.step();
+    }
+    assert_eq!(mark_forage(&mut world, marked), None);
+    let ripe_before = world.plants().iter().filter(|(_, ripe)| *ripe).count();
+    step_until(&mut world, 1500, "the eater eats", |w| {
+        assert!(
+            holds(w, eater, |kind| kind == JobKind::EatPlant)
+                .is_none_or(|job| job.target != marked),
+            "the marked bush is never his meal"
+        );
+        hunger_of(w, eater) == 0
+    });
+    assert_eq!(
+        ripe(&world, marked),
+        Some(true),
+        "the marked bush stands ripe"
+    );
+    assert_eq!(forage_marks(&world), vec![marked], "and keeps its mark");
+    assert_eq!(
+        world.plants().iter().filter(|(_, ripe)| *ripe).count(),
+        ripe_before - 1,
+        "one bush eaten, now regrowing"
+    );
+}
+
+/// AC 1: a carrier is not interrupted until his hands are empty: a forager carrying his load
+/// delivers it first, then eats it, and the eaten-out load is gone.
+#[test]
+fn a_hungry_forager_delivers_his_load_before_he_eats_and_the_eaten_load_is_gone() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let hauler = solo_hauler(&mut world);
+    let zones = place_pile(&mut world);
+    let bush = plant_cluster(&world, 1, 0)[0];
+    assert_eq!(mark_forage(&mut world, bush), None);
+    let mut world = with_hungers(world.with_hunger(), |_| 0);
+    step_until(&mut world, 3000, "the hauler picks the bush", |w| {
+        carried_count(w, hauler).is_some()
+    });
+    let mut world = with_hungers(
+        world,
+        |id| {
+            if id == hauler.0 { sim_core::EAT_AT } else { 0 }
+        },
+    );
+    step_until(&mut world, 3000, "the load reaches the pile", |w| {
+        if carried_count(w, hauler).is_some() {
+            assert!(
+                holds(w, hauler, is_meal).is_none(),
+                "no meal while he carries"
+            );
+        }
+        loads_on_pile(w) == vec![1]
+    });
+    let load = world
+        .items()
+        .into_iter()
+        .find(|(_, pos)| zones.contains(pos))
+        .expect("the load on the pile")
+        .0;
+    step_until(&mut world, 600, "the hauler eats his load", |w| {
+        hunger_of(w, hauler) == 0
+    });
+    assert!(
+        world.items().iter().all(|(id, _)| *id != load),
+        "a load eaten to 0 is gone"
+    );
+    assert_eq!(world.stored_berries_count(), 0);
+}
+
+/// AC 3: a miserable miner lets go of his dig (hands empty) and claims nothing while no food can
+/// be had; the dig stays queued for the others.
+#[test]
+fn a_miserable_miner_lets_go_of_his_dig_and_claims_no_trade_job() {
+    let (world, _, miner, dig) = digging_miner();
+    let mut world = with_hungers(world, |id| {
+        if id == miner.0 {
+            sim_core::MISERABLE_AT
+        } else {
+            0
+        }
+    });
+    world.step();
+    assert_eq!(holds(&world, miner, |_| true), None, "he let go at once");
+    assert!(
+        world.jobs().iter().any(|job| job.id == dig.id),
+        "the dig stays queued"
+    );
+    for _ in 0..500 {
+        world.step();
+        assert_eq!(holds(&world, miner, |_| true), None, "claims nothing");
+        assert!(world.miserable().contains(&(miner, true)));
+    }
+}
+
+/// AC 4 (FR65, success criterion 3): a crew with no food anywhere goes miserable and stops work
+/// for 5,000 ticks without panicking or losing anyone. Food put back on the pile clears every
+/// dwarf's misery within `RECOVERY_BOUND` ticks.
+#[test]
+fn a_crew_with_no_food_goes_miserable_and_recovers_when_berries_are_stored() {
+    let (world, zones) = backlog_world();
+    let world = edited(world.with_hunger(), |save| save.plants.clear());
+    let mut world = with_hungers(world, |_| sim_core::MISERABLE_AT - 1);
+    let crew = world.dwarves().len();
+    world.step();
+    let jobs: BTreeMap<JobId, JobKind> = world.jobs().iter().map(|j| (j.id, j.kind)).collect();
+    assert_eq!(jobs.len(), 20, "the backlog's 20 digs are queued");
+    let start = world.tick();
+    for _ in 0..5_000 {
+        world.step();
+        assert!(world.miserable().iter().all(|(_, miserable)| *miserable));
+        assert!(
+            world.claims().iter().all(|(_, job)| job.is_none()),
+            "no miserable dwarf holds a trade job"
+        );
+    }
+    assert_eq!(world.dwarves().len(), crew);
+    assert_eq!(world.tick(), start + 5_000);
+    assert_eq!(
+        world
+            .jobs()
+            .iter()
+            .map(|j| (j.id, j.kind))
+            .collect::<BTreeMap<_, _>>(),
+        jobs,
+        "every mark still queued"
+    );
+
+    let cells: Vec<Pos> = zones.iter().copied().collect();
+    let (world, _) = add_berries(world, cells[0], 3);
+    let (mut world, _) = add_berries(world, cells[1], 3);
+    let back = world.tick();
+    step_until(&mut world, RECOVERY_BOUND, "every dwarf recovers", |w| {
+        w.miserable().iter().all(|(_, miserable)| !*miserable)
+    });
+    println!("recovered in {} ticks", world.tick() - back);
+    assert_eq!(world.stored_berries_count(), 6 - crew);
+}
+
+/// AC 4: measured at 13.10 dev (280 ticks: six berries on two pile cells, five eaters taking
+/// turns, one meal per item at a time), plus a margin.
+const RECOVERY_BOUND: u32 = 600;
+
+/// AC 5 (AD-12's one market): an Eat job nobody holds is gone the next tick, and nobody claims it.
+#[test]
+fn an_eat_job_nobody_holds_is_retired_on_the_next_tick() {
+    let (world, zones) = backlog_world();
+    let cell = free_pile_cell(&world, &zones);
+    let (world, item) = add_berries(world.with_hunger(), cell, 1);
+    let mut world = with_hungers(world, |_| 0);
+    let mut orphan = JobId(0);
+    world = edited(world, |save| {
+        orphan = JobId(save.next_job_id);
+        save.jobs.push(Job {
+            id: orphan,
+            kind: JobKind::Eat { item },
+            target: cell,
+            created_tick: save.tick,
+            retry_after: 0,
+        });
+        save.next_job_id += 1;
+    });
+    assert!(world.jobs().iter().any(|job| job.id == orphan));
+    world.step();
+    assert!(world.jobs().iter().all(|job| job.id != orphan));
+    assert!(world.claims().iter().all(|(_, job)| *job != Some(orphan)));
+}
+
+/// AC 5: a trade change never takes a dwarf off his meal.
+#[test]
+fn a_trade_change_keeps_the_meal() {
+    let (world, zones, miner, _) = digging_miner();
+    let cell = free_pile_cell(&world, &zones);
+    let (world, item) = add_berries(world, cell, 1);
+    let mut world = with_hungers(world, |id| if id == miner.0 { sim_core::EAT_AT } else { 0 });
+    step_until(&mut world, 25, "the miner takes a meal", |w| {
+        holds(w, miner, is_meal).is_some()
+    });
+    let meal = holds(&world, miner, is_meal).expect("a meal");
+    assert_eq!(meal.kind, JobKind::Eat { item });
+    set_profession(&mut world, miner, Profession::Woodcutter);
+    assert_eq!(holds(&world, miner, is_meal), Some(meal));
+}
+
+/// AC 5: two hungry dwarves and one berry. One eats it; the other never walks on to a vanished
+/// item and eats a bush instead. No meal ever changes hands.
+#[test]
+fn two_hungry_dwarves_and_one_berry_one_eats_it_and_the_other_finds_a_bush() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).with_hunger();
+    let dwarves: Vec<Id> = world.dwarves().into_iter().map(|(id, ..)| id).collect();
+    for id in &dwarves {
+        set_profession(&mut world, *id, Profession::Miner);
+    }
+    let zones = place_pile(&mut world);
+    let cell = *zones.iter().next().expect("a pile cell");
+    let (world, item) = add_berries(world, cell, 1);
+    let (a, b) = (dwarves[0], dwarves[1]);
+    let mut world = with_hungers(world, |id| {
+        if id == a.0 || id == b.0 {
+            sim_core::EAT_AT
+        } else {
+            0
+        }
+    });
+    let mut holder: BTreeMap<JobId, Id> = BTreeMap::new();
+    let mut ate_berries = BTreeSet::new();
+    let mut fed = BTreeSet::new();
+    step_until(&mut world, 2000, "both eat", |w| {
+        let items: BTreeSet<u32> = w.items().into_iter().map(|(id, _)| id.0).collect();
+        for (dwarf, job) in w.claims() {
+            let Some(job) = w.jobs().into_iter().find(|j| Some(j.id) == job) else {
+                continue;
+            };
+            if let JobKind::Eat { item: food } = job.kind {
+                assert!(items.contains(&food), "no meal of a vanished item");
+                ate_berries.insert(dwarf);
+            }
+            if is_meal(job.kind) {
+                assert_eq!(
+                    *holder.entry(job.id).or_insert(dwarf),
+                    dwarf,
+                    "a meal is personal"
+                );
+            }
+        }
+        for dwarf in [a, b] {
+            if hunger_of(w, dwarf) == 0 {
+                fed.insert(dwarf);
+            }
+        }
+        fed.len() == 2
+    });
+    assert_eq!(ate_berries.len(), 1, "one of them ate the berry");
+    assert!(world.items().iter().all(|(id, _)| id.0 != item));
 }

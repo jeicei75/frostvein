@@ -38,9 +38,9 @@ mutation "4 a cut is a miner's job" sim-core cutting_one_tree_fells_it_whole_and
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 # Re-pointed 13.9 Amendment 1: forage is the hauler's now, so the woodcutter's arm is the cut alone.
-old = '        JobKind::Cut => Profession::Woodcutter,\n'
+old = '        JobKind::Cut => Some(Profession::Woodcutter),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        JobKind::Cut => Profession::Miner,\n'))
+p.write_text(s.replace(old, '        JobKind::Cut => Some(Profession::Miner),\n'))
 PY
 
 mutation "5 the wood spawns as stone" sim-core cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing <<'PY'

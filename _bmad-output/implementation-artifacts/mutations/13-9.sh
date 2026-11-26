@@ -8,9 +8,9 @@
 mutation "2 trade(Forage) is the miner's (AC 5)" sim-core only_haulers_hold_forage_jobs <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        JobKind::Forage => Profession::Hauler,\n'
+old = '        JobKind::Forage => Some(Profession::Hauler),\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        JobKind::Forage => Profession::Miner,\n'))
+p.write_text(s.replace(old, '        JobKind::Forage => Some(Profession::Miner),\n'))
 PY
 
 mutation "5 a forage regrows next tick, not after REGROW_TICKS (AC 6)" sim-core a_regrown_bush_is_unmarked_and_not_foraged_again_until_it_is_marked_again <<'PY'

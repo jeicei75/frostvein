@@ -563,6 +563,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             clearing: None,
             squeeze: None,
             arriving: None,
+            hunger: 0,
         },
         SavedDwarf {
             id: 1,
@@ -583,6 +584,7 @@ fn save_load_recomputes_every_path_invalidated_by_another_dig() {
             clearing: None,
             squeeze: None,
             arriving: None,
+            hunger: 0,
         },
     ];
     save.designations = vec![
@@ -696,6 +698,7 @@ fn save_load_keeps_the_exit_path_of_an_idle_dwarf_leaving_a_dead_end() {
         clearing: None,
         squeeze: None,
         arriving: None,
+        hunger: 0,
     };
     let mut save = World::generate(42, dims).to_save();
     save.tick = 100;
@@ -982,6 +985,7 @@ fn a_world_saved_at_every_tick_of_a_stand_off_loads_and_steps_identically() {
         clearing: None,
         squeeze: None,
         arriving: None,
+        hunger: 0,
     };
     let fixture = || {
         let mut save = World::generate(42, dims).to_save();
@@ -1445,4 +1449,120 @@ fn a_forage_mark_round_trips_through_a_save() {
         loaded.designations(),
         vec![(plant, DesignationKind::Forage)]
     );
+}
+
+// ---- 13.10: hunger ----
+
+/// A hungry world: the default crew with hunger on, one dwarf about to eat and one miserable, a
+/// pile with stored berries, and the default world's bushes.
+fn hungry_world() -> World {
+    let mut world = World::generate(42, Dims::DEFAULT).with_hunger();
+    let camp = world.camp_origin();
+    let pile = (3..12)
+        .map(|r| Pos {
+            x: camp.x + r,
+            ..camp
+        })
+        .find(|cell| {
+            world.tile(*cell) == Some(Tile::Empty)
+                && matches!(
+                    world.tile(Pos {
+                        z: cell.z - 1,
+                        ..*cell
+                    }),
+                    Some(Tile::Solid(_))
+                )
+        })
+        .expect("a standable cell east of the camp");
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: Rect {
+            min: pile,
+            max: pile,
+        },
+    });
+    let mut save = world.to_save();
+    save.items.push((save.next_id, pile, ItemKind::Berries, 3));
+    save.next_id += 1;
+    for dwarf in &mut save.dwarves {
+        dwarf.hunger = match dwarf.id {
+            0 => sim_core::EAT_AT - 1,
+            1 => sim_core::MISERABLE_AT,
+            _ => 0,
+        };
+    }
+    World::from_save(save)
+}
+
+/// AC 6 (NFR9): same seed and commands give the same hunger every tick, with the setting on.
+#[test]
+fn hunger_is_deterministic_tick_by_tick() {
+    let mut a = hungry_world();
+    let mut b = hungry_world();
+    let mut ate = false;
+    for _ in 0..600 {
+        a.step();
+        b.step();
+        assert_eq!(a.hunger(), b.hunger(), "tick {}", a.tick());
+        ate |= a
+            .hunger()
+            .iter()
+            .any(|(id, hunger)| id.0 == 0 && *hunger == 0);
+    }
+    assert!(ate, "the hungry dwarf ate, so the run covered a meal");
+}
+
+/// AC 6 (AD-11): a world saved mid-meal (one dwarf eating with work under way, another miserable),
+/// loaded and stepped past the meal, equals the never-saved world.
+#[test]
+fn a_world_saved_mid_meal_matches_the_never_saved_world() {
+    let mut control = hungry_world();
+    let mid_meal = |world: &World| {
+        let save = world.to_save();
+        let jobs: Vec<Job> = save.jobs.clone();
+        save.dwarves.iter().any(|dwarf| {
+            dwarf.work_progress > 0
+                && jobs.iter().any(|job| {
+                    Some(job.id.0) == dwarf.current_job
+                        && matches!(job.kind, JobKind::Eat { .. } | JobKind::EatPlant)
+                })
+        })
+    };
+    let mut steps = 0;
+    while !mid_meal(&control) {
+        control.step();
+        steps += 1;
+        assert!(steps < 1000, "no meal under way within 1000 ticks");
+    }
+    assert!(
+        control.miserable().iter().any(|(_, miserable)| *miserable),
+        "a miserable dwarf in the save"
+    );
+    let mut loaded = World::from_save(
+        serde_json::from_str(&serde_json::to_string(&control.to_save()).unwrap()).unwrap(),
+    );
+    for _ in 0..300 {
+        control.step();
+        loaded.step();
+    }
+    assert_eq!(loaded.hunger(), control.hunger());
+    assert_eq!(
+        serde_json::to_string(&loaded.to_save()).unwrap(),
+        serde_json::to_string(&control.to_save()).unwrap()
+    );
+}
+
+/// AC 6: a save missing either hunger key fails to decode (simd refuses it); the full save decodes.
+#[test]
+fn a_save_missing_a_hunger_key_does_not_decode() {
+    let save = serde_json::to_value(hungry_world().to_save()).unwrap();
+    assert!(serde_json::from_value::<sim_core::SaveState>(save.clone()).is_ok());
+    let mut no_setting = save.clone();
+    no_setting.as_object_mut().unwrap().remove("hunger");
+    assert!(serde_json::from_value::<sim_core::SaveState>(no_setting).is_err());
+    let mut no_dwarf_hunger = save;
+    no_dwarf_hunger["dwarves"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("hunger");
+    assert!(serde_json::from_value::<sim_core::SaveState>(no_dwarf_hunger).is_err());
 }

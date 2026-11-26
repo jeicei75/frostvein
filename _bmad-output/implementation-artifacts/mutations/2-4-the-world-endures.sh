@@ -39,6 +39,7 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            hunger,
             plants
                 .into_iter()
                 .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
@@ -50,6 +51,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            hunger,
             plants
                 .into_iter()
                 .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
@@ -69,6 +71,7 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            emitters,
             goals_completed,
             arrivals,
+            hunger,
             plants,
         } = save;
 '''
@@ -76,6 +79,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''            emitters,
             goals_completed,
             arrivals,
+            hunger,
             plants,
         } = save;
         let tiles = World::generate(seed, dims).to_save().tiles;
@@ -98,6 +102,7 @@ p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            hunger,
             plants
                 .into_iter()
                 .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
@@ -109,6 +114,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, '''            zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            hunger,
             plants
                 .into_iter()
                 .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))

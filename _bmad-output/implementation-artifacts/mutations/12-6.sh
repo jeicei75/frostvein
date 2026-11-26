@@ -16,20 +16,20 @@ PY
 mutation "a reassignment keeps the held job" sim-core a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if held.is_some_and(|job| trade(job.kind) != profession) {\n'
+old = '        if held.is_some_and(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if false && held.is_some_and(|job| trade(job.kind) != profession) {\n'))
+p.write_text(s.replace(old, '        if false && held.is_some_and(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {\n'))
 PY
 
 mutation "the released job is removed from Jobs" sim-core a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''        if held.is_some_and(|job| trade(job.kind) != profession) {
+old = '''        if held.is_some_and(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {
             release_claim(&mut self.ecs, entity);
         }
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''        if let Some(job) = held.filter(|job| trade(job.kind) != profession) {
+p.write_text(s.replace(old, '''        if let Some(job) = held.filter(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {
             release_claim(&mut self.ecs, entity);
             self.ecs.resource_mut::<Jobs>().remove(job.id);
         }
@@ -39,12 +39,12 @@ PY
 mutation "retry_claim instead of release_claim" sim-core a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '''        if held.is_some_and(|job| trade(job.kind) != profession) {
+old = '''        if held.is_some_and(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {
             release_claim(&mut self.ecs, entity);
         }
 '''
 assert s.count(old) == 1
-p.write_text(s.replace(old, '''        if let Some(job) = held.filter(|job| trade(job.kind) != profession) {
+p.write_text(s.replace(old, '''        if let Some(job) = held.filter(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {
             retry_claim(&mut self.ecs, entity, job.id);
         }
 '''))
@@ -53,9 +53,9 @@ PY
 mutation "a reassigned hauler keeps carrying" sim-core a_reassigned_hauler_puts_the_stone_down_and_another_hauler_delivers_it <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        if held.is_some_and(|job| trade(job.kind) != profession) {\n'
+old = '        if held.is_some_and(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '        if held.is_some_and(|job| {\n            trade(job.kind) != profession && !matches!(job.kind, JobKind::Haul { .. })\n        }) {\n'))
+p.write_text(s.replace(old, '        if held.is_some_and(|job| {\n            trade(job.kind).is_some_and(|needed| needed != profession) && !matches!(job.kind, JobKind::Haul { .. })\n        }) {\n'))
 PY
 
 mutation "6a an unknown dwarf is not refused (sim)" sim-core an_unknown_dwarf_is_refused_and_an_emptied_trade_is_allowed <<'PY'

@@ -102,6 +102,12 @@ pub const FORAGE_TRIP_BUSHES: u32 = 5;
 /// 13.9 Amendment 1 (Q10): a trip goes on only to bushes within this many cells (Manhattan, 3D) of
 /// where the hauler stands.
 pub const FORAGE_TRIP_RADIUS: u32 = 10;
+/// 13.10: a dwarf is hungry from this hunger on: 20 min at 1x, 60 s at fast4x.
+pub const EAT_AT: u32 = 12_000;
+/// 13.10: and miserable from this on, 10 min later at 1x (30 s at fast4x).
+pub const MISERABLE_AT: u32 = 18_000;
+/// 13.10: ticks of work one meal takes.
+pub const EAT_WORK_TICKS: u32 = 20;
 const RETRY_COOLDOWN: u64 = 20;
 
 /// The first-session goal chain (12.12, FR47), in order: store this many of each kind.
@@ -393,6 +399,15 @@ pub enum JobKind {
     Haul {
         item: u32,
     },
+    /// 13.10: a meal of one berry from a stored berries item. Handed straight to one hungry dwarf
+    /// and never in the claim market (`trade` is `None`). `target` is the item's cell when the
+    /// job was made, like a Haul's; execution reads the item's live `Pos`.
+    Eat {
+        item: u32,
+    },
+    /// 13.10: a meal at a ripe bush no job or mark names; `target` is the bush's cell. Personal,
+    /// like `Eat`.
+    EatPlant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -413,6 +428,12 @@ struct CurrentJob(Option<JobId>);
 /// nothing failing. A query asking for `&Carrying` would skip them too.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct Carrying(Option<u32>);
+
+/// 13.10: ticks since the dwarf last ate. Present on every dwarf from spawn, like `Carrying`, and
+/// 0 for good while the world's hunger setting is off. Misery is read from it (`miserable`), never
+/// stored.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+struct Hunger(u32);
 
 #[derive(Component)]
 struct Clearing {
@@ -438,14 +459,16 @@ struct Path(Vec<Pos>);
 #[derive(Component)]
 struct WorkProgress(u32);
 
-/// The map and both uniqueness indexes move together through `insert` and `remove`.
+/// The map and every uniqueness index move together through `insert` and `remove`.
 /// Tile jobs are unique by `target`; haul jobs are unique by the stone they name, because a
-/// stone may well sit on the tile a dig was designated for.
+/// stone may well sit on the tile a dig was designated for. Meals of an item are unique by the
+/// item (13.10), and a bush's meal shares `targets`, so no eater takes a bush any job names.
 #[derive(Resource, Default)]
 struct Jobs {
     by_id: BTreeMap<JobId, Job>,
     targets: BTreeSet<Pos>,
     haul_items: BTreeSet<u32>,
+    eat_items: BTreeSet<u32>,
     next_id: u32,
 }
 
@@ -455,7 +478,11 @@ impl Jobs {
             return false;
         }
         match job.kind {
-            JobKind::Dig | JobKind::Channel | JobKind::Cut | JobKind::Forage => {
+            JobKind::Dig
+            | JobKind::Channel
+            | JobKind::Cut
+            | JobKind::Forage
+            | JobKind::EatPlant => {
                 if self.targets.contains(&job.target) {
                     return false;
                 }
@@ -467,6 +494,12 @@ impl Jobs {
                 }
                 self.haul_items.insert(item);
             }
+            JobKind::Eat { item } => {
+                if self.eat_items.contains(&item) {
+                    return false;
+                }
+                self.eat_items.insert(item);
+            }
         }
         self.by_id.insert(job.id, job);
         true
@@ -475,11 +508,18 @@ impl Jobs {
     fn remove(&mut self, id: JobId) -> Option<Job> {
         let job = self.by_id.remove(&id)?;
         match job.kind {
-            JobKind::Dig | JobKind::Channel | JobKind::Cut | JobKind::Forage => {
+            JobKind::Dig
+            | JobKind::Channel
+            | JobKind::Cut
+            | JobKind::Forage
+            | JobKind::EatPlant => {
                 self.targets.remove(&job.target);
             }
             JobKind::Haul { item } => {
                 self.haul_items.remove(&item);
+            }
+            JobKind::Eat { item } => {
+                self.eat_items.remove(&item);
             }
         }
         Some(job)
@@ -709,14 +749,244 @@ fn reaction_delay(seed: u64, dwarf: Id, job: JobId) -> u64 {
     5 + hash % 26
 }
 
-/// The trade a job needs. Exhaustive on purpose: a new `JobKind` must name its trade.
-fn trade(kind: JobKind) -> Profession {
+/// The trade a job needs. Exhaustive on purpose: a new `JobKind` must name its trade. `None` is a
+/// personal job (13.10's meals): handed to one dwarf, never claimed, never let go by a trade change.
+fn trade(kind: JobKind) -> Option<Profession> {
     match kind {
-        JobKind::Dig | JobKind::Channel => Profession::Miner,
-        JobKind::Cut => Profession::Woodcutter,
+        JobKind::Dig | JobKind::Channel => Some(Profession::Miner),
+        JobKind::Cut => Some(Profession::Woodcutter),
         // 13.9 Amendment 1 (Q7): haulers forage, carrying what they gather to the pile themselves.
-        JobKind::Forage => Profession::Hauler,
-        JobKind::Haul { .. } => Profession::Hauler,
+        JobKind::Forage => Some(Profession::Hauler),
+        JobKind::Haul { .. } => Some(Profession::Hauler),
+        JobKind::Eat { .. } | JobKind::EatPlant => None,
+    }
+}
+
+/// 13.10: the hunger a dwarf starts with, staggered so a crew does not turn hungry on one tick.
+/// Fixed named FNV-1a like `reaction_delay`: it draws on no RNG stream, so no other draw shifts.
+fn start_hunger(seed: u64, dwarf: Id) -> u32 {
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in seed.to_le_bytes().into_iter().chain(dwarf.0.to_le_bytes()) {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    (hash % u64::from(EAT_AT)) as u32
+}
+
+/// 13.10: the one misery rule. A miserable dwarf holds and claims no trade job.
+// NOTE: cold (13.13) and tiredness (13.14) join this function. There is no needs framework.
+fn miserable(hunger: u32) -> bool {
+    hunger >= MISERABLE_AT
+}
+
+/// 13.10: where a hungry dwarf at `from` eats: a stored berries item no meal names, else a ripe
+/// bush no job or mark names (Wolf, Task 0 Q4/Q7). Each is ONE search to the union of its
+/// candidates' work cells, the forage turn's shape; the path's end picks the candidate, lowest
+/// item id or cell on a tie. A failed search's flood is kept in `failed` for the rest of the call:
+/// every later search from inside it for goals outside it fails the same way.
+// NOTE: two floods per hungry dwarf per look when no food is reachable. AC 9 measures the cost.
+fn find_meal(
+    ecs: &EcsWorld,
+    blocked: &BTreeSet<Pos>,
+    from: Pos,
+    failed: &mut Vec<BTreeSet<Pos>>,
+) -> Option<(JobKind, Pos, Vec<Pos>)> {
+    let tick = ecs.resource::<Tick>().0;
+    let terrain = ecs.resource::<Terrain>();
+    let zones = &ecs.resource::<Zones>().0;
+    let jobs = ecs.resource::<Jobs>();
+    let items = uncarried_stones(ecs);
+    let stored = split_stored(ecs).0;
+    let cells_of = |kind: JobKind, target: Pos| {
+        let job = Job {
+            id: JobId(0),
+            kind,
+            target,
+            created_tick: tick,
+            retry_after: 0,
+        };
+        work_positions_with(terrain, blocked, zones, &items, job, None, &mut None)
+    };
+    let food: Vec<(JobKind, Pos, BTreeSet<Pos>)> = items
+        .iter()
+        .filter(|(item, _)| stored.contains(item) && !jobs.eat_items.contains(item))
+        .filter(|(item, _)| {
+            item_entity(ecs, **item)
+                .and_then(|entity| ecs.get::<Item>(entity))
+                .is_some_and(|kind| kind.0 == ItemKind::Berries)
+        })
+        .map(|(item, pos)| {
+            let kind = JobKind::Eat { item: *item };
+            (kind, *pos, cells_of(kind, *pos))
+        })
+        .collect();
+    let designations = &ecs.resource::<Designations>().0;
+    let bushes = || -> Vec<(JobKind, Pos, BTreeSet<Pos>)> {
+        ecs.resource::<Plants>()
+            .by_pos
+            .iter()
+            .filter(|(pos, plant)| {
+                tick >= plant.ripe_at
+                    && !jobs.targets.contains(*pos)
+                    && !designations.contains_key(*pos)
+            })
+            .map(|(pos, _)| (JobKind::EatPlant, *pos, cells_of(JobKind::EatPlant, *pos)))
+            .collect()
+    };
+    let mut nearest = |candidates: Vec<(JobKind, Pos, BTreeSet<Pos>)>| {
+        let goals: BTreeSet<Pos> = candidates
+            .iter()
+            .flat_map(|(_, _, cells)| cells.iter().copied())
+            .collect();
+        if goals.is_empty()
+            || failed
+                .iter()
+                .any(|component| component.contains(&from) && goals.is_disjoint(component))
+        {
+            return None;
+        }
+        let mut nodes = terrain.tiles.len();
+        match astar_with_budget(terrain, blocked, from, &goals, &mut nodes) {
+            (Some(path), false, _) => {
+                let end = path.last().copied().unwrap_or(from);
+                candidates
+                    .into_iter()
+                    .find(|(_, _, cells)| cells.contains(&end))
+                    .map(|(kind, target, _)| (kind, target, path))
+            }
+            (None, false, explored) => {
+                if !explored.is_empty() {
+                    failed.push(explored);
+                }
+                None
+            }
+            (_, true, _) => unreachable!("a meal search sized to the world cannot run out"),
+        }
+    };
+    nearest(food).or_else(|| nearest(bushes()))
+}
+
+/// 13.10: hunger rises, and a hungry dwarf with empty hands sets out to eat. Chained after
+/// `advance_tick`, and nothing at all while the world's setting is off. Exclusive, because taking
+/// a dwarf off his trade job calls `release_claim`.
+///
+/// Each dwarf, ascending `Id`, that is hungry, holds no meal and carries nothing looks for one
+/// on its look tick (`(tick + id) % RETRY_COOLDOWN == 0`, stateless). Found, it lets go of its
+/// trade job (which stays queued) and is handed the meal job with its path, as a forage trip's
+/// Haul is handed to its hauler. A miserable dwarf lets go of its trade job anyway.
+fn tend_hunger(ecs: &mut EcsWorld) {
+    if !ecs.resource::<HungerOn>().0 {
+        return;
+    }
+    let tick = ecs.resource::<Tick>().0;
+    let mut dwarves: Vec<(Id, Entity)> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| Some((*entity.get::<Id>()?, entity.id())))
+        .collect();
+    dwarves.sort_by_key(|(id, _)| *id);
+    for (_, entity) in &dwarves {
+        let mut hunger = ecs
+            .get_mut::<Hunger>(*entity)
+            .expect("every dwarf has a hunger");
+        hunger.0 = hunger.0.saturating_add(1);
+    }
+    // Nobody here carries anything or drops anything, so the blocked cells hold for the call.
+    let blocked = world_blocked(ecs);
+    let mut failed = Vec::new();
+    for (id, entity) in dwarves {
+        let hunger = ecs
+            .get::<Hunger>(entity)
+            .expect("every dwarf has a hunger")
+            .0;
+        if hunger < EAT_AT {
+            continue;
+        }
+        let held = ecs
+            .get::<CurrentJob>(entity)
+            .and_then(|current| current.0)
+            .and_then(|job| ecs.resource::<Jobs>().by_id.get(&job).copied());
+        if held.is_some_and(|job| trade(job.kind).is_none()) {
+            continue;
+        }
+        // NOTE: a carrier is not interrupted until his hands are empty, so hunger drops no stone
+        // or load on the ground: a delivery, a clearing set-down or a forage trip ends first.
+        if ecs
+            .get::<Carrying>(entity)
+            .is_some_and(|carrying| carrying.0.is_some())
+        {
+            continue;
+        }
+        if (tick + u64::from(id.0)).is_multiple_of(RETRY_COOLDOWN) {
+            let pos = *ecs.get::<Pos>(entity).expect("every dwarf has a position");
+            if let Some((kind, target, path)) = find_meal(ecs, &blocked, pos, &mut failed) {
+                release_claim(ecs, entity);
+                let mut jobs = ecs.resource_mut::<Jobs>();
+                let job_id = jobs.next_job_id();
+                let inserted = jobs.insert(Job {
+                    id: job_id,
+                    kind,
+                    target,
+                    created_tick: tick,
+                    retry_after: 0,
+                });
+                debug_assert!(inserted, "find_meal offers only food no job names");
+                ecs.get_mut::<CurrentJob>(entity)
+                    .expect("every dwarf has a current job")
+                    .0 = Some(job_id);
+                ecs.entity_mut(entity).insert((Path(path), WorkProgress(0)));
+                continue;
+            }
+        }
+        if miserable(hunger) && held.is_some() {
+            release_claim(ecs, entity);
+        }
+    }
+}
+
+/// 13.10: a meal job ends with its meal, or here: when nobody holds it, or its food is gone (an
+/// item no longer a stored berries item, a bush lost or not ripe). Its holder lets go. Last in the
+/// tick, and after a stockpile is removed, so a save never holds a meal job without its eater or
+/// its food (simd's load refusals).
+fn retire_meals(ecs: &mut EcsWorld) {
+    let meals: Vec<Job> = ecs
+        .resource::<Jobs>()
+        .iter()
+        .filter(|job| trade(job.kind).is_none())
+        .copied()
+        .collect();
+    if meals.is_empty() {
+        return;
+    }
+    let tick = ecs.resource::<Tick>().0;
+    let holders: BTreeMap<JobId, Entity> = ecs
+        .iter_entities()
+        .filter(|entity| entity.contains::<Dwarf>())
+        .filter_map(|entity| Some((entity.get::<CurrentJob>()?.0?, entity.id())))
+        .collect();
+    let stored = split_stored(ecs).0;
+    for job in meals {
+        let food = match job.kind {
+            JobKind::Eat { item } => {
+                stored.contains(&item)
+                    && item_entity(ecs, item)
+                        .and_then(|entity| ecs.get::<Item>(entity))
+                        .is_some_and(|kind| kind.0 == ItemKind::Berries)
+            }
+            _ => ecs
+                .resource::<Plants>()
+                .by_pos
+                .get(&job.target)
+                .is_some_and(|plant| tick >= plant.ripe_at),
+        };
+        let holder = holders.get(&job.id).copied();
+        if food && holder.is_some() {
+            continue;
+        }
+        ecs.resource_mut::<Jobs>().remove(job.id);
+        if let Some(holder) = holder {
+            release_claim(ecs, holder);
+        }
     }
 }
 
@@ -733,8 +1003,15 @@ fn claim_jobs(
     mut jobs: ResMut<Jobs>,
     stones: Query<(&Id, &Pos), With<Item>>,
     emitters: Query<&Pos, With<Emitter>>,
+    hungers: Query<(&Id, &Hunger)>,
     mut dwarves: Query<(Entity, &Id, &Pos, &mut CurrentJob, &Carrying, &Profession)>,
 ) {
+    // 13.10: a miserable dwarf claims no trade job (empty while the hunger setting is off).
+    let wretched: BTreeSet<Id> = hungers
+        .iter()
+        .filter(|(_, hunger)| miserable(hunger.0))
+        .map(|(id, _)| *id)
+        .collect();
     let mut dwarves: Vec<_> = dwarves.iter_mut().collect();
     dwarves.sort_by_key(|(_, id, _, _, _, _)| **id);
     let mut claimed: BTreeSet<_> = dwarves
@@ -777,8 +1054,9 @@ fn claim_jobs(
     // The one test of whether a dwarf tries a job this tick: his trade, no job, past his reaction
     // delay. It gates both the early skip below and `attempted`, so the two cannot drift.
     let can_try = |job: &Job, id: Id, profession: Profession, free: bool| {
-        trade(job.kind) == profession
+        trade(job.kind) == Some(profession)
             && free
+            && !wretched.contains(&id)
             && tick.0
                 >= job
                     .created_tick
@@ -1012,6 +1290,11 @@ struct Arriving {
 /// every old scenario; saved with the world (`SaveState.arrivals`).
 #[derive(Resource)]
 struct Arrivals(bool);
+
+/// 13.10: the world setting that makes dwarves hungry. Off for every `generate*` world and every
+/// old scenario; on in the fresh game. Saved with the world (`SaveState.hunger`).
+#[derive(Resource)]
+struct HungerOn(bool);
 
 #[derive(Resource)]
 struct WanderRng(ChaCha8Rng);
@@ -1802,7 +2085,7 @@ fn work_positions_with(
     pile: &mut Option<BTreeMap<Pos, u32>>,
 ) -> BTreeSet<Pos> {
     match job.kind {
-        JobKind::Dig | JobKind::Cut | JobKind::Forage => {
+        JobKind::Dig | JobKind::Cut | JobKind::Forage | JobKind::EatPlant => {
             let goals: BTreeSet<_> = side_neighbours(job.target)
                 .into_iter()
                 .filter(|candidate| is_walkable(terrain, blocked, *candidate))
@@ -1885,6 +2168,16 @@ fn work_positions_with(
                 _ => BTreeSet::new(),
             }
         }
+        // 13.10: eaten where it lies, from where a hauler would lift it. Only an item on the pile:
+        // a lifted or carried one has no cell here, so the meal waits and `retire_meals` ends it.
+        JobKind::Eat { item } => match items.get(&item) {
+            Some(pos) if zones.contains(pos) && terrain.is_standable(*pos) => {
+                astar_neighbours(terrain, blocked, *pos)
+                    .into_iter()
+                    .collect()
+            }
+            _ => BTreeSet::new(),
+        },
     }
 }
 
@@ -1905,7 +2198,8 @@ fn uncarried_stones(ecs: &EcsWorld) -> BTreeMap<u32, Pos> {
         .collect()
 }
 
-/// Stones are few and never despawn, so a scan beats a reverse index that has to stay in sync.
+/// Stones are few, so a scan beats a reverse index that has to stay in sync. Only a meal despawns
+/// one (13.10, a berries item eaten down to 0).
 fn item_entity(ecs: &EcsWorld, item: u32) -> Option<Entity> {
     ecs.iter_entities()
         .find(|entity| entity.contains::<Item>() && entity.get::<Id>() == Some(&Id(item)))
@@ -2989,6 +3283,7 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 JobKind::Cut => CUT_WORK_TICKS,
                 JobKind::Forage => FORAGE_WORK_TICKS,
                 JobKind::Haul { .. } => WORK_TICKS,
+                JobKind::Eat { .. } | JobKind::EatPlant => EAT_WORK_TICKS,
             }
         };
         if progress < needed {
@@ -3044,6 +3339,57 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                 ecs.entity_mut(entity).insert(WorkProgress(0));
                 ecs.entity_mut(entity).remove::<Path>();
             }
+            continue;
+        }
+
+        // 13.10: a meal. One berry from a stored berries item (gone at 0), or a ripe bush, which
+        // regrows as a forage does. Food gone while he ate: no meal, and he looks again later.
+        if let JobKind::Eat { item } = job.kind {
+            let stone = item_entity(ecs, item).filter(|stone| {
+                split_stored(ecs).0.contains(&item)
+                    && ecs
+                        .get::<Item>(*stone)
+                        .is_some_and(|kind| kind.0 == ItemKind::Berries)
+            });
+            if let Some(stone) = stone {
+                let mut count = ecs
+                    .get_mut::<ItemCount>(stone)
+                    .expect("a berries item has a count");
+                count.0 = count.0.saturating_sub(1);
+                if count.0 == 0 {
+                    ecs.despawn(stone);
+                    stale = true;
+                }
+                ecs.get_mut::<Hunger>(entity)
+                    .expect("every dwarf has a hunger")
+                    .0 = 0;
+            }
+            ecs.resource_mut::<Jobs>().remove(job.id);
+            release_claim(ecs, entity);
+            continue;
+        }
+        if job.kind == JobKind::EatPlant {
+            let tick = ecs.resource::<Tick>().0;
+            let ate = {
+                let mut plants = ecs.resource_mut::<Plants>();
+                let ripe = plants
+                    .by_pos
+                    .get_mut(&job.target)
+                    .filter(|plant| tick >= plant.ripe_at)
+                    .map(|plant| plant.ripe_at = tick + REGROW_TICKS)
+                    .is_some();
+                if ripe {
+                    plants.changed.insert(job.target);
+                }
+                ripe
+            };
+            if ate {
+                ecs.get_mut::<Hunger>(entity)
+                    .expect("every dwarf has a hunger")
+                    .0 = 0;
+            }
+            ecs.resource_mut::<Jobs>().remove(job.id);
+            release_claim(ecs, entity);
             continue;
         }
 
@@ -3217,8 +3563,12 @@ fn execute_jobs(ecs: &mut EcsWorld) {
                         _ => None,
                     }
                 }
-                JobKind::Cut | JobKind::Forage | JobKind::Haul { .. } => {
-                    unreachable!("cut, forage and haul jobs are dispatched above")
+                JobKind::Cut
+                | JobKind::Forage
+                | JobKind::Haul { .. }
+                | JobKind::Eat { .. }
+                | JobKind::EatPlant => {
+                    unreachable!("cut, forage, haul and meal jobs are dispatched above")
                 }
             }
         };
@@ -3646,6 +3996,7 @@ fn assemble(
     zones: BTreeSet<Pos>,
     goals_completed: u32,
     arrivals: bool,
+    hunger: bool,
     plants: BTreeMap<Pos, Plant>,
 ) -> World {
     let mut ecs = EcsWorld::new();
@@ -3662,6 +4013,7 @@ fn assemble(
     });
     ecs.insert_resource(GoalsCompleted(goals_completed));
     ecs.insert_resource(Arrivals(arrivals));
+    ecs.insert_resource(HungerOn(hunger));
     ecs.insert_resource(jobs);
     ecs.insert_resource(Terrain {
         dims,
@@ -3674,6 +4026,7 @@ fn assemble(
     schedule.add_systems(
         (
             advance_tick,
+            tend_hunger,
             create_jobs,
             create_haul_jobs,
             claim_jobs,
@@ -3683,6 +4036,7 @@ fn assemble(
             wander,
             carry_items,
             advance_goals,
+            retire_meals,
             // Last, so no other system sees a half-spawned group mid-tick.
             arrive,
         )
@@ -3744,6 +4098,7 @@ impl World {
             BTreeMap::new(),
             BTreeSet::new(),
             0,
+            false,
             false,
             plants,
         );
@@ -3815,6 +4170,25 @@ impl World {
         world
     }
 
+    /// This world with hunger on (13.10): each dwarf starts at its staggered `start_hunger`, and
+    /// every later arrival does too.
+    pub fn with_hunger(mut self) -> World {
+        self.ecs.resource_mut::<HungerOn>().0 = true;
+        let seed = self.seed();
+        let dwarves: Vec<(Entity, Id)> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| Some((entity.id(), *entity.get::<Id>()?)))
+            .collect();
+        for (entity, id) in dwarves {
+            self.ecs
+                .entity_mut(entity)
+                .insert(Hunger(start_hunger(seed, id)));
+        }
+        self
+    }
+
     /// Dwarves still walking in from the edge (13.8).
     pub fn arriving_count(&self) -> usize {
         self.ecs
@@ -3838,6 +4212,7 @@ impl World {
                 let wander = entity.get::<Wander>()?;
                 let current_job = entity.get::<CurrentJob>()?;
                 let carrying = entity.get::<Carrying>()?;
+                let hunger = entity.get::<Hunger>()?;
                 Some(SavedDwarf {
                     id: entity.get::<Id>()?.0,
                     pos: *entity.get::<Pos>()?,
@@ -3870,6 +4245,7 @@ impl World {
                         to: arriving.to,
                         waited: arriving.waited,
                     }),
+                    hunger: hunger.0,
                 })
             })
             .collect();
@@ -3908,6 +4284,7 @@ impl World {
             emitters,
             goals_completed: self.ecs.resource::<GoalsCompleted>().0,
             arrivals: self.ecs.resource::<Arrivals>().0,
+            hunger: self.ecs.resource::<HungerOn>().0,
             plants: self
                 .ecs
                 .resource::<Plants>()
@@ -3936,6 +4313,7 @@ impl World {
             emitters,
             goals_completed,
             arrivals,
+            hunger,
             plants,
         } = save;
         let mut job_resource = Jobs {
@@ -3962,6 +4340,7 @@ impl World {
             zones.into_iter().collect(),
             goals_completed,
             arrivals,
+            hunger,
             plants
                 .into_iter()
                 .map(|(pos, ripe_at)| (pos, Plant { ripe_at }))
@@ -3982,6 +4361,7 @@ impl World {
                     },
                     CurrentJob(current_job),
                     Carrying(dwarf.carrying),
+                    Hunger(dwarf.hunger),
                     dwarf.identity,
                     dwarf.profession,
                 ))
@@ -4403,6 +4783,9 @@ impl World {
                 unreachable!("dispatched before the rect prelude")
             }
         }
+        // 13.10: berries a removed stockpile leaves are no meal, and a save taken now must not
+        // hold one. Nothing to do without a meal under way.
+        retire_meals(&mut self.ecs);
         None
     }
 
@@ -4434,7 +4817,8 @@ impl World {
         // A held job is always of the old trade, so a changed trade lets go of it. Not
         // `retry_claim`: the job did not fail, and a cooldown would delay the right-trade claim.
         // NOTE: the released job's `WorkProgress` is lost; the next miner starts the dig from 0.
-        if held.is_some_and(|job| trade(job.kind) != profession) {
+        // A meal names no trade (`None`), so a trade change never takes a dwarf off his meal.
+        if held.is_some_and(|job| trade(job.kind).is_some_and(|needed| needed != profession)) {
             release_claim(&mut self.ecs, entity);
         }
         None
@@ -4564,6 +4948,40 @@ impl World {
             .collect();
         professions.sort_by_key(|(id, _)| *id);
         professions
+    }
+
+    /// Sorted ascending by dwarf `Id` (13.10): ticks since each dwarf last ate. 0 for good while
+    /// the setting is off.
+    pub fn hunger(&self) -> Vec<(Id, u32)> {
+        let mut hunger: Vec<_> = self
+            .ecs
+            .iter_entities()
+            .filter(|entity| entity.contains::<Dwarf>())
+            .filter_map(|entity| Some((*entity.get::<Id>()?, entity.get::<Hunger>()?.0)))
+            .collect();
+        hunger.sort_by_key(|(id, _)| *id);
+        hunger
+    }
+
+    /// Sorted ascending by dwarf `Id`: hunger at or past `EAT_AT`.
+    pub fn hungry(&self) -> Vec<(Id, bool)> {
+        self.hunger()
+            .into_iter()
+            .map(|(id, hunger)| (id, hunger >= EAT_AT))
+            .collect()
+    }
+
+    /// Sorted ascending by dwarf `Id`: the misery rule (`miserable`), the one the claim reads.
+    pub fn miserable(&self) -> Vec<(Id, bool)> {
+        self.hunger()
+            .into_iter()
+            .map(|(id, hunger)| (id, miserable(hunger)))
+            .collect()
+    }
+
+    /// The world's hunger setting (13.10).
+    pub fn hunger_on(&self) -> bool {
+        self.ecs.resource::<HungerOn>().0
     }
 
     /// Sorted ascending by `Id`.
@@ -4713,6 +5131,12 @@ fn spawn_dwarf(
     profession: Profession,
 ) -> Entity {
     let id = ecs.resource_mut::<IdAllocator>().allocate();
+    // 13.10: an arrival into a hungry world starts staggered, like the embark crew.
+    let hunger = if ecs.resource::<HungerOn>().0 {
+        start_hunger(ecs.resource::<Seed>().0, id)
+    } else {
+        0
+    };
     ecs.spawn((
         Dwarf,
         id,
@@ -4728,6 +5152,7 @@ fn spawn_dwarf(
         },
         CurrentJob(None),
         Carrying(None),
+        Hunger(hunger),
         identity,
         profession,
     ))
@@ -4903,8 +5328,8 @@ mod tests {
     };
 
     use super::{
-        DesignationKind, Dims, Job, JobId, JobKind, JobState, Jobs, Material, Pos, SimCommand,
-        Terrain, Tile, World,
+        ARRIVAL_PERIOD, DEFAULT_SEED, DesignationKind, Dims, EAT_AT, Id, Job, JobId, JobKind,
+        JobState, Jobs, MISERABLE_AT, Material, Pos, Profession, SimCommand, Terrain, Tile, World,
     };
 
     /// Tests insert the trade directly: there is no public setter until 12.6 adds the command.
@@ -4956,6 +5381,65 @@ mod tests {
 
         assert!(terrain.is_standable(Pos { x: 0, y: 0, z: 1 }));
         assert!(!terrain.is_standable(Pos { x: 1, y: 0, z: 1 }));
+    }
+
+    /// 13.10 Q1: with the setting off (every `generate*` world), hunger never rises.
+    #[test]
+    fn hunger_stays_zero_with_the_setting_off() {
+        let mut world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+        assert!(!world.hunger_on());
+        for _ in 0..50 {
+            world.step();
+        }
+        assert!(world.hunger().iter().all(|(_, hunger)| *hunger == 0));
+        assert_eq!(world.hunger().len(), 5);
+    }
+
+    /// 13.10 Q2: the embark crew and every arrival start staggered below `EAT_AT`, by a hash of
+    /// the seed and id, and hunger then rises 1 a tick.
+    #[test]
+    fn hunger_starts_staggered_for_the_crew_and_each_arrival_and_rises_one_a_tick() {
+        let seed = DEFAULT_SEED;
+        let starts: BTreeSet<u32> = (0..200)
+            .map(|id| super::start_hunger(seed, Id(id)))
+            .collect();
+        assert!(starts.iter().all(|start| *start < EAT_AT));
+        assert!(
+            starts.len() > 190,
+            "staggered: {} distinct of 200",
+            starts.len()
+        );
+        let mut world = World::generate_with_arrivals(seed, Dims::DEFAULT, 5).with_hunger();
+        assert!(world.hunger_on());
+        for (id, hunger) in world.hunger() {
+            assert_eq!(hunger, super::start_hunger(seed, id));
+        }
+        world.step();
+        for (id, hunger) in world.hunger() {
+            assert_eq!(hunger, super::start_hunger(seed, id) + 1);
+        }
+        while world.tick() < ARRIVAL_PERIOD {
+            world.step();
+        }
+        let arrivals: Vec<(Id, u32)> = world
+            .hunger()
+            .into_iter()
+            .filter(|(id, _)| id.0 >= 10)
+            .collect();
+        assert!(!arrivals.is_empty(), "a group arrived");
+        for (id, hunger) in arrivals {
+            assert_eq!(hunger, super::start_hunger(seed, id), "arrival {id:?}");
+        }
+    }
+
+    /// 13.10 Q4: a meal names no trade, so the claim market never sees one.
+    #[test]
+    fn a_meal_has_no_trade() {
+        assert_eq!(super::trade(JobKind::Eat { item: 7 }), None);
+        assert_eq!(super::trade(JobKind::EatPlant), None);
+        assert_eq!(super::trade(JobKind::Forage), Some(Profession::Hauler));
+        assert!(!super::miserable(MISERABLE_AT - 1));
+        assert!(super::miserable(MISERABLE_AT));
     }
 
     #[test]

@@ -283,7 +283,7 @@ PY
 mutation "23b the no-throw sweep's level assert: no dwarf ever claims a job (review LOW)" sim-core a_carried_stone_is_always_set_down_beside_its_carrier <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        trade(job.kind) == profession\n'
+old = '        trade(job.kind) == Some(profession)\n'
 assert s.count(old) == 1
 p.write_text(s.replace(old, '        false\n'))
 PY
