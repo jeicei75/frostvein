@@ -354,7 +354,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
         let mut schedule = scenario.schedule(world.tick());
         let mut ms = Vec::with_capacity(scenario.ticks as usize);
         let start_tiles = world.tiles().to_vec();
-        let (mut dug, mut cut) = (0, 0);
+        let (mut dug, mut cut, mut foraged) = (0, 0, 0);
         for _ in 0..scenario.ticks {
             for command in schedule.due(world.tick()) {
                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
@@ -371,9 +371,20 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                 .into_iter()
                 .map(|(pos, kind)| (pos, kind, world.tile(pos)))
                 .collect();
+            // A forage completion is a plant that was ripe and is still standing, not ripe.
+            let ripe: BTreeSet<_> = world
+                .plants()
+                .into_iter()
+                .filter_map(|(pos, ripe)| ripe.then_some(pos))
+                .collect();
             let started = Instant::now();
             world.step();
             ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            foraged += world
+                .plants()
+                .into_iter()
+                .filter(|(pos, now_ripe)| !now_ripe && ripe.contains(pos))
+                .count();
             let after: BTreeSet<_> = world
                 .designations()
                 .into_iter()
@@ -389,7 +400,8 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                     match kind {
                         sim_core::DesignationKind::Dig => dug += 1,
                         sim_core::DesignationKind::Cut => cut += 1,
-                        sim_core::DesignationKind::Channel => {}
+                        // A forage mark never changes its tile, so it is never counted here.
+                        sim_core::DesignationKind::Channel | sim_core::DesignationKind::Forage => {}
                     }
                 }
             }
@@ -430,14 +442,16 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             .count();
         end = format!(
             "bench {name} end tick={} marks={} items={} zones={} goals={} \
-             done=dig:{dug},cut:{cut} stored={stored} cells={cells} crew={} arriving={}",
+             done=dig:{dug},cut:{cut} stored={stored} cells={cells} crew={} arriving={} \
+             foraged={foraged} food={}",
             world.tick(),
             world.designations().len(),
             world.items().len(),
             zones.len(),
             goals.join("/"),
             world.dwarves().len(),
-            world.arriving_count()
+            world.arriving_count(),
+            world.stored_berries_count()
         );
     }
     println!("{end}");

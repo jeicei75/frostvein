@@ -1,7 +1,9 @@
 use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
 
-use crate::{Dims, Material, Tile};
+use std::collections::BTreeMap;
+
+use crate::{Dims, Material, PLANT_ONE_IN, Plant, Pos, Tile};
 
 const NOISE_SPACING: u32 = 32;
 pub(crate) const CAMP_RADIUS: u32 = 3;
@@ -440,6 +442,70 @@ pub(crate) fn place_trees(
             trunks.push((x, y));
         }
     }
+}
+
+/// 13.9: berry bushes. One per `PLANT_ONE_IN` eligible columns, all ripe at tick 0, drawn from
+/// their own stream after the trees so no tile, spawn or id moves. A plant is not a tile: it is
+/// keyed by the standable cell it stands on (surface + 1).
+///
+/// Eligible: the column's top tile is `Solid(Snow)` with air above it (a tree column's top is
+/// trunk or foliage, so it falls out), outside the lake, the camp box and the edge ring, and at
+/// least one side neighbour of the bush's cell is standable, so no bush is born unforageable.
+pub(crate) fn place_plants(
+    dims: Dims,
+    tiles: &[Tile],
+    camp: Pos,
+    rng: &mut ChaCha8Rng,
+) -> BTreeMap<Pos, Plant> {
+    let camp_radius = CAMP_RADIUS as i32;
+    let standable = |x: u32, y: u32, z: u32| {
+        tiles[index(dims, x, y, z)] == Tile::Empty
+            && matches!(
+                tiles[index(dims, x, y, z - 1)],
+                Tile::Solid(_) | Tile::Ramp(_)
+            )
+    };
+    let mut plants = BTreeMap::new();
+    for y in 1..dims.y - 1 {
+        for x in 1..dims.x - 1 {
+            if biome_at(dims, x, y) == Biome::Lake {
+                continue;
+            }
+            if (x as i32 - camp.x).abs() <= camp_radius + 1
+                && (y as i32 - camp.y).abs() <= camp_radius + 1
+            {
+                continue;
+            }
+            let Some(top) = (0..dims.z)
+                .rev()
+                .find(|&z| tiles[index(dims, x, y, z)] != Tile::Empty)
+            else {
+                continue;
+            };
+            if tiles[index(dims, x, y, top)] != Tile::Solid(Material::Snow) || top + 1 >= dims.z {
+                continue;
+            }
+            let z = top + 1;
+            if !(standable(x - 1, y, z)
+                || standable(x + 1, y, z)
+                || standable(x, y - 1, z)
+                || standable(x, y + 1, z))
+            {
+                continue;
+            }
+            if rng.random_range(0..PLANT_ONE_IN) == 0 {
+                plants.insert(
+                    Pos {
+                        x: x as i32,
+                        y: y as i32,
+                        z: z as i32,
+                    },
+                    Plant { ripe_at: 0 },
+                );
+            }
+        }
+    }
+    plants
 }
 
 #[cfg(test)]

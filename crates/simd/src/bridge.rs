@@ -32,6 +32,14 @@ pub fn snapshot(world: &sim_core::World, speed: protocol::Speed) -> protocol::Sn
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
             .collect(),
+        plants: world
+            .plants()
+            .into_iter()
+            .map(|(pos, ripe)| protocol::Plant {
+                pos: pos_out(pos),
+                state: plant_state_out(ripe),
+            })
+            .collect(),
         items: items_out(world),
         speed,
         tick: world.tick(),
@@ -78,10 +86,26 @@ pub fn delta(
             .into_iter()
             .map(|pos| protocol::Zone { pos: pos_out(pos) })
             .collect(),
+        plants: world
+            .drain_plant_changes()
+            .into_iter()
+            .map(|(pos, ripe)| protocol::PlantChange {
+                pos: pos_out(pos),
+                state: ripe.map(plant_state_out),
+            })
+            .collect(),
         items: items_out(world),
         speed,
         goals: goals_out(world),
         refusals,
+    }
+}
+
+fn plant_state_out(ripe: bool) -> protocol::PlantState {
+    if ripe {
+        protocol::PlantState::Ripe
+    } else {
+        protocol::PlantState::Growing
     }
 }
 
@@ -99,23 +123,26 @@ fn goals_out(world: &sim_core::World) -> Vec<protocol::Goal> {
 }
 
 fn items_out(world: &sim_core::World) -> Vec<protocol::Item> {
-    join_items(world.items(), world.item_kinds())
+    join_items(world.items(), world.item_kinds(), world.item_counts())
 }
 
 /// Joined by id, not by position: `items()` drops an item with no `Pos`, `item_kinds()` keeps it,
 /// so a zip would hand every later item its neighbour's kind. Both read `Item` + `Id`, so every
-/// id in `items` has a kind.
+/// id in `items` has a kind and a count.
 fn join_items(
     items: Vec<(sim_core::Id, sim_core::Pos)>,
     kinds: Vec<(sim_core::Id, sim_core::ItemKind)>,
+    counts: Vec<(sim_core::Id, u32)>,
 ) -> Vec<protocol::Item> {
     let kinds: std::collections::BTreeMap<_, _> = kinds.into_iter().collect();
+    let counts: std::collections::BTreeMap<_, _> = counts.into_iter().collect();
     items
         .into_iter()
         .map(|(id, pos)| protocol::Item {
             id: id.0,
             pos: pos_out(pos),
             kind: item_kind_out(kinds[&id]),
+            count: counts[&id],
         })
         .collect()
 }
@@ -126,6 +153,7 @@ fn item_kind_out(kind: sim_core::ItemKind) -> protocol::ItemKind {
         sim_core::ItemKind::Wood => protocol::ItemKind::Wood,
         sim_core::ItemKind::Tetrahedrite => protocol::ItemKind::Tetrahedrite,
         sim_core::ItemKind::Bloodstone => protocol::ItemKind::Bloodstone,
+        sim_core::ItemKind::Berries => protocol::ItemKind::Berries,
     }
 }
 
@@ -217,6 +245,7 @@ fn dwarf_job(job: sim_core::Job) -> protocol::DwarfJob {
         sim_core::JobKind::Dig => protocol::DwarfJob::Dig { target },
         sim_core::JobKind::Channel => protocol::DwarfJob::Channel { target },
         sim_core::JobKind::Cut => protocol::DwarfJob::Cut { target },
+        sim_core::JobKind::Forage => protocol::DwarfJob::Forage { target },
         // NOTE: a haul's `target` is the stone's position at creation and goes stale at pick-up,
         // so it is not on the wire.
         sim_core::JobKind::Haul { .. } => protocol::DwarfJob::Haul,
@@ -320,6 +349,7 @@ pub(crate) fn designation_kind_in(kind: protocol::DesignationKind) -> sim_core::
         protocol::DesignationKind::Dig => sim_core::DesignationKind::Dig,
         protocol::DesignationKind::Channel => sim_core::DesignationKind::Channel,
         protocol::DesignationKind::Cut => sim_core::DesignationKind::Cut,
+        protocol::DesignationKind::Forage => sim_core::DesignationKind::Forage,
     }
 }
 
@@ -328,6 +358,7 @@ fn designation_kind_out(kind: sim_core::DesignationKind) -> protocol::Designatio
         sim_core::DesignationKind::Dig => protocol::DesignationKind::Dig,
         sim_core::DesignationKind::Channel => protocol::DesignationKind::Channel,
         sim_core::DesignationKind::Cut => protocol::DesignationKind::Cut,
+        sim_core::DesignationKind::Forage => protocol::DesignationKind::Forage,
     }
 }
 
@@ -446,6 +477,7 @@ mod tests {
             (sim_core::ItemKind::Wood, r#""wood""#),
             (sim_core::ItemKind::Tetrahedrite, r#""tetrahedrite""#),
             (sim_core::ItemKind::Bloodstone, r#""bloodstone""#),
+            (sim_core::ItemKind::Berries, r#""berries""#),
         ] {
             assert_eq!(
                 serde_json::to_string(&super::item_kind_out(value)).unwrap(),
@@ -475,6 +507,8 @@ mod tests {
         for (value, wire) in [
             (sim_core::DesignationKind::Dig, r#""dig""#),
             (sim_core::DesignationKind::Channel, r#""channel""#),
+            (sim_core::DesignationKind::Cut, r#""cut""#),
+            (sim_core::DesignationKind::Forage, r#""forage""#),
         ] {
             assert_eq!(
                 serde_json::to_string(&super::designation_kind_out(value)).unwrap(),
@@ -484,6 +518,50 @@ mod tests {
                 serde_json::from_str(wire).expect("hand-written wire name must decode");
             assert_eq!(designation_kind_in(protocol_kind), value);
         }
+    }
+
+    /// Found G: the plant states and the job names cross the bridge under hand-written names.
+    #[test]
+    fn plant_states_and_jobs_map_to_their_named_wire_names() {
+        for (ripe, wire) in [(true, r#""ripe""#), (false, r#""growing""#)] {
+            assert_eq!(
+                serde_json::to_string(&super::plant_state_out(ripe)).unwrap(),
+                wire
+            );
+        }
+        let target = sim_core::Pos { x: 1, y: 2, z: 3 };
+        for (kind, wire) in [
+            (sim_core::JobKind::Cut, r#"{"cut":{"target":[1,2,3]}}"#),
+            (
+                sim_core::JobKind::Forage,
+                r#"{"forage":{"target":[1,2,3]}}"#,
+            ),
+        ] {
+            let job = sim_core::Job {
+                id: sim_core::JobId(1),
+                kind,
+                target,
+                created_tick: 0,
+                retry_after: 0,
+            };
+            assert_eq!(serde_json::to_string(&super::dwarf_job(job)).unwrap(), wire);
+        }
+    }
+
+    #[test]
+    fn snapshot_carries_every_plant_in_its_state() {
+        let world = sim_core::World::generate(42, sim_core::Dims::DEFAULT);
+        let snap = snapshot(&world, protocol::Speed::Normal);
+        let plants = world.plants();
+
+        assert!(!plants.is_empty(), "seed 42 grows plants");
+        assert_eq!(snap.plants.len(), plants.len());
+        // All plants are ripe at tick 0; a mapping that sends everything one way is caught.
+        assert!(
+            snap.plants
+                .iter()
+                .all(|plant| plant.state == protocol::PlantState::Ripe)
+        );
     }
 
     #[test]
@@ -775,7 +853,7 @@ mod tests {
                 sim_core::ItemKind::Tetrahedrite
             };
             save.zones.push(pos);
-            save.items.push((save.next_id, pos, kind));
+            save.items.push((save.next_id, pos, kind, 1));
             save.next_id += 1;
         }
         save.goals_completed = 1;
@@ -790,6 +868,7 @@ mod tests {
             goal(protocol::ItemKind::Wood, 10, 10, true),
             goal(protocol::ItemKind::Tetrahedrite, 10, 1, false),
             goal(protocol::ItemKind::Bloodstone, 1, 0, false),
+            goal(protocol::ItemKind::Berries, 20, 0, false),
         ];
         assert_eq!(snapshot(&world, protocol::Speed::Normal).goals, expected);
         assert_eq!(
@@ -920,18 +999,23 @@ mod tests {
             (sim_core::Id(2), sim_core::ItemKind::Wood),
             (sim_core::Id(3), sim_core::ItemKind::Stone),
         ];
+        let counts = vec![
+            (sim_core::Id(1), 1),
+            (sim_core::Id(2), 5),
+            (sim_core::Id(3), 4),
+        ];
 
-        let out = join_items(items, kinds);
+        let out = join_items(items, kinds, counts);
 
         let got: Vec<_> = out
             .iter()
-            .map(|item| (item.id, item.pos, item.kind))
+            .map(|item| (item.id, item.pos, item.kind, item.count))
             .collect();
         assert_eq!(
             got,
             [
-                (1, [1, 0, 0], protocol::ItemKind::Stone),
-                (3, [3, 0, 0], protocol::ItemKind::Stone),
+                (1, [1, 0, 0], protocol::ItemKind::Stone, 1),
+                (3, [3, 0, 0], protocol::ItemKind::Stone, 4),
             ]
         );
     }

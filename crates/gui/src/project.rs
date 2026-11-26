@@ -17,14 +17,16 @@ use bevy::{
     world_serialization::{WorldAsset, WorldAssetRoot},
 };
 use client_core::Mirror;
-use protocol::{DesignationKind, Dims, EntityKind, ItemKind, Material, Tile};
+use protocol::{DesignationKind, Dims, EntityKind, ItemKind, Material, PlantState, Tile};
 
 use crate::{
     appearance::{
-        CARRY_OFFSET, CUT_OFFSET, ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE,
-        WOOD_ITEM_DROP, WOOD_ITEM_SCALE, debris_color, designation_color, entity_appearance,
-        flicker_scale, foliage_snow_color, hover_highlight_color, light_properties, material_color,
-        rim_dissolved_color, rim_dissolved_color_at, snow_cap_color, wood_item_color, zone_color,
+        BERRY_ITEM_DROP, BERRY_ITEM_SCALE, BERRY_ITEM_SHIFT, CARRY_OFFSET, CUT_OFFSET,
+        ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, WOOD_ITEM_DROP,
+        WOOD_ITEM_SCALE, berry_item_color, bush_berry_color, bush_color, debris_color,
+        designation_color, entity_appearance, flicker_scale, foliage_snow_color, forage_mark_color,
+        hover_highlight_color, light_properties, material_color, rim_dissolved_color,
+        rim_dissolved_color_at, snow_cap_color, wood_item_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
@@ -154,6 +156,16 @@ pub struct ProjectedDesignationKind(pub DesignationKind);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectedZone(pub [i32; 3]);
+
+/// One berry bush: the cell it stands on and the state it is drawn in. The state is what the
+/// reconcile compares to decide a mesh swap, so a ripe-to-growing change cannot go unseen.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProjectedPlant {
+    pub pos: [i32; 3],
+    pub state: PlantState,
+    /// A forage mark stands on this bush: it wears the marked material.
+    pub marked: bool,
+}
 
 /// The client-local slab drawn under the tile currently under the cursor.
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -286,7 +298,15 @@ pub struct ProjectionAssets {
     channel_mark: Handle<StandardMaterial>,
     cut_mark: Handle<StandardMaterial>,
     wood_item: Handle<StandardMaterial>,
+    berry_item: Handle<StandardMaterial>,
     zone_mark: Handle<StandardMaterial>,
+    /// The bush material with an amber glow: every bush a forage mark stands on.
+    bush_marked: Handle<StandardMaterial>,
+    /// ONE material for every bush: white, so the mesh's vertex colours (leaf green, berry red)
+    /// carry the look and every bush of a state batches into one draw.
+    bush: Handle<StandardMaterial>,
+    bush_ripe_mesh: Handle<Mesh>,
+    bush_growing_mesh: Handle<Mesh>,
     hover_highlight: Handle<StandardMaterial>,
     trees: [Handle<WorldAsset>; 4],
     dwarf_scene: Handle<WorldAsset>,
@@ -796,6 +816,34 @@ impl SceneSource {
     }
 }
 
+/// A bush as ONE mesh in cell units, origin at the cell FLOOR centre, with vertex colours: a green
+/// block, plus four red berry dots on a ripe one. One mesh per state, so ~3k bushes at 256^2 are
+/// two batches. Plain primitives (13.9: no art rounds).
+fn bush_mesh(state: PlantState) -> Mesh {
+    let linear = |color: bevy::prelude::Color| {
+        let c = color.to_linear();
+        [c.red, c.green, c.blue, c.alpha]
+    };
+    let part = |centre: Vec3, size: Vec3, color: [f32; 4]| {
+        let mesh = Mesh::from(Cuboid::new(size.x, size.y, size.z)).translated_by(centre);
+        let count = mesh.count_vertices();
+        mesh.with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, vec![color; count])
+    };
+    let leaf = linear(bush_color());
+    match state {
+        PlantState::Growing => part(Vec3::new(0.0, 0.13, 0.0), Vec3::new(0.34, 0.26, 0.34), leaf),
+        PlantState::Ripe => {
+            let mut mesh = part(Vec3::new(0.0, 0.18, 0.0), Vec3::new(0.5, 0.36, 0.5), leaf);
+            let berry = linear(bush_berry_color());
+            for (dx, dz) in [(-0.17, -0.17), (0.17, -0.17), (-0.17, 0.17), (0.17, 0.17)] {
+                mesh.merge(&part(Vec3::new(dx, 0.36, dz), Vec3::splat(0.13), berry))
+                    .expect("both parts carry the same attributes");
+            }
+            mesh
+        }
+    }
+}
+
 pub fn setup_projection_assets(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -813,6 +861,8 @@ pub fn setup_projection_assets(
     let cube = meshes.add(Mesh::from(Cuboid::default()));
     let snow_cap_mesh = meshes.add(snow_cap_mesh());
     let mark_mesh = meshes.add(Mesh::from(Cuboid::new(1.02, 0.08, 1.02)));
+    let bush_ripe_mesh = meshes.add(bush_mesh(PlantState::Ripe));
+    let bush_growing_mesh = meshes.add(bush_mesh(PlantState::Growing));
     let terrain = TERRAIN_SLOTS.map(|slot| {
         std::array::from_fn(|level| {
             materials.add(terrain_standard_material(rim_dissolved_color(
@@ -840,7 +890,17 @@ pub fn setup_projection_assets(
             DesignationKind::Cut,
         ))),
         wood_item: materials.add(terrain_standard_material(wood_item_color())),
+        berry_item: materials.add(terrain_standard_material(berry_item_color())),
         zone_mark: materials.add(terrain_standard_material(zone_color())),
+        // A marked bush: the same white material plus an amber glow, so the leaf and berry
+        // vertex colours still read and every marked bush of a state batches.
+        bush_marked: materials.add(StandardMaterial {
+            emissive: forage_mark_color().to_linear() * 0.5,
+            ..terrain_standard_material(bevy::prelude::Color::WHITE)
+        }),
+        bush: materials.add(terrain_standard_material(bevy::prelude::Color::WHITE)),
+        bush_ripe_mesh,
+        bush_growing_mesh,
         hover_highlight: materials.add(terrain_standard_material(hover_highlight_color())),
         trees: asset_server.as_ref().map_or_else(
             || std::array::from_fn(|_| Handle::default()),
@@ -1034,7 +1094,8 @@ pub fn sync_drag_preview(
 ///
 /// Dig and clear keep AC4's single-z rect at the cells the ray hit; channel and stockpile follow
 /// the ground. Both branches then drop whatever the sim would refuse, so the preview never
-/// promises a mark that cannot appear. Cut is the exception: the whole rect, so the box shows.
+/// promises a mark that cannot appear. Cut and forage are the exception: the whole rect, so the
+/// box shows.
 fn preview_cells(
     mirror: &Mirror,
     level: i32,
@@ -1043,15 +1104,18 @@ fn preview_cells(
     mode: DesignateMode,
 ) -> Vec<[i32; 3]> {
     match mode {
-        DesignateMode::Channel | DesignateMode::Stockpile => client_core::surface_targets(
-            mirror,
-            level,
-            designation_target(mirror, anchor, mode),
-            designation_target(mirror, release, mode),
-        )
-        .into_iter()
-        .filter(|tile| sim_will_keep(mirror, *tile, mode))
-        .collect(),
+        // Forage follows the ground too (13.9 seat run 2), and lights the ripe bushes on it.
+        DesignateMode::Channel | DesignateMode::Stockpile | DesignateMode::Forage => {
+            client_core::surface_targets(
+                mirror,
+                level,
+                designation_target(mirror, anchor, mode),
+                designation_target(mirror, release, mode),
+            )
+            .into_iter()
+            .filter(|tile| sim_will_keep(mirror, *tile, mode))
+            .collect()
+        }
         _ => {
             // Cut's single level is the cut-target level, the one the release sends.
             let z = match mode {
@@ -1098,9 +1162,12 @@ fn sim_will_keep(mirror: &Mirror, tile: [i32; 3], mode: DesignateMode) -> bool {
         }
         // The sim keeps `is_walkable` cells: standable and not an emitter's tile.
         DesignateMode::Stockpile => client_core::is_standable(mirror, tile) && !on_emitter(tile),
-        // Cut previews the WHOLE box (12.8 §2); `preview_appearance` tells the trees it will mark
-        // from the rest. Clear removes rather than designates; there is nothing for the sim to filter.
-        DesignateMode::Cut | DesignateMode::Clear | DesignateMode::None => true,
+        // Cut and forage preview the WHOLE box (12.8 §2); `preview_appearance` tells the trees
+        // (bushes) they will mark from the rest. Clear removes rather than designates; there is
+        // nothing for the sim to filter.
+        DesignateMode::Cut | DesignateMode::Forage | DesignateMode::Clear | DesignateMode::None => {
+            true
+        }
     }
 }
 
@@ -1126,6 +1193,17 @@ fn preview_appearance(
             assets.channel_mark.clone(),
         ),
         DesignateMode::Stockpile => (slab_transform(tile, -0.46), assets.zone_mark.clone()),
+        // The way cut lights the trees it will catch: a RIPE bush (the only kind the sim marks,
+        // Q12) is lit in the berry red; a growing one and every other cell of the box wear the
+        // plain hover slab, so the box's size shows over open ground.
+        DesignateMode::Forage => (
+            slab_transform(tile, -0.46),
+            if mirror.plant(tile) == Some(PlantState::Ripe) {
+                assets.berry_item.clone()
+            } else {
+                assets.hover_highlight.clone()
+            },
+        ),
         // The cut preview sits where the committed mark will: at the trunk base's floor, and it
         // lights a foliage tile at its own level too, so the whole tree it catches reads. Every
         // other cell of the box is a plain hover slab, so the box's size shows over open ground.
@@ -1884,6 +1962,7 @@ pub fn reconcile(
     projected: &DynamicProjectionQuery,
     designations: &Query<(BevyEntity, &ProjectedDesignation, &ProjectedDesignationKind)>,
     zones: &Query<(BevyEntity, &ProjectedZone)>,
+    plants: &Query<(BevyEntity, &ProjectedPlant)>,
     terrain: &TerrainQuery,
     trees: &TreeMeshQuery,
     chips: &DigChipQuery,
@@ -2272,6 +2351,7 @@ pub fn reconcile(
                             ItemKind::Tetrahedrite => assets.slot(TerrainSlot::Tetrahedrite, 0),
                             ItemKind::Bloodstone => assets.slot(TerrainSlot::Bloodstone, 0),
                             ItemKind::Wood => assets.wood_item.clone(),
+                            ItemKind::Berries => assets.berry_item.clone(),
                         }),
                         Transform::from_translation(item_translation(position, kind, stacks[&id]))
                             .with_scale(item_scale(kind)),
@@ -2284,7 +2364,9 @@ pub fn reconcile(
     let wanted_designations = mirror
         .designations()
         .iter()
-        .filter(|designation| designation.pos[2] <= slice.level())
+        .filter(|designation| {
+            designation.pos[2] <= slice.level() && designation.kind != DesignationKind::Forage
+        })
         .map(|designation| (designation.pos, designation.kind))
         .collect::<std::collections::BTreeMap<_, _>>();
     let wanted_zones = mirror
@@ -2375,6 +2457,66 @@ pub fn reconcile(
             }
         }
     }
+
+    // Bushes: one entity per plant, ONE shared mesh per state and TWO shared materials (plain and
+    // marked). A state or mark change swaps the handles and `ProjectedPlant` in place; a plant
+    // that leaves the mirror is despawned (never stripped: removing components crashes the
+    // render sync). A forage mark is shown on its bush, as a cut mark tints its tree.
+    let forage_marks = mirror
+        .designations()
+        .iter()
+        .filter(|designation| designation.kind == DesignationKind::Forage)
+        .map(|designation| designation.pos)
+        .collect::<BTreeSet<_>>();
+    let wanted_plants = mirror
+        .plants()
+        .filter(|(pos, _)| pos[2] <= slice.level())
+        .map(|(pos, state)| (pos, (state, forage_marks.contains(&pos))))
+        .collect::<BTreeMap<_, _>>();
+    let existing_plants = plants
+        .iter()
+        .map(|(entity, plant)| (plant.pos, (entity, (plant.state, plant.marked))))
+        .collect::<BTreeMap<_, _>>();
+    for (position, &(entity, _)) in &existing_plants {
+        if !wanted_plants.contains_key(position) {
+            commands.entity(entity).despawn();
+        }
+    }
+    for (&position, &(state, marked)) in &wanted_plants {
+        match existing_plants.get(&position) {
+            Some(&(_, shown)) if shown == (state, marked) => {}
+            Some(&(entity, _)) => {
+                let mut entity = commands.entity(entity);
+                entity.insert(ProjectedPlant {
+                    pos: position,
+                    state,
+                    marked,
+                });
+                if let Some(assets) = assets {
+                    entity.insert((
+                        Mesh3d(assets.bush_mesh(state)),
+                        MeshMaterial3d(assets.bush_material(marked)),
+                    ));
+                }
+            }
+            None => {
+                let mut entity = commands.spawn((
+                    ProjectedPlant {
+                        pos: position,
+                        state,
+                        marked,
+                    },
+                    Transform::from_translation(world_to_render(position) - Vec3::Y * 0.5),
+                ));
+                if let Some(assets) = assets {
+                    entity.insert((
+                        Mesh3d(assets.bush_mesh(state)),
+                        MeshMaterial3d(assets.bush_material(marked)),
+                    ));
+                }
+            }
+        }
+    }
 }
 
 /// Where an item is drawn: the tile centre, dropped onto the tile floor, and lifted one log height
@@ -2385,17 +2527,24 @@ fn item_translation(position: [i32; 3], kind: ItemKind, stack: usize) -> Vec3 {
         // An ore item is the stone's cube in the ore's colour: same drop, same scale.
         ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => STONE_ITEM_DROP,
         ItemKind::Wood => WOOD_ITEM_DROP,
+        ItemKind::Berries => BERRY_ITEM_DROP,
     };
-    world_to_render(position) + Vec3::new(0.0, drop + ITEM_STACK_STEP * stack as f32, 0.0)
+    // A berry lies beside the cell centre so a bush on its own cell does not hide it.
+    let aside = match kind {
+        ItemKind::Berries => BERRY_ITEM_SHIFT,
+        ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone | ItemKind::Wood => 0.0,
+    };
+    world_to_render(position) + Vec3::new(aside, drop + ITEM_STACK_STEP * stack as f32, 0.0)
 }
 
-/// The drawn size of an item: a stone is a small cube, a log a long box.
+/// The drawn size of an item: a stone is a small cube, a log a long box, a berry a smaller cube.
 fn item_scale(kind: ItemKind) -> Vec3 {
     match kind {
         ItemKind::Stone | ItemKind::Tetrahedrite | ItemKind::Bloodstone => {
             Vec3::splat(STONE_ITEM_SCALE)
         }
         ItemKind::Wood => WOOD_ITEM_SCALE,
+        ItemKind::Berries => Vec3::splat(BERRY_ITEM_SCALE),
     }
 }
 
@@ -2455,6 +2604,8 @@ fn designation_mark_transform(
         // NOTE: not lifted over cells drawn above it as dig's is: a tree's base has open air
         // around it, and the trunk is not a cube that could seal the slab in.
         DesignationKind::Cut => slab_transform(position, -0.46),
+        // Never projected as a slab (see the reconcile); the mark is the bush's tint.
+        DesignationKind::Forage => slab_transform(position, -0.46),
     }
 }
 
@@ -3109,11 +3260,28 @@ impl ProjectionAssets {
         }
     }
 
+    fn bush_mesh(&self, state: PlantState) -> Handle<Mesh> {
+        match state {
+            PlantState::Ripe => self.bush_ripe_mesh.clone(),
+            PlantState::Growing => self.bush_growing_mesh.clone(),
+        }
+    }
+
+    fn bush_material(&self, marked: bool) -> Handle<StandardMaterial> {
+        if marked {
+            self.bush_marked.clone()
+        } else {
+            self.bush.clone()
+        }
+    }
+
     fn designation_material(&self, kind: DesignationKind) -> Handle<StandardMaterial> {
         match kind {
             DesignationKind::Dig => self.dig_mark.clone(),
             DesignationKind::Channel => self.channel_mark.clone(),
             DesignationKind::Cut => self.cut_mark.clone(),
+            // Never a slab: the reconcile skips forage marks and tints the bush instead.
+            DesignationKind::Forage => self.bush_marked.clone(),
         }
     }
 
@@ -4192,6 +4360,115 @@ mod tests {
         assert_eq!(stone.z, world_to_render(position).z);
     }
 
+    /// 13.9: a berry is its own small red cube, not wood's log, and it lies beside the cell
+    /// centre so a bush on the same cell cannot swallow it. Literals are hand-written.
+    #[test]
+    fn a_berry_is_a_small_cube_beside_the_cell_centre() {
+        assert_eq!(item_scale(ItemKind::Berries), Vec3::splat(0.24));
+        assert_ne!(item_scale(ItemKind::Berries), item_scale(ItemKind::Wood));
+        let position = [3, 4, 5];
+        let berry = item_translation(position, ItemKind::Berries, 0);
+        let centre = world_to_render(position);
+        assert!(
+            (berry.y - (centre.y - 0.38)).abs() < 1e-6,
+            "rests on the floor"
+        );
+        assert!(
+            (berry.x - (centre.x + 0.3)).abs() < 1e-6,
+            "lies beside the bush"
+        );
+        assert_eq!(berry.z, centre.z);
+        let wood = item_translation(position, ItemKind::Wood, 0);
+        assert_eq!(wood.x, centre.x);
+    }
+
+    /// 13.9 R3: the forage preview is the whole box, like cut's; a RIPE bush's cell is lit, and a
+    /// growing bush and bare ground wear the plain hover slab.
+    #[test]
+    fn the_forage_preview_lights_ripe_bushes_and_not_growing_ones() {
+        use crate::designate::DesignateMode::Forage;
+        let dims = Dims { x: 3, y: 1, z: 4 };
+        let mut tiles = vec![Tile::Empty; 12];
+        let at = |x: usize, z: usize| x + z * 3;
+        for x in 0..3 {
+            tiles[at(x, 0)] = Tile::Solid(protocol::Material::Stone);
+            tiles[at(x, 1)] = Tile::Solid(protocol::Material::Stone);
+        }
+        let mirror = Mirror::from_snapshot(Snapshot {
+            msg_type: MessageType::Snapshot,
+            dims,
+            tiles,
+            entities: vec![protocol::Entity {
+                id: 1,
+                kind: EntityKind::Campfire,
+                pos: [1, 0, 2],
+                state: protocol::JobState::Idle,
+                light: Some(protocol::LightKind::Campfire),
+                identity: None,
+                profession: None,
+                job: None,
+                carrying: None,
+            }],
+            designations: Vec::new(),
+            zones: Vec::new(),
+            plants: vec![
+                protocol::Plant {
+                    pos: [0, 0, 2],
+                    state: PlantState::Ripe,
+                },
+                protocol::Plant {
+                    pos: [1, 0, 2],
+                    state: PlantState::Growing,
+                },
+            ],
+            items: Vec::new(),
+            speed: Speed::Normal,
+            tick: 0,
+            goals: Vec::new(),
+        })
+        .unwrap();
+        let slab = Handle::<StandardMaterial>::Uuid(
+            bevy::asset::uuid::Uuid::from_u128(1),
+            Default::default(),
+        );
+        let lit = Handle::<StandardMaterial>::Uuid(
+            bevy::asset::uuid::Uuid::from_u128(2),
+            Default::default(),
+        );
+        let assets = ProjectionAssets {
+            cube: Handle::default(),
+            snow_cap_mesh: Handle::default(),
+            mark_mesh: Handle::default(),
+            terrain: std::array::from_fn(|_| std::array::from_fn(|_| Handle::default())),
+            dwarf: Handle::default(),
+            torch: Handle::default(),
+            campfire: Handle::default(),
+            debris: Handle::default(),
+            dig_mark: Handle::default(),
+            channel_mark: Handle::default(),
+            cut_mark: Handle::default(),
+            wood_item: Handle::default(),
+            berry_item: lit.clone(),
+            zone_mark: Handle::default(),
+            bush_marked: Handle::default(),
+            bush: Handle::default(),
+            bush_ripe_mesh: Handle::default(),
+            bush_growing_mesh: Handle::default(),
+            hover_highlight: slab.clone(),
+            trees: std::array::from_fn(|_| Handle::default()),
+            dwarf_scene: Handle::default(),
+            dwarf_walk: None,
+        };
+        let style = |tile| preview_appearance(Forage, &mirror, tile, 3, &assets).1;
+        assert_eq!(style([0, 0, 2]), lit, "a ripe bush cell is lit");
+        assert_eq!(style([1, 0, 2]), slab, "a growing bush is not lit");
+        assert_eq!(style([2, 0, 2]), slab, "bare ground wears the plain slab");
+        assert!(
+            sim_will_keep(&mirror, [2, 0, 2], Forage),
+            "the whole box shows"
+        );
+    }
+
     /// 12.10b D2/D3: a channel mark is refused on an emitter's tile and where z < 2, and the
     /// preview mirrors the sim so it lights neither. A stockpile is refused on an emitter's tile
     /// too (the sim's `is_walkable`; 12.10b review run 2), but not below z 2.
@@ -4222,6 +4499,7 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -4285,6 +4563,7 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -4305,6 +4584,42 @@ mod tests {
             drag(DesignateMode::Stockpile),
             vec![[0, 0, 2], [2, 0, 2]],
             "the stockpile preview lights the cells beside the fire, never the fire"
+        );
+    }
+
+    /// 8.2's follow-the-ground ruling, for the PREVIEW. A channel drag across a step lights the
+    /// standable cell at BOTH heights, as the send path designates them
+    /// (`tests/headless.rs::a_channel_drag_across_a_step_follows_the_ground_while_dig_stays_on_one_level`
+    /// pins the send path only). On one level it would light the low cell alone.
+    #[test]
+    fn a_channel_preview_across_a_step_follows_the_ground() {
+        use crate::{designate::DesignateMode, pick::Face};
+        let dims = Dims { x: 2, y: 1, z: 6 };
+        let mut tiles = vec![Tile::Empty; 12];
+        let at = |x: usize, z: usize| x + z * 2;
+        for z in 0..=3 {
+            tiles[at(0, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        for z in 0..=2 {
+            tiles[at(1, z)] = Tile::Solid(protocol::Material::Stone);
+        }
+        let mirror = world(dims, tiles);
+        let cell = |tile| crate::pick::PickedCell {
+            tile,
+            face: Face::Top,
+        };
+        let mut lit = preview_cells(
+            &mirror,
+            5,
+            cell([0, 0, 3]),
+            cell([1, 0, 2]),
+            DesignateMode::Channel,
+        );
+        lit.sort();
+        assert_eq!(
+            lit,
+            vec![[0, 0, 4], [1, 0, 3]],
+            "a channel preview across a step must light the ground at both heights"
         );
     }
 
@@ -4406,7 +4721,12 @@ mod tests {
             channel_mark: Handle::default(),
             cut_mark: cut.clone(),
             wood_item: Handle::default(),
+            berry_item: Handle::default(),
             zone_mark: Handle::default(),
+            bush_marked: Handle::default(),
+            bush: Handle::default(),
+            bush_ripe_mesh: Handle::default(),
+            bush_growing_mesh: Handle::default(),
             hover_highlight: hover.clone(),
             trees: std::array::from_fn(|_| Handle::default()),
             dwarf_scene: Handle::default(),
@@ -4464,6 +4784,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5477,6 +5798,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5499,6 +5821,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5531,6 +5854,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5573,6 +5897,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5627,6 +5952,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5715,6 +6041,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5796,6 +6123,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5919,6 +6247,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -5978,6 +6307,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,

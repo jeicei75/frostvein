@@ -2842,3 +2842,15 @@ story) and #194 (`route:undecided`); they are not repeated here.
 ## Deferred from: code review round 2 of 13-8b-after-the-big-dig (2026-11-19)
 
 - **The tick timer times a client's connect snapshot as neither step nor send** (`crates/simd/src/main.rs:463-484`; feature, RAN). The snapshot is encoded inside the iteration, so the window where a client joins carries one `over` with small step/send maxes, which AC 18's doc comment reads as "the machine". Seat-like at Normal: a mid-window connect stalled the stream 152 ms against a 100 ms period. This is pre-existing (AC 18's original code). A reading note is enough unless connects become frequent.
+
+## Deferred from: code review of 13-9-forage (2026-11-24)
+
+- **`tend_plants` walks every plant every tick** (`crates/sim-core/src/lib.rs:585`; blind, read). Two O(P) passes, about 1.9k plants at 256². The sim tick is measured equal to main on seat-like (`13-9-signoff/tick-bench-seatlike-main-vs-4251c099.txt`). A pass driven by `changed` or by dirty terrain would make it free.
+- **`next_trip_job` scans every entity and every job per bush picked** (`crates/sim-core/src/lib.rs:1964`; blind, read). Once per forage; it grows with the number of marks.
+- **The simd load validator accepts a plant on a non-standable cell** (`crates/simd/src/main.rs:673`; edge, RAN). `tend_plants` removes it on tick 1, so it is a one-snapshot phantom bush. Self-healing, like the carried-stone position note at `:908`.
+- **A rect spanning `i32::MIN..i32::MAX` is refused although it holds ripe bushes** (`crates/sim-core/src/lib.rs` `apply_command`; edge, RAN). ±100000 marks all of them. Crafted input only; the refusal text is misleading.
+- **A multi-level, inverted or bad-kind client command is dropped with only a daemon stderr line** (`crates/simd/src/main.rs` `read_inbound`; edge, RAN). Pre-existing (memory `wire-rect-single-level`). The client gets nothing; only the gui forage drag was made to avoid it (`9d252bee`).
+
+## Deferred from: code review round 2 of 13-9-forage (2026-11-25)
+
+- **The simd load validator's `forage_trip` excuse does not check the carrier's profession** (`crates/simd/src/main.rs:942`; edge, read). A Miner or Woodcutter carrying berries while holding a Forage job is accepted. Hand-edit only: `set_profession` releases the claim, so the sim cannot write it, and the Forage-job arm has no profession check either. Pre-existing gap.

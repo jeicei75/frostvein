@@ -1,0 +1,12 @@
+== _bmad-output/implementation-artifacts/13-8-signoff/prototypes/seat-like.json
+bench seat-like run 1/1: ticks=30000 commands=1631/1631 mean=3.3241 p99=35.1882 max=84.459 over10=2209 state=8f92dbb28e0978dd
+bench seat-like end tick=30000 marks=114 items=1655 zones=1800 goals=135/0/0 done=dig:1486,cut:30 stored=538 cells=2335 crew=200 arriving=0 foraged=0 food=0
+bench seat-like: 1 run, mean 3.3241 ms (1 run: no floor)
+== 13-9-signoff/prototypes/seat-like-forage-early.json
+bench seat-like-forage-early run 1/1: ticks=30000 commands=1654/1654 mean=3.4942 p99=38.2973 max=106.109 over10=2225 state=eb83a6a1e55eb4b0
+bench seat-like-forage-early end tick=30000 marks=195 items=1867 zones=1800 goals=132/0/0 done=dig:1405,cut:30 stored=732 cells=2232 crew=200 arriving=0 foraged=567 food=567
+bench seat-like-forage-early: 1 run, mean 3.4942 ms (1 run: no floor)
+== 13-9-signoff/prototypes/seat-like-forage-bigdig.json
+bench seat-like-forage-bigdig run 1/1: ticks=30000 commands=1654/1654 mean=2.9059 p99=31.2832 max=76.128 over10=1948 state=072d739122c6f9b8
+bench seat-like-forage-bigdig end tick=30000 marks=163 items=1960 zones=1800 goals=132/0/0 done=dig:1439,cut:30 stored=669 cells=2267 crew=200 arriving=0 foraged=547 food=542
+bench seat-like-forage-bigdig: 1 run, mean 2.9059 ms (1 run: no floor)

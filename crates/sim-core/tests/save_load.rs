@@ -183,6 +183,8 @@ fn save_load_then_tick_matches_never_saved() {
         assert_eq!(loaded.emitters(), control.emitters());
         assert_eq!(loaded.designations(), control.designations());
         assert_eq!(loaded.zones(), control.zones());
+        assert_eq!(loaded.plants(), control.plants());
+        assert_eq!(loaded.item_counts(), control.item_counts());
     }
 }
 
@@ -201,7 +203,7 @@ fn save_load_with_a_goal_done_and_the_next_in_progress_matches_never_saved() {
             } else {
                 ItemKind::Tetrahedrite
             };
-            save.items.push((id, at(x), kind));
+            save.items.push((id, at(x), kind, 1));
             save.zones.push(at(x));
             id += 1;
         }
@@ -399,7 +401,7 @@ fn save_round_trip_preserves_a_mid_haul_carry() {
     let mut save = World::generate(42, Dims::DEFAULT).to_save();
     let stone = Pos { x: 9, y: 8, z: 7 };
     save.next_id = 13;
-    save.items = vec![(12, stone, ItemKind::Wood)];
+    save.items = vec![(12, stone, ItemKind::Wood, 1)];
     save.jobs = vec![Job {
         id: JobId(7),
         kind: JobKind::Haul { item: 12 },
@@ -425,7 +427,7 @@ fn save_round_trip_preserves_a_mid_haul_carry() {
             .all(|dwarf| dwarf.carrying.is_none())
     );
     assert_eq!(round_trip.jobs[0].kind, JobKind::Haul { item: 12 });
-    assert_eq!(round_trip.items, vec![(12, stone, ItemKind::Wood)]);
+    assert_eq!(round_trip.items, vec![(12, stone, ItemKind::Wood, 1)]);
 }
 
 #[test]
@@ -441,7 +443,7 @@ fn save_round_trip_preserves_items_and_current_job() {
     let mut save = World::generate(42, Dims::DEFAULT).to_save();
     let target = Pos { x: 9, y: 8, z: 7 };
     save.next_id = 13;
-    save.items = vec![(12, target, ItemKind::Stone)];
+    save.items = vec![(12, target, ItemKind::Stone, 1)];
     save.jobs = vec![Job {
         id: JobId(7),
         kind: JobKind::Dig,
@@ -455,7 +457,7 @@ fn save_round_trip_preserves_items_and_current_job() {
 
     let round_trip = World::from_save(save).to_save();
 
-    assert_eq!(round_trip.items, vec![(12, target, ItemKind::Stone)]);
+    assert_eq!(round_trip.items, vec![(12, target, ItemKind::Stone, 1)]);
     assert_eq!(round_trip.jobs.len(), 1);
     assert_eq!(round_trip.jobs[0].id, JobId(7));
     assert_eq!(round_trip.jobs[0].kind, JobKind::Dig);
@@ -870,7 +872,7 @@ fn a_world_saved_at_every_tick_of_a_clear_loads_and_steps_identically() {
         let mut save = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).to_save();
         let id = save.next_id;
         save.next_id += 1;
-        save.items.push((id, site, ItemKind::Stone));
+        save.items.push((id, site, ItemKind::Stone, 1));
         let mut world = World::from_save(save);
         assert_eq!(world.tile(site), Some(Tile::Empty), "the site moved");
         assert_eq!(
@@ -1264,4 +1266,183 @@ fn a_save_missing_an_arrivals_key_is_refused() {
         let refused = serde_json::from_value::<sim_core::SaveState>(strip(key));
         assert!(refused.is_err(), "a save without `{key}` loaded");
     }
+}
+
+/// 13.9 AC 8 (amended): saved mid-trip, a hauler carrying berries with count 2 and holding a
+/// forage job, one bush mid-regrowth. The load must walk, forage, deliver and regrow on the very
+/// ticks the never-saved world does, the counts included.
+#[test]
+fn a_world_saved_mid_trip_with_two_berries_in_hand_loads_and_steps_identically() {
+    let mut saved = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = saved.camp_origin();
+    let mut plants: Vec<Pos> = saved.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos));
+    // Three bushes within reach of each other, so one trip takes all of them.
+    let near = |a: &Pos, b: &Pos| a.x.abs_diff(b.x) + a.y.abs_diff(b.y) + a.z.abs_diff(b.z) <= 8;
+    let marked: Vec<Pos> = plants
+        .iter()
+        .find_map(|first| {
+            let group: Vec<Pos> = plants
+                .iter()
+                .filter(|other| near(first, other))
+                .copied()
+                .take(3)
+                .collect();
+            (group.len() == 3 && group.iter().all(|a| group.iter().all(|b| near(a, b))))
+                .then_some(group)
+        })
+        .expect("three bushes in reach of each other");
+    let hauler = saved.dwarves()[0].0;
+    let miners: Vec<_> = saved.dwarves().iter().skip(1).map(|d| d.0).collect();
+    let mut control = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let pile = Rect {
+        min: Pos {
+            x: camp.x + 3,
+            ..camp
+        },
+        max: Pos {
+            x: camp.x + 5,
+            y: camp.y + 2,
+            z: camp.z,
+        },
+    };
+    for world in [&mut saved, &mut control] {
+        let hauler_command = SimCommand::SetProfession {
+            dwarf: hauler,
+            profession: Profession::Hauler,
+        };
+        assert_eq!(world.apply_command(hauler_command), None);
+        for miner in &miners {
+            let command = SimCommand::SetProfession {
+                dwarf: *miner,
+                profession: Profession::Miner,
+            };
+            assert_eq!(world.apply_command(command), None);
+        }
+        assert_eq!(
+            world.apply_command(SimCommand::PlaceStockpile { rect: pile }),
+            None
+        );
+        for plant in &marked {
+            let mark = SimCommand::Designate {
+                kind: DesignationKind::Forage,
+                rect: Rect {
+                    min: *plant,
+                    max: *plant,
+                },
+            };
+            assert_eq!(world.apply_command(mark), None);
+        }
+    }
+
+    let holds_a_forage = |world: &World| {
+        world.claims().iter().any(|(_, held)| {
+            world
+                .jobs()
+                .iter()
+                .any(|job| Some(job.id) == *held && job.kind == JobKind::Forage)
+        })
+    };
+    let load = |world: &World| {
+        let carried = world.carrying().into_iter().find_map(|(_, item)| item)?;
+        world
+            .item_counts()
+            .into_iter()
+            .find_map(|(id, count)| (id.0 == carried).then_some(count))
+    };
+    let growing = |world: &World| world.plants().iter().filter(|(_, ripe)| !ripe).count();
+    while !(load(&saved) == Some(2) && holds_a_forage(&saved)) {
+        assert!(saved.tick() < 3_000, "never two in hand with a forage held");
+        saved.step();
+        control.step();
+    }
+    // THE GUARD: the round trip below covers a load of count 2, a held forage job, two bushes
+    // mid-regrowth and a mark still standing, with the regrowth and the delivery still ahead.
+    assert_eq!(growing(&saved), 2);
+    assert_eq!(saved.designations().len(), 1);
+    assert_eq!(saved.stored_count(), 0);
+
+    let mut loaded = World::from_save(saved.to_save());
+    assert_eq!(loaded.plants(), saved.plants());
+    assert_eq!(loaded.item_counts(), saved.item_counts());
+    // Pending plant changes are not saved (a load starts clean, like dirty tiles), so the control
+    // forgets its own; each regrow's change must then land on the same tick in both.
+    control.drain_plant_changes();
+    let mut regrew = false;
+    for _ in 0..(sim_core::REGROW_TICKS + 100) {
+        let before = growing(&loaded);
+        loaded.step();
+        control.step();
+        regrew |= growing(&loaded) < before;
+        assert_eq!(loaded.plants(), control.plants());
+        assert_eq!(loaded.designations(), control.designations());
+        assert_eq!(loaded.jobs(), control.jobs());
+        assert_eq!(loaded.claims(), control.claims());
+        assert_eq!(loaded.carrying(), control.carrying());
+        assert_eq!(loaded.items(), control.items());
+        assert_eq!(loaded.item_kinds(), control.item_kinds());
+        assert_eq!(loaded.item_counts(), control.item_counts());
+        assert_eq!(loaded.dwarves(), control.dwarves());
+        assert_eq!(loaded.drain_plant_changes(), control.drain_plant_changes());
+    }
+    assert!(regrew, "no plant regrew after the load");
+    assert_eq!(loaded.stored_berries_count(), 3, "the three bushes landed");
+}
+
+/// 13.9 AC 8: `plants` and an item's `count` are required, and the unstripped save is the control.
+#[test]
+fn a_save_missing_a_plants_key_or_an_item_count_is_refused() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items
+        .push((id, Pos { x: 0, y: 0, z: 1 }, ItemKind::Berries, 3));
+    world = World::from_save(save);
+    let json: serde_json::Value = serde_json::to_value(world.to_save()).unwrap();
+    assert!(!json["plants"].as_array().unwrap().is_empty());
+    assert_eq!(json["items"][0][3], 3, "the count is saved");
+    assert!(json.get("forage").is_none(), "the forage area is gone");
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(json.clone()).is_ok(),
+        "the control must load"
+    );
+    let mut stripped = json.clone();
+    stripped
+        .as_object_mut()
+        .unwrap()
+        .remove("plants")
+        .expect("a key");
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(stripped).is_err(),
+        "a save without `plants` loaded"
+    );
+    // An item written without its count, as before 13.9's amendment, is refused.
+    let mut uncounted = json;
+    uncounted["items"][0].as_array_mut().unwrap().pop();
+    assert!(
+        serde_json::from_value::<sim_core::SaveState>(uncounted).is_err(),
+        "a save with an uncounted item loaded"
+    );
+}
+
+/// A forage mark is a designation, so it saves and loads as one.
+#[test]
+fn a_forage_mark_round_trips_through_a_save() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = world.plants()[0].0;
+    let mark = SimCommand::Designate {
+        kind: DesignationKind::Forage,
+        rect: Rect {
+            min: plant,
+            max: plant,
+        },
+    };
+    assert_eq!(world.apply_command(mark), None);
+    let bytes = serde_json::to_vec(&world.to_save()).unwrap();
+    let loaded = World::from_save(serde_json::from_slice(&bytes).unwrap());
+    assert_eq!(
+        loaded.designations(),
+        vec![(plant, DesignationKind::Forage)]
+    );
 }

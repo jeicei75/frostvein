@@ -126,9 +126,10 @@ PY
 mutation "12 simd's save validation refuses a clearing miner (Task 3)" simd a_save_taken_mid_clear_loads_and_the_clear_finishes <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = 'if !holds_haul && !miner_clearing {'
+# Re-pointed 2026-11-24: 13.9's review (#244) added the forage-trip excuse to this line.
+old = 'if !holds_haul && !miner_clearing && !forage_trip {'
 assert s.count(old) == 1
-p.write_text(s.replace(old, 'if !holds_haul {'))
+p.write_text(s.replace(old, 'if !holds_haul && !forage_trip {'))
 PY
 
 # Wolf at the seat ("miners are throwing stones quite wildly"): rows 13-17. 13 and 14 are the two

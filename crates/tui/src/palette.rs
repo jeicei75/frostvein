@@ -142,6 +142,7 @@ pub fn designation_cell(kind: DesignationKind) -> Cell {
             glyph: '▼',
             fg: (92, 174, 224),
         },
+        DesignationKind::Forage => marked_bush_cell(),
     }
 }
 
@@ -213,6 +214,48 @@ pub fn bloodstone_item_cell() -> Cell {
 pub fn stored_bloodstone_item_cell() -> Cell {
     Cell {
         glyph: bloodstone_item_cell().glyph,
+        fg: zone_cell().fg,
+    }
+}
+
+// 13.9 (Q5): ASCII on purpose, #152. A ripe bush and a growing one share `"`; only the colour
+// differs, so "ripe" is read by colour.
+pub fn ripe_bush_cell() -> Cell {
+    Cell {
+        glyph: '"',
+        fg: (214, 62, 62),
+    }
+}
+
+pub fn growing_bush_cell() -> Cell {
+    Cell {
+        glyph: '"',
+        fg: (58, 112, 66),
+    }
+}
+
+/// A bush with a forage mark on it, the way a cut mark (`/`) shows a marked tree: the mark IS
+/// the glyph of the cell. ASCII on purpose, #152.
+pub fn marked_bush_cell() -> Cell {
+    Cell {
+        glyph: '&',
+        fg: (240, 150, 56),
+    }
+}
+
+/// A berry. NOTE: `%` is also the tetrahedrite ore TILE glyph; the layers differ (item over
+/// terrain) and so does the colour (red here, blue there).
+pub fn berries_item_cell() -> Cell {
+    Cell {
+        glyph: '%',
+        fg: (222, 70, 84),
+    }
+}
+
+/// Berries on a stockpile cell: the berry glyph in the stockpile's colour, like a stored stone.
+pub fn stored_berries_item_cell() -> Cell {
+    Cell {
+        glyph: berries_item_cell().glyph,
         fg: zone_cell().fg,
     }
 }
@@ -415,6 +458,7 @@ mod tests {
             designation_cell(DesignationKind::Dig),
             designation_cell(DesignationKind::Channel),
             designation_cell(DesignationKind::Cut),
+            designation_cell(DesignationKind::Forage),
             zone_cell(),
             cursor_cell(),
             pending_rect_cell(Mode::Dig),
@@ -442,6 +486,10 @@ mod tests {
                 Cell {
                     glyph: '/',
                     fg: (226, 96, 64),
+                },
+                Cell {
+                    glyph: '&',
+                    fg: (240, 150, 56),
                 },
                 Cell {
                     glyph: '≡',
@@ -517,6 +565,37 @@ mod tests {
                 .all(|glyph| !existing_glyphs.contains(glyph)),
             "marker glyphs must not collide with terrain or entities"
         );
+    }
+
+    #[test]
+    fn the_forage_looks_are_pinned_ascii_and_distinct() {
+        let looks = [
+            (ripe_bush_cell(), '"', (214, 62, 62)),
+            (growing_bush_cell(), '"', (58, 112, 66)),
+            (marked_bush_cell(), '&', (240, 150, 56)),
+            (berries_item_cell(), '%', (222, 70, 84)),
+            (stored_berries_item_cell(), '%', (88, 190, 118)),
+        ];
+        for (cell, glyph, fg) in looks {
+            assert_eq!(cell, Cell { glyph, fg });
+            assert!(cell.glyph.is_ascii(), "#152: forage glyphs stay ASCII");
+        }
+        // Ripe against growing is the one pair that shares a glyph, so colour must separate it.
+        assert_ne!(ripe_bush_cell().fg, growing_bush_cell().fg);
+        // No new look may equal an existing terrain look, glyph AND colour.
+        let ore = tile_cell(Tile::Solid(Material::Tetrahedrite));
+        for (cell, _, _) in looks {
+            assert_ne!(cell, ore, "berries must not read as ore");
+        }
+        // The marked bush `&`, bush `"` and berries `%` all overwrite one another: glyphs differ,
+        // and a marked bush reads differently from a ripe one by glyph, not by colour alone.
+        let glyphs: std::collections::BTreeSet<_> =
+            [marked_bush_cell(), ripe_bush_cell(), berries_item_cell()]
+                .iter()
+                .map(|cell| cell.glyph)
+                .collect();
+        assert_eq!(glyphs.len(), 3);
+        assert_ne!(marked_bush_cell(), designation_cell(DesignationKind::Cut));
     }
 
     #[test]

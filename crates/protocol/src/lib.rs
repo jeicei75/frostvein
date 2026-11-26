@@ -132,6 +132,7 @@ pub enum DwarfJob {
     Dig { target: [i32; 3] },
     Channel { target: [i32; 3] },
     Cut { target: [i32; 3] },
+    Forage { target: [i32; 3] },
     Haul,
 }
 
@@ -161,6 +162,7 @@ pub enum DesignationKind {
     Dig,
     Channel,
     Cut,
+    Forage,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -179,7 +181,7 @@ pub enum Refusal {
     SetProfession {
         dwarf: u32,
     },
-    /// A dig, channel or cut rect that marked nothing.
+    /// A dig, channel, cut or forage rect that marked nothing.
     Designate {
         kind: DesignationKind,
         rect: Rect,
@@ -277,6 +279,8 @@ pub struct Item {
     pub id: u32,
     pub pos: [i32; 3],
     pub kind: ItemKind,
+    /// How many the item stands for: 1 for everything but a forager's load of berries.
+    pub count: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -286,9 +290,30 @@ pub enum ItemKind {
     Wood,
     Tetrahedrite,
     Bloodstone,
+    Berries,
 }
 
-/// One step of the goal chain (12.12). All three are sent on every message, in chain order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlantState {
+    Ripe,
+    Growing,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Plant {
+    pub pos: [i32; 3],
+    pub state: PlantState,
+}
+
+/// `state: None` means the plant is gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlantChange {
+    pub pos: [i32; 3],
+    pub state: Option<PlantState>,
+}
+
+/// One step of the goal chain (12.12). All four are sent on every message, in chain order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Goal {
     pub kind: ItemKind,
@@ -308,6 +333,7 @@ pub struct Snapshot {
     pub entities: Vec<Entity>,
     pub designations: Vec<Designation>,
     pub zones: Vec<Zone>,
+    pub plants: Vec<Plant>,
     pub items: Vec<Item>,
     pub speed: Speed,
     pub tick: u64,
@@ -325,6 +351,8 @@ pub struct Delta {
     pub entities: Vec<Entity>,
     pub designations: Vec<Designation>,
     pub zones: Vec<Zone>,
+    /// Only the plants that changed since the last delta, like `tiles`.
+    pub plants: Vec<PlantChange>,
     pub items: Vec<Item>,
     pub speed: Speed,
     pub goals: Vec<Goal>,
@@ -350,7 +378,8 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "idle", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
-        "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
+        "plants": [{"pos": [1, 2, 5], "state": "ripe"}, {"pos": [3, 2, 5], "state": "growing"}],
+        "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone", "count": 1}],
         "speed": "normal",
         "tick": 9,
         "goals": [{"kind": "wood", "target": 10, "progress": 12, "completed": true}, {"kind": "tetrahedrite", "target": 10, "progress": 3, "completed": false}, {"kind": "bloodstone", "target": 1, "progress": 0, "completed": false}]
@@ -363,7 +392,8 @@ mod tests {
         "entities": [{"id": 7, "kind": "dwarf", "pos": [4, 5, 6], "state": "walk", "light": null}],
         "designations": [{"pos": [1, 2, 3], "kind": "dig"}],
         "zones": [{"pos": [1, 2, 4]}],
-        "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone"}],
+        "plants": [{"pos": [1, 2, 5], "state": "growing"}, {"pos": [3, 2, 5], "state": null}, {"pos": [4, 2, 5], "state": "ripe"}],
+        "items": [{"id": 12, "pos": [1, 2, 3], "kind": "stone", "count": 1}],
         "speed": "fast",
         "goals": [{"kind": "wood", "target": 10, "progress": 12, "completed": true}, {"kind": "tetrahedrite", "target": 10, "progress": 3, "completed": false}, {"kind": "bloodstone", "target": 1, "progress": 0, "completed": false}]
     }"#;
@@ -396,13 +426,30 @@ mod tests {
             }
         );
         assert_eq!(serde_json::to_string(&refusal_cut).unwrap(), designate);
+        let forage_literal =
+            r#"{"command":"designate","kind":"forage","rect":{"min":[64,64,8],"max":[66,66,8]}}"#;
+        let forage_refusal: Refusal = serde_json::from_str(forage_literal).unwrap();
+        assert_eq!(
+            forage_refusal,
+            Refusal::Designate {
+                kind: DesignationKind::Forage,
+                rect: Rect {
+                    min: [64, 64, 8],
+                    max: [66, 66, 8]
+                }
+            }
+        );
+        assert_eq!(
+            serde_json::to_string(&forage_refusal).unwrap(),
+            forage_literal
+        );
         let mut plain: Delta = serde_json::from_str(DELTA_WIRE).unwrap();
         assert!(plain.refusals.is_empty());
         let plain_value: serde_json::Value = serde_json::from_str(DELTA_WIRE).unwrap();
         assert_eq!(serde_json::to_value(&plain).unwrap(), plain_value);
         assert_eq!(
             serde_json::to_string(&plain).unwrap(),
-            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"items":[{"id":12,"pos":[1,2,3],"kind":"stone"}],"speed":"fast","goals":[{"kind":"wood","target":10,"progress":12,"completed":true},{"kind":"tetrahedrite","target":10,"progress":3,"completed":false},{"kind":"bloodstone","target":1,"progress":0,"completed":false}]}"#
+            r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,2,3],"tile":{"solid":"ice"}}],"entities":[{"id":7,"kind":"dwarf","pos":[4,5,6],"state":"walk","light":null}],"designations":[{"pos":[1,2,3],"kind":"dig"}],"zones":[{"pos":[1,2,4]}],"plants":[{"pos":[1,2,5],"state":"growing"},{"pos":[3,2,5],"state":null},{"pos":[4,2,5],"state":"ripe"}],"items":[{"id":12,"pos":[1,2,3],"kind":"stone","count":1}],"speed":"fast","goals":[{"kind":"wood","target":10,"progress":12,"completed":true},{"kind":"tetrahedrite","target":10,"progress":3,"completed":false},{"kind":"bloodstone","target":1,"progress":0,"completed":false}]}"#
         );
         plain.refusals.push(refusal);
         let encoded = serde_json::to_string(&plain).unwrap();
@@ -527,16 +574,30 @@ mod tests {
         );
         assert_eq!(snapshot.zones, vec![Zone { pos: [1, 2, 4] }]);
         assert_eq!(
+            snapshot.plants,
+            vec![
+                Plant {
+                    pos: [1, 2, 5],
+                    state: PlantState::Ripe
+                },
+                Plant {
+                    pos: [3, 2, 5],
+                    state: PlantState::Growing
+                }
+            ]
+        );
+        assert_eq!(
             snapshot.items,
             vec![Item {
                 id: 12,
                 pos: [1, 2, 3],
-                kind: ItemKind::Stone
+                kind: ItemKind::Stone,
+                count: 1
             }]
         );
         assert_eq!(
             serde_json::to_string(&snapshot.items[0]).unwrap(),
-            r#"{"id":12,"pos":[1,2,3],"kind":"stone"}"#
+            r#"{"id":12,"pos":[1,2,3],"kind":"stone","count":1}"#
         );
         assert_eq!(snapshot.speed, Speed::Normal);
         assert_eq!(snapshot.tick, 9);
@@ -586,11 +647,29 @@ mod tests {
         );
         assert_eq!(delta.zones, vec![Zone { pos: [1, 2, 4] }]);
         assert_eq!(
+            delta.plants,
+            vec![
+                PlantChange {
+                    pos: [1, 2, 5],
+                    state: Some(PlantState::Growing)
+                },
+                PlantChange {
+                    pos: [3, 2, 5],
+                    state: None
+                },
+                PlantChange {
+                    pos: [4, 2, 5],
+                    state: Some(PlantState::Ripe)
+                }
+            ]
+        );
+        assert_eq!(
             delta.items,
             vec![Item {
                 id: 12,
                 pos: [1, 2, 3],
-                kind: ItemKind::Stone
+                kind: ItemKind::Stone,
+                count: 1
             }]
         );
         assert_eq!(delta.speed, Speed::Fast);
@@ -648,8 +727,9 @@ mod tests {
                 },
             ),
             (
-                r#"{"type":"remove_stockpile","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
-                Command::RemoveStockpile {
+                r#"{"type":"designate","kind":"forage","rect":{"min":[1,2,3],"max":[4,5,3]}}"#,
+                Command::Designate {
+                    kind: DesignationKind::Forage,
                     rect: Rect {
                         min: [1, 2, 3],
                         max: [4, 5, 3],
@@ -750,6 +830,10 @@ mod tests {
                 },
                 r#"{"cut":{"target":[73,59,12]}}"#,
             ),
+            (
+                DwarfJob::Forage { target: [7, 8, 9] },
+                r#"{"forage":{"target":[7,8,9]}}"#,
+            ),
             (DwarfJob::Haul, "\"haul\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
@@ -788,40 +872,79 @@ mod tests {
             (DesignationKind::Dig, "\"dig\""),
             (DesignationKind::Channel, "\"channel\""),
             (DesignationKind::Cut, "\"cut\""),
+            (DesignationKind::Forage, "\"forage\""),
         ] {
             assert_eq!(serde_json::to_string(&value).unwrap(), wire);
         }
+        for (value, wire) in [
+            (PlantState::Ripe, "\"ripe\""),
+            (PlantState::Growing, "\"growing\""),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+        }
+        for (value, wire) in [
+            (
+                PlantChange {
+                    pos: [1, 2, 3],
+                    state: None,
+                },
+                r#"{"pos":[1,2,3],"state":null}"#,
+            ),
+            (
+                PlantChange {
+                    pos: [1, 2, 3],
+                    state: Some(PlantState::Ripe),
+                },
+                r#"{"pos":[1,2,3],"state":"ripe"}"#,
+            ),
+        ] {
+            assert_eq!(serde_json::to_string(&value).unwrap(), wire);
+            assert_eq!(serde_json::from_str::<PlantChange>(wire).unwrap(), value);
+        }
         for (item_wire, item) in [
             (
-                r#"{"id":12,"pos":[1,2,3],"kind":"stone"}"#,
+                r#"{"id":12,"pos":[1,2,3],"kind":"stone","count":1}"#,
                 Item {
                     id: 12,
                     pos: [1, 2, 3],
                     kind: ItemKind::Stone,
+                    count: 1,
                 },
             ),
             (
-                r#"{"id":13,"pos":[73,59,12],"kind":"wood"}"#,
+                r#"{"id":13,"pos":[73,59,12],"kind":"wood","count":1}"#,
                 Item {
                     id: 13,
                     pos: [73, 59, 12],
                     kind: ItemKind::Wood,
+                    count: 1,
                 },
             ),
             (
-                r#"{"id":14,"pos":[62,77,12],"kind":"tetrahedrite"}"#,
+                r#"{"id":14,"pos":[62,77,12],"kind":"tetrahedrite","count":1}"#,
                 Item {
                     id: 14,
                     pos: [62, 77, 12],
                     kind: ItemKind::Tetrahedrite,
+                    count: 1,
                 },
             ),
             (
-                r#"{"id":15,"pos":[1,2,3],"kind":"bloodstone"}"#,
+                r#"{"id":15,"pos":[1,2,3],"kind":"bloodstone","count":1}"#,
                 Item {
                     id: 15,
                     pos: [1, 2, 3],
                     kind: ItemKind::Bloodstone,
+                    count: 1,
+                },
+            ),
+            (
+                r#"{"id":16,"pos":[1,2,3],"kind":"berries","count":3}"#,
+                Item {
+                    id: 16,
+                    pos: [1, 2, 3],
+                    kind: ItemKind::Berries,
+                    count: 3,
                 },
             ),
         ] {

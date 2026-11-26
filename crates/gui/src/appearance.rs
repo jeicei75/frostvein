@@ -206,6 +206,8 @@ pub fn designation_color(kind: DesignationKind) -> Color {
         // 12.7: a cold cyan-green, 66+ from every TUI mark colour and 50+ from the dig, channel and
         // zone literals above; `mark_colours_are_distinct_cold_literals` holds the floors.
         DesignationKind::Cut => Color::srgb_u8(30, 190, 150),
+        // A forage mark is no slab: it tints the bush itself (`forage_mark_color`).
+        DesignationKind::Forage => forage_mark_color(),
     }
 }
 
@@ -242,6 +244,38 @@ pub const WOOD_ITEM_SCALE: Vec3 = Vec3::new(0.7, 0.28, 0.28);
 /// pointer rather than import because `gui` never depends on `tui`.
 pub fn wood_item_color() -> Color {
     Color::srgb_u8(164, 116, 66)
+}
+
+/// A berry: a small red cube lying on the ground. Same red family as the TUI's `%`
+/// (`crates/tui/src/palette.rs`), carried by value because `gui` never depends on `tui`.
+pub fn berry_item_color() -> Color {
+    Color::srgb_u8(222, 70, 84)
+}
+
+/// A berry item is a small cube, a little smaller than a stone.
+pub const BERRY_ITEM_SCALE: f32 = 0.24;
+
+/// A berry rests on the cell floor like a stone does: centre at floor + half its height.
+pub const BERRY_ITEM_DROP: f32 = -0.5 + BERRY_ITEM_SCALE / 2.0;
+
+/// A berry lies to one side of its cell's centre, because it drops on the bush's own cell and the
+/// bush's block would otherwise swallow it (13.9: a bush blocks nothing, and berries land on it).
+pub const BERRY_ITEM_SHIFT: f32 = 0.3;
+
+/// The glow a forage mark gives its bush, the way a cut mark tints its tree: a warm amber,
+/// where every slab mark is cold, and far from the bush's green and its berry red (13.9 Q8).
+pub fn forage_mark_color() -> Color {
+    Color::srgb_u8(255, 176, 40)
+}
+
+/// A bush's leaf block, shared by both states. Same green as the TUI's growing bush.
+pub fn bush_color() -> Color {
+    Color::srgb_u8(58, 112, 66)
+}
+
+/// The red dots on a ripe bush.
+pub fn bush_berry_color() -> Color {
+    Color::srgb_u8(214, 62, 62)
 }
 
 /// How far each further item on one cell is lifted above the one before it: one log height
@@ -473,12 +507,14 @@ pub fn dwarf_tunic_color(colour: protocol::DwarfColour) -> Color {
 #[cfg(test)]
 mod tests {
     use bevy::color::ColorToPacked;
+    use bevy::prelude::Color;
     use protocol::{DesignationKind, EntityKind, LightKind, Material};
 
     use super::{
-        RIM_LEVELS, day_lighting, day_weight, designation_color, entity_appearance,
-        foliage_snow_color, hover_highlight_color, light_properties, lighting_at, material_color,
-        night_lighting, rim_dissolved_color, snow_cap_color, zone_color,
+        RIM_LEVELS, bush_berry_color, bush_color, day_lighting, day_weight, designation_color,
+        entity_appearance, foliage_snow_color, forage_mark_color, hover_highlight_color,
+        light_properties, lighting_at, material_color, night_lighting, rim_dissolved_color,
+        snow_cap_color, zone_color,
     };
 
     #[test]
@@ -704,6 +740,19 @@ mod tests {
                 "{colour:?}"
             );
         }
+    }
+
+    /// 13.9 Q5: the forage mark's glow must not read as the bush's leaf green, its berry red or
+    /// the pile's slab.
+    #[test]
+    fn the_forage_mark_colour_is_far_from_the_bush_and_the_zone_slab() {
+        let rgb = |color: Color| color.to_srgba().to_u8_array_no_alpha();
+        for other in [zone_color(), bush_color(), bush_berry_color()] {
+            assert!(channel_distance(rgb(forage_mark_color()), rgb(other)) >= MIN_MARK_SEPARATION);
+        }
+        assert!(
+            channel_distance(rgb(bush_color()), rgb(bush_berry_color())) >= MIN_MARK_SEPARATION
+        );
     }
 
     #[test]

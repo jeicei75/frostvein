@@ -202,12 +202,13 @@ mutation "carry_items runs before settle" sim-core a_carried_stone_tracks_its_ca
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '''            execute_jobs,
+            tend_plants,
             settle,
             wander,
             carry_items,
 '''
 assert old in s
-p.write_text(s.replace(old, '            execute_jobs,\n            carry_items,\n            settle,\n            wander,\n'))
+p.write_text(s.replace(old, '            execute_jobs,\n            tend_plants,\n            carry_items,\n            settle,\n            wander,\n'))
 PY
 
 mutation "release_claim does not drop the carried stone" sim-core release_claim_drops_the_carried_stone_beside_the_dwarf <<'PY'
@@ -227,7 +228,8 @@ mutation "CancelDesignation cancels haul jobs too" sim-core cancelling_marks_ove
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 added `JobKind::Cut` to the tile-job filter; the sabotage still drops the whole filter.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '                    .filter(|job| {\n                        matches!(job.kind, JobKind::Dig | JobKind::Channel | JobKind::Cut)\n                    })\n'
+# Re-pointed 13.9 Amendment 1: the filter also names Forage.
+old = '                    .filter(|job| {\n                        matches!(\n                            job.kind,\n                            JobKind::Dig | JobKind::Channel | JobKind::Cut | JobKind::Forage\n                        )\n                    })\n'
 assert old in s
 p.write_text(s.replace(old, ''))
 PY
@@ -295,7 +297,8 @@ PY
 mutation "load_world lets a carrying dwarf hold someone else's job" simd carrying_dwarf_without_the_matching_haul_job_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''                if !holds_haul && !miner_clearing {
+# Re-pointed 2026-11-24: 13.9's review (#244) added the forage-trip excuse to this line.
+old = '''                if !holds_haul && !miner_clearing && !forage_trip {
                     bail!(
                         "save dwarf {} carries item {item} without holding its haul job",
                         dwarf.id
@@ -345,6 +348,8 @@ p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 # Re-pointed 2026-10-05 (12.7): the item layer now picks the cell by kind (a `match` on kind and
 # stored-ness); the seam is unchanged.
 # Re-pointed 2026-10-11 (12.10): the match gained the four real ore-item arms (Task 5 replaced the stub arms).
+# Re-pointed 2026-11-22 (13.9 Task 5): the match gained the two Berries stand-in arms.
+# Re-pointed 2026-11-22 (13.9 Task 6): the Berries arms got their own cells.
 old = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             let stored = mirror.zones().iter().any(|zone| zone.pos == item.pos);
@@ -357,6 +362,8 @@ old = '''    for item in mirror.items() {
                 (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
+                (protocol::ItemKind::Berries, true) => stored_berries_item_cell(),
+                (protocol::ItemKind::Berries, false) => berries_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
@@ -375,6 +382,8 @@ new = '''    for item in mirror.items() {
                 (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
+                (protocol::ItemKind::Berries, true) => stored_berries_item_cell(),
+                (protocol::ItemKind::Berries, false) => berries_item_cell(),
             };
         }
     }

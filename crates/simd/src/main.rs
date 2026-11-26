@@ -657,8 +657,38 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 );
             }
         }
+        for (pos, _) in &save.plants {
+            if !in_bounds(*pos) {
+                bail!(
+                    "save plant position {},{},{} is outside dims {}x{}x{}",
+                    pos.x,
+                    pos.y,
+                    pos.z,
+                    save.dims.x,
+                    save.dims.y,
+                    save.dims.z
+                );
+            }
+        }
+        let mut plant_cells = BTreeSet::new();
+        for (pos, _) in &save.plants {
+            if !plant_cells.insert(*pos) {
+                bail!("save reuses plant cell {},{},{}", pos.x, pos.y, pos.z);
+            }
+        }
         let designation_kinds: BTreeMap<_, _> = save.designations.iter().copied().collect();
-        // Tile jobs come from designations and are bounded by the designation budget. Haul jobs
+        for (pos, kind) in &designation_kinds {
+            if *kind == sim_core::DesignationKind::Forage && !plant_cells.contains(pos) {
+                bail!(
+                    "save forage mark at {},{},{} has no plant",
+                    pos.x,
+                    pos.y,
+                    pos.z
+                );
+            }
+        }
+        // Tile jobs (a forage job among them: it comes from a mark) come from designations and are
+        // bounded by the designation budget. Haul jobs
         // name a stone instead, so their bound is the number of stones in the save. Counting
         // first means an absurd haul count is refused as a count rather than as the first
         // missing item it happens to name.
@@ -668,7 +698,10 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
             .filter(|job| {
                 matches!(
                     job.kind,
-                    sim_core::JobKind::Dig | sim_core::JobKind::Channel | sim_core::JobKind::Cut
+                    sim_core::JobKind::Dig
+                        | sim_core::JobKind::Channel
+                        | sim_core::JobKind::Cut
+                        | sim_core::JobKind::Forage
                 )
             })
             .count();
@@ -691,6 +724,12 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
             );
         }
         let item_ids: BTreeSet<_> = save.items.iter().map(|(id, ..)| *id).collect();
+        let berries_ids: BTreeSet<_> = save
+            .items
+            .iter()
+            .filter(|(_, _, kind, _)| *kind == sim_core::ItemKind::Berries)
+            .map(|(id, ..)| *id)
+            .collect();
         let mut seen_job_ids = BTreeSet::new();
         let mut seen_job_targets = BTreeSet::new();
         let mut seen_haul_items = BTreeSet::new();
@@ -721,6 +760,42 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                         );
                     }
                 }
+                // Shares `seen_job_targets` with the tile jobs: the sim keeps one target per job. A
+                // forage job stands on a bush and its forage mark, or on a channel mark that took
+                // the cell after the job stood (`remove_forage_mark` leaves the channel).
+                sim_core::JobKind::Forage => {
+                    if !seen_job_targets.insert(job.target) {
+                        bail!(
+                            "save reuses job target {},{},{}",
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                    if !plant_cells.contains(&job.target) {
+                        bail!(
+                            "save forage job {} has no plant at {},{},{}",
+                            job.id.0,
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                    if !matches!(
+                        designation_kinds.get(&job.target),
+                        Some(
+                            sim_core::DesignationKind::Forage | sim_core::DesignationKind::Channel
+                        )
+                    ) {
+                        bail!(
+                            "save forage job {} has no forage or channel mark at {},{},{}",
+                            job.id.0,
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                }
                 sim_core::JobKind::Haul { item } => {
                     if !item_ids.contains(&item) {
                         bail!("save haul job {} names missing item {item}", job.id.0);
@@ -744,7 +819,20 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 id.0
             );
         }
-        for (id, pos, _) in &save.items {
+        for (id, pos, kind, count) in &save.items {
+            // 13.9 Amendment 1 (Q11): every item has a count, 1 unless it is a berries load.
+            if *count == 0 {
+                bail!("save item {id} has a count of 0");
+            }
+            if *kind != sim_core::ItemKind::Berries && *count != 1 {
+                bail!("save item {id} is not berries but has a count of {count}");
+            }
+            if *count > sim_core::FORAGE_TRIP_BUSHES {
+                bail!(
+                    "save item {id} has a count of {count}; a trip carries at most {}",
+                    sim_core::FORAGE_TRIP_BUSHES
+                );
+            }
             if !in_bounds(*pos) {
                 bail!(
                     "save item {id} position {},{},{} is outside dims {}x{}x{}",
@@ -851,7 +939,14 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     haul_job_for_item.get(&item),
                     Some(job_id) if dwarf.current_job == Some(*job_id)
                 );
-                if !holds_haul && !miner_clearing {
+                // 13.9 #244: a hauler mid-trip carries his berries load while holding the next
+                // bush's Forage job. The load has no haul job until the trip ends.
+                let forage_trip = berries_ids.contains(&item)
+                    && !haul_job_for_item.contains_key(&item)
+                    && save.jobs.iter().any(|job| {
+                        dwarf.current_job == Some(job.id.0) && job.kind == sim_core::JobKind::Forage
+                    });
+                if !holds_haul && !miner_clearing && !forage_trip {
                     bail!(
                         "save dwarf {} carries item {item} without holding its haul job",
                         dwarf.id
@@ -975,6 +1070,8 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 // A haul job names a stone, not a tile: it has no designation and never had
                 // one. Its own rules live with the haul validation below.
                 sim_core::JobKind::Haul { .. } => continue,
+                // A forage job names a plant, not a designation: validated with the jobs above.
+                sim_core::JobKind::Forage => continue,
             };
             if designation_kinds.get(&job.target) != Some(&expected_designation) {
                 bail!(

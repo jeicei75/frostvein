@@ -175,6 +175,34 @@ fn a_finished_dig_is_counted_as_done_and_as_a_changed_cell() {
     assert!(cells >= 1, "a dug cell differs from the start world: {end}");
 }
 
+/// 13.9 AC 13: the end line's `foraged=` and `food=` (after `arriving=`, so `done=dig:N,cut:M` still
+/// splits on `,cut:`). The one-dig fixture forages nothing; the one-forage fixture (one hauler, a
+/// pile and forage marks over two bushes) picks both bushes on one trip and stores ONE berries item
+/// of count 2 inside 320 ticks, so `food` reads 2 only if it sums counts (it counts 1 item).
+#[test]
+fn the_end_line_counts_forages_and_stored_berries() {
+    let dig = stdout(&bench(Path::new(FIXTURE), 1));
+    let end = end_line(&dig);
+    assert_eq!(field(&end, "foraged"), "0", "{end}");
+    assert_eq!(field(&end, "food"), "0", "{end}");
+    let forage = stdout(&bench(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/one-forage.json"),
+        1,
+    ));
+    let end = end_line(&forage);
+    assert_eq!(field(&end, "foraged"), "2", "two bushes were picked: {end}");
+    assert_eq!(field(&end, "items"), "1", "as one load: {end}");
+    assert_eq!(
+        field(&end, "food"),
+        "2",
+        "food sums the load's count, not its items: {end}"
+    );
+    assert!(
+        end.find("arriving=") < end.find("foraged="),
+        "new fields follow arriving=, outside done=: {end}"
+    );
+}
+
 /// 13.6 review: a Dig whose target a channel above has already opened is dropped by the sim with no
 /// work done. Channel (73,64,12) and dig (73,64,11) land together; the channel's miner opens the
 /// cell, the dig's miner finds air. Both marks go, but only the channel yields (one item, the two
@@ -233,7 +261,7 @@ fn stored_counts_one_item_per_zone_tile_as_the_sim_does() {
     for _ in 0..2 {
         saved
             .items
-            .push((saved.next_id, tile, sim_core::ItemKind::Stone));
+            .push((saved.next_id, tile, sim_core::ItemKind::Stone, 1));
         saved.next_id += 1;
     }
     let path = variant("stacked-zone", |json| {
@@ -272,6 +300,11 @@ fn stored_counts_one_item_per_zone_tile_as_the_sim_does() {
 /// 13.7 (2026-11-02, `641dbc7b`) reads `done=dig:234,cut:90 stored=27 cells=2146`: claim searches
 /// now run on a world-sized budget and complete, where 238 of them used to exhaust on the camp's
 /// 64,300-cell area, so dwarves claim different jobs at different ticks. Not a regression.
+/// 13.9 (2026-11-22, `897b3420` plus the forage area) read `done=dig:286,cut:22 stored=17
+/// cells=770 foraged=32 food=9`: woodcutters foraged ahead of their cuts. After Amendment 1
+/// (`c1f74fca`, haulers forage on trips over 32 forage marks at tick 1) it reads
+/// `done=dig:287,cut:96 stored=66 cells=2304 foraged=32 food=31`: cuts are back, and `food`
+/// sums the counted loads.
 #[test]
 #[ignore = "release: steps 256² crew 200 for 2500 ticks"]
 fn the_two_hundred_on_256_scenario_does_real_work() {
@@ -303,6 +336,14 @@ fn the_two_hundred_on_256_scenario_does_real_work() {
     assert!(
         count(&field(&end, "cells")) >= 1,
         "the world changed: {end}"
+    );
+    assert!(
+        count(&field(&end, "foraged")) >= 1,
+        "a hauler foraged a bush: {end}"
+    );
+    assert!(
+        count(&field(&end, "food")) >= 1,
+        "a hauler stored berries on the pile: {end}"
     );
 }
 
@@ -355,6 +396,18 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
                     serde_json::json!({"min": [10, 10, 31], "max": [10, 10, 31]})
             }),
             "refused",
+        ),
+        (
+            "forage-refused",
+            variant("forage-refused", |json| {
+                // The top of the map is air: no ripe bush stands there, so the mark is refused.
+                json["commands"][0]["command"] = serde_json::json!({
+                    "type": "designate",
+                    "kind": "forage",
+                    "rect": {"min": [10, 10, 31], "max": [10, 10, 31]}
+                })
+            }),
+            "kind: Forage",
         ),
         (
             "crew-zero",
@@ -428,6 +481,58 @@ fn every_unusable_scenario_fails_loudly_naming_the_cause() {
             "{name}: stderr must name {cause:?}: {stderr}"
         );
     }
+}
+
+/// 13.9 AC 9: a scenario file reads `designate` with kind `forage` through the daemon's own command
+/// path. The oracle marks the same bush straight through `sim_core`, at a plant it finds itself.
+#[test]
+fn a_scenario_places_a_forage_mark_through_the_command_path() {
+    let probe =
+        sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5);
+    let (plant, _) = probe.plants()[0];
+    let path = variant("forage-area", |json| {
+        json["commands"][0] = serde_json::json!({
+            "at": DIG_AT,
+            "command": {
+                "type": "designate",
+                "kind": "forage",
+                "rect": {"min": [plant.x, plant.y, plant.z], "max": [plant.x, plant.y, plant.z]}
+            }
+        });
+    });
+    let output = bench(&path, 1);
+    let _ = fs::remove_dir_all(path.parent().unwrap());
+    let text = stdout(&output);
+    assert!(output.status.success(), "bench failed: {output:?}");
+
+    let mut world =
+        sim_core::World::generate_with_crew(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5);
+    let cell = sim_core::Rect {
+        min: plant,
+        max: plant,
+    };
+    for _ in 0..TICKS {
+        if world.tick() == DIG_AT {
+            assert_eq!(
+                world.apply_command(sim_core::SimCommand::Designate {
+                    kind: sim_core::DesignationKind::Forage,
+                    rect: cell
+                }),
+                None
+            );
+        }
+        world.step();
+    }
+    assert_eq!(
+        world.designations(),
+        vec![(plant, sim_core::DesignationKind::Forage)]
+    );
+    assert_eq!(run_states(&text), vec![fnv(&world)], "{text}");
+    assert_ne!(
+        fnv(&world),
+        expected(false),
+        "the forage mark must change the world's hash"
+    );
 }
 
 /// 13.6 AC 3: `dims` and `crew` in a seed start are honoured. No command here: the fixture's dig

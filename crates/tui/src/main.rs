@@ -223,6 +223,19 @@ the viewport, or overpainted by the cursor, a dwarf or an item. Do not read the 
 what the sim holds"
             }
         );
+        // 13.9: the forage layer, same drawn-of-held shape; Task 8's capture test reads this line.
+        eprintln!(
+            "forage: z {} ripe={} of {} growing={} of {} berries={} of {} marked={} of {}",
+            tally.z,
+            tally.drawn_forage.ripe,
+            tally.mirror_forage.ripe,
+            tally.drawn_forage.growing,
+            tally.mirror_forage.growing,
+            tally.drawn_forage.berries,
+            tally.mirror_forage.berries,
+            tally.drawn_forage.marked,
+            tally.mirror_forage.marked,
+        );
         // The span is what a cross-client check actually compares against: this client's screen
         // axes ARE the world axes, while the Bevy client's boot camera is yawed ~40 degrees, so
         // "north" does not mean the same thing in the two views. Numbers do.
@@ -553,14 +566,14 @@ mod tests {
     const SNAPSHOT_LINE: &str = concat!(
         r#"{"type":"snapshot","dims":{"x":2,"y":1,"z":1},"#,
         r#""tiles":["empty",{"solid":"ice"}],"entities":[{"id":7,"kind":"dwarf","pos":[0,0,0],"state":"idle","light":null}],"#,
-        r#""designations":[],"zones":[],"items":[],"speed":"normal","tick":9,"goals":[]}"#,
+        r#""designations":[],"zones":[],"plants":[],"items":[],"speed":"normal","tick":9,"goals":[]}"#,
         "\n"
     );
 
     const DELTA_LINE: &str = concat!(
         r#"{"type":"delta","tick":10,"tiles":[{"pos":[1,0,0],"tile":{"solid":"stone"}}],"#,
         r#""entities":[{"id":8,"kind":"dwarf","pos":[1,0,0],"state":"walk","light":null}],"#,
-        r#""designations":[],"zones":[],"items":[],"speed":"fast","goals":[]}"#,
+        r#""designations":[],"zones":[],"plants":[],"items":[],"speed":"fast","goals":[]}"#,
         "\n"
     );
 
@@ -646,7 +659,7 @@ mod tests {
         const SHORT: &str = concat!(
             r#"{"type":"snapshot","dims":{"x":4,"y":4,"z":4},"#,
             r#""tiles":["empty",{"solid":"ice"}],"entities":[],"#,
-            r#""designations":[],"zones":[],"items":[],"speed":"normal","tick":0,"goals":[]}"#,
+            r#""designations":[],"zones":[],"plants":[],"items":[],"speed":"normal","tick":0,"goals":[]}"#,
             "\n"
         );
         let mut reader = Cursor::new(SHORT.as_bytes());

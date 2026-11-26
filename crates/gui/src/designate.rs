@@ -6,7 +6,8 @@ use bevy::{
         TextColor, TextFont, px,
     },
 };
-use protocol::{Command, DesignationKind, Material, Rect, Tile};
+use protocol::{Command, DesignationKind, Material, PlantState, Rect, Tile};
+use std::collections::BTreeSet;
 
 use client_core::Mirror;
 
@@ -28,6 +29,7 @@ pub enum DesignateMode {
     Stockpile,
     Clear,
     Cut,
+    Forage,
 }
 
 /// The cell a drag was anchored at, WITH the face its ray entered.
@@ -84,7 +86,7 @@ pub fn update_refusal_hint(
 pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
     match (mode, dragging) {
         (DesignateMode::None, _) => {
-            "1 dig  2 channel  3 stockpile  4 clear  5 cut   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"
+            "1 dig  2 channel  3 stockpile  4 clear  5 cut  6 forage   Space pause  +/- speed  Ctrl+S save  Ctrl+L load"
         }
         (DesignateMode::Dig, false) => "dig: drag to designate  Esc leave",
         (DesignateMode::Dig, true) => "dig: release to designate  Esc abort",
@@ -96,6 +98,8 @@ pub fn designation_hint(mode: DesignateMode, dragging: bool) -> &'static str {
         (DesignateMode::Clear, true) => "clear: release to remove  Esc abort",
         (DesignateMode::Cut, false) => "cut: drag over the foot of the trees  Esc leave",
         (DesignateMode::Cut, true) => "cut: release to mark  Esc abort",
+        (DesignateMode::Forage, false) => "forage: drag over the bushes  Esc leave",
+        (DesignateMode::Forage, true) => "forage: release to mark  Esc abort",
     }
 }
 
@@ -158,6 +162,8 @@ pub fn designation_input(
         *mode = DesignateMode::Clear;
     } else if keys.just_pressed(KeyCode::Digit5) {
         *mode = DesignateMode::Cut;
+    } else if keys.just_pressed(KeyCode::Digit6) {
+        *mode = DesignateMode::Forage;
     }
 
     let abort = keys.just_pressed(KeyCode::Escape) || mouse.just_pressed(MouseButton::Right);
@@ -190,12 +196,19 @@ pub fn designation_input(
                 (release_cell.tile[0], release_cell.tile[1]),
                 anchor_cell.tile[2],
             );
-            let surface = client_core::rects_for_cells(&client_core::surface_targets(
+            let followed = client_core::surface_targets(
                 mirror,
                 slice.level(),
                 designation_target(mirror, anchor_cell, mode),
                 designation_target(mirror, release_cell, mode),
-            ));
+            );
+            let surface = client_core::rects_for_cells(&followed);
+            // The levels of the followed ground that hold a ripe bush the sim will mark (Q12).
+            let ripe_levels: BTreeSet<i32> = followed
+                .iter()
+                .filter(|cell| mirror.plant(**cell) == Some(PlantState::Ripe))
+                .map(|cell| cell[2])
+                .collect();
             // NOTE: the commands do not filter emitters; the sim drops them, and the preview
             // mirrors that rule (`project::sim_will_keep`).
             // One level for the whole cut rect, taken from the anchor, like dig's single-z rect.
@@ -204,7 +217,7 @@ pub fn designation_input(
                 (release_cell.tile[0], release_cell.tile[1]),
                 cut_target(mirror, anchor_cell)[2],
             );
-            for command in commands_for(mode, picked_rect, &surface, cut_rect) {
+            for command in commands_for(mode, picked_rect, &surface, cut_rect, &ripe_levels) {
                 last_refusal.0 = None;
                 pending.push(command);
             }
@@ -260,7 +273,10 @@ pub fn designation_target(mirror: &Mirror, cell: PickedCell, mode: DesignateMode
             // answer; the preview filter and the sim both drop it, visibly and consistently.
             neighbour
         }
-        DesignateMode::Cut => cut_target(mirror, cell),
+        // A bush stands on the ground the ray hits, so forage targets what cut targets: the cell
+        // above the ground, one level for the whole drag (the sim also takes a bush directly
+        // above a rect cell).
+        DesignateMode::Cut | DesignateMode::Forage => cut_target(mirror, cell),
         DesignateMode::Dig | DesignateMode::None => cell.tile,
     }
 }
@@ -297,6 +313,7 @@ fn commands_for(
     picked_rect: Rect,
     surface: &[Rect],
     cut_rect: Rect,
+    ripe_levels: &BTreeSet<i32>,
 ) -> Vec<Command> {
     match mode {
         DesignateMode::None => Vec::new(),
@@ -322,6 +339,27 @@ fn commands_for(
         DesignateMode::Stockpile => vec![Command::PlaceStockpile {
             rects: surface.to_vec(),
         }],
+        // A bush is one cell tall, so a forage drag must reach every level of the ground it
+        // follows (13.9 seat run 2: "dragging works only in the surface level it was initiated").
+        // The wire takes single-level rects only (simd's `rect_is_valid`; a taller rect is
+        // dropped with a log line and nothing for the client, seat run 3), so: one command per
+        // level that holds a ripe bush, the drag's box at that level. No command can be refused
+        // for a part of the box (12.1), since each level holds a bush the sim will mark. A drag
+        // with no ripe bush sends one command on the cut-target level, so the refusal shows.
+        DesignateMode::Forage if ripe_levels.is_empty() => vec![Command::Designate {
+            kind: DesignationKind::Forage,
+            rect: cut_rect,
+        }],
+        DesignateMode::Forage => ripe_levels
+            .iter()
+            .map(|&z| Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: Rect {
+                    min: [cut_rect.min[0], cut_rect.min[1], z],
+                    max: [cut_rect.max[0], cut_rect.max[1], z],
+                },
+            })
+            .collect(),
         // Clear means "remove what is under the cursor", and after the targeting fix that is two
         // different cells: a dig sits at the cell the ray hit, while a channel or a stockpile
         // sits one cell across the entered face. Clearing only one of them leaves the other
@@ -347,6 +385,7 @@ fn commands_for(
 #[cfg(test)]
 mod tests {
     use protocol::{Command, DesignationKind, Rect};
+    use std::collections::BTreeSet;
 
     use super::{DesignateMode, commands_for, designation_hint};
 
@@ -354,7 +393,7 @@ mod tests {
     /// helper passes the same rect as both so a single-rect expectation stays readable, and the
     /// call sites that care about the distinction spell it out.
     fn commands_at(mode: DesignateMode, rect: Rect) -> Vec<Command> {
-        commands_for(mode, rect, &[rect], rect)
+        commands_for(mode, rect, &[rect], rect, &BTreeSet::new())
     }
 
     #[test]
@@ -364,12 +403,27 @@ mod tests {
             max: [64, 64, 9],
         };
         assert_eq!(
-            commands_for(DesignateMode::Stockpile, picked, &[], picked),
+            commands_for(
+                DesignateMode::Stockpile,
+                picked,
+                &[],
+                picked,
+                &BTreeSet::new()
+            ),
             vec![Command::PlaceStockpile {
                 rects: vec![picked]
             }]
         );
-        assert!(commands_for(DesignateMode::Channel, picked, &[], picked).is_empty());
+        assert!(
+            commands_for(
+                DesignateMode::Channel,
+                picked,
+                &[],
+                picked,
+                &BTreeSet::new()
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -391,7 +445,13 @@ mod tests {
             },
         ];
         assert_eq!(
-            commands_for(DesignateMode::Stockpile, picked, &surface, picked),
+            commands_for(
+                DesignateMode::Stockpile,
+                picked,
+                &surface,
+                picked,
+                &BTreeSet::new()
+            ),
             vec![Command::PlaceStockpile {
                 rects: surface.to_vec()
             }]
@@ -421,7 +481,8 @@ mod tests {
                 DesignateMode::Clear,
                 picked_rect,
                 &[standable_rect],
-                cut_rect
+                cut_rect,
+                &BTreeSet::new(),
             ),
             vec![
                 Command::CancelDesignation { rect: picked_rect },
@@ -459,7 +520,13 @@ mod tests {
             max: [4, 5, 6],
         };
         assert_eq!(
-            commands_for(DesignateMode::Cut, picked_rect, &surface, cut_rect),
+            commands_for(
+                DesignateMode::Cut,
+                picked_rect,
+                &surface,
+                cut_rect,
+                &BTreeSet::new()
+            ),
             vec![Command::Designate {
                 kind: DesignationKind::Cut,
                 rect: cut_rect
@@ -493,6 +560,87 @@ mod tests {
         );
     }
 
+    /// One single-level `designate forage` per level of the followed ground that holds a ripe
+    /// bush (13.9 seat runs 2 and 3), so no command is refused for a part of the box, and the
+    /// cut-target rect alone when there is no ripe bush, so the refusal shows.
+    #[test]
+    fn a_forage_drag_is_one_single_level_designate_per_level_holding_a_ripe_bush() {
+        let picked = Rect {
+            min: [62, 62, 9],
+            max: [62, 66, 9],
+        };
+        let cut_rect = Rect {
+            min: [62, 62, 10],
+            max: [62, 66, 10],
+        };
+        let surface = [
+            Rect {
+                min: [62, 62, 9],
+                max: [62, 63, 9],
+            },
+            Rect {
+                min: [62, 64, 10],
+                max: [62, 66, 10],
+            },
+        ];
+        let sent = commands_for(
+            DesignateMode::Forage,
+            picked,
+            &surface,
+            cut_rect,
+            &BTreeSet::from([9, 10]),
+        );
+        let at = |z| Command::Designate {
+            kind: DesignationKind::Forage,
+            rect: Rect {
+                min: [62, 62, z],
+                max: [62, 66, z],
+            },
+        };
+        assert_eq!(
+            sent,
+            vec![at(9), at(10)],
+            "one command per ripe level, 9 and 10"
+        );
+        // simd's `rect_is_valid` drops any rect spanning levels (seat run 3).
+        for command in &sent {
+            let Command::Designate { rect, .. } = command else {
+                unreachable!()
+            };
+            assert_eq!(
+                rect.min[2], rect.max[2],
+                "every rect is single-level: {command:?}"
+            );
+        }
+        assert_eq!(
+            commands_for(
+                DesignateMode::Forage,
+                picked,
+                &surface,
+                cut_rect,
+                &BTreeSet::new()
+            ),
+            vec![Command::Designate {
+                kind: DesignationKind::Forage,
+                rect: cut_rect,
+            }],
+            "no ripe bush: one command on the cut-target level, so the refusal shows"
+        );
+    }
+
+    #[test]
+    fn the_forage_hints_name_the_mode_and_the_key() {
+        assert!(designation_hint(DesignateMode::None, false).contains("6 forage"));
+        assert_eq!(
+            designation_hint(DesignateMode::Forage, false),
+            "forage: drag over the bushes  Esc leave"
+        );
+        assert_eq!(
+            designation_hint(DesignateMode::Forage, true),
+            "forage: release to mark  Esc abort"
+        );
+    }
+
     #[test]
     fn every_hint_is_ascii() {
         for mode in [
@@ -502,6 +650,7 @@ mod tests {
             DesignateMode::Stockpile,
             DesignateMode::Clear,
             DesignateMode::Cut,
+            DesignateMode::Forage,
         ] {
             for dragging in [false, true] {
                 assert!(designation_hint(mode, dragging).is_ascii());

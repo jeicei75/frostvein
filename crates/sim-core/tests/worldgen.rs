@@ -1210,3 +1210,96 @@ fn two_hundred_by_arrivals_hold_two_hundred_distinct_full_names() {
         .collect();
     assert!(colours.len() < 200 && colours.len() >= 2);
 }
+
+/// 13.9 AC 1: berry bushes. The measured count is pinned with a +-15% band; every bush stands on
+/// snow, on a standable cell, and outside the lake, the camp box, the edge ring and tree columns.
+const PLANTS_MEASURED_SEED_42: usize = 479;
+
+fn plant_cells(world: &World) -> Vec<Pos> {
+    world.plants().into_iter().map(|(pos, _)| pos).collect()
+}
+
+#[test]
+fn plants_are_all_ripe_at_tick_zero_and_their_count_is_in_the_pinned_band() {
+    let world = World::generate(42, Dims::DEFAULT);
+    let plants = world.plants();
+    assert!(
+        plants.iter().all(|(_, ripe)| *ripe),
+        "a bush is unripe at tick 0"
+    );
+    let (low, high) = (
+        PLANTS_MEASURED_SEED_42 * 85 / 100,
+        PLANTS_MEASURED_SEED_42 * 115 / 100,
+    );
+    assert!(
+        (low..=high).contains(&plants.len()) && PLANTS_MEASURED_SEED_42 > 0,
+        "{} bushes, expected {low}..={high}",
+        plants.len()
+    );
+}
+
+#[test]
+fn plants_stand_only_where_the_rule_allows() {
+    let world = World::generate(DEFAULT_SEED, Dims::DEFAULT);
+    let dims = world.dims();
+    let camp = world.camp_origin();
+    // The lake's ellipse, restated from the generator's description (a second oracle).
+    let in_lake = |x: i32, y: i32| {
+        let dx = (f64::from(x) - f64::from(dims.x) * 0.22) / (f64::from(dims.x) * 0.075);
+        let dy = (f64::from(y) - f64::from(dims.y) * 0.72) / (f64::from(dims.y) * 0.055);
+        dx * dx + dy * dy + 0.12 * dx * dy <= 1.0
+    };
+    let cells = plant_cells(&world);
+    assert!(!cells.is_empty());
+    for pos in cells {
+        assert!(is_standable(&world, pos), "{pos:?} is not standable");
+        assert_eq!(
+            world.tile(Pos {
+                z: pos.z - 1,
+                ..pos
+            }),
+            Some(Tile::Solid(Material::Snow)),
+            "{pos:?} is not on snow"
+        );
+        assert!(!in_lake(pos.x, pos.y), "{pos:?} is in the lake");
+        assert!(
+            (pos.x - camp.x).abs() > 4 || (pos.y - camp.y).abs() > 4,
+            "{pos:?} is in the camp box"
+        );
+        assert!(
+            pos.x >= 1 && pos.y >= 1 && pos.x < dims.x as i32 - 1 && pos.y < dims.y as i32 - 1,
+            "{pos:?} is on the edge ring"
+        );
+        assert!(
+            (0..dims.z as i32).all(|z| !matches!(
+                world.tile(Pos { z, ..pos }),
+                Some(Tile::Solid(Material::TreeTrunk))
+            )),
+            "{pos:?} is a tree column"
+        );
+        let beside = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|(dx, dy)| {
+            is_standable(
+                &world,
+                Pos {
+                    x: pos.x + dx,
+                    y: pos.y + dy,
+                    z: pos.z,
+                },
+            )
+        });
+        assert!(beside, "{pos:?} is born unforageable");
+    }
+}
+
+#[test]
+fn plants_follow_the_seed_alone() {
+    let a = plant_cells(&World::generate(DEFAULT_SEED, Dims::DEFAULT));
+    assert_eq!(
+        a,
+        plant_cells(&World::generate(DEFAULT_SEED, Dims::DEFAULT))
+    );
+    assert_ne!(
+        a,
+        plant_cells(&World::generate(DEFAULT_SEED + 1, Dims::DEFAULT))
+    );
+}

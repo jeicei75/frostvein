@@ -1,0 +1,178 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 2 trade(Forage) is the miner's (AC 5) ===
+thread 'only_haulers_hold_forage_jobs' (441045) panicked at crates/sim-core/tests/scenario.rs:5868:17:
+assertion `left == right` failed: Id(2) holds a forage job
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.01s
+
+=== 5 a forage regrows next tick, not after REGROW_TICKS (AC 6) ===
+thread 'a_regrown_bush_is_unmarked_and_not_foraged_again_until_it_is_marked_again' (441688) panicked at crates/sim-core/tests/scenario.rs:6212:13:
+assertion `left == right` failed: ripe early
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.01s
+
+=== 6 tend_plants never removes a plant whose ground went (AC 7) ===
+thread 'losing_the_next_bush_mid_trip_drops_the_load' (442283) panicked at crates/sim-core/tests/scenario.rs:6255:5:
+assertion `left == right` failed: the plant is gone
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.02s
+
+=== 7 a forage does not mark its plant changed (AC 4, 9) ===
+thread 'a_forage_turns_the_plant_growing_and_the_hauler_carries_one_berries' (442913) panicked at crates/sim-core/tests/scenario.rs:5924:5:
+assertion `left == right` failed: the wire is told the plant is growing
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.01s
+
+=== 8 a regrown plant is never announced (AC 6, 9) ===
+thread 'a_regrown_plant_is_announced_on_the_tick_it_ripens' (443516) panicked at crates/sim-core/tests/scenario.rs:6177:13:
+assertion `left == right` failed: the regrowth is announced
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.09s
+
+=== 9 apply_delta drops the plant changes (Found F) ===
+thread 'a_plant_goes_from_ripe_to_growing_to_ripe_to_gone' (443840) panicked at crates/client-core/tests/mirror.rs:173:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+=== 10 a save without plants still loads (AC 8) ===
+thread 'a_save_missing_a_plants_key_or_an_item_count_is_refused' (444456) panicked at crates/sim-core/tests/save_load.rs:1416:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out; finished in 0.43s
+
+=== 12 the validator takes a forage job over no plant (Found H) ===
+thread 'a_forage_job_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking' (445558) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 95 filtered out; finished in 2.52s
+
+=== 13 the bench never counts a forage (AC 11, 13) ===
+thread 'the_end_line_counts_forages_and_stored_berries' (446692) panicked at crates/simd/tests/bench.rs:193:5:
+assertion `left == right` failed: two bushes were picked: bench one-forage end tick=320 marks=0 items=1 zones=1 goals=0/0/0 done=dig:0,cut:0 stored=1 cells=0 crew=5 arriving=0 foraged=0 food=2
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.47s
+
+=== 14 food counts stored wood, not berries (AC 11, 13) ===
+thread 'the_end_line_counts_forages_and_stored_berries' (447800) panicked at crates/simd/tests/bench.rs:195:5:
+assertion `left == right` failed: food sums the load's count, not its items: bench one-forage end tick=320 marks=0 items=1 zones=1 goals=0/0/0 done=dig:0,cut:0 stored=1 cells=0 crew=5 arriving=0 foraged=2 food=0
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.47s
+
+=== 15 the tui draws a growing bush as ripe (AC 9, 13) ===
+thread 'the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear' (448495) panicked at crates/tui/tests/client.rs:2169:5:
+assertion `left == right` failed: forage: z 1 ripe=3 of 2 growing=0 of 1 berries=1 of 1 marked=1 of 1
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 26 filtered out; finished in 0.62s
+
+=== 16 the gui forage drag sends no mark (AC 10) ===
+thread 'designate::tests::a_forage_drag_is_one_designate_forage_on_the_cut_target_rect' (450183) panicked at crates/gui/src/designate.rs:533:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 248 filtered out; finished in 0.00s
+
+=== 18 the bridge sends a forage mark as a cut mark (R2) ===
+thread 'bridge::tests::every_designation_kind_maps_to_its_named_wire_variant' (451289) panicked at crates/simd/src/bridge.rs:513:13:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+=== 19 the bridge sends count 1 for every item (R2) ===
+thread 'bridge::tests::an_item_without_a_position_does_not_shift_later_kinds' (452389) panicked at crates/simd/src/bridge.rs:1013:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 46 filtered out; finished in 0.00s
+
+=== 20 food counts the berries items, not their counts (R2) ===
+thread 'the_end_line_counts_forages_and_stored_berries' (453526) panicked at crates/simd/tests/bench.rs:195:5:
+assertion `left == right` failed: food sums the load's count, not its items: bench one-forage end tick=320 marks=0 items=1 zones=1 goals=0/0/0 done=dig:0,cut:0 stored=1 cells=0 crew=5 arriving=0 foraged=2 food=1
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.47s
+
+=== 17 the gui keeps a growing bush on the ripe mesh (AC 10) ===
+thread 'every_mirror_plant_has_a_bush_in_its_state_and_a_forage_flips_it' (455227) panicked at crates/gui/tests/headless.rs:6387:5:
+assertion `left != right` failed: ripe and growing are different meshes
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 129 filtered out; finished in 0.02s
+
+=== 21 the tui draws a marked bush as an unmarked one (R3, AC 9) ===
+thread 'view::tests::a_marked_bush_is_drawn_marked_and_keeps_the_tally_complete' (455952) panicked at crates/tui/src/view.rs:1788:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 58 filtered out; finished in 0.00s
+
+=== 22 the gui never shows a forage mark on its bush (R3, AC 10) ===
+thread 'a_forage_mark_shows_on_its_bush_and_clears_with_the_designation' (457592) panicked at crates/gui/tests/headless.rs:6303:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 129 filtered out; finished in 0.02s
+
+=== 23 the gui forage preview lights growing bushes (R3, AC 10) ===
+thread 'project::tests::the_forage_preview_lights_ripe_bushes_and_not_growing_ones' (459329) panicked at crates/gui/src/project.rs:4463:9:
+assertion `left == right` failed: a growing bush is not lit
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 248 filtered out; finished in 0.00s
+
+=== 24 a forage drag marks growing bushes too (AC 3, Q12) ===
+thread 'a_forage_drag_with_no_ripe_bush_is_refused_and_a_growing_bush_takes_no_mark' (459941) panicked at crates/sim-core/tests/scenario.rs:5750:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.01s
+
+=== 25 a forage drag on the ground misses the bush above it (AC 3) ===
+thread 'a_forage_drag_marks_the_ripe_bush_on_its_cell_or_directly_above_a_ground_cell' (460576) panicked at crates/sim-core/tests/scenario.rs:5701:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.01s
+
+=== 26 the first bush is the oldest, not the nearest (AC 5, Q9) ===
+thread 'the_first_bush_of_a_trip_is_the_nearest_not_the_oldest' (461202) panicked at crates/sim-core/tests/scenario.rs:6071:5:
+assertion `left == right` failed: he went for the older, far bush
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.01s
+
+=== 27 a trip ignores its radius (AC 4, Q10) ===
+thread 'a_bush_beyond_ten_cells_ends_the_trip' (461803) panicked at crates/sim-core/tests/scenario.rs:6021:5:
+assertion `left == right` failed: one bush a trip
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.03s
+
+=== 28 a trip takes a sixth bush (AC 4, Q10) ===
+thread 'a_sixth_bush_in_reach_is_not_picked_on_a_trip_of_five' (462428) panicked at crates/sim-core/tests/scenario.rs:5996:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.03s
+
+=== 29 a later bush adds nothing to the load (AC 4, Q11) ===
+thread 'a_trip_of_three_bushes_lands_one_berries_item_of_count_three' (463016) panicked at crates/sim-core/tests/scenario.rs:5970:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.03s
+
+=== 30 a picked bush keeps its mark (AC 6, Q8) ===
+thread 'a_regrown_bush_is_unmarked_and_not_foraged_again_until_it_is_marked_again' (463641) panicked at crates/sim-core/tests/scenario.rs:6200:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 103 filtered out; finished in 0.01s
+
+=== 31 a lost bush keeps its mark (AC 7) ===
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 131 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.00s
+
+=== 32 the validator takes an item count of 0 (AC 8) ===
+thread 'an_item_count_of_zero_save_is_logged_and_the_daemon_keeps_ticking' (465399) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 95 filtered out; finished in 2.51s
+
+=== 33 the validator takes a counted stone (AC 8) ===
+thread 'a_stone_with_a_count_save_is_logged_and_the_daemon_keeps_ticking' (466509) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 95 filtered out; finished in 2.52s
+
+=== 34 the validator takes a berries load over a trip (AC 8) ===
+thread 'a_berries_count_over_a_trip_save_is_logged_and_the_daemon_keeps_ticking' (467618) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 95 filtered out; finished in 2.49s
+
+================ MUTATION RESULTS ================
+2 trade(Forage) is the miner's (AC 5)                        KILLED
+5 a forage regrows next tick, not after REGROW_TICKS (AC 6)  KILLED
+6 tend_plants never removes a plant whose ground went (AC 7) KILLED
+7 a forage does not mark its plant changed (AC 4, 9)         KILLED
+8 a regrown plant is never announced (AC 6, 9)               KILLED
+9 apply_delta drops the plant changes (Found F)              KILLED
+10 a save without plants still loads (AC 8)                  KILLED
+12 the validator takes a forage job over no plant (Found H)  KILLED
+13 the bench never counts a forage (AC 11, 13)               KILLED
+14 food counts stored wood, not berries (AC 11, 13)          KILLED
+15 the tui draws a growing bush as ripe (AC 9, 13)           KILLED
+16 the gui forage drag sends no mark (AC 10)                 KILLED
+18 the bridge sends a forage mark as a cut mark (R2)         KILLED
+19 the bridge sends count 1 for every item (R2)              KILLED
+20 food counts the berries items, not their counts (R2)      KILLED
+17 the gui keeps a growing bush on the ripe mesh (AC 10)     KILLED
+21 the tui draws a marked bush as an unmarked one (R3, AC 9) KILLED
+22 the gui never shows a forage mark on its bush (R3, AC 10) KILLED
+23 the gui forage preview lights growing bushes (R3, AC 10)  KILLED
+24 a forage drag marks growing bushes too (AC 3, Q12)        KILLED
+25 a forage drag on the ground misses the bush above it (AC 3) KILLED
+26 the first bush is the oldest, not the nearest (AC 5, Q9)  KILLED
+27 a trip ignores its radius (AC 4, Q10)                     KILLED
+28 a trip takes a sixth bush (AC 4, Q10)                     KILLED
+29 a later bush adds nothing to the load (AC 4, Q11)         KILLED
+30 a picked bush keeps its mark (AC 6, Q8)                   KILLED
+31 a lost bush keeps its mark (AC 7)                         SURVIVED
+32 the validator takes an item count of 0 (AC 8)             KILLED
+33 the validator takes a counted stone (AC 8)                KILLED
+34 the validator takes a berries load over a trip (AC 8)     KILLED
+
+1 mutation(s) did not KILL. SURVIVED = the test is not pinning what it claims.
+NO-COMPILE / NO-COLLECT / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.

@@ -216,8 +216,8 @@ fn stored_count_skips_a_stone_carried_over_a_pile_tile() {
     }
     save.zones = vec![carried_on, lying_on];
     let (carried, lying) = (save.next_id, save.next_id + 1);
-    save.items.push((carried, carried_on, ItemKind::Stone));
-    save.items.push((lying, lying_on, ItemKind::Stone));
+    save.items.push((carried, carried_on, ItemKind::Stone, 1));
+    save.items.push((lying, lying_on, ItemKind::Stone, 1));
     save.next_id += 2;
     let job = save.next_job_id;
     save.jobs.push(Job {
@@ -1662,7 +1662,10 @@ fn two_carriers_racing_for_the_last_tile_do_not_leave_a_permanent_stack() {
             arriving: None,
         },
     ];
-    save.items = vec![(2, first, ItemKind::Stone), (3, second, ItemKind::Stone)];
+    save.items = vec![
+        (2, first, ItemKind::Stone, 1),
+        (3, second, ItemKind::Stone, 1),
+    ];
     save.next_id = 4;
     save.jobs = vec![
         Job {
@@ -3588,7 +3591,7 @@ fn a_loose_stone_falls_to_standable_ground_in_one_tick() {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     let mut world = World::from_save(save);
     world.step();
     assert_eq!(
@@ -3621,7 +3624,7 @@ fn a_fallen_stone_never_lands_on_a_dwarf() {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     save.dwarves[0].pos = bottom;
     let mut world = World::from_save(save);
     world.step();
@@ -3660,7 +3663,7 @@ fn a_fallen_stone_never_lands_on_an_emitters_tile() {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, above, ItemKind::Stone));
+    save.items.push((id, above, ItemKind::Stone, 1));
     let mut world = World::from_save(save);
     world.step();
     let stone = world
@@ -3712,7 +3715,7 @@ fn a_fallen_stone_never_lands_above_where_it_started() {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     save.dwarves[0].pos = bottom;
     save.dwarves[1].pos = beside;
     let mut world = World::from_save(save);
@@ -3753,7 +3756,7 @@ fn a_clearing_miner_never_sets_the_stone_down_in_the_target_column() {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     let mut world = World::from_save(save);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
@@ -3834,7 +3837,7 @@ fn a_clearing_miner_never_sets_the_stone_down_on_his_dig_targets_top() {
     let mut save = world.to_save();
     let stone = save.next_id;
     save.next_id += 1;
-    save.items.push((stone, face, ItemKind::Stone));
+    save.items.push((stone, face, ItemKind::Stone, 1));
     for (index, dwarf) in save.dwarves.iter_mut().enumerate() {
         assert!(
             !solid.contains(&dwarf.pos),
@@ -3898,7 +3901,7 @@ fn walled_clearing(cells: &[Pos], target: Pos, miner: Pos, extra: Option<Pos>) -
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, target, ItemKind::Stone));
+    save.items.push((id, target, ItemKind::Stone, 1));
     for (index, dwarf) in save.dwarves.iter_mut().enumerate() {
         dwarf.profession = if index == 0 {
             Profession::Miner
@@ -4090,7 +4093,7 @@ fn a_stone_on_a_channel_mark() -> (World, u32) {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     let mut world = World::from_save(save);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
@@ -4208,7 +4211,7 @@ fn a_channel_miner_carries_its_target_stone_aside_before_cutting() {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     world = World::from_save(save);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Channel,
@@ -4254,7 +4257,7 @@ fn a_hauler_holding_the_lifted_stones_job_lets_go_and_the_stone_is_delivered_lat
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     world = World::from_save(save);
     let pile = rect(
         Pos {
@@ -4341,7 +4344,7 @@ fn a_fallen_stone_with_a_haul_job_is_delivered_to_the_pile() {
     let mut save = world.to_save();
     let stone = save.next_id;
     save.next_id += 1;
-    save.items.push((stone, ground, ItemKind::Stone));
+    save.items.push((stone, ground, ItemKind::Stone, 1));
     let mut world = World::from_save(save);
     place_creation_pile(&mut world);
     world.step();
@@ -4414,7 +4417,7 @@ fn a_dig_under_a_stone_does_not_leave_it_floating() {
     let mut save = world.to_save();
     let id = save.next_id;
     save.next_id += 1;
-    save.items.push((id, site, ItemKind::Stone));
+    save.items.push((id, site, ItemKind::Stone, 1));
     let mut world = World::from_save(save);
     world.apply_command(SimCommand::Designate {
         kind: DesignationKind::Dig,
@@ -4640,7 +4643,7 @@ fn a_miner_caged_by_one_stone_carries_it_out_and_cuts() {
         squeeze: None,
         arriving: None,
     }];
-    save.items = vec![(1, exit, ItemKind::Stone)];
+    save.items = vec![(1, exit, ItemKind::Stone, 1)];
     save.next_id = 2;
     let mut world = World::from_save(save);
     world.apply_command(SimCommand::Designate {
@@ -5192,6 +5195,7 @@ fn at3((x, y, z): (i32, i32, i32)) -> Pos {
 fn stored_by_kind(world: &World) -> BTreeMap<ItemKind, u32> {
     let carried: BTreeSet<u32> = world.carrying().iter().filter_map(|(_, c)| *c).collect();
     let kinds: BTreeMap<Id, ItemKind> = world.item_kinds().into_iter().collect();
+    let counts: BTreeMap<Id, u32> = world.item_counts().into_iter().collect();
     let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
     let mut occupied = BTreeSet::new();
     let mut stored = BTreeMap::new();
@@ -5199,7 +5203,8 @@ fn stored_by_kind(world: &World) -> BTreeMap<ItemKind, u32> {
         if carried.contains(&id.0) || !zones.contains(&pos) || !occupied.insert(pos) {
             continue;
         }
-        *stored.entry(kinds[&id]).or_insert(0) += 1;
+        // 13.9 review: a stored item counts its `count` (1 unless it is a berries load).
+        *stored.entry(kinds[&id]).or_insert(0) += counts[&id];
     }
     stored
 }
@@ -5244,11 +5249,14 @@ fn the_default_world_completes_the_goal_chain_with_scripted_commands() {
         vec![
             (ItemKind::Wood, 10),
             (ItemKind::Tetrahedrite, 10),
-            (ItemKind::Bloodstone, 1)
+            (ItemKind::Bloodstone, 1),
+            (ItemKind::Berries, 20)
         ]
     );
 
-    let mut done_at: [Option<u64>; 3] = [None; 3];
+    // NOTE: the scripted commands order no forage, so the chain's 4th goal (berries, 13.9) stays
+    // open here; `the_berries_goal_counts_each_stored_loads_count` completes it.
+    let mut done_at: [Option<u64>; 4] = [None; 4];
     while world.tick() < CHAIN_BOUND_TICK && done_at[2].is_none() {
         world.step();
         let goals = world.goals();
@@ -5299,10 +5307,52 @@ fn the_default_world_completes_the_goal_chain_with_scripted_commands() {
     }
     assert_eq!(world.tick(), done_tick + 200, "the tick has climbed");
     assert!(
-        world.goals().iter().all(|g| g.completed),
+        world.goals()[..3].iter().all(|g| g.completed),
         "a goal un-completed after the chain: {:?}",
         world.goals()
     );
+    assert!(
+        !world.goals()[3].completed,
+        "no forage was ordered, yet the berries goal completed: {:?}",
+        world.goals()
+    );
+}
+
+/// 13.9 review (Wolf, 2026-11-24): berries are the 4th goal, 20 of them, and a stored load counts
+/// its `count`, not 1. Three loads of 5 are 15 food (counting items would say 3), and a fourth
+/// makes 20 and completes the goal. The bench's `food=` reads the same figure.
+#[test]
+fn the_berries_goal_counts_each_stored_loads_count() {
+    let at = |x: i32| Pos { x, y: 0, z: 1 };
+    for (loads, food, done) in [(3, 15, false), (4, 20, true)] {
+        let mut save = World::generate(42, Dims::DEFAULT).to_save();
+        save.goals_completed = 3;
+        let mut id = save.next_id;
+        for x in 0..loads {
+            save.items.push((id, at(x), ItemKind::Berries, 5));
+            save.zones.push(at(x));
+            id += 1;
+        }
+        save.next_id = id;
+        let mut world = World::from_save(save);
+        world.step();
+
+        let goals = world.goals();
+        assert_eq!(goals.len(), 4, "{goals:?}");
+        assert_eq!((goals[3].kind, goals[3].target), (ItemKind::Berries, 20));
+        assert_eq!(
+            stored_by_kind(&world)[&ItemKind::Berries],
+            food,
+            "the oracle"
+        );
+        assert_eq!(goals[3].progress, food, "{loads} loads of 5: {goals:?}");
+        assert_eq!(goals[3].completed, done, "{loads} loads of 5: {goals:?}");
+        assert_eq!(
+            world.stored_berries_count(),
+            food as usize,
+            "food= reads the goal's figure"
+        );
+    }
 }
 
 // ---- 12.12 Task 2b: a pile round walkable ground it does not zone ----
@@ -5364,7 +5414,7 @@ fn assert_ring_fills(ring: fn(Pos) -> Vec<Pos>, rock: &[Pos]) {
     for y in fire.y + 5..=fire.y + 6 {
         for x in fire.x - 6..fire.x + 7 {
             save.items
-                .push((id, Pos { x, y, z: fire.z }, ItemKind::Stone));
+                .push((id, Pos { x, y, z: fire.z }, ItemKind::Stone, 1));
             id += 1;
         }
     }
@@ -5482,4 +5532,877 @@ fn joint_ring_pile(fire: Pos) -> Vec<Pos> {
 #[test]
 fn two_piles_that_ring_ground_together_still_fill_every_cell() {
     assert_ring_fills(joint_ring_pile, &[]);
+}
+
+// ---- Story 13.9: forage (plants come from `world.plants()`, never a hardcoded position) ----
+
+/// The `n` plants nearest the camp, nearest first.
+fn plants_near_camp(world: &World, n: usize) -> Vec<Pos> {
+    let camp = world.camp_origin();
+    let mut plants: Vec<Pos> = world.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| ((pos.x - camp.x).abs() + (pos.y - camp.y).abs(), *pos));
+    plants.truncate(n);
+    assert_eq!(plants.len(), n, "too few plants");
+    plants
+}
+
+fn mark_forage(world: &mut World, pos: Pos) -> Option<Refusal> {
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Forage,
+        rect: rect(pos, pos),
+    })
+}
+
+/// The forage marks, ascending by `Pos`.
+fn forage_marks(world: &World) -> Vec<Pos> {
+    world
+        .designations()
+        .into_iter()
+        .filter_map(|(pos, kind)| (kind == DesignationKind::Forage).then_some(pos))
+        .collect()
+}
+
+fn forage_jobs(world: &World) -> Vec<Job> {
+    world
+        .jobs()
+        .into_iter()
+        .filter(|job| job.kind == JobKind::Forage)
+        .collect()
+}
+
+fn ripe(world: &World, pos: Pos) -> Option<bool> {
+    world
+        .plants()
+        .into_iter()
+        .find_map(|(at, ripe)| (at == pos).then_some(ripe))
+}
+
+fn step_until(world: &mut World, limit: u32, what: &str, mut done: impl FnMut(&World) -> bool) {
+    for _ in 0..limit {
+        world.step();
+        if done(world) {
+            return;
+        }
+    }
+    panic!("{what}: not within {limit} ticks (tick {})", world.tick());
+}
+
+fn set_profession(world: &mut World, dwarf: Id, profession: Profession) {
+    assert_eq!(
+        world.apply_command(SimCommand::SetProfession { dwarf, profession }),
+        None
+    );
+}
+
+/// The first dwarf is the one hauler; the rest are miners, who never forage and, with nothing
+/// marked to dig, never work.
+fn solo_hauler(world: &mut World) -> Id {
+    let dwarves: Vec<Id> = world.dwarves().into_iter().map(|(id, ..)| id).collect();
+    for (i, id) in dwarves.iter().enumerate() {
+        let profession = if i == 0 {
+            Profession::Hauler
+        } else {
+            Profession::Miner
+        };
+        set_profession(world, *id, profession);
+    }
+    dwarves[0]
+}
+
+fn dwarf_pos(world: &World, dwarf: Id) -> Pos {
+    world
+        .dwarves()
+        .into_iter()
+        .find_map(|(id, pos, ..)| (id == dwarf).then_some(pos))
+        .expect("the dwarf exists")
+}
+
+fn distance(a: Pos, b: Pos) -> u32 {
+    a.x.abs_diff(b.x) + a.y.abs_diff(b.y) + a.z.abs_diff(b.z)
+}
+
+/// `n` plants within `reach` (Manhattan, 3D) of one another, from the plants nearest the camp.
+fn plant_cluster(world: &World, n: usize, reach: u32) -> Vec<Pos> {
+    let plants = plants_near_camp(world, 80);
+    for first in &plants {
+        let mut group = vec![*first];
+        for other in &plants {
+            if group.len() < n
+                && !group.contains(other)
+                && group
+                    .iter()
+                    .all(|member| distance(*member, *other) <= reach)
+            {
+                group.push(*other);
+            }
+        }
+        if group.len() == n {
+            return group;
+        }
+    }
+    panic!("no {n} plants within {reach} of one another near the camp");
+}
+
+/// The count of the berries load the dwarf carries, if any.
+fn carried_count(world: &World, dwarf: Id) -> Option<u32> {
+    let item = world
+        .carrying()
+        .into_iter()
+        .find_map(|(id, item)| (id == dwarf).then_some(item))??;
+    world
+        .item_counts()
+        .into_iter()
+        .find_map(|(id, count)| (id.0 == item).then_some(count))
+}
+
+/// The counts of the berries items standing on the pile, ascending by item id.
+fn loads_on_pile(world: &World) -> Vec<u32> {
+    let zones: BTreeSet<Pos> = world.zones().into_iter().collect();
+    let kinds: BTreeMap<Id, ItemKind> = world.item_kinds().into_iter().collect();
+    let counts: BTreeMap<Id, u32> = world.item_counts().into_iter().collect();
+    world
+        .items()
+        .into_iter()
+        .filter(|(id, pos)| zones.contains(pos) && kinds[id] == ItemKind::Berries)
+        .map(|(id, _)| counts[&id])
+        .collect()
+}
+
+fn holds(world: &World, dwarf: Id, kind: impl Fn(JobKind) -> bool) -> Option<Job> {
+    let job = world
+        .claims()
+        .into_iter()
+        .find_map(|(id, job)| (id == dwarf).then_some(job))??;
+    world
+        .jobs()
+        .into_iter()
+        .find(|candidate| candidate.id == job && kind(candidate.kind))
+}
+
+/// A 3x3 pile on the camp's level, found as `a_cut_is_hauled_to_the_pile_as_wood` finds it.
+fn place_pile(world: &mut World) -> BTreeSet<Pos> {
+    let camp = world.camp_origin();
+    let pile = (3..12)
+        .flat_map(|r| {
+            [
+                (camp.x - r - 2, camp.y),
+                (camp.x, camp.y + r),
+                (camp.x, camp.y - r - 2),
+                (camp.x + r, camp.y),
+            ]
+        })
+        .find(|(px, py)| {
+            (*px..*px + 3)
+                .all(|x| (*py..*py + 3).all(|y| is_standable(world, Pos { x, y, z: camp.z })))
+        })
+        .expect("a 3x3 standable pile near the camp");
+    let corner = Pos {
+        x: pile.0,
+        y: pile.1,
+        z: camp.z,
+    };
+    world.apply_command(SimCommand::PlaceStockpile {
+        rect: rect(
+            corner,
+            Pos {
+                x: corner.x + 2,
+                y: corner.y + 2,
+                ..corner
+            },
+        ),
+    });
+    world.zones().into_iter().collect()
+}
+
+/// A world whose one hauler is on a pile with every listed plant marked in the same tick.
+fn trip_world(marked: &[Pos]) -> (World, Id) {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let hauler = solo_hauler(&mut world);
+    place_pile(&mut world);
+    for plant in marked {
+        assert_eq!(mark_forage(&mut world, *plant), None);
+    }
+    (world, hauler)
+}
+
+/// AC 3 (Q12): a drag marks each RIPE bush whose cell is in the rect or directly above a cell of
+/// it, on the bush's own cell; a cancel reaches the mark from the ground below it too.
+#[test]
+fn a_forage_drag_marks_the_ripe_bush_on_its_cell_or_directly_above_a_ground_cell() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    let ground = Pos {
+        z: plant.z - 1,
+        ..plant
+    };
+    let forage = |world: &mut World, rect: Rect| {
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Forage,
+            rect,
+        })
+    };
+    let cancel =
+        |world: &mut World, rect: Rect| world.apply_command(SimCommand::CancelDesignation { rect });
+
+    // A drag on the ground marks the bush standing on it, on the bush's own cell.
+    assert_eq!(forage(&mut world, rect(ground, ground)), None);
+    assert_eq!(forage_marks(&world), vec![plant]);
+    // The same bush reached by two cells of one rect is marked once.
+    assert_eq!(forage(&mut world, rect(ground, plant)), None);
+    assert_eq!(forage_marks(&world), vec![plant]);
+    // A cancel two levels below does not reach it; one on the ground below does.
+    cancel(
+        &mut world,
+        rect(
+            Pos {
+                z: plant.z - 2,
+                ..plant
+            },
+            Pos {
+                z: plant.z - 2,
+                ..plant
+            },
+        ),
+    );
+    assert_eq!(forage_marks(&world), vec![plant], "only directly above");
+    cancel(&mut world, rect(ground, ground));
+    assert!(
+        forage_marks(&world).is_empty(),
+        "the ground rect cancelled it"
+    );
+    // The bush's own cell is cancelled too.
+    assert_eq!(forage(&mut world, rect(plant, plant)), None);
+    assert_eq!(forage_marks(&world), vec![plant]);
+    cancel(&mut world, rect(plant, plant));
+    assert!(forage_marks(&world).is_empty());
+}
+
+#[test]
+fn a_forage_drag_with_no_ripe_bush_is_refused_and_a_growing_bush_takes_no_mark() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let camp = world.camp_origin();
+    let two = plants_near_camp(&world, 2);
+    // One bush is made growing through its save.
+    let mut save = world.to_save();
+    save.plants
+        .iter_mut()
+        .find(|(pos, _)| *pos == two[0])
+        .expect("a saved plant")
+        .1 = 1_000_000;
+    let mut world = World::from_save(save);
+    assert_eq!(ripe(&world, two[0]), Some(false));
+    assert_eq!(ripe(&world, two[1]), Some(true));
+
+    let growing = rect(two[0], two[0]);
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Forage,
+            rect: growing
+        }),
+        Some(Refusal::Designate {
+            kind: DesignationKind::Forage,
+            rect: growing
+        })
+    );
+    // The camp box holds standable ground and no bush.
+    let bare = rect(
+        Pos {
+            x: camp.x - 3,
+            y: camp.y - 3,
+            ..camp
+        },
+        Pos {
+            x: camp.x - 2,
+            y: camp.y - 2,
+            ..camp
+        },
+    );
+    assert!(is_standable(&world, bare.min), "the control: bare ground");
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Forage,
+            rect: bare
+        }),
+        Some(Refusal::Designate {
+            kind: DesignationKind::Forage,
+            rect: bare
+        })
+    );
+    assert!(forage_marks(&world).is_empty(), "a refusal marks nothing");
+
+    // A rect over both takes the ripe one only.
+    let both = rect(
+        Pos {
+            x: two[0].x.min(two[1].x),
+            y: two[0].y.min(two[1].y),
+            z: two[0].z.min(two[1].z),
+        },
+        Pos {
+            x: two[0].x.max(two[1].x),
+            y: two[0].y.max(two[1].y),
+            z: two[0].z.max(two[1].z),
+        },
+    );
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Forage,
+            rect: both
+        }),
+        None
+    );
+    assert_eq!(forage_marks(&world), vec![two[1]]);
+}
+
+#[test]
+fn a_forage_mark_counts_against_the_designation_cap_and_skips_a_channel_mark() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let two = plants_near_camp(&world, 2);
+    assert_eq!(mark_forage(&mut world, two[0]), None);
+    // A channel already marked on a bush's cell keeps it.
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(two[1], two[1]),
+        }),
+        None
+    );
+    assert!(mark_forage(&mut world, two[1]).is_some());
+    assert_eq!(forage_marks(&world), vec![two[0]]);
+    // Fill the cap with dig marks: a bush is then refused, because its mark would be the 4,097th.
+    let dims = world.dims();
+    world.apply_command(SimCommand::Designate {
+        kind: DesignationKind::Dig,
+        rect: rect(
+            Pos { x: 0, y: 0, z: 0 },
+            Pos {
+                x: dims.x as i32 - 1,
+                y: dims.y as i32 - 1,
+                z: 0,
+            },
+        ),
+    });
+    assert_eq!(world.designations().len(), sim_core::MAX_DESIGNATIONS);
+    let third = plants_near_camp(&world, 3)[2];
+    assert_eq!(
+        mark_forage(&mut world, third),
+        Some(Refusal::Designate {
+            kind: DesignationKind::Forage,
+            rect: rect(third, third)
+        })
+    );
+}
+
+#[test]
+fn only_haulers_hold_forage_jobs() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    for plant in plants_near_camp(&world, 4) {
+        assert_eq!(mark_forage(&mut world, plant), None);
+    }
+    world.step();
+    assert_eq!(forage_jobs(&world).len(), 4, "one job per mark");
+    let professions: BTreeMap<Id, Profession> = world.professions().into_iter().collect();
+    assert!(
+        professions.values().any(|p| *p == Profession::Hauler)
+            && professions.values().any(|p| *p == Profession::Woodcutter),
+        "the control: the crew has haulers and woodcutters"
+    );
+    let mut held = false;
+    for _ in 0..400 {
+        world.step();
+        let forage_ids: BTreeSet<JobId> = forage_jobs(&world).iter().map(|job| job.id).collect();
+        for (id, job) in world.claims() {
+            if job.is_some_and(|job| forage_ids.contains(&job)) {
+                assert_eq!(
+                    professions[&id],
+                    Profession::Hauler,
+                    "{id:?} holds a forage job"
+                );
+                held = true;
+            }
+        }
+    }
+    assert!(held, "no hauler took a forage job");
+}
+
+/// AC 4: the worker works `FORAGE_WORK_TICKS`, the plant turns growing, its mark and job are used
+/// up, and the hauler carries ONE berries item of count 1, holding the job that takes it to the
+/// pile. The clients are told through the plant changes.
+#[test]
+fn a_forage_turns_the_plant_growing_and_the_hauler_carries_one_berries() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let hauler = solo_hauler(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    assert_eq!(mark_forage(&mut world, plant), None);
+    world.drain_plant_changes();
+
+    let mut claimed_at = None;
+    let mut ticks = 0;
+    while ripe(&world, plant) == Some(true) {
+        world.step();
+        ticks += 1;
+        assert!(ticks < 3_000, "never foraged");
+        if claimed_at.is_none() && holds(&world, hauler, |k| k == JobKind::Forage).is_some() {
+            claimed_at = Some(world.tick());
+        }
+    }
+    let claimed_at = claimed_at.expect("a forage job was held before the plant turned");
+    assert!(
+        world.tick() - claimed_at >= u64::from(sim_core::FORAGE_WORK_TICKS),
+        "foraged after {} ticks of holding",
+        world.tick() - claimed_at
+    );
+    assert_eq!(ripe(&world, plant), Some(false));
+    assert!(forage_marks(&world).is_empty(), "the mark is used up");
+    assert!(forage_jobs(&world).is_empty(), "the job is spent");
+    assert_eq!(carried_count(&world, hauler), Some(1));
+    assert_eq!(world.items().len(), 1);
+    assert_eq!(
+        world
+            .item_kinds()
+            .into_iter()
+            .map(|(_, k)| k)
+            .collect::<Vec<_>>(),
+        vec![ItemKind::Berries]
+    );
+    assert!(
+        holds(&world, hauler, |kind| matches!(kind, JobKind::Haul { .. })).is_some(),
+        "a hauler carrying berries holds a job"
+    );
+    assert_eq!(
+        world.drain_plant_changes(),
+        vec![(plant, Some(false))],
+        "the wire is told the plant is growing"
+    );
+}
+
+#[test]
+fn a_hauler_stores_the_berries_on_the_pile() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let zones = place_pile(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    assert_eq!(mark_forage(&mut world, plant), None);
+    step_until(&mut world, 4_000, "the berries reach the pile", |w| {
+        w.stored_count() == 1
+    });
+    let items = world.items();
+    assert_eq!(items.len(), 1);
+    assert!(
+        zones.contains(&items[0].1),
+        "{:?} is off the pile",
+        items[0]
+    );
+    assert_eq!(world.item_kinds(), vec![(items[0].0, ItemKind::Berries)]);
+    assert_eq!(world.stored_berries_count(), 1);
+}
+
+/// AC 4: three marked bushes in reach of each other are picked in ONE trip and land as ONE berries
+/// item with count 3, which `food` counts as 3.
+#[test]
+fn a_trip_of_three_bushes_lands_one_berries_item_of_count_three() {
+    let marked = plant_cluster(
+        &World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT),
+        3,
+        8,
+    );
+    let (mut world, hauler) = trip_world(&marked);
+    let mut counts_seen = BTreeSet::new();
+    let mut item_ids = BTreeSet::new();
+    step_until(&mut world, 6_000, "the load reaches the pile", |w| {
+        if let Some(count) = carried_count(w, hauler) {
+            counts_seen.insert(count);
+        }
+        item_ids.extend(w.items().into_iter().map(|(id, _)| id));
+        w.stored_count() == 1
+    });
+    assert_eq!(loads_on_pile(&world), vec![3]);
+    assert_eq!(world.items().len(), 1, "one item, not three");
+    assert_eq!(item_ids.len(), 1, "one item all along");
+    assert_eq!(
+        counts_seen,
+        BTreeSet::from([1, 2, 3]),
+        "the count grew a bush at a time"
+    );
+    assert_eq!(world.stored_berries_count(), 3);
+    assert!(marked.iter().all(|p| ripe(&world, *p) == Some(false)));
+    assert!(forage_marks(&world).is_empty());
+    assert!(forage_jobs(&world).is_empty());
+}
+
+/// AC 4 (Q10): a trip stops at `FORAGE_TRIP_BUSHES`; the sixth bush in reach is left for the next.
+#[test]
+fn a_sixth_bush_in_reach_is_not_picked_on_a_trip_of_five() {
+    let marked = plant_cluster(
+        &World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT),
+        6,
+        8,
+    );
+    let (mut world, _) = trip_world(&marked);
+    step_until(&mut world, 8_000, "the first load reaches the pile", |w| {
+        w.stored_count() == 1
+    });
+    assert_eq!(loads_on_pile(&world), vec![sim_core::FORAGE_TRIP_BUSHES]);
+    let ripe_left: Vec<Pos> = marked
+        .iter()
+        .copied()
+        .filter(|p| ripe(&world, *p) == Some(true))
+        .collect();
+    assert_eq!(ripe_left.len(), 1, "one bush was left");
+    assert_eq!(forage_marks(&world), ripe_left, "and it is still marked");
+}
+
+/// AC 4 (Q10): a marked bush more than `FORAGE_TRIP_RADIUS` cells from where he stands does not
+/// join the trip. It is foraged on a trip of its own, as a second item.
+#[test]
+fn a_bush_beyond_ten_cells_ends_the_trip() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plants = plants_near_camp(&world, 60);
+    let (a, b) = plants
+        .iter()
+        .flat_map(|a| plants.iter().map(move |b| (*a, *b)))
+        .find(|(a, b)| (13..=18).contains(&distance(*a, *b)))
+        .expect("two plants 13 to 18 cells apart");
+    let (mut world, _) = trip_world(&[a, b]);
+    step_until(&mut world, 6_000, "the first load reaches the pile", |w| {
+        w.stored_count() == 1
+    });
+    assert_eq!(loads_on_pile(&world), vec![1], "one bush a trip");
+    let left: Vec<Pos> = [a, b]
+        .into_iter()
+        .filter(|p| ripe(&world, *p) == Some(true))
+        .collect();
+    assert_eq!(left.len(), 1, "the other bush waits");
+    assert_eq!(forage_marks(&world), left);
+    step_until(&mut world, 6_000, "the second load reaches the pile", |w| {
+        w.stored_count() == 2
+    });
+    assert_eq!(loads_on_pile(&world), vec![1, 1]);
+}
+
+/// AC 5 (Q9): two marked bushes, the older one far: a free hauler goes to the near one first.
+/// The hauler is a miner while both jobs age past every reaction delay, so both are claimable
+/// when he becomes a hauler.
+#[test]
+fn the_first_bush_of_a_trip_is_the_nearest_not_the_oldest() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let hauler = solo_hauler(&mut world);
+    set_profession(&mut world, hauler, Profession::Miner);
+    let from = dwarf_pos(&world, hauler);
+    let plants = plants_near_camp(&world, 80);
+    let near = *plants
+        .iter()
+        .min_by_key(|p| (distance(from, **p), **p))
+        .unwrap();
+    let far = *plants
+        .iter()
+        .filter(|p| distance(from, **p) >= distance(from, near) + 20)
+        .min_by_key(|p| (distance(from, **p), **p))
+        .expect("a far plant");
+    assert_eq!(mark_forage(&mut world, far), None);
+    world.step();
+    assert_eq!(mark_forage(&mut world, near), None);
+    for _ in 0..40 {
+        world.step();
+    }
+    let jobs = forage_jobs(&world);
+    let job_at = |pos: Pos| jobs.iter().find(|job| job.target == pos).unwrap().id;
+    assert!(
+        job_at(far) < job_at(near),
+        "the guard: the far mark is older"
+    );
+    set_profession(&mut world, hauler, Profession::Hauler);
+    let mut first = None;
+    step_until(&mut world, 200, "the hauler takes a forage job", |w| {
+        first = holds(w, hauler, |k| k == JobKind::Forage).map(|job| job.target);
+        first.is_some()
+    });
+    assert_eq!(first, Some(near), "he went for the older, far bush");
+}
+
+/// AC 5: kinds keep FIFO. A haul job older than a forage mark is taken first by the only hauler,
+/// though the bush is nearer than the stone.
+#[test]
+fn a_haul_job_older_than_a_forage_mark_is_taken_first() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let hauler = solo_hauler(&mut world);
+    set_profession(&mut world, hauler, Profession::Miner);
+    let from = dwarf_pos(&world, hauler);
+    let near = *plants_near_camp(&world, 80)
+        .iter()
+        .min_by_key(|p| (distance(from, **p), **p))
+        .unwrap();
+    let zones = place_pile(&mut world);
+    // A loose stone on the camp's level, farther from the hauler than the bush.
+    let camp = world.camp_origin();
+    let stone = (camp.x - 12..=camp.x + 12)
+        .flat_map(|x| (camp.y - 12..=camp.y + 12).map(move |y| Pos { x, y, z: camp.z }))
+        .filter(|p| is_standable(&world, *p) && !zones.contains(p))
+        .find(|p| distance(from, *p) >= distance(from, near) + 4)
+        .expect("a stone cell farther than the bush");
+    let mut save = world.to_save();
+    let id = save.next_id;
+    save.next_id += 1;
+    save.items.push((id, stone, ItemKind::Stone, 1));
+    let mut world = World::from_save(save);
+    world.step();
+    assert_eq!(mark_forage(&mut world, near), None);
+    for _ in 0..40 {
+        world.step();
+    }
+    let jobs = world.jobs();
+    let haul = jobs
+        .iter()
+        .find(|job| matches!(job.kind, JobKind::Haul { .. }))
+        .expect("the stone has a haul job");
+    let forage = jobs
+        .iter()
+        .find(|job| job.kind == JobKind::Forage)
+        .expect("the bush has a forage job");
+    assert!(haul.id < forage.id, "the guard: the haul job is older");
+    set_profession(&mut world, hauler, Profession::Hauler);
+    let mut first = None;
+    step_until(&mut world, 200, "the hauler takes a job", |w| {
+        first = holds(w, hauler, |_| true).map(|job| job.kind);
+        first.is_some()
+    });
+    assert_eq!(first, Some(JobKind::Haul { item: id }));
+}
+
+/// The unripe-guard of AC 4's no-pile exit: with no pile, the load is dropped where he stands and
+/// an ordinary haul job takes it, count and all, once a pile appears.
+#[test]
+fn with_no_pile_the_load_is_dropped_and_hauled_later_with_its_count() {
+    let marked = plant_cluster(
+        &World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT),
+        2,
+        8,
+    );
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let hauler = solo_hauler(&mut world);
+    for plant in &marked {
+        assert_eq!(mark_forage(&mut world, *plant), None);
+    }
+    step_until(&mut world, 4_000, "the trip ends and the load lies", |w| {
+        forage_marks(w).is_empty()
+            && w.carrying().iter().all(|(_, item)| item.is_none())
+            && w.items().len() == 1
+    });
+    assert_eq!(carried_count(&world, hauler), None);
+    assert_eq!(world.item_counts().iter().map(|(_, c)| *c).sum::<u32>(), 2);
+    place_pile(&mut world);
+    step_until(&mut world, 2_000, "the dropped load is hauled", |w| {
+        w.stored_count() == 1
+    });
+    assert_eq!(loads_on_pile(&world), vec![2]);
+}
+
+/// 13.9 mutation row 8: the clients hear about a regrowth on the tick it happens. Ripeness is
+/// derived from the tick, so nothing changes in `Plants` when a bush ripens; without the
+/// announcement the tui and gui would draw it growing for ever.
+#[test]
+fn a_regrown_plant_is_announced_on_the_tick_it_ripens() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    place_pile(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    assert_eq!(mark_forage(&mut world, plant), None);
+    step_until(&mut world, 4_000, "the forage", |w| {
+        ripe(w, plant) == Some(false)
+    });
+    let first = world.tick();
+    // The mark is used up, so the only change left for this plant is the regrowth.
+    world.drain_plant_changes();
+    while world.tick() < first + sim_core::REGROW_TICKS {
+        world.step();
+        let changes = world.drain_plant_changes();
+        let mine: Vec<_> = changes.iter().filter(|(pos, _)| *pos == plant).collect();
+        if world.tick() < first + sim_core::REGROW_TICKS {
+            assert!(
+                mine.is_empty(),
+                "announced early, tick {}: {mine:?}",
+                world.tick()
+            );
+        } else {
+            assert_eq!(
+                mine,
+                vec![&(plant, Some(true))],
+                "the regrowth is announced"
+            );
+        }
+    }
+    assert_eq!(ripe(&world, plant), Some(true));
+}
+
+/// AC 6: a picked bush is ripe again `REGROW_TICKS` later, unmarked, and is foraged again only
+/// when it is marked again.
+#[test]
+fn a_regrown_bush_is_unmarked_and_not_foraged_again_until_it_is_marked_again() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let hauler = solo_hauler(&mut world);
+    place_pile(&mut world);
+    let plant = plants_near_camp(&world, 1)[0];
+    assert_eq!(mark_forage(&mut world, plant), None);
+    step_until(&mut world, 4_000, "the forage", |w| {
+        ripe(w, plant) == Some(false)
+    });
+    let first = world.tick();
+    assert!(
+        forage_marks(&world).is_empty(),
+        "the mark went with the pick"
+    );
+    while world.tick() < first + sim_core::REGROW_TICKS + 300 {
+        world.step();
+        assert!(forage_marks(&world).is_empty(), "re-marked by itself");
+        assert!(
+            forage_jobs(&world).is_empty(),
+            "a job stands without a mark"
+        );
+        if world.tick() < first + sim_core::REGROW_TICKS {
+            assert_eq!(ripe(&world, plant), Some(false), "ripe early");
+        }
+    }
+    assert_eq!(ripe(&world, plant), Some(true), "regrown and left alone");
+    assert!(holds(&world, hauler, |_| true).is_none(), "nothing to do");
+    // Marked again, it is foraged again.
+    assert_eq!(mark_forage(&mut world, plant), None);
+    step_until(&mut world, 3_000, "the second forage", |w| {
+        ripe(w, plant) == Some(false)
+    });
+    assert!(world.tick() - first >= sim_core::REGROW_TICKS);
+}
+
+/// AC 7: the bush a hauler is walking to loses its ground mid-trip: its mark and job go, he is
+/// released and the load he carries is dropped, not lost and not carried by an idle dwarf.
+#[test]
+fn losing_the_next_bush_mid_trip_drops_the_load() {
+    let marked = plant_cluster(
+        &World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT),
+        2,
+        8,
+    );
+    let (mut world, hauler) = trip_world(&marked);
+    let mut next = None;
+    step_until(
+        &mut world,
+        4_000,
+        "he carries one bush's berries to the other",
+        |w| {
+            next = holds(w, hauler, |k| k == JobKind::Forage).map(|job| job.target);
+            carried_count(w, hauler) == Some(1) && next.is_some()
+        },
+    );
+    let next = next.unwrap();
+    world.drain_plant_changes();
+    assert!(world.set_tile(
+        Pos {
+            z: next.z - 1,
+            ..next
+        },
+        Tile::Empty
+    ));
+    world.step();
+    assert_eq!(ripe(&world, next), None, "the plant is gone");
+    assert!(world.drain_plant_changes().contains(&(next, None)));
+    assert!(!forage_marks(&world).contains(&next), "and so is its mark");
+    assert!(forage_jobs(&world).is_empty(), "and its job");
+    assert!(holds(&world, hauler, |_| true).is_none(), "he is released");
+    assert_eq!(carried_count(&world, hauler), None);
+    let items = world.items();
+    assert_eq!(items.len(), 1, "the load lies where it was dropped");
+    assert_eq!(world.item_counts()[0].1, 1);
+    assert!(distance(items[0].1, dwarf_pos(&world, hauler)) <= 3);
+}
+
+/// A cancel over the mark of the bush he is walking to lets him go and drops the load.
+#[test]
+fn cancelling_the_next_mark_mid_trip_drops_the_load() {
+    let marked = plant_cluster(
+        &World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT),
+        2,
+        8,
+    );
+    let (mut world, hauler) = trip_world(&marked);
+    let mut next = None;
+    step_until(
+        &mut world,
+        4_000,
+        "he carries one bush's berries to the other",
+        |w| {
+            next = holds(w, hauler, |k| k == JobKind::Forage).map(|job| job.target);
+            carried_count(w, hauler) == Some(1) && next.is_some()
+        },
+    );
+    let next = next.unwrap();
+    world.apply_command(SimCommand::CancelDesignation {
+        rect: rect(next, next),
+    });
+    assert!(forage_jobs(&world).is_empty(), "the job went with the mark");
+    assert!(holds(&world, hauler, |_| true).is_none(), "he is released");
+    assert_eq!(carried_count(&world, hauler), None);
+    assert_eq!(world.items().len(), 1);
+    assert_eq!(ripe(&world, next), Some(true), "the bush was not picked");
+}
+
+/// 13.9 mutation row 31: a MARKED bush whose ground is dug away takes its mark with it. A channel
+/// on the bush's own cell overwrites the mark, so it cannot pin this; a dig of the tile UNDER the
+/// bush leaves the mark's cell alone. With no hauler, nobody forages the bush before the dig.
+#[test]
+fn a_marked_bush_whose_ground_is_dug_away_takes_its_mark_with_it() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    for (dwarf, profession) in world.professions() {
+        if profession == Profession::Hauler {
+            assert_eq!(
+                world.apply_command(SimCommand::SetProfession {
+                    dwarf,
+                    profession: Profession::Miner,
+                }),
+                None
+            );
+        }
+    }
+    let plant = plants_near_camp(&world, 1)[0];
+    assert_eq!(mark_forage(&mut world, plant), None);
+    assert!(
+        forage_marks(&world).contains(&plant),
+        "the fixture holds a mark"
+    );
+    let ground = Pos {
+        z: plant.z - 1,
+        ..plant
+    };
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Dig,
+            rect: rect(ground, ground),
+        }),
+        None
+    );
+    step_until(&mut world, 4_000, "the dig takes the bush's ground", |w| {
+        ripe(w, plant).is_none()
+    });
+    assert!(
+        !forage_marks(&world).contains(&plant),
+        "the lost bush's mark is gone"
+    );
+    assert!(forage_jobs(&world).iter().all(|job| job.target != plant));
+}
+
+#[test]
+fn a_channel_through_a_bush_removes_it() {
+    let mut world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT);
+    let plant = plants_near_camp(&world, 1)[0];
+    let others = plants_near_camp(&world, 3);
+    assert_eq!(
+        world.apply_command(SimCommand::Designate {
+            kind: DesignationKind::Channel,
+            rect: rect(plant, plant),
+        }),
+        None
+    );
+    for other in &others[1..] {
+        assert_eq!(mark_forage(&mut world, *other), None);
+    }
+    step_until(&mut world, 4_000, "the channel opens under the bush", |w| {
+        ripe(w, plant).is_none()
+    });
+    assert!(forage_jobs(&world).iter().all(|job| job.target != plant));
+    assert!(!forage_marks(&world).contains(&plant));
 }

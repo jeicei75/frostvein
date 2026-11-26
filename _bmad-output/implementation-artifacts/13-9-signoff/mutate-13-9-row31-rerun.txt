@@ -1,0 +1,10 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 31 a lost bush keeps its mark (AC 7) ===
+thread 'a_marked_bush_whose_ground_is_dug_away_takes_its_mark_with_it' (468761) panicked at crates/sim-core/tests/scenario.rs:6334:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 104 filtered out; finished in 0.01s
+
+================ MUTATION RESULTS ================
+31 a lost bush keeps its mark (AC 7)                         KILLED
+
+All mutations killed.

@@ -30,7 +30,9 @@ old = '''                        _ => positions()
                                             ..*pos
                                         })
                                 }
-                                DesignationKind::Cut => unreachable!("handled above"),
+                                DesignationKind::Cut | DesignationKind::Forage => {
+                                    unreachable!("handled above")
+                                }
                             })
                             // 12.10b: a channel's step opens two cells down (D2: none at z < 2) and
                             // never under a fire (D3, #188).
@@ -92,10 +94,11 @@ PY
 mutation "from_save discards items" sim-core save_round_trip_preserves_items_and_current_job <<'PY'
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 items carry a kind (`(id, pos, kind)`).
+# Re-pointed 13.9 Amendment 1: and a count.
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
-old = '        for (id, pos, kind) in items {\n'
+old = '        for (id, pos, kind, count) in items {\n'
 assert old in s
-p.write_text(s.replace(old, '        for (id, pos, kind) in Vec::<(u32, Pos, ItemKind)>::new() {\n'))
+p.write_text(s.replace(old, '        for (id, pos, kind, count) in Vec::<(u32, Pos, ItemKind, u32)>::new() {\n'))
 PY
 
 mutation "from_save discards current_job" sim-core save_round_trip_preserves_items_and_current_job <<'PY'
@@ -150,6 +153,8 @@ p = pathlib.Path('crates/tui/src/view.rs'); s = p.read_text()
 # Re-pointed 2026-10-05 (12.7): the item layer now picks the cell by kind (a `match` on kind and
 # stored-ness); the seam is unchanged.
 # Re-pointed 2026-10-11 (12.10): the match gained the four real ore-item arms (Task 5 replaced the stub arms).
+# Re-pointed 2026-11-22 (13.9 Task 5): the match gained the two Berries stand-in arms.
+# Re-pointed 2026-11-22 (13.9 Task 6): the Berries arms got their own cells.
 item = '''    for item in mirror.items() {
         if let Some(index) = screen_index(item.pos) {
             let stored = mirror.zones().iter().any(|zone| zone.pos == item.pos);
@@ -162,6 +167,8 @@ item = '''    for item in mirror.items() {
                 (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
+                (protocol::ItemKind::Berries, true) => stored_berries_item_cell(),
+                (protocol::ItemKind::Berries, false) => berries_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
@@ -198,9 +205,9 @@ PY
 mutation "load accepts an out-of-bounds item" simd out_of_bounds_item_save_is_logged_and_the_daemon_keeps_ticking <<'PY'
 import pathlib
 # Re-pointed 2026-10-05 (12.7): 12.7 the item tuple gained a kind: `(id, pos, _)`.
+# Re-pointed 13.9 Amendment 1: and a count, whose checks stay; only the bounds check goes.
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
-old = '''        for (id, pos, _) in &save.items {
-            if !in_bounds(*pos) {
+old = '''            if !in_bounds(*pos) {
                 bail!(
                     "save item {id} position {},{},{} is outside dims {}x{}x{}",
                     pos.x,
@@ -211,9 +218,8 @@ old = '''        for (id, pos, _) in &save.items {
                     save.dims.z
                 );
             }
-        }
 '''
-assert old in s
+assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
@@ -729,7 +735,9 @@ import pathlib
 p = pathlib.Path('crates/simd/src/main.rs'); s = p.read_text()
 # Re-pointed 2026-08-22: the surrounding code grew (rect validation, haul jobs, a `path`
 # argument, a larger save ceiling) and this anchor rotted with it. The seam is unchanged.
-old = '''                    if !seen_job_targets.insert(job.target) {
+# Re-pointed 13.9: the Forage arm repeats this check, so the anchor starts at the tile-job arm.
+old = '''                sim_core::JobKind::Dig | sim_core::JobKind::Channel | sim_core::JobKind::Cut => {
+                    if !seen_job_targets.insert(job.target) {
                         bail!(
                             "save reuses job target {},{},{}",
                             job.target.x,
@@ -738,8 +746,9 @@ old = '''                    if !seen_job_targets.insert(job.target) {
                         );
                     }
 '''
+pre = old.split('\n')[0] + '\n'
 assert s.count(old) == 1
-p.write_text(s.replace(old, '                    seen_job_targets.insert(job.target);\n'))
+p.write_text(s.replace(old, pre + '                    seen_job_targets.insert(job.target);\n'))
 PY
 
 mutation "load accepts job id at next_job_id" simd job_id_at_next_job_id_save_is_logged_and_the_daemon_keeps_ticking <<'PY'

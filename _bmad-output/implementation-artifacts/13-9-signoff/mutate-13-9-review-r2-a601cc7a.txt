@@ -1,0 +1,31 @@
+mutate.sh: capping cargo at 11 jobs (23 GB / 32 cores)
+
+=== 38 a forage trip excuses a carried stone (#244) ===
+thread 'a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking' (241693) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 2.50s
+
+=== 39 a forage trip excuses a load a haul job names (#244) ===
+thread 'a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking' (242940) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 6.17s
+
+=== 46 a forage trip excuses a carrier holding no forage job (review r2) ===
+thread 'a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking' (244486) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 1.77s
+
+=== 47 a forage trip excuses a carrier holding any job (review r2) ===
+thread 'a_forage_trip_carrying_stone_or_a_hauled_load_save_is_logged_and_the_daemon_keeps_ticking' (246001) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 2.41s
+
+=== 43 the validator takes a forage mark over no plant (review LOW) ===
+thread 'a_forage_mark_over_no_plant_save_is_logged_and_the_daemon_keeps_ticking' (247575) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 100 filtered out; finished in 2.64s
+
+================ MUTATION RESULTS ================
+38 a forage trip excuses a carried stone (#244)              KILLED
+39 a forage trip excuses a load a haul job names (#244)      KILLED
+46 a forage trip excuses a carrier holding no forage job (review r2) KILLED
+47 a forage trip excuses a carrier holding any job (review r2) KILLED
+43 the validator takes a forage mark over no plant (review LOW) KILLED
+
+All mutations killed.
+exit=0

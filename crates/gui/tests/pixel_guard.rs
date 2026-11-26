@@ -293,9 +293,16 @@ fn ambient_occlusion_darkens_terrace_creases_and_msaa_cannot_silently_disable_it
     /// RE-BASELINED 55 -> 60 (LR 57 -> 59) by 11.3's night haze ruling (gain 14, 2026-09-26): the
     /// haze now scatters the moon 14x and lifts open snow in BOTH windows, so LR is no longer
     /// outside its reach. Measured on the full gate's own run of `b4a4b9d`; darkening 0.451.
-    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 60;
+    ///
+    /// RE-BASELINED 60 -> 59 (LR 59 -> 57) by 13.9's berry bushes (Task 0 Q1/Q5 ruled, Wolf ruled
+    /// the re-baseline 2026-11-22). Four bushes now stand in the LL window, so these windows pin
+    /// the bush look too: a later bush change moves them. Attributed, not assumed: the same build
+    /// (`f80e6e62`) with bush drawing switched off reads 60/59, with bushes 59/57 on the full
+    /// gate's own run and on a fresh capture. Masking the bush pixels alone leaves LL at 59, so the
+    /// shift includes the shading round the bushes. Darkening 0.498.
+    const CONTROL_OPEN_SNOW_LL_MEDIAN: u8 = 59;
     /// Was outside the haze's reach until the night gain -- see `CONTROL_OPEN_SNOW_LL_MEDIAN`.
-    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 59;
+    const CONTROL_OPEN_SNOW_LR_MEDIAN: u8 = 57;
 
     // ONE DAEMON PER CAPTURE, and this is load-bearing for a delta. `--static-world` freezes the
     // world at whatever tick it has reached when the client connects, so a second capture against

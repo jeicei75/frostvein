@@ -5,7 +5,7 @@ baseline_commit: 5f83e82e
 
 # Story 13.8b: After the Big Dig
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -473,3 +473,4 @@ All outputs are under `13-8b-signoff/`. Code head for Tasks 1-7's figures: `89be
 | 2026-11-19 | Review patch pass (Opus 5.5): six patches landed (`26cb47ac`, `df7da46c`, `33b4361c`). The tick timer drops a window on a pause or a load; `over`, `send`, `from` and the max reset are pinned; rows 31-38. Whole `13-8b.sh` 38/38 KILLED at HEAD; tick-bench after the pocket: nothing slower. #236 stays open (`Refs`). Full gate GREEN at `33b4361c`. Open: seat run 5 again, with files (Wolf). |
 | 2026-11-20 | Review run 2 patch pass (Opus 5.5): five patches landed (`3c727628`, `beba4af4`, `0ccb7694`, `db870cb1`). The tick timer logs the part-window a pause, a Load or a speed change cuts (`cut=`), and a speed change now cuts the window. The NOTE is corrected, and so is the P3/P4 record. Rows 39-44, 31-44 KILLED. Full gate green at `db870cb1` (2140 s). Seat run 5 still owed. |
 | 2026-11-21 | Seat run 5 with files, on the review patches' build: Wolf sees no stops ("no hickups anymore"); fps drops to 20-30 are the gui (#224). The tap keeps within 3.7% of real time after the big dig; the daemon step there ran about 2x Run 4's on identical sim code (the seat machine). The 11-17 sitting had no files; the card and record are corrected. |
+| 2026-11-21 | Merged as PR #241 (`3c6cf3b7`, head `fc9f12d4`), closing #231 (`closingIssuesReferences` [231]); #236 stays open. Status → done. |

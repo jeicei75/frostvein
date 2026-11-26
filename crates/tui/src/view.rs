@@ -5,8 +5,9 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
-    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, bloodstone_item_cell, carrier_cell, crowd_cell,
-    cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, item_cell, pending_rect_cell,
+    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, berries_item_cell, bloodstone_item_cell, carrier_cell,
+    crowd_cell, cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, growing_bush_cell,
+    item_cell, marked_bush_cell, pending_rect_cell, ripe_bush_cell, stored_berries_item_cell,
     stored_bloodstone_item_cell, stored_item_cell, stored_tetrahedrite_item_cell,
     stored_wood_item_cell, tetrahedrite_item_cell, tile_cell, wood_item_cell, zone_cell,
 };
@@ -75,6 +76,12 @@ pub struct MarkTally {
     pub drawn_zones: usize,
     pub mirror_designations: usize,
     pub mirror_zones: usize,
+    /// 13.9: ripe bushes, growing bushes and berries, as drawn on the map rows and
+    /// as the mirror holds them at this cut. Like the marks, a plant under an item or a dwarf, or
+    /// outside the viewport, is in the mirror count but not the drawn one. They stay out of
+    /// `complete()`, which only the `marks:` line reads.
+    pub drawn_forage: ForageTally,
+    pub mirror_forage: ForageTally,
     /// The x/y bounding box of every mark the MIRROR holds at this cut, or `None` when there are
     /// none. Read from the mirror rather than the frame so it does not depend on what fitted on
     /// screen — it is the half of this readout that can be checked against the other client's
@@ -88,6 +95,16 @@ pub struct MarkTally {
     /// stockpile sits one level up, so no single `--z` shows all four modes, and an interactive
     /// `tui` opens at `opening_z` rather than at whatever the operator passed to `--frame`.
     pub elsewhere: Vec<(i32, usize, usize)>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ForageTally {
+    /// A marked bush counts here too: it is a ripe bush drawn as its mark.
+    pub ripe: usize,
+    pub growing: usize,
+    pub berries: usize,
+    /// Forage marks: drawn marked bushes against the forage designations the mirror holds.
+    pub marked: usize,
 }
 
 impl MarkTally {
@@ -105,14 +122,48 @@ pub fn tally_marks(mirror: &Mirror, state: &ViewState, framebuffer: &Framebuffer
         designation_cell(protocol::DesignationKind::Dig).glyph,
         designation_cell(protocol::DesignationKind::Channel).glyph,
         designation_cell(protocol::DesignationKind::Cut).glyph,
+        // A marked bush is drawn by its mark (the plant pass skips it), like a cut tree.
+        designation_cell(protocol::DesignationKind::Forage).glyph,
     ];
     let zone_glyph = zone_cell().glyph;
     // NOTE: the footer rows are goal, roster, status and hint text. The cut mark's ASCII `/` also
     // appears in the status row's `z 1/2`, so counting there would invent a mark.
     let map_cells =
         usize::from(framebuffer.w) * usize::from(framebuffer.h.saturating_sub(FOOTER_ROWS));
+    let map_cells_slice = || framebuffer.cells.iter().take(map_cells);
+    let count = |wanted: &[Cell]| {
+        map_cells_slice()
+            .filter(|cell| wanted.contains(cell))
+            .count()
+    };
+    let at_cut = |pos: [i32; 3]| pos[2] == state.z;
     MarkTally {
         z: state.z,
+        drawn_forage: ForageTally {
+            ripe: count(&[ripe_bush_cell(), marked_bush_cell()]),
+            growing: count(&[growing_bush_cell()]),
+            berries: count(&[berries_item_cell(), stored_berries_item_cell()]),
+            marked: count(&[marked_bush_cell()]),
+        },
+        mirror_forage: ForageTally {
+            ripe: mirror
+                .plants()
+                .filter(|&(pos, plant)| at_cut(pos) && plant == protocol::PlantState::Ripe)
+                .count(),
+            growing: mirror
+                .plants()
+                .filter(|&(pos, plant)| at_cut(pos) && plant == protocol::PlantState::Growing)
+                .count(),
+            berries: mirror
+                .items()
+                .filter(|item| at_cut(item.pos) && item.kind == protocol::ItemKind::Berries)
+                .count(),
+            marked: mirror
+                .designations()
+                .iter()
+                .filter(|mark| at_cut(mark.pos) && mark.kind == protocol::DesignationKind::Forage)
+                .count(),
+        },
         drawn_designations: framebuffer
             .cells
             .iter()
@@ -316,6 +367,28 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         }
     }
 
+    // NOTE: #172 (peek) is open: like zones and items, a plant on another z-level is not drawn
+    // (`screen_index` is same-level only), and nothing here peeks down to it. Not fixed here.
+    // A forage mark sits on its bush's own cell and is drawn AS that cell (`&`), so the plant
+    // pass leaves a marked bush alone; the tally counts it as a designation like a cut mark.
+    let forage_marks: std::collections::BTreeSet<[i32; 3]> = mirror
+        .designations()
+        .iter()
+        .filter(|mark| mark.kind == protocol::DesignationKind::Forage)
+        .map(|mark| mark.pos)
+        .collect();
+    for (pos, state) in mirror.plants() {
+        if forage_marks.contains(&pos) {
+            continue;
+        }
+        if let Some(index) = screen_index(pos) {
+            framebuffer.cells[index] = match state {
+                protocol::PlantState::Ripe => ripe_bush_cell(),
+                protocol::PlantState::Growing => growing_bush_cell(),
+            };
+        }
+    }
+
     // Counted in the same pass that draws them, so the count and the draw can never disagree
     // about which stones are on screen, on this level, and where.
     // NOTE: two or more stones on one tile render as a single `*` with no count in the glyph —
@@ -334,6 +407,8 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
                 (protocol::ItemKind::Bloodstone, false) => bloodstone_item_cell(),
                 (protocol::ItemKind::Wood, true) => stored_wood_item_cell(),
                 (protocol::ItemKind::Wood, false) => wood_item_cell(),
+                (protocol::ItemKind::Berries, true) => stored_berries_item_cell(),
+                (protocol::ItemKind::Berries, false) => berries_item_cell(),
             };
             *item_counts.entry(index).or_insert(0_usize) += 1;
         }
@@ -744,6 +819,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             tick: 0,
@@ -1319,6 +1395,7 @@ mod tests {
             id: 9,
             pos: [3, 1, 1],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }];
         let named = |id, x, colour| Entity {
             id,
@@ -1384,11 +1461,13 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 2],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
         ];
         snapshot.entities = vec![Entity {
@@ -1440,11 +1519,13 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 1],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
         ];
 
@@ -1466,11 +1547,13 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Wood,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 1],
                 kind: protocol::ItemKind::Wood,
+                count: 1,
             },
         ];
 
@@ -1492,21 +1575,25 @@ mod tests {
                 id: 5,
                 pos: [1, 1, 1],
                 kind: protocol::ItemKind::Tetrahedrite,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [2, 1, 1],
                 kind: protocol::ItemKind::Bloodstone,
+                count: 1,
             },
             Item {
                 id: 7,
                 pos: [3, 1, 1],
                 kind: protocol::ItemKind::Tetrahedrite,
+                count: 1,
             },
             Item {
                 id: 8,
                 pos: [4, 1, 1],
                 kind: protocol::ItemKind::Bloodstone,
+                count: 1,
             },
         ];
 
@@ -1520,6 +1607,142 @@ mod tests {
         assert_eq!(framebuffer.cell(2, 1).glyph, '◊');
         assert_eq!(framebuffer.cell(1, 1).fg, zone_cell().fg);
         assert_eq!(framebuffer.cell(2, 1).fg, zone_cell().fg);
+    }
+
+    /// 13.9: a 9x7 view centred on (32,32). Ripe bush at +0, growing at +1, a marked ripe bush at +2,
+    /// berries on open ground at +3, a bush under an item, and a second marked ripe bush, later.
+    fn forage_mirror() -> (Mirror, ViewState) {
+        let dims = Dims { x: 64, y: 64, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        snapshot.plants = vec![
+            protocol::Plant {
+                pos: [32, 32, 1],
+                state: protocol::PlantState::Ripe,
+            },
+            protocol::Plant {
+                pos: [33, 32, 1],
+                state: protocol::PlantState::Growing,
+            },
+            // Under an item.
+            protocol::Plant {
+                pos: [32, 33, 1],
+                state: protocol::PlantState::Ripe,
+            },
+            // Marked.
+            protocol::Plant {
+                pos: [33, 33, 1],
+                state: protocol::PlantState::Ripe,
+            },
+            protocol::Plant {
+                pos: [34, 32, 1],
+                state: protocol::PlantState::Ripe,
+            },
+        ];
+        snapshot.designations = vec![
+            Designation {
+                pos: [34, 32, 1],
+                kind: protocol::DesignationKind::Forage,
+            },
+            Designation {
+                pos: [33, 33, 1],
+                kind: protocol::DesignationKind::Forage,
+            },
+        ];
+        snapshot.items = vec![
+            Item {
+                id: 1,
+                pos: [35, 32, 1],
+                kind: protocol::ItemKind::Berries,
+                count: 1,
+            },
+            Item {
+                id: 2,
+                pos: [32, 33, 1],
+                kind: protocol::ItemKind::Berries,
+                count: 1,
+            },
+        ];
+        let mirror = mirror(&snapshot);
+        let state = initial(&mirror, Some(1));
+        (mirror, state)
+    }
+
+    fn at(framebuffer: &Framebuffer, x: i64, y: i64, state: &ViewState) -> Cell {
+        let (w, h) = (framebuffer.w, framebuffer.h - FOOTER_ROWS);
+        let sx = x - state.camera.0 + i64::from(w) / 2;
+        let sy = y - state.camera.1 + i64::from(h) / 2;
+        framebuffer.cell(sx as u16, sy as u16)
+    }
+
+    #[test]
+    fn forage_things_draw_their_glyph_and_colour() {
+        let (mirror, state) = forage_mirror();
+        let framebuffer = render(&mirror, &state, 11, 12);
+        assert_eq!(at(&framebuffer, 32, 32, &state), ripe_bush_cell());
+        assert_eq!(at(&framebuffer, 33, 32, &state), growing_bush_cell());
+        assert_eq!(
+            at(&framebuffer, 34, 32, &state),
+            designation_cell(DesignationKind::Forage)
+        );
+        assert_eq!(at(&framebuffer, 34, 32, &state), marked_bush_cell());
+        assert_ne!(
+            at(&framebuffer, 34, 32, &state),
+            ripe_bush_cell(),
+            "a marked ripe bush is drawn differently from an unmarked one"
+        );
+        assert_eq!(at(&framebuffer, 35, 32, &state), berries_item_cell());
+        assert_ne!(ripe_bush_cell().fg, growing_bush_cell().fg);
+    }
+
+    /// Draw order: marks, then items over them. A marked bush is drawn as its mark, never
+    /// overpainted by the plant.
+    #[test]
+    fn forage_draw_order_holds() {
+        let (mirror, state) = forage_mirror();
+        let framebuffer = render(&mirror, &state, 11, 12);
+        assert_eq!(
+            at(&framebuffer, 32, 33, &state),
+            berries_item_cell(),
+            "an item shows over a bush"
+        );
+        assert_eq!(
+            at(&framebuffer, 33, 33, &state),
+            marked_bush_cell(),
+            "a marked bush shows its mark, not the bare bush"
+        );
+    }
+
+    #[test]
+    fn the_forage_tally_counts_each_kind_and_range_checks() {
+        let (mirror, state) = forage_mirror();
+        let framebuffer = render(&mirror, &state, 11, 12);
+        let tally = tally_marks(&mirror, &state, &framebuffer);
+        // Drawn: the item hides one ripe bush; a marked bush counts as ripe AND as marked.
+        assert_eq!(
+            tally.drawn_forage,
+            ForageTally {
+                ripe: 3,
+                growing: 1,
+                berries: 2,
+                marked: 2,
+            }
+        );
+        assert_eq!(
+            tally.mirror_forage,
+            ForageTally {
+                ripe: 4,
+                growing: 1,
+                berries: 2,
+                marked: 2,
+            }
+        );
+        assert_eq!(tally.drawn_designations, tally.mirror_designations);
+        assert!(tally.complete(), "a forage mark under its bush is drawn");
+        // Off this level, nothing is held or drawn.
+        let other = ViewState { z: 0, ..state };
+        let tally = tally_marks(&mirror, &other, &render(&mirror, &other, 11, 12));
+        assert_eq!(tally.mirror_forage, ForageTally::default());
+        assert_eq!(tally.drawn_forage, ForageTally::default());
     }
 
     /// 12.7: the `marks:` tally counts a cut mark. A cut glyph the tally does not know reads as
@@ -1542,6 +1765,35 @@ mod tests {
         assert!(tally.complete());
     }
 
+    /// 13.9 R3: a marked bush with no other mark keeps the frame complete, and the same bush
+    /// unmarked is drawn as a plain ripe bush.
+    #[test]
+    fn a_marked_bush_is_drawn_marked_and_keeps_the_tally_complete() {
+        let mut snapshot = empty_snapshot(Dims { x: 64, y: 64, z: 3 });
+        snapshot.plants = vec![protocol::Plant {
+            pos: [32, 32, 1],
+            state: protocol::PlantState::Ripe,
+        }];
+        let unmarked = mirror(&snapshot);
+        let state = initial(&unmarked, Some(1));
+        let plain = render(&unmarked, &state, 11, 9);
+        assert_eq!(at(&plain, 32, 32, &state), ripe_bush_cell());
+
+        snapshot.designations = vec![Designation {
+            pos: [32, 32, 1],
+            kind: DesignationKind::Forage,
+        }];
+        let marked = mirror(&snapshot);
+        let framebuffer = render(&marked, &state, 11, 9);
+        assert_eq!(at(&framebuffer, 32, 32, &state), marked_bush_cell());
+        let tally = tally_marks(&marked, &state, &framebuffer);
+        assert_eq!(
+            (tally.drawn_designations, tally.mirror_designations),
+            (1, 1)
+        );
+        assert!(tally.complete());
+    }
+
     #[test]
     fn offscreen_items_are_discarded_before_indexing_the_framebuffer() {
         let dims = Dims {
@@ -1554,6 +1806,7 @@ mod tests {
             id: 5,
             pos: [0, 0, 0],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }];
         snapshot.entities = vec![Entity {
             id: 1,
@@ -1587,6 +1840,7 @@ mod tests {
             id: 5,
             pos: [1, 1, 0],
             kind: protocol::ItemKind::Stone,
+            count: 1,
         }];
         snapshot.entities = vec![
             Entity {
@@ -1672,16 +1926,19 @@ mod tests {
                 id: 5,
                 pos: [2, 1, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 6,
                 pos: [3, 1, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
             Item {
                 id: 7,
                 pos: [4, 1, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             },
         ];
         snapshot.entities = vec![

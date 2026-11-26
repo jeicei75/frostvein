@@ -5,7 +5,8 @@
 use std::collections::BTreeMap;
 
 use protocol::{
-    Delta, Designation, Dims, Entity, Goal, Item, ItemKind, Rect, Snapshot, Speed, Tile, Zone,
+    Delta, Designation, Dims, Entity, Goal, Item, ItemKind, PlantState, Rect, Snapshot, Speed,
+    Tile, Zone,
 };
 use thiserror::Error;
 
@@ -23,6 +24,9 @@ pub fn refusal_text(refusal: &protocol::Refusal) -> &'static str {
             }
             protocol::DesignationKind::Channel => {
                 "channel refused: nothing to channel, or the mark limit is reached"
+            }
+            protocol::DesignationKind::Forage => {
+                "forage refused: no ripe bush, or the mark limit is reached"
             }
         },
     }
@@ -88,6 +92,7 @@ pub fn goal_kind_text(kind: ItemKind) -> &'static str {
         ItemKind::Wood => "wood",
         ItemKind::Tetrahedrite => "tetrahedrite",
         ItemKind::Bloodstone => "bloodstone",
+        ItemKind::Berries => "berries",
     }
 }
 
@@ -221,6 +226,7 @@ pub struct Mirror {
     entities: BTreeMap<u32, Entity>,
     designations: Vec<Designation>,
     zones: Vec<Zone>,
+    plants: BTreeMap<[i32; 3], PlantState>,
     items: BTreeMap<u32, Item>,
     speed: Speed,
     tick: u64,
@@ -248,6 +254,7 @@ impl Mirror {
             entities,
             designations,
             zones,
+            plants,
             items,
             speed,
             goals,
@@ -287,6 +294,17 @@ impl Mirror {
         self.entities = next_entities;
         self.designations = designations;
         self.zones = zones;
+        // `plants` is changes only, like `tiles`; `None` is a plant that is gone.
+        for change in plants {
+            match change.state {
+                Some(state) => {
+                    self.plants.insert(change.pos, state);
+                }
+                None => {
+                    self.plants.remove(&change.pos);
+                }
+            }
+        }
         self.items = items.into_iter().map(|item| (item.id, item)).collect();
         self.speed = speed;
         self.goals = goals;
@@ -330,6 +348,14 @@ impl Mirror {
         &self.zones
     }
 
+    pub fn plants(&self) -> impl Iterator<Item = ([i32; 3], PlantState)> + '_ {
+        self.plants.iter().map(|(pos, state)| (*pos, *state))
+    }
+
+    pub fn plant(&self, pos: [i32; 3]) -> Option<PlantState> {
+        self.plants.get(&pos).copied()
+    }
+
     pub fn previous_entity(&self, id: u32) -> Option<&Entity> {
         self.previous_entities.get(&id)
     }
@@ -349,6 +375,11 @@ impl Mirror {
                 .collect(),
             designations: snapshot.designations,
             zones: snapshot.zones,
+            plants: snapshot
+                .plants
+                .into_iter()
+                .map(|plant| (plant.pos, plant.state))
+                .collect(),
             items: snapshot
                 .items
                 .into_iter()
@@ -591,6 +622,13 @@ mod tests {
                 },
                 "channel refused: nothing to channel, or the mark limit is reached",
             ),
+            (
+                protocol::Refusal::Designate {
+                    kind: protocol::DesignationKind::Forage,
+                    rect,
+                },
+                "forage refused: no ripe bush, or the mark limit is reached",
+            ),
         ] {
             assert_eq!(refusal_text(&refusal), text);
         }
@@ -716,6 +754,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
             refusals: Vec::new(),
@@ -745,10 +784,12 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: vec![Item {
                 id: 9,
                 pos: [0, 0, 0],
                 kind: protocol::ItemKind::Stone,
+                count: 1,
             }],
             speed: Speed::Normal,
             tick: 9,
@@ -770,6 +811,7 @@ mod tests {
             entities: Vec::new(),
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
 
@@ -804,6 +846,7 @@ mod tests {
             }],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Fast,
 
@@ -917,6 +960,7 @@ mod tests {
             ],
             designations: Vec::new(),
             zones: Vec::new(),
+            plants: Vec::new(),
             items: Vec::new(),
             speed: Speed::Normal,
 
