@@ -1,0 +1,116 @@
+
+=== 23b the no-throw sweep's level assert: no dwarf ever claims a job (review LOW) ===
+thread 'a_carried_stone_is_always_set_down_beside_its_carrier' (170271) panicked at crates/sim-core/tests/scenario.rs:4809:13:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.19s
+
+=== trade check removed ===
+thread 'hauling_starts_while_the_dig_backlog_is_still_queued' (170904) panicked at crates/sim-core/tests/scenario.rs:1834:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.18s
+
+=== trade maps Haul to Miner ===
+thread 'each_trade_holds_only_its_own_jobs_and_the_woodcutter_wanders' (171515) panicked at crates/sim-core/tests/scenario.rs:1879:22:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.18s
+
+=== a reassignment keeps the held job ===
+thread 'a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job' (172136) panicked at crates/sim-core/tests/scenario.rs:1961:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+=== the released job is removed from Jobs ===
+thread 'a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job' (172765) panicked at crates/sim-core/tests/scenario.rs:1967:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+=== retry_claim instead of release_claim ===
+thread 'a_reassigned_miner_lets_go_and_the_other_miner_takes_the_same_job' (173374) panicked at crates/sim-core/tests/scenario.rs:1971:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+=== a reassigned hauler keeps carrying ===
+thread 'a_reassigned_hauler_puts_the_stone_down_and_another_hauler_delivers_it' (174003) panicked at crates/sim-core/tests/scenario.rs:2013:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.03s
+
+=== 4 a cut is a miner's job ===
+thread 'cutting_one_tree_fells_it_whole_and_leaves_the_touching_neighbour_standing' (174628) panicked at crates/sim-core/tests/scenario.rs:2544:13:
+assertion `left == right` failed: only the woodcutter holds a cut
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+=== 2 trade(Forage) is the miner's (AC 5) ===
+thread 'only_haulers_hold_forage_jobs' (175208) panicked at crates/sim-core/tests/scenario.rs:5918:17:
+assertion `left == right` failed: Id(2) holds a forage job
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+=== loaded world schedule omits wander ===
+thread 'save_load_then_tick_matches_never_saved' (175841) panicked at crates/sim-core/tests/save_load.rs:174:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.06s
+
+=== from_save regenerates terrain from the seed ===
+thread 'save_load_then_tick_matches_never_saved' (176463) panicked at crates/sim-core/tests/save_load.rs:175:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.10s
+
+=== from_save marks every tile dirty ===
+thread 'loading_starts_with_no_dirty_tiles' (177069) panicked at crates/sim-core/tests/save_load.rs:637:5:
+assertion failed: loaded.drain_dirty().is_empty()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.06s
+
+=== tui never draws the roster ===
+thread 'the_roster_row_names_each_dwarf_in_his_colour_and_follows_an_identity_swap' (177762) panicked at crates/tui/tests/client.rs:1874:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.50s
+
+=== named tui dwarf drawn as the emoji-capable smiley ===
+thread 'view::tests::a_named_dwarf_is_drawn_in_his_tunic_colour_and_a_nameless_one_in_his_job_colour' (178461) panicked at crates/tui/src/view.rs:1550:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 59 filtered out; finished in 0.00s
+
+=== 5 the scenario loader ignores dims (AC 1) ===
+thread 'a_seed_start_with_dims_and_crew_builds_that_world' (179590) panicked at crates/simd/tests/bench.rs:621:5:
+assertion `left == right` failed: bench one-dig run 1/1: ticks=40 commands=0/0 mean=0.0624 p99=0.9303 max=0.930 over10=0 state=f56e6dcb5723f2ee
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.04s
+
+=== the tui status drops its compass ===
+thread 'view::tests::status_line_reports_speed_z_and_dwarf_count' (180284) panicked at crates/tui/src/view.rs:2253:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 59 filtered out; finished in 0.00s
+
+=== 1 progress counts loose items too (AC 2) ===
+thread 'tests::goal_progress_counts_stored_items_only' (180897) panicked at crates/sim-core/src/lib.rs:10711:9:
+assertion `left == right` failed: a carried item on a pile cell is not stored
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.01s
+
+=== RemoveStockpile also clears designations ===
+thread 'each_eraser_leaves_the_other_mark_kind_untouched' (181539) panicked at crates/sim-core/tests/scenario.rs:598:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+=== RemoveStockpile is a no-op ===
+thread 'each_eraser_leaves_the_other_mark_kind_untouched' (182172) panicked at crates/sim-core/tests/scenario.rs:599:5:
+assertion failed: world.zones().is_empty()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+=== 10 a bush another job names is offered (AC 5) ===
+thread 'one_ripe_bush_feeds_one_of_two_hungry_dwarves_and_the_other_waits' (182781) panicked at crates/sim-core/src/lib.rs:932:17:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 115 filtered out; finished in 0.01s
+
+================ MUTATION RESULTS ================
+23b the no-throw sweep's level assert: no dwarf ever claims a job (review LOW) KILLED
+trade check removed                                          KILLED
+trade maps Haul to Miner                                     KILLED
+a reassignment keeps the held job                            KILLED
+the released job is removed from Jobs                        KILLED
+retry_claim instead of release_claim                         KILLED
+a reassigned hauler keeps carrying                           KILLED
+4 a cut is a miner's job                                     KILLED
+2 trade(Forage) is the miner's (AC 5)                        KILLED
+loaded world schedule omits wander                           KILLED
+from_save regenerates terrain from the seed                  KILLED
+from_save marks every tile dirty                             KILLED
+tui never draws the roster                                   KILLED
+named tui dwarf drawn as the emoji-capable smiley            KILLED
+5 the scenario loader ignores dims (AC 1)                    KILLED
+the tui status drops its compass                             KILLED
+1 progress counts loose items too (AC 2)                     KILLED
+RemoveStockpile also clears designations                     KILLED
+RemoveStockpile is a no-op                                   KILLED
+10 a bush another job names is offered (AC 5)                KILLED
+
+All mutations killed.
+exit=0
