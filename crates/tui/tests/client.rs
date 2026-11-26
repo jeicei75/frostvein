@@ -1008,6 +1008,8 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }];
         if with_features {
             entities.extend([
@@ -1021,6 +1023,8 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
                 protocol::Entity {
                     id: 6,
@@ -1032,6 +1036,8 @@ fn capture_growing_world_raw(with_features: bool, with_ore: bool) -> String {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
             ]);
         }
@@ -1237,6 +1243,8 @@ fn capture_haul_replay(changes: bool) -> String {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 }],
                 designations: Vec::new(),
                 zones: vec![protocol::Zone { pos: PILE }],
@@ -1360,6 +1368,8 @@ fn dwarf_at(x: i32) -> protocol::Entity {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     }
 }
 
@@ -1544,6 +1554,8 @@ fn capture_walking_dwarf(no_color: bool) -> (String, String) {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

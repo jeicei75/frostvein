@@ -85,6 +85,18 @@ pub fn profession_text(profession: protocol::Profession) -> &'static str {
     }
 }
 
+/// 13.10: the one spelling of a dwarf's need, shared by both clients: `miserable` over `hungry`,
+/// and nothing for a fed dwarf or an entity that carries no need.
+pub fn need_text(entity: &protocol::Entity) -> Option<&'static str> {
+    if entity.miserable == Some(true) {
+        Some("miserable")
+    } else if entity.hungry == Some(true) {
+        Some("hungry")
+    } else {
+        None
+    }
+}
+
 /// The one spelling of a goal's item kind, shared by both clients.
 pub fn goal_kind_text(kind: ItemKind) -> &'static str {
     match kind {
@@ -781,6 +793,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -843,6 +857,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -905,6 +921,8 @@ mod tests {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         });
         initial.entities.push(Entity {
             id: 3,
@@ -916,6 +934,8 @@ mod tests {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         });
         let mut mirror = Mirror::from_snapshot(initial).unwrap();
 
@@ -934,6 +954,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
                 Entity {
                     id: 2,
@@ -945,6 +967,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
                 Entity {
                     id: 8,
@@ -956,6 +980,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
             ],
             designations: Vec::new(),

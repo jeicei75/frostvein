@@ -191,6 +191,8 @@ fn emitter_entity(
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     }
 }
 
@@ -201,6 +203,8 @@ fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Ent
     let jobs = world.jobs();
     let carrying = world.carrying();
     let clearing = world.clearing();
+    let hungry = world.hungry();
+    let miserable = world.miserable();
     world
         .dwarves()
         .into_iter()
@@ -236,6 +240,15 @@ fn dwarf_entities(world: &sim_core::World) -> impl Iterator<Item = protocol::Ent
                 .iter()
                 .find(|(carrier_id, _)| *carrier_id == id)
                 .and_then(|(_, stone)| *stone),
+            // 13.10: both read from the sim's rule (ADR 4): no client holds a threshold.
+            hungry: hungry
+                .iter()
+                .find(|(dwarf, _)| *dwarf == id)
+                .map(|(_, hungry)| *hungry),
+            miserable: miserable
+                .iter()
+                .find(|(dwarf, _)| *dwarf == id)
+                .map(|(_, miserable)| *miserable),
         })
 }
 
@@ -249,6 +262,9 @@ fn dwarf_job(job: sim_core::Job) -> protocol::DwarfJob {
         // NOTE: a haul's `target` is the stone's position at creation and goes stale at pick-up,
         // so it is not on the wire.
         sim_core::JobKind::Haul { .. } => protocol::DwarfJob::Haul,
+        sim_core::JobKind::Eat { .. } | sim_core::JobKind::EatPlant => {
+            protocol::DwarfJob::Eat { target }
+        }
     }
 }
 
@@ -766,6 +782,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             })
             .collect();
 

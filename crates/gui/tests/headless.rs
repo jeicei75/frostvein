@@ -200,6 +200,8 @@ fn dwarf(id: u32, pos: [i32; 3]) -> Entity {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     }
 }
 
@@ -214,6 +216,8 @@ fn lantern_dwarf(id: u32, pos: [i32; 3]) -> Entity {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     }
 }
 
@@ -1394,6 +1398,8 @@ fn the_floor_drop_does_not_move_the_cube_kinds() {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }],
     ));
     app.update();
@@ -1596,6 +1602,8 @@ fn production_drives_the_flicker_from_elapsed_time() {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1624,6 +1632,8 @@ fn flickered_light_survives_a_later_production_reconciliation() {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![emitter]));
     app.update();
@@ -1665,6 +1675,8 @@ fn campfire_light_casts_shadows_and_is_not_rewritten_by_a_later_reconciliation()
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     };
     let mut app = headless_app(snapshot(vec![Tile::Empty, Tile::Empty], vec![campfire]));
     app.update();
@@ -1734,6 +1746,8 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     };
     let dwarf_one = Entity {
         id: 1,
@@ -1745,6 +1759,8 @@ fn terrain_ids_never_satisfy_a_simulation_id_lookup() {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     };
     let mut app = headless_app(snapshot(
         vec![Tile::Solid(Material::Ice), Tile::Empty],
@@ -1935,6 +1951,8 @@ fn despawning_world_projection_then_reconciling_recreates_the_same_scene() {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     };
     // AC11 says "marks included", so the snapshot must actually carry marks — reviewed
     // 2026-08-21, this test used an empty designation and zone list, so every assertion in it was
@@ -2039,6 +2057,8 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -2050,6 +2070,8 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }))
         .chain(std::iter::once(Entity {
             id: 5,
@@ -2061,6 +2083,8 @@ fn a_camp_snapshot_lights_only_its_wire_declared_emitters_and_not_an_unlit_dwarf
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }))
         .collect();
     let mut app = headless_app(snapshot_with_dims(
@@ -2103,6 +2127,8 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         })
         .chain(std::iter::once(Entity {
             id: 4,
@@ -2114,6 +2140,8 @@ fn the_camp_as_it_now_ships_lights_every_dwarf_as_well_as_every_emitter() {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }))
         .chain((5..10).map(|id| lantern_dwarf(id, [60 + id as i32 - 5, 65, 9])))
         .collect();
@@ -6954,6 +6982,135 @@ fn a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not() 
         app.update();
     }
     assert_eq!(armature(&mut app, 7), rest, "the nudge must clear exactly");
+}
+
+/// 13.10 (Q5): a miserable dwarf's ARMATURE node is drawn pitched forward `SLUMP_PITCH` and sunk
+/// `SLUMP_SINK` cells, and comes back to rest exactly when the mirror's flag clears; the dwarf
+/// entity never moves, and a miserable woodcutter on a cut keeps the cut nudge as well.
+#[test]
+fn a_miserable_dwarfs_armature_slumps_with_the_flag_and_his_entity_does_not_move() {
+    use bevy::prelude::{AnimationPlayer, ChildOf, Quat, Transform, Vec3};
+    use gui::appearance::{CUT_OFFSET, SLUMP_PITCH, SLUMP_SINK};
+    use gui::project::METRES_TO_CELLS;
+    let cut = protocol::DwarfJob::Cut { target: [2, 0, 0] };
+    let mut app = headless_app(snapshot(
+        vec![Tile::Empty, Tile::Empty],
+        vec![dwarf(7, [0, 0, 0]), dwarf(8, [1, 0, 0])],
+    ));
+    app.update();
+    let rest = Vec3::new(0.0, 0.0, -0.175_165_92);
+    let dwarf_entity = |app: &mut App, id: u32| {
+        app.world_mut()
+            .query::<(bevy::prelude::Entity, &WorldProjected)>()
+            .iter(app.world())
+            .find(|(_, marker)| marker.0 == id)
+            .map(|(entity, _)| entity)
+            .unwrap()
+    };
+    for id in [7, 8] {
+        let parent = dwarf_entity(&mut app, id);
+        app.world_mut().spawn((
+            AnimationPlayer::default(),
+            Transform::from_translation(rest),
+            ChildOf(parent),
+        ));
+    }
+    let armature = |app: &mut App, id: u32| -> Transform {
+        let parent = dwarf_entity(app, id);
+        *app.world_mut()
+            .query::<(&AnimationPlayer, &Transform, &ChildOf)>()
+            .iter(app.world())
+            .find(|(_, _, child_of)| child_of.0 == parent)
+            .map(|(_, transform, _)| transform)
+            .unwrap()
+    };
+    let drawn = |app: &mut App, id: u32| -> Transform {
+        *app.world_mut()
+            .query::<(&WorldProjected, &Transform)>()
+            .iter(app.world())
+            .find(|(marker, _)| marker.0 == id)
+            .map(|(_, transform)| transform)
+            .unwrap()
+    };
+    let miserable = |mut entity: protocol::Entity, flag: bool| {
+        entity.hungry = Some(flag);
+        entity.miserable = Some(flag);
+        entity
+    };
+    let pitch = Quat::from_rotation_x(-SLUMP_PITCH.to_radians());
+    let sink = Vec3::new(0.0, -SLUMP_SINK / METRES_TO_CELLS, 0.0);
+    for _ in 0..3 {
+        app.update();
+    }
+    assert_eq!(armature(&mut app, 7).translation, rest);
+    let cell = drawn(&mut app, 7);
+
+    apply_delta(
+        &mut app,
+        delta_at(
+            1,
+            Vec::new(),
+            vec![
+                miserable(working(7, [0, 0, 0], JobState::Idle, None, None), true),
+                miserable(working(8, [1, 0, 0], JobState::Idle, None, None), false),
+            ],
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    let slumped = armature(&mut app, 7);
+    assert!(
+        (slumped.translation - (rest + sink)).length() < 1e-6,
+        "{slumped:?}"
+    );
+    assert!(slumped.rotation.abs_diff_eq(pitch, 1e-6), "{slumped:?}");
+    assert_eq!(
+        armature(&mut app, 8).translation,
+        rest,
+        "a fed dwarf stands"
+    );
+    assert_eq!(armature(&mut app, 8).rotation, Quat::IDENTITY);
+    assert_eq!(drawn(&mut app, 7), cell, "the dwarf entity must not move");
+
+    // A miserable woodcutter on a cut: both offsets.
+    apply_delta(
+        &mut app,
+        delta_at(
+            2,
+            Vec::new(),
+            vec![miserable(
+                working(7, [0, 0, 0], JobState::Work, Some(cut), None),
+                true,
+            )],
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    let both = armature(&mut app, 7);
+    assert!(
+        (both.translation - (rest + Vec3::new(0.0, 0.0, -CUT_OFFSET) + sink)).length() < 1e-6,
+        "{both:?}"
+    );
+
+    apply_delta(
+        &mut app,
+        delta_at(
+            3,
+            Vec::new(),
+            vec![miserable(
+                working(7, [0, 0, 0], JobState::Idle, None, None),
+                false,
+            )],
+        ),
+    );
+    for _ in 0..3 {
+        app.update();
+    }
+    let back = armature(&mut app, 7);
+    assert_eq!(back.translation, rest, "the slump must clear exactly");
+    assert_eq!(back.rotation, Quat::IDENTITY);
 }
 
 /// 12.7 Task 0.1: and he faces the trunk while he does it.

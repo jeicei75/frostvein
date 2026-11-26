@@ -129,11 +129,23 @@ pub enum Profession {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DwarfJob {
-    Dig { target: [i32; 3] },
-    Channel { target: [i32; 3] },
-    Cut { target: [i32; 3] },
-    Forage { target: [i32; 3] },
+    Dig {
+        target: [i32; 3],
+    },
+    Channel {
+        target: [i32; 3],
+    },
+    Cut {
+        target: [i32; 3],
+    },
+    Forage {
+        target: [i32; 3],
+    },
     Haul,
+    /// 13.10: a meal: `target` is the berries item's cell or the bush's cell.
+    Eat {
+        target: [i32; 3],
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -255,6 +267,12 @@ pub struct Entity {
     pub job: Option<DwarfJob>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub carrying: Option<u32>,
+    /// 13.10: a dwarf's need, read by the sim: hungry from `EAT_AT`, miserable from `MISERABLE_AT`.
+    /// Every dwarf carries `Some`; a torch or the campfire carries neither.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hungry: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub miserable: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -559,6 +577,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }]
         );
         assert_eq!(
@@ -636,6 +656,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }]
         );
         assert_eq!(

@@ -5,11 +5,12 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use protocol::{Command, DesignationKind, Dims, EntityKind, Speed, Tile};
 
 use crate::palette::{
-    BLANK, Cell, PEEK_DEPTH, STATUS_TEXT, berries_item_cell, bloodstone_item_cell, carrier_cell,
-    crowd_cell, cursor_cell, designation_cell, dim, dwarf_colour, entity_cell, growing_bush_cell,
-    item_cell, marked_bush_cell, pending_rect_cell, ripe_bush_cell, stored_berries_item_cell,
-    stored_bloodstone_item_cell, stored_item_cell, stored_tetrahedrite_item_cell,
-    stored_wood_item_cell, tetrahedrite_item_cell, tile_cell, wood_item_cell, zone_cell,
+    BLANK, Cell, MISERY_COLOUR, PEEK_DEPTH, STATUS_TEXT, berries_item_cell, bloodstone_item_cell,
+    carrier_cell, crowd_cell, cursor_cell, designation_cell, dim, dwarf_colour, entity_cell,
+    growing_bush_cell, item_cell, marked_bush_cell, pending_rect_cell, ripe_bush_cell,
+    stored_berries_item_cell, stored_bloodstone_item_cell, stored_item_cell,
+    stored_tetrahedrite_item_cell, stored_wood_item_cell, tetrahedrite_item_cell, tile_cell,
+    wood_item_cell, zone_cell,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -449,11 +450,16 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
                 };
                 // 12.2 (Wolf): a named dwarf is `☻` in his tunic colour; job and carry state leave
                 // his glyph. Not `☺`: it is emoji-capable, and Windows Terminal paints it as a
-                // yellow emoji face that ignores the colour.
+                // yellow emoji face that ignores the colour. 13.10: a miserable one is drawn in
+                // `MISERY_COLOUR` instead.
                 match entity.identity {
                     Some(identity) => Cell {
                         glyph: '☻',
-                        fg: dwarf_colour(identity.colour),
+                        fg: if entity.miserable == Some(true) {
+                            MISERY_COLOUR
+                        } else {
+                            dwarf_colour(identity.colour)
+                        },
                     },
                     None => cell,
                 }
@@ -492,6 +498,15 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             .entities()
             .filter(|entity| entity.kind == EntityKind::Dwarf)
             .count();
+        // 13.10 (Q6): the needs as counts, which survive `NO_COLOR`. A miserable dwarf is hungry too.
+        let needing = |need: fn(&protocol::Entity) -> Option<bool>| {
+            mirror
+                .entities()
+                .filter(|entity| need(entity) == Some(true))
+                .count()
+        };
+        let hungry = needing(|entity| entity.hungry);
+        let miserable = needing(|entity| entity.miserable);
         let speed = match state.speed {
             Speed::Paused => "paused",
             Speed::Normal => "normal",
@@ -511,6 +526,10 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             mirror.dims().z.saturating_sub(1),
             dwarves
         );
+        // Only while someone is hungry, so a fed crew's line keeps room for a refusal.
+        if hungry > 0 {
+            status.push_str(&format!("  hungry {hungry}  miserable {miserable}"));
+        }
         if let Some(refusal) = &state.refusal {
             status.push_str("  ");
             status.push_str(client_core::refusal_text(refusal));
@@ -540,9 +559,9 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
         .filter_map(|entity| {
             entity
                 .identity
-                .map(|identity| (identity, entity.profession))
+                .map(|identity| (identity, entity.profession, client_core::need_text(entity)))
         })
-        .flat_map(|(identity, profession)| {
+        .flat_map(|(identity, profession, need)| {
             let fg = dwarf_colour(identity.colour);
             let name = format!(
                 "{} {}",
@@ -553,10 +572,16 @@ pub fn render(mirror: &Mirror, state: &ViewState, w: u16, h: u16) -> Framebuffer
             .map(move |glyph| Cell { glyph, fg })
             .collect::<Vec<_>>();
             // One blank, then the trade in status grey; a dwarf with no trade shows his name only.
+            // 13.10 (Q6): and a need after the trade, in the same grey.
             let trade = profession
                 .map(|profession| format!(" {}", client_core::profession_text(profession)))
                 .unwrap_or_default()
                 .chars()
+                .chain(
+                    need.map(|need| format!(" {need}"))
+                        .unwrap_or_default()
+                        .chars(),
+                )
                 .map(|glyph| Cell {
                     glyph,
                     fg: STATUS_TEXT,
@@ -1299,6 +1324,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
             Entity {
                 id: 2,
@@ -1310,6 +1337,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
         ];
         let state = normal_state((2, 1), 1);
@@ -1360,6 +1389,8 @@ mod tests {
             profession,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         };
         snapshot.entities = vec![
             named(1, protocol::DwarfName::Ori, None),
@@ -1382,6 +1413,88 @@ mod tests {
         assert_eq!(
             framebuffer.cell(14, 3).fg,
             dwarf_colour(protocol::DwarfColour::Blue)
+        );
+    }
+
+    /// 13.10 (Q6): a miserable dwarf's `☻` is `MISERY_COLOUR` and a hungry one keeps his tunic;
+    /// the roster puts the need after the trade, and the status line counts both.
+    #[test]
+    fn a_miserable_dwarf_is_drawn_cold_and_the_roster_and_status_name_the_needs() {
+        let dims = Dims { x: 5, y: 3, z: 3 };
+        let mut snapshot = empty_snapshot(dims);
+        let named = |id, x, name, colour, hungry, miserable| Entity {
+            id,
+            kind: EntityKind::Dwarf,
+            pos: [x, 1, 1],
+            state: JobState::Idle,
+            light: None,
+            identity: Some(protocol::Identity {
+                name,
+                epithet: protocol::Epithet::Ironhand,
+                colour,
+            }),
+            profession: Some(protocol::Profession::Miner),
+            job: None,
+            carrying: None,
+            hungry: Some(hungry),
+            miserable: Some(miserable),
+        };
+        snapshot.entities = vec![
+            named(
+                1,
+                1,
+                protocol::DwarfName::Ori,
+                protocol::DwarfColour::Blue,
+                false,
+                false,
+            ),
+            named(
+                2,
+                2,
+                protocol::DwarfName::Nori,
+                protocol::DwarfColour::Red,
+                true,
+                false,
+            ),
+            named(
+                3,
+                3,
+                protocol::DwarfName::Dori,
+                protocol::DwarfColour::Green,
+                true,
+                true,
+            ),
+        ];
+
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
+        assert_eq!(
+            framebuffer.cell(1, 1).fg,
+            dwarf_colour(protocol::DwarfColour::Blue)
+        );
+        assert_eq!(
+            framebuffer.cell(2, 1).fg,
+            dwarf_colour(protocol::DwarfColour::Red),
+            "a hungry dwarf keeps his tunic"
+        );
+        assert_eq!(
+            framebuffer.cell(3, 1),
+            Cell {
+                glyph: '☻',
+                fg: MISERY_COLOUR,
+            }
+        );
+        let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 80, 6);
+        let row: String = (0..80).map(|x| framebuffer.cell(x, 3).glyph).collect();
+        assert!(
+            row.starts_with(
+                "Ori Ironhand miner  Nori Ironhand miner hungry  Dori Ironhand miner miserable  "
+            ),
+            "{row:?}"
+        );
+        let status: String = (0..80).map(|x| framebuffer.cell(x, 4).glyph).collect();
+        assert!(
+            status.contains("dwarves 3  N up  hungry 2  miserable 1"),
+            "{status:?}"
         );
     }
 
@@ -1411,6 +1524,8 @@ mod tests {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         };
         snapshot.entities = vec![
             named(1, 1, protocol::DwarfColour::Blue),
@@ -1425,6 +1540,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
         ];
 
@@ -1480,6 +1597,8 @@ mod tests {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }];
 
         let framebuffer = render(&mirror(&snapshot), &normal_state((2, 1), 1), 5, 6);
@@ -1818,6 +1937,8 @@ mod tests {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }];
 
         let framebuffer = render(&mirror(&snapshot), &normal_state((127, 127), 0), 5, 5);
@@ -1853,6 +1974,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
             Entity {
                 id: 2,
@@ -1864,6 +1987,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
         ];
 
@@ -1952,6 +2077,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
             Entity {
                 id: 9,
@@ -1963,6 +2090,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
             Entity {
                 id: 1,
@@ -1974,6 +2103,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
             Entity {
                 id: 2,
@@ -1985,6 +2116,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
         ];
         let state = ViewState {
@@ -2024,6 +2157,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
             Entity {
                 id: 2,
@@ -2035,6 +2170,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             },
         ];
         let state = normal_state((1, 0), 0);
@@ -2091,6 +2228,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             })
             .collect();
         snapshot.entities.push(Entity {
@@ -2103,6 +2242,8 @@ mod tests {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         });
         let state = normal_state((12, 34), 19);
 
@@ -2215,6 +2356,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 })
                 .collect();
             // Worst case with the compass appended is 46 of 80 columns, so the budget this
@@ -2675,6 +2818,8 @@ mod tests {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         });
         assert_eq!(initial(&mirror(&snapshot), None), before);
 

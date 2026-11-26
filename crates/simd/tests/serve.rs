@@ -1870,6 +1870,188 @@ fn forage_world() -> sim_core::World {
     world
 }
 
+/// 13.10: a save the SIM wrote with a meal under way: hunger on, a one-cell pile beside the camp,
+/// and dwarf 0 hungry while the rest are fed. With `stored` the pile holds a berries item of 2 and
+/// he eats there (`Eat`); without it he eats a bush (`EatPlant`). Stepped until he holds it.
+fn meal_save(stored: bool) -> (sim_core::SaveState, sim_core::Job) {
+    let mut world =
+        sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT).with_hunger();
+    let tile = sim_core::Pos { x: 66, y: 64, z: 9 };
+    assert_eq!(
+        world.apply_command(sim_core::SimCommand::PlaceStockpile {
+            rect: sim_core::Rect {
+                min: tile,
+                max: tile
+            },
+        }),
+        None
+    );
+    let mut save = world.to_save();
+    if stored {
+        save.items
+            .push((save.next_id, tile, sim_core::ItemKind::Berries, 2));
+        save.next_id += 1;
+    }
+    for dwarf in &mut save.dwarves {
+        dwarf.hunger = if dwarf.id == 0 { sim_core::EAT_AT } else { 0 };
+    }
+    world = sim_core::World::from_save(save);
+    let meal = |world: &sim_core::World| {
+        let held = world.claims().into_iter().find(|(id, _)| id.0 == 0)?.1?;
+        world.jobs().into_iter().find(|job| {
+            job.id == held
+                && matches!(
+                    job.kind,
+                    sim_core::JobKind::Eat { .. } | sim_core::JobKind::EatPlant
+                )
+        })
+    };
+    while meal(&world).is_none() {
+        assert!(world.tick() < 40, "dwarf 0 took no meal");
+        world.step();
+    }
+    let job = meal(&world).expect("a meal");
+    assert_eq!(
+        matches!(job.kind, sim_core::JobKind::Eat { .. }),
+        stored,
+        "{job:?}"
+    );
+    (world.to_save(), job)
+}
+
+/// 13.10 AC 6, positive control: the live Load takes a sim-written save with each kind of meal
+/// under way.
+#[test]
+fn the_live_load_takes_a_save_holding_a_meal_of_either_kind() {
+    for stored in [true, false] {
+        let daemon = Daemon::spawn();
+        let (state, _) = meal_save(stored);
+        fs::write(
+            daemon.save_path(),
+            serde_json::to_vec(&state).expect("encode meal save"),
+        )
+        .expect("write meal save");
+        let stream = daemon.connect();
+        let mut writer = stream.try_clone().expect("client write half must clone");
+        let mut reader = BufReader::new(stream);
+        let _ = read_snapshot(&mut reader);
+        send_literal(&mut writer, b"{\"type\":\"load\"}\n");
+        let loaded = read_snapshot_after_load(&mut reader);
+        assert_eq!(loaded.tick, state.tick);
+    }
+}
+
+/// 13.10 AC 6: a meal nobody holds is refused.
+#[test]
+fn a_meal_nobody_holds_save_is_logged_and_the_daemon_keeps_ticking() {
+    let (mut state, job) = meal_save(true);
+    state.dwarves[0].current_job = None;
+    state.dwarves[0].work_progress = 0;
+    state.dwarves[0].path.clear();
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        &format!("save meal job {} is held by no dwarf", job.id.0),
+    );
+}
+
+/// 13.10 AC 6: a meal of an item that is not a stored berries item is refused: off the pile, or
+/// not berries.
+#[test]
+fn a_meal_of_no_stored_berries_save_is_logged_and_the_daemon_keeps_ticking() {
+    let (state, job) = meal_save(true);
+    let sim_core::JobKind::Eat { item } = job.kind else {
+        unreachable!("a stored meal")
+    };
+    let cause = format!(
+        "save eat job {} names item {item}, not a stored berries item",
+        job.id.0
+    );
+    let mut off_pile = state.clone();
+    off_pile.zones.clear();
+    assert_save_is_rejected_without_stopping_ticks(off_pile, &cause);
+    let mut stone = state;
+    let entry = stone
+        .items
+        .iter_mut()
+        .find(|(id, ..)| *id == item)
+        .expect("the meal's item");
+    entry.2 = sim_core::ItemKind::Stone;
+    entry.3 = 1;
+    assert_save_is_rejected_without_stopping_ticks(stone, &cause);
+}
+
+/// 13.10 AC 6: two meals on one item, or two on one bush, are refused.
+#[test]
+fn two_meals_on_one_item_or_bush_save_is_logged_and_the_daemon_keeps_ticking() {
+    for stored in [true, false] {
+        let (mut state, job) = meal_save(stored);
+        let twin = sim_core::Job {
+            id: sim_core::JobId(state.next_job_id),
+            ..job
+        };
+        state.next_job_id += 1;
+        state.jobs.push(twin);
+        state.dwarves[1].current_job = Some(twin.id.0);
+        let cause = match job.kind {
+            sim_core::JobKind::Eat { item } => format!("save has two eat jobs on item {item}"),
+            _ => format!(
+                "save reuses job target {},{},{}",
+                job.target.x, job.target.y, job.target.z
+            ),
+        };
+        assert_save_is_rejected_without_stopping_ticks(state, &cause);
+    }
+}
+
+/// 13.10 AC 6: a bush meal over no ripe plant, or over a bush that has a forage job, is refused.
+#[test]
+fn a_bush_meal_over_no_ripe_plant_or_a_forage_job_save_is_logged_and_the_daemon_keeps_ticking() {
+    let (state, job) = meal_save(false);
+    let target = job.target;
+    let mut growing = state.clone();
+    growing
+        .plants
+        .iter_mut()
+        .find(|(pos, _)| *pos == target)
+        .expect("the meal's bush")
+        .1 = state.tick + 100;
+    assert_save_is_rejected_without_stopping_ticks(
+        growing,
+        &format!(
+            "save eat-plant job {} has no ripe plant at {},{},{}",
+            job.id.0, target.x, target.y, target.z
+        ),
+    );
+    let mut foraged = state;
+    foraged
+        .designations
+        .push((target, sim_core::DesignationKind::Forage));
+    foraged.jobs.push(sim_core::Job {
+        id: sim_core::JobId(foraged.next_job_id),
+        kind: sim_core::JobKind::Forage,
+        ..job
+    });
+    foraged.next_job_id += 1;
+    assert_save_is_rejected_without_stopping_ticks(
+        foraged,
+        &format!(
+            "save reuses job target {},{},{}",
+            target.x, target.y, target.z
+        ),
+    );
+}
+
+/// 13.10 AC 6: a dwarf with hunger on a world with hunger off is refused.
+#[test]
+fn hunger_on_a_world_with_hunger_off_save_is_logged_and_the_daemon_keeps_ticking() {
+    let mut state = sim_core::World::generate(42, sim_core::Dims::DEFAULT).to_save();
+    state.dwarves[0].hunger = 1;
+    assert_save_is_rejected_without_stopping_ticks(
+        state,
+        "save dwarf 0 has hunger 1 on a world with hunger off",
+    );
+}
+
 /// 13.9 AC 8, positive control (13.6 #226's lesson: the validator can be tighter than the sim):
 /// the live Load takes a save holding plants, forage marks and a Forage job, and no item.
 #[test]

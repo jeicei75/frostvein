@@ -32,9 +32,9 @@ struct File {
     commands: Vec<Scheduled>,
 }
 
-/// `{"seed":S}` or `{"save":F}`, where a seed may add `"dims":[X,Y,Z]` and `"crew":N` (13.6), and
-/// `"arrivals":true` (13.8). Absent, a seed start is the 128x128x32 world with five dwarves and no
-/// arrivals it always was.
+/// `{"seed":S}` or `{"save":F}`, where a seed may add `"dims":[X,Y,Z]` and `"crew":N` (13.6),
+/// `"arrivals":true` (13.8) and `"hunger":true` (13.10). Absent, a seed start is the 128x128x32
+/// world with five dwarves, no arrivals and no hunger it always was.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StartFile {
@@ -44,6 +44,7 @@ struct StartFile {
     dims: Option<[u32; 3]>,
     crew: Option<usize>,
     arrivals: Option<bool>,
+    hunger: Option<bool>,
 }
 
 enum Start {
@@ -52,6 +53,7 @@ enum Start {
         dims: sim_core::Dims,
         crew: usize,
         arrivals: bool,
+        hunger: bool,
     },
     Save(PathBuf),
 }
@@ -124,6 +126,7 @@ impl Scenario {
                 dims,
                 crew,
                 arrivals,
+                hunger,
             } => {
                 let dims = dims.map_or(sim_core::Dims::DEFAULT, |[x, y, z]| sim_core::Dims {
                     x,
@@ -138,6 +141,7 @@ impl Scenario {
                     dims,
                     crew,
                     arrivals: arrivals.unwrap_or(false),
+                    hunger: hunger.unwrap_or(false),
                 }
             }
             StartFile {
@@ -146,6 +150,7 @@ impl Scenario {
                 dims: None,
                 crew: None,
                 arrivals: None,
+                hunger: None,
             } => Start::Save(path.parent().unwrap_or(Path::new("")).join(save)),
             StartFile {
                 save: Some(_),
@@ -153,6 +158,12 @@ impl Scenario {
                 arrivals: Some(_),
                 ..
             } => bail!("start arrivals is for a seed start: a save has its own"),
+            StartFile {
+                save: Some(_),
+                seed: None,
+                hunger: Some(_),
+                ..
+            } => bail!("start hunger is for a seed start: a save has its own"),
             StartFile {
                 save: Some(_),
                 seed: None,
@@ -180,7 +191,8 @@ impl Scenario {
                 dims,
                 crew,
                 arrivals,
-            } => crate::generate_world(*seed, *dims, *crew, *arrivals)
+                hunger,
+            } => crate::generate_world(*seed, *dims, *crew, *arrivals, *hunger)
                 .with_context(|| format!("scenario {}", self.name)),
             Start::Save(save) => {
                 let path = save.to_str().context("the save path is not UTF-8")?;
@@ -354,7 +366,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
         let mut schedule = scenario.schedule(world.tick());
         let mut ms = Vec::with_capacity(scenario.ticks as usize);
         let start_tiles = world.tiles().to_vec();
-        let (mut dug, mut cut, mut foraged) = (0, 0, 0);
+        let (mut dug, mut cut, mut foraged, mut eaten) = (0, 0, 0, 0);
         for _ in 0..scenario.ticks {
             for command in schedule.due(world.tick()) {
                 if let Some(refusal) = crate::apply_sim_command(&mut world, command.clone()) {
@@ -377,14 +389,54 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
                 .into_iter()
                 .filter_map(|(pos, ripe)| ripe.then_some(pos))
                 .collect();
+            // 13.10: a meal is a hunger that falls to 0. A meal at a bush turns it from ripe to
+            // growing like a forage, so it is taken off `foraged`. Nothing to read with hunger off.
+            let hunger_on = world.hunger_on();
+            let hunger_before = if hunger_on {
+                world.hunger()
+            } else {
+                Vec::new()
+            };
+            let at_bush: BTreeSet<sim_core::Id> = if hunger_on {
+                let jobs = world.jobs();
+                world
+                    .claims()
+                    .into_iter()
+                    .filter(|(_, held)| {
+                        jobs.iter().any(|job| {
+                            Some(job.id) == *held && job.kind == sim_core::JobKind::EatPlant
+                        })
+                    })
+                    .map(|(id, _)| id)
+                    .collect()
+            } else {
+                BTreeSet::new()
+            };
             let started = Instant::now();
             world.step();
             ms.push(started.elapsed().as_secs_f64() * 1000.0);
+            let fed: Vec<sim_core::Id> = if hunger_on {
+                world
+                    .hunger()
+                    .into_iter()
+                    .filter(|(id, hunger)| {
+                        *hunger == 0
+                            && hunger_before
+                                .iter()
+                                .any(|(before_id, before)| before_id == id && *before > 0)
+                    })
+                    .map(|(id, _)| id)
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            eaten += fed.len();
             foraged += world
                 .plants()
                 .into_iter()
                 .filter(|(pos, now_ripe)| !now_ripe && ripe.contains(pos))
-                .count();
+                .count()
+                - fed.iter().filter(|id| at_bush.contains(id)).count();
             let after: BTreeSet<_> = world
                 .designations()
                 .into_iter()
@@ -443,7 +495,7 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
         end = format!(
             "bench {name} end tick={} marks={} items={} zones={} goals={} \
              done=dig:{dug},cut:{cut} stored={stored} cells={cells} crew={} arriving={} \
-             foraged={foraged} food={}",
+             foraged={foraged} food={} eaten={eaten} hungry={} miserable={}",
             world.tick(),
             world.designations().len(),
             world.items().len(),
@@ -451,7 +503,13 @@ pub fn bench(path: &Path, runs: usize) -> anyhow::Result<()> {
             goals.join("/"),
             world.dwarves().len(),
             world.arriving_count(),
-            world.stored_berries_count()
+            world.stored_berries_count(),
+            world.hungry().iter().filter(|(_, hungry)| *hungry).count(),
+            world
+                .miserable()
+                .iter()
+                .filter(|(_, miserable)| *miserable)
+                .count()
         );
     }
     println!("{end}");

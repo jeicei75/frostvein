@@ -802,6 +802,7 @@ pub fn projection_systems(app: &mut App) {
                 crate::project::start_dwarf_walk,
                 crate::project::drive_dwarf_walk,
                 crate::project::nudge_dwarf_for_cut,
+                crate::project::slump_miserable_dwarf,
                 crate::project::apply_dwarf_tunics,
                 crate::project::sync_cut_tint_marks,
                 crate::project::apply_cut_tint,
@@ -818,7 +819,8 @@ pub fn projection_systems(app: &mut App) {
         .add_systems(Update, update_clock_readout.after(ProjectionSet))
         .add_systems(Update, update_name_readout.after(ProjectionSet))
         .add_systems(Update, update_goal_readout.after(ProjectionSet))
-        .add_systems(Update, report_trade_changes.after(ingest_messages));
+        .add_systems(Update, report_trade_changes.after(ingest_messages))
+        .add_systems(Update, report_misery_changes.after(ingest_messages));
     // The toggles resource is initialised HERE, beside the systems that READ it, not only in
     // `client_systems`. Registering a system in one app-builder while its resource is created in
     // another is the same defect this function's own doc comment describes: `crates/gui/tests/
@@ -1876,6 +1878,44 @@ fn report_trade_changes(
     }
 }
 
+/// 13.10: the `gui dwarf {id} miserable on|off` lines for every dwarf whose wire misery differs
+/// from the last look, the trade lines' shape. `seen` is `None` until the first call, which
+/// records the snapshot and prints nothing.
+fn misery_change_lines(
+    seen: &mut Option<std::collections::BTreeMap<u32, bool>>,
+    mirror: &Mirror,
+) -> Vec<String> {
+    let now: std::collections::BTreeMap<u32, bool> = mirror
+        .entities()
+        .filter_map(|entity| Some((entity.id, entity.miserable?)))
+        .collect();
+    let lines = match seen.as_ref() {
+        None => Vec::new(),
+        Some(before) => now
+            .iter()
+            .filter(|(id, miserable)| before.get(id).is_some_and(|old| old != *miserable))
+            .map(|(id, miserable)| {
+                format!(
+                    "gui dwarf {id} miserable {}",
+                    if *miserable { "on" } else { "off" }
+                )
+            })
+            .collect(),
+    };
+    *seen = Some(now);
+    lines
+}
+
+/// NOTE: printed from the MIRROR, like the trade lines, so it reports only the daemon's word.
+fn report_misery_changes(
+    mirror: Res<MirrorResource>,
+    mut seen: Local<Option<std::collections::BTreeMap<u32, bool>>>,
+) {
+    for line in misery_change_lines(&mut seen, &mirror.0) {
+        eprintln!("{line}");
+    }
+}
+
 /// The coloured pieces of the name slot, read from the MIRROR: the trade shown is the one the
 /// daemon last reported, never the one a key asked for.
 fn name_readout_spans(mirror: &Mirror, selected: Option<u32>) -> Vec<(String, Color)> {
@@ -1898,7 +1938,11 @@ fn name_readout_spans(mirror: &Mirror, selected: Option<u32>) -> Vec<(String, Co
         match trade(entity) {
             Some(trade) => {
                 spans.push((format!("{name}\n"), color));
-                spans.push((format!("{trade}   T: change trade"), grey));
+                // 13.10 (Q5): the need after the trade.
+                let need = client_core::need_text(entity)
+                    .map(|need| format!(" {need}"))
+                    .unwrap_or_default();
+                spans.push((format!("{trade}{need}   T: change trade"), grey));
             }
             None => spans.push((name, color)),
         }
@@ -3851,6 +3895,8 @@ mod tests {
             profession: Some(profession),
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }
     }
 
@@ -4277,6 +4323,44 @@ mod tests {
             super::trade_change_lines(&mut seen, &changed).is_empty(),
             "a change is reported once"
         );
+    }
+
+    /// 13.10: the `miserable on|off` line is printed from the MIRROR, once per change, and the
+    /// selection panel names the need after the trade.
+    #[test]
+    fn a_misery_line_is_reported_once_per_change_and_the_panel_names_the_need() {
+        let mut seen = None;
+        let mut crew = crew_snapshot();
+        for entity in &mut crew.entities {
+            entity.hungry = Some(false);
+            entity.miserable = Some(false);
+        }
+        let mirror = Mirror::from_snapshot(crew.clone()).unwrap();
+        assert!(super::misery_change_lines(&mut seen, &mirror).is_empty());
+        crew.entities[2].hungry = Some(true);
+        crew.entities[2].miserable = Some(true);
+        let changed = Mirror::from_snapshot(crew.clone()).unwrap();
+        assert_eq!(
+            super::misery_change_lines(&mut seen, &changed),
+            vec!["gui dwarf 3 miserable on".to_owned()]
+        );
+        assert!(super::misery_change_lines(&mut seen, &changed).is_empty());
+        let panel: String = super::name_readout_spans(&changed, Some(3))
+            .into_iter()
+            .map(|(text, _)| text)
+            .collect();
+        assert!(panel.contains(" miserable   T: change trade"), "{panel:?}");
+        crew.entities[2].miserable = Some(false);
+        let hungry = Mirror::from_snapshot(crew).unwrap();
+        assert_eq!(
+            super::misery_change_lines(&mut seen, &hungry),
+            vec!["gui dwarf 3 miserable off".to_owned()]
+        );
+        let panel: String = super::name_readout_spans(&hungry, Some(3))
+            .into_iter()
+            .map(|(text, _)| text)
+            .collect();
+        assert!(panel.contains(" hungry   T: change trade"), "{panel:?}");
     }
 
     #[test]
@@ -4779,6 +4863,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -5718,6 +5804,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -5801,6 +5889,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
                 protocol::Entity {
                     id: 5,
@@ -5812,6 +5902,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
             ],
             designations: Vec::new(),
@@ -5869,6 +5961,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -5985,6 +6079,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
                 protocol::Entity {
                     id: 2,
@@ -5996,6 +6092,8 @@ mod tests {
                     profession: None,
                     job: None,
                     carrying: None,
+                    hungry: None,
+                    miserable: None,
                 },
             ],
             designations: Vec::new(),
@@ -7508,6 +7606,8 @@ mod tests {
                         profession: None,
                         job: None,
                         carrying: None,
+                        hungry: None,
+                        miserable: None,
                     })
                     .collect(),
                 designations: Vec::new(),

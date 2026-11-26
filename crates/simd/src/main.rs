@@ -105,7 +105,7 @@ fn check_crew(label: &str, crew: usize) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `World::generate_with_crew` (or `generate_with_arrivals`), with a crew the camp's ground cannot hold refused by name instead
+/// `World::generate_with_crew` (or `generate_with_arrivals`, and `with_hunger` when `hunger`), with a crew the camp's ground cannot hold refused by name instead
 /// of as a backtrace. NOTE: caught where it is built, not counted beforehand, because sim-core has
 /// no public way to count the camp's ground; the panic hook still prints the sim's own message.
 fn generate_world(
@@ -113,13 +113,15 @@ fn generate_world(
     dims: sim_core::Dims,
     crew: usize,
     arrivals: bool,
+    hunger: bool,
 ) -> anyhow::Result<sim_core::World> {
     std::panic::catch_unwind(|| {
-        if arrivals {
+        let world = if arrivals {
             sim_core::World::generate_with_arrivals(seed, dims, crew)
         } else {
             sim_core::World::generate_with_crew(seed, dims, crew)
-        }
+        };
+        if hunger { world.with_hunger() } else { world }
     })
     .map_err(|_| {
         anyhow::anyhow!(
@@ -131,9 +133,10 @@ fn generate_world(
     })
 }
 
-/// The game `simd` starts with no scenario: arrivals on (13.8). A scenario decides for itself.
+/// The game `simd` starts with no scenario: arrivals on (13.8) and hunger on (13.10). A scenario
+/// decides for itself.
 fn fresh_world(dims: sim_core::Dims, crew: usize) -> anyhow::Result<sim_core::World> {
-    generate_world(sim_core::DEFAULT_SEED, dims, crew, true)
+    generate_world(sim_core::DEFAULT_SEED, dims, crew, true, true)
 }
 
 /// `simd [port] [--pause-at TICK | --scenario FILE] [--dims X,Y,Z] [--crew N]`, or
@@ -711,7 +714,18 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 sim_core::MAX_DESIGNATIONS
             );
         }
-        let haul_jobs = save.jobs.len() - tile_jobs;
+        // 13.10: meals name an item or a bush the dwarf holding them eats, bounded by the crew.
+        let meal_jobs = save
+            .jobs
+            .iter()
+            .filter(|job| {
+                matches!(
+                    job.kind,
+                    sim_core::JobKind::Eat { .. } | sim_core::JobKind::EatPlant
+                )
+            })
+            .count();
+        let haul_jobs = save.jobs.len() - tile_jobs - meal_jobs;
         // MESSAGE QUALITY ONLY, not the real bound — raised at 3.3's review. Unique-by-item plus
         // item-exists below already imply this by pigeonhole, so this check can never reject a save
         // those two would accept; it only decides WHICH complaint the log carries. Do not read its
@@ -730,6 +744,27 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
             .filter(|(_, _, kind, _)| *kind == sim_core::ItemKind::Berries)
             .map(|(id, ..)| *id)
             .collect();
+        // 13.10: the STORED items by 3.3's rule (`split_stored`): uncarried, on a stockpile cell,
+        // the lowest id on its cell. A meal of an item eats a stored berries item.
+        let carried: BTreeSet<u32> = save.dwarves.iter().filter_map(|d| d.carrying).collect();
+        let zone_cells: BTreeSet<_> = save.zones.iter().copied().collect();
+        let mut by_id: Vec<_> = save.items.iter().collect();
+        by_id.sort_by_key(|(id, ..)| *id);
+        let mut stored_cells = BTreeSet::new();
+        let stored_items: BTreeSet<u32> = by_id
+            .into_iter()
+            .filter(|(id, pos, ..)| {
+                !carried.contains(id) && zone_cells.contains(pos) && stored_cells.insert(*pos)
+            })
+            .map(|(id, ..)| *id)
+            .collect();
+        let ripe_plants: BTreeSet<_> = save
+            .plants
+            .iter()
+            .filter(|(_, ripe_at)| save.tick >= *ripe_at)
+            .map(|(pos, _)| *pos)
+            .collect();
+        let mut seen_eat_items = BTreeSet::new();
         let mut seen_job_ids = BTreeSet::new();
         let mut seen_job_targets = BTreeSet::new();
         let mut seen_haul_items = BTreeSet::new();
@@ -805,6 +840,39 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                     }
                     haul_job_for_item.insert(item, job.id.0);
                 }
+                // 13.10: a meal of one berry from a stored berries item, one meal per item.
+                sim_core::JobKind::Eat { item } => {
+                    if !(berries_ids.contains(&item) && stored_items.contains(&item)) {
+                        bail!(
+                            "save eat job {} names item {item}, not a stored berries item",
+                            job.id.0
+                        );
+                    }
+                    if !seen_eat_items.insert(item) {
+                        bail!("save has two eat jobs on item {item}");
+                    }
+                }
+                // 13.10: a meal at a ripe bush. Shares `seen_job_targets`, so a bush with a forage
+                // job or a second meal is refused as a reused target.
+                sim_core::JobKind::EatPlant => {
+                    if !seen_job_targets.insert(job.target) {
+                        bail!(
+                            "save reuses job target {},{},{}",
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                    if !ripe_plants.contains(&job.target) {
+                        bail!(
+                            "save eat-plant job {} has no ripe plant at {},{},{}",
+                            job.id.0,
+                            job.target.x,
+                            job.target.y,
+                            job.target.z
+                        );
+                    }
+                }
             }
         }
         if save.next_job_id == u32::MAX {
@@ -878,6 +946,13 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
         for dwarf in &save.dwarves {
             if !seen_ids.insert(dwarf.id) {
                 bail!("save reuses dwarf id {}", dwarf.id);
+            }
+            if !save.hunger && dwarf.hunger > 0 {
+                bail!(
+                    "save dwarf {} has hunger {} on a world with hunger off",
+                    dwarf.id,
+                    dwarf.hunger
+                );
             }
             if !seen_names.insert((dwarf.identity.name, dwarf.identity.epithet)) {
                 bail!(
@@ -1027,6 +1102,16 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 );
             }
         }
+        // 13.10: a meal is personal, handed to its eater, so one nobody holds is refused.
+        for job in &save.jobs {
+            if matches!(
+                job.kind,
+                sim_core::JobKind::Eat { .. } | sim_core::JobKind::EatPlant
+            ) && !claimed_job_ids.contains(&job.id)
+            {
+                bail!("save meal job {} is held by no dwarf", job.id.0);
+            }
+        }
         for (id, ..) in &save.items {
             if !seen_ids.insert(*id) {
                 bail!("save reuses entity id {id}");
@@ -1072,6 +1157,8 @@ fn try_load_world_from(path: &str) -> anyhow::Result<sim_core::World> {
                 sim_core::JobKind::Haul { .. } => continue,
                 // A forage job names a plant, not a designation: validated with the jobs above.
                 sim_core::JobKind::Forage => continue,
+                // 13.10: a meal is never designated: validated with the jobs above.
+                sim_core::JobKind::Eat { .. } | sim_core::JobKind::EatPlant => continue,
             };
             if designation_kinds.get(&job.target) != Some(&expected_designation) {
                 bail!(
@@ -1672,14 +1759,39 @@ mod tests {
             sim_core::Dims::DEFAULT,
             1_000_000,
             false,
+            false,
         )
         .err()
         .expect("a million dwarves cannot stand at the camp");
         assert!(error.to_string().contains("crew 1000000"), "{error}");
-        assert!(generate_world(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT, 5, false).is_ok());
+        assert!(
+            generate_world(
+                sim_core::DEFAULT_SEED,
+                sim_core::Dims::DEFAULT,
+                5,
+                false,
+                false
+            )
+            .is_ok()
+        );
     }
 
     use super::*;
+
+    /// 13.10 Q1: the fresh game has hunger on; any other generated world has it off.
+    #[test]
+    fn a_fresh_game_is_hungry_and_a_plain_world_is_not() {
+        assert!(fresh_world(sim_core::Dims::DEFAULT, 5).unwrap().hunger_on());
+        let plain = generate_world(
+            sim_core::DEFAULT_SEED,
+            sim_core::Dims::DEFAULT,
+            5,
+            true,
+            false,
+        )
+        .unwrap();
+        assert!(!plain.hunger_on());
+    }
 
     /// 13.8 AC 8: the fresh game has arrivals on. 128x128 so the debug run stays cheap.
     #[test]

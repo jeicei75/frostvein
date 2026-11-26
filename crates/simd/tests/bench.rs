@@ -203,6 +203,68 @@ fn the_end_line_counts_forages_and_stored_berries() {
     );
 }
 
+/// 13.10 AC 10: the end line's `eaten=` counts meals, and a meal at a bush is not a forage. Saves
+/// written here by `sim_core`: with hunger off nobody eats (`eaten=0`). With hunger on, dwarf 0 at
+/// `EAT_AT - 5` and everyone else fed, he eats the stored berries item when there is one
+/// (`eaten=1`, `food` one less), and a bush when there is not (`eaten=1`, `foraged=0`).
+#[test]
+fn the_end_line_counts_meals_and_a_bush_meal_is_not_a_forage() {
+    let base = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
+    let tile = sim_core::Pos { x: 66, y: 64, z: 9 };
+    let run = |name: &str, hunger: bool, berries: bool| -> String {
+        let mut saved = base.to_save();
+        saved.zones = vec![tile];
+        if berries {
+            saved
+                .items
+                .push((saved.next_id, tile, sim_core::ItemKind::Berries, 3));
+            saved.next_id += 1;
+        }
+        saved.hunger = hunger;
+        for dwarf in &mut saved.dwarves {
+            dwarf.hunger = if hunger && dwarf.id == 0 {
+                sim_core::EAT_AT - 5
+            } else {
+                0
+            };
+        }
+        let path = variant(name, |json| {
+            json["commands"] = serde_json::json!([]);
+            json["ticks"] = 300.into();
+            json["start"] = serde_json::json!({"save": "hungry.save"});
+        });
+        fs::write(
+            path.with_file_name("hungry.save"),
+            serde_json::to_vec(&saved).unwrap(),
+        )
+        .unwrap();
+        let output = bench(&path, 1);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        assert!(output.status.success(), "bench failed: {output:?}");
+        end_line(&stdout(&output))
+    };
+    let end = run("fed", false, true);
+    assert_eq!(field(&end, "eaten"), "0", "{end}");
+    assert_eq!(field(&end, "food"), "3", "{end}");
+    assert_eq!(field(&end, "hungry"), "0", "{end}");
+    let end = run("berries", true, true);
+    assert_eq!(
+        field(&end, "eaten"),
+        "1",
+        "one meal of the stored berries: {end}"
+    );
+    assert_eq!(field(&end, "food"), "2", "{end}");
+    assert_eq!(field(&end, "foraged"), "0", "{end}");
+    let end = run("bush", true, false);
+    assert_eq!(field(&end, "eaten"), "1", "one meal at a bush: {end}");
+    assert_eq!(field(&end, "foraged"), "0", "a meal is not a forage: {end}");
+    assert_eq!(field(&end, "miserable"), "0", "{end}");
+    assert!(
+        end.find("food=") < end.find("eaten="),
+        "new fields follow food=: {end}"
+    );
+}
+
 /// 13.6 review: a Dig whose target a channel above has already opened is dropped by the sim with no
 /// work done. Channel (73,64,12) and dig (73,64,11) land together; the channel's miner opens the
 /// cell, the dig's miner finds air. Both marks go, but only the channel yields (one item, the two

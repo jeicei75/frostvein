@@ -22,11 +22,11 @@ use protocol::{DesignationKind, Dims, EntityKind, ItemKind, Material, PlantState
 use crate::{
     appearance::{
         BERRY_ITEM_DROP, BERRY_ITEM_SCALE, BERRY_ITEM_SHIFT, CARRY_OFFSET, CUT_OFFSET,
-        ITEM_STACK_STEP, RIM_LEVELS, STONE_ITEM_DROP, STONE_ITEM_SCALE, WOOD_ITEM_DROP,
-        WOOD_ITEM_SCALE, berry_item_color, bush_berry_color, bush_color, debris_color,
-        designation_color, entity_appearance, flicker_scale, foliage_snow_color, forage_mark_color,
-        hover_highlight_color, light_properties, material_color, rim_dissolved_color,
-        rim_dissolved_color_at, snow_cap_color, wood_item_color, zone_color,
+        ITEM_STACK_STEP, RIM_LEVELS, SLUMP_PITCH, SLUMP_SINK, STONE_ITEM_DROP, STONE_ITEM_SCALE,
+        WOOD_ITEM_DROP, WOOD_ITEM_SCALE, berry_item_color, bush_berry_color, bush_color,
+        debris_color, designation_color, entity_appearance, flicker_scale, foliage_snow_color,
+        forage_mark_color, hover_highlight_color, light_properties, material_color,
+        rim_dissolved_color, rim_dissolved_color_at, snow_cap_color, wood_item_color, zone_color,
     },
     blend::{TickClock, blended_translation},
     designate::{DesignateMode, DragAnchor, DragMode, designation_target},
@@ -2852,6 +2852,72 @@ pub fn nudge_dwarf_for_cut(
     }
 }
 
+/// The armature node's rotation as the GLB authored it, captured the first frame the slump sees
+/// it (13.10).
+#[derive(Component)]
+pub struct SlumpRest(bevy::prelude::Quat);
+
+/// 13.10 (Q5): a miserable dwarf is drawn pitched forward `SLUMP_PITCH` about his feet and sunk
+/// `SLUMP_SINK` cells, by his armature node like `nudge_dwarf_for_cut` -- never the dwarf entity.
+/// Runs right after the nudge and on top of the translation it set this frame, so a miserable
+/// woodcutter keeps both offsets; a node the nudge has not captured yet waits a frame. The need is
+/// the mirror's (`Entity.miserable`): the client holds no threshold.
+///
+/// NOTE: the slump pops on and off, without an ease, and applies over any clip.
+// The armature row is read together; a `type` alias for one query would only move it.
+#[allow(clippy::type_complexity)]
+pub fn slump_miserable_dwarf(
+    mut commands: Commands,
+    mirror: Res<crate::ingest::MirrorResource>,
+    mut players: Query<
+        (BevyEntity, &mut Transform, Option<&SlumpRest>),
+        (With<AnimationPlayer>, With<ArmatureRest>),
+    >,
+    parents: Query<&ChildOf>,
+    dwarves: Query<&WorldProjected, With<DwarfClip>>,
+) {
+    let miserable: std::collections::BTreeSet<u32> = mirror
+        .0
+        .entities()
+        .filter(|entity| entity.miserable == Some(true))
+        .map(|entity| entity.id)
+        .collect();
+    for (entity, mut transform, rest) in players.iter_mut() {
+        let mut current = entity;
+        let mut dwarf = None;
+        for _ in 0..8 {
+            if let Ok(id) = dwarves.get(current) {
+                dwarf = Some(id.0);
+                break;
+            }
+            match parents.get(current) {
+                Ok(parent) => current = parent.0,
+                Err(_) => break,
+            }
+        }
+        let Some(dwarf) = dwarf else {
+            continue;
+        };
+        let rest = match rest {
+            Some(rest) => rest.0,
+            None => {
+                commands
+                    .entity(entity)
+                    .insert(SlumpRest(transform.rotation));
+                transform.rotation
+            }
+        };
+        if miserable.contains(&dwarf) {
+            // Local -Z is his facing, so a forward pitch turns +Y toward -Z: a negative turn about X.
+            transform.rotation =
+                bevy::prelude::Quat::from_rotation_x(-SLUMP_PITCH.to_radians()) * rest;
+            transform.translation.y -= SLUMP_SINK / METRES_TO_CELLS;
+        } else {
+            transform.rotation = rest;
+        }
+    }
+}
+
 /// Applies presentation interpolation to dynamic wire projections only.
 /// Each dwarf's facing, recorded as every delta is applied rather than once per frame.
 ///
@@ -4408,6 +4474,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -4496,6 +4564,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),
@@ -4560,6 +4630,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

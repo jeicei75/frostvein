@@ -2080,6 +2080,8 @@ mod tests {
                 profession: None,
                 job: None,
                 carrying: None,
+                hungry: None,
+                miserable: None,
             }],
             designations: Vec::new(),
             zones: Vec::new(),

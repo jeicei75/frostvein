@@ -309,6 +309,12 @@ pub const CARRY_OFFSET: Vec3 = Vec3::new(0.0, 0.705, -0.580);
 /// in the clip (`src-assets/prompts/dwarf-miner-round-20-report.md` §2).
 pub const CUT_OFFSET: f32 = 0.35;
 
+/// 13.10 (Q5): a miserable dwarf is drawn pitched forward this many DEGREES about his feet. A plain
+/// pose judged at the seat, not an art round.
+pub const SLUMP_PITCH: f32 = 20.0;
+/// 13.10 (Q5): and sunk this many CELLS.
+pub const SLUMP_SINK: f32 = 0.05;
+
 /// Rests the shrunken item on the tile floor rather than leaving it floating mid-voxel, which is
 /// where a centred sub-unit cube would otherwise sit. The chips are already low for this reason.
 pub const STONE_ITEM_DROP: f32 = -(0.5 - STONE_ITEM_SCALE / 2.0);

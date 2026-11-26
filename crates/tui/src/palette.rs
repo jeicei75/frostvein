@@ -17,6 +17,9 @@ pub const BLANK: Cell = Cell {
     fg: BACKGROUND,
 };
 pub const STATUS_TEXT: Rgb = (150, 160, 170);
+/// 13.10 (Q6): a miserable dwarf's `☻`, a cold grey-blue in place of his tunic. A hungry one keeps
+/// his tunic; the status line counts both, which survives `NO_COLOR` where this colour does not.
+pub const MISERY_COLOUR: Rgb = (110, 120, 150);
 
 const DIM_PERCENT: [u16; PEEK_DEPTH] = [55, 35, 22];
 
@@ -372,6 +375,8 @@ mod tests {
                 Cell { glyph: '☺', fg }
             );
         }
+
+        assert_eq!(MISERY_COLOUR, (110, 120, 150));
 
         for (colour, fg) in [
             (DwarfColour::Red, (178, 58, 52)),

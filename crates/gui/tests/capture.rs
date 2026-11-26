@@ -729,6 +729,8 @@ fn the_lantern_sweep_sees_terrain_that_exists_only_as_chunk_meshes() {
             profession: None,
             job: None,
             carrying: None,
+            hungry: None,
+            miserable: None,
         }],
         designations: Vec::new(),
         zones: Vec::new(),
@@ -805,6 +807,8 @@ fn static_world_skips_the_motion_assertions_on_an_at_tick_capture() {
         profession: None,
         job: None,
         carrying: None,
+        hungry: None,
+        miserable: None,
     };
     let snapshot = Snapshot {
         msg_type: MessageType::Snapshot,
