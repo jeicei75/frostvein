@@ -5,7 +5,7 @@ baseline_commit: 3c6cf3b7
 
 # Story 13.9: Forage
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -640,3 +640,4 @@ Wolf picked Sonnet 5.5 subagents for the implementation (asked 2026-11-22). clau
 | 2026-11-24 | Review round 1 patch pass (fresh session, Opus 5.5): all 8 patches landed, `db9b6274`..`343bed55`. #244 and the channel-mark refusal are fixed in simd's load validator, each proved with a save the sim wrote; two silent hand-edit states are now refused; berries 20 is the 4th goal, and stored loads count their `count` (AC 2 amended). Mutation rows 37-45 plus two re-pointed older rows: all KILLED. Full gate GREEN at `343bed55` (2,232 s). Seat run 5 (AC 15) is still unrun. |
 | 2026-11-25 | Seat run 5b (AC 15). Wolf's run 5 attempt hiccuped once a dig was ordered. The sim is cleared: on seat-like, this branch and `main` read p99 34.6 vs 34.2 ms and max 83 vs 80 ms, under Normal's 100 ms. A 10-minute `seat-dig-short.json` was sat three times: the branch twice, then `main` (`3c6cf3b7`). Dig p50 28.0 / 28.9 vs 27.5 ms on `main`; a terrain-edit frame costs 43.0 / 44.6 vs 43.1 ms. The dig hiccup is `main`'s, filed as #245 on Wolf's yes. The worst stretch of the first log was the monitor switched to another input. Question 1, Wolf: "with haze on it was maybe between 20-50", beside 13.8b's run 5 ("fps drops between 20-30 some times"); 5b stays #245's measurement, not AC 15's NFR13 record (review r2 ruling). Question 2, Wolf: "yes", the marked bush reads as marked. AC 15 met; Task 11 done. |
 | 2026-11-25 | Review round 2 patch pass (fresh session, Opus 5.5): all 6 patches landed, `43f0d2c3`..`47feb38b`. #244's job clause is pinned (rows 46/47) and row 43's fixture holds no job, each mutant shown to LOAD; Wolf's Question 1 words recorded; AC 2's 4-goal end lines committed. Full gate `RUST_TEST_THREADS=1 scripts/gate.sh` at `47feb38b`: GREEN, exit 0, 2,159 s. |
+| 2026-11-26 | Merged as PR #243 (`0465969f`, head `5c955e9d`), closing no issue by keyword (`closingIssuesReferences` []); #244 closed by hand with a comment; #245 stays open. Status → done. |
