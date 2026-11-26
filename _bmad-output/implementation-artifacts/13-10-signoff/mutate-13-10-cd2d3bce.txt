@@ -1,0 +1,236 @@
+
+=== 1 hunger never rises (AC 1, Q2) ===
+thread 'tests::hunger_starts_staggered_for_the_crew_and_each_arrival_and_rises_one_a_tick' (121457) panicked at crates/sim-core/src/lib.rs:5419:13:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.01s
+
+=== 2 the setting gates nothing (AC 2, Q1) ===
+thread 'tests::hunger_stays_zero_with_the_setting_off' (122088) panicked at crates/sim-core/src/lib.rs:5394:9:
+assertion failed: world.hunger().iter().all(|(_, hunger)| *hunger == 0)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.01s
+
+=== 3 start hunger is not staggered (Q2) ===
+thread 'tests::hunger_starts_staggered_for_the_crew_and_each_arrival_and_rises_one_a_tick' (124257) panicked at crates/sim-core/src/lib.rs:5407:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.00s
+
+=== 4 an arrival starts fed (Q2) ===
+thread 'tests::hunger_starts_staggered_for_the_crew_and_each_arrival_and_rises_one_a_tick' (124869) panicked at crates/sim-core/src/lib.rs:5431:13:
+assertion `left == right` failed: arrival Id(10)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 133 filtered out; finished in 0.06s
+
+=== 5 a dwarf eats only once miserable (AC 1, EAT_AT) ===
+thread 'a_hungry_miner_leaves_his_dig_eats_a_stored_berry_and_the_dig_is_done_later' (125566) panicked at crates/sim-core/tests/scenario.rs:5590:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 6 a carrier is interrupted (AC 1, empty hands) ===
+thread 'a_hungry_forager_delivers_his_load_before_he_eats_and_the_eaten_load_is_gone' (126238) panicked at crates/sim-core/tests/scenario.rs:5590:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.04s
+
+=== 7 a miserable dwarf claims trade work (AC 3, can_try) ===
+thread 'a_miserable_miner_lets_go_of_his_dig_and_claims_no_trade_job' (126885) panicked at crates/sim-core/tests/scenario.rs:6627:5:
+assertion `left == right` failed: he let go at once
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 8 a miserable dwarf keeps his trade job (AC 3) ===
+thread 'a_miserable_miner_lets_go_of_his_dig_and_claims_no_trade_job' (127545) panicked at crates/sim-core/tests/scenario.rs:6627:5:
+assertion `left == right` failed: he let go at once
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 9 a marked bush is eaten before its job stands (AC 3) ===
+thread 'with_no_stored_food_a_hungry_dwarf_eats_an_unmarked_bush_and_never_a_marked_one' (128191) panicked at crates/sim-core/tests/scenario.rs:6550:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 10 a bush another job names is offered (AC 5) ===
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 134 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 30 filtered out; finished in 0.00s
+
+=== 11 an unheld meal is never retired (AC 5) ===
+thread 'an_eat_job_nobody_holds_is_retired_on_the_next_tick' (129426) panicked at crates/sim-core/tests/scenario.rs:6708:5:
+assertion failed: world.jobs().iter().all(|job| job.id != orphan)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 12 a meal is the miner's trade (AC 5, trade None) ===
+thread 'a_trade_change_keeps_the_meal' (130009) panicked at crates/sim-core/tests/scenario.rs:6725:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 13 a meal eats no berry (AC 1, count) ===
+thread 'a_hungry_miner_leaves_his_dig_eats_a_stored_berry_and_the_dig_is_done_later' (130612) panicked at crates/sim-core/tests/scenario.rs:6520:5:
+assertion `left == right` failed: one berry eaten
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.02s
+
+=== 14 an item eaten to 0 stays (AC 1, despawn) ===
+thread 'a_hungry_forager_delivers_his_load_before_he_eats_and_the_eaten_load_is_gone' (131244) panicked at crates/sim-core/tests/scenario.rs:6607:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.02s
+
+=== 15 a stored meal does not feed (AC 1, reset) ===
+thread 'a_hungry_miner_leaves_his_dig_eats_a_stored_berry_and_the_dig_is_done_later' (133443) panicked at crates/sim-core/tests/scenario.rs:5590:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.07s
+
+=== 16 a bush meal does not feed (AC 1, reset) ===
+thread 'with_no_stored_food_a_hungry_dwarf_eats_an_unmarked_bush_and_never_a_marked_one' (134041) panicked at crates/sim-core/tests/scenario.rs:5590:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.07s
+
+=== 17 a bush is preferred to stored berries (Q4/Q7) ===
+thread 'two_hungry_dwarves_and_one_berry_one_eats_it_and_the_other_finds_a_bush' (134738) panicked at crates/sim-core/tests/scenario.rs:6776:5:
+assertion `left == right` failed: one of them ate the berry
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 18 retire_meals is not scheduled (AC 5) ===
+thread 'an_eat_job_nobody_holds_is_retired_on_the_next_tick' (135429) panicked at crates/sim-core/tests/scenario.rs:6708:5:
+assertion failed: world.jobs().iter().all(|job| job.id != orphan)
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 19 removing a pile keeps its meals (AC 6) ===
+thread 'removing_the_pile_ends_a_meal_of_its_berries_at_once' (136056) panicked at crates/sim-core/tests/scenario.rs:6799:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 114 filtered out; finished in 0.01s
+
+=== 20 the setting is not saved (AC 6) ===
+thread 'a_world_saved_mid_meal_matches_the_never_saved_world' (136691) panicked at crates/sim-core/tests/save_load.rs:1534:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.07s
+
+=== 21 a dwarf's hunger is not saved (AC 6) ===
+thread 'a_world_saved_mid_meal_matches_the_never_saved_world' (137292) panicked at crates/sim-core/tests/save_load.rs:1547:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.09s
+
+=== 22 a load forgets each dwarf's hunger (AC 6) ===
+thread 'a_world_saved_mid_meal_matches_the_never_saved_world' (137925) panicked at crates/sim-core/tests/save_load.rs:1534:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.09s
+
+=== 23 a meal nobody holds loads (AC 6) ===
+thread 'a_meal_nobody_holds_save_is_logged_and_the_daemon_keeps_ticking' (139033) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 106 filtered out; finished in 2.51s
+
+=== 24 a meal off the pile loads (AC 6) ===
+thread 'a_meal_of_no_stored_berries_save_is_logged_and_the_daemon_keeps_ticking' (140163) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 106 filtered out; finished in 2.51s
+
+=== 25 a meal of a stone loads (AC 6) ===
+thread 'a_meal_of_no_stored_berries_save_is_logged_and_the_daemon_keeps_ticking' (141280) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 106 filtered out; finished in 3.32s
+
+=== 26 two meals on one item load (AC 6) ===
+thread 'two_meals_on_one_item_or_bush_save_is_logged_and_the_daemon_keeps_ticking' (142425) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 106 filtered out; finished in 0.73s
+
+=== 27 a bush meal does not share the job targets (AC 6) ===
+thread 'two_meals_on_one_item_or_bush_save_is_logged_and_the_daemon_keeps_ticking' (143538) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 106 filtered out; finished in 1.44s
+
+=== 28 a bush meal over no ripe plant loads (AC 6) ===
+thread 'a_bush_meal_over_no_ripe_plant_or_a_forage_job_save_is_logged_and_the_daemon_keeps_ticking' (144658) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 106 filtered out; finished in 2.51s
+
+=== 29 hunger on a world with hunger off loads (AC 6) ===
+thread 'hunger_on_a_world_with_hunger_off_save_is_logged_and_the_daemon_keeps_ticking' (145772) panicked at crates/simd/tests/serve.rs:271:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 106 filtered out; finished in 2.50s
+
+=== 30 the fresh game is not hungry (Q1) ===
+thread 'tests::a_fresh_game_is_hungry_and_a_plain_world_is_not' (146911) panicked at crates/simd/src/main.rs:1784:9:
+assertion failed: fresh_world(sim_core::Dims::DEFAULT, 5).unwrap().hunger_on()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.01s
+
+=== 31 a seed start ignores hunger (Q1) ===
+thread 'scenario::tests::a_seed_start_may_turn_hunger_on_and_a_save_start_may_not' (148015) panicked at crates/simd/src/scenario.rs:598:9:
+assertion failed: on.world().unwrap().hunger_on()
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.01s
+
+=== 32 the end line counts no meal (AC 10, RED) ===
+thread 'the_end_line_counts_meals_and_a_bush_meal_is_not_a_forage' (149120) panicked at crates/simd/tests/bench.rs:251:5:
+assertion `left == right` failed: one meal of the stored berries: bench one-dig end tick=300 marks=0 items=1 zones=1 goals=0/0/0/2 done=dig:0,cut:0 stored=1 cells=0 crew=5 arriving=0 foraged=0 food=2 eaten=0 hungry=0 miserable=0
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.10s
+
+=== 33 a bush meal counts as a forage (AC 10) ===
+thread 'the_end_line_counts_meals_and_a_bush_meal_is_not_a_forage' (150228) panicked at crates/simd/tests/bench.rs:260:5:
+assertion `left == right` failed: a meal is not a forage: bench one-dig end tick=300 marks=0 items=0 zones=1 goals=0/0/0/0 done=dig:0,cut:0 stored=0 cells=0 crew=5 arriving=0 foraged=1 food=0 eaten=1 hungry=0 miserable=0
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 14 filtered out; finished in 1.69s
+
+=== 34 the wire says nobody is miserable (AC 7) ===
+thread 'bridge::tests::each_dwarf_carries_his_own_needs_and_an_emitter_none' (151338) panicked at crates/simd/src/bridge.rs:594:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.01s
+
+=== 35 the wire says nobody is hungry (AC 7) ===
+thread 'bridge::tests::each_dwarf_carries_his_own_needs_and_an_emitter_none' (152442) panicked at crates/simd/src/bridge.rs:594:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 49 filtered out; finished in 0.02s
+
+=== 36 a miserable dwarf keeps his tunic (AC 7, Q6) ===
+thread 'view::tests::a_miserable_dwarf_is_drawn_cold_and_the_roster_and_status_name_the_needs' (153134) panicked at crates/tui/src/view.rs:1479:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 59 filtered out; finished in 0.00s
+
+=== 37 the status line ignores misery (AC 10, RED) ===
+thread 'the_status_line_counts_a_dwarf_turning_miserable_under_no_color' (153833) panicked at crates/tui/tests/client.rs:2256:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 27 filtered out; finished in 0.59s
+
+=== 38 the roster names no need (AC 7, Q6) ===
+thread 'view::tests::a_miserable_dwarf_is_drawn_cold_and_the_roster_and_status_name_the_needs' (154532) panicked at crates/tui/src/view.rs:1488:9:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 59 filtered out; finished in 0.00s
+
+=== 39 the slump is never registered (AC 10, RED) ===
+thread 'a_miserable_dwarfs_armature_slumps_with_the_flag_and_his_entity_does_not_move' (156300) panicked at crates/gui/tests/headless.rs:7063:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 131 filtered out; finished in 0.03s
+
+=== 40 the misery line never prints a change (AC 7) ===
+thread 'ingest::tests::a_misery_line_is_reported_once_per_change_and_the_panel_names_the_need' (157956) panicked at crates/gui/src/ingest.rs:4343:9:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 250 filtered out; finished in 0.02s
+
+=== 41 the slump does not sink (Q5) ===
+thread 'a_miserable_dwarfs_armature_slumps_with_the_flag_and_his_entity_does_not_move' (159598) panicked at crates/gui/tests/headless.rs:7063:5:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 131 filtered out; finished in 0.03s
+
+=== 42 the slump never clears (Q5) ===
+thread 'a_miserable_dwarfs_armature_slumps_with_the_flag_and_his_entity_does_not_move' (161287) panicked at crates/gui/tests/headless.rs:7113:5:
+assertion `left == right` failed
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 131 filtered out; finished in 0.04s
+
+================ MUTATION RESULTS ================
+1 hunger never rises (AC 1, Q2)                              KILLED
+2 the setting gates nothing (AC 2, Q1)                       KILLED
+3 start hunger is not staggered (Q2)                         KILLED
+4 an arrival starts fed (Q2)                                 KILLED
+5 a dwarf eats only once miserable (AC 1, EAT_AT)            KILLED
+6 a carrier is interrupted (AC 1, empty hands)               KILLED
+7 a miserable dwarf claims trade work (AC 3, can_try)        KILLED
+8 a miserable dwarf keeps his trade job (AC 3)               KILLED
+9 a marked bush is eaten before its job stands (AC 3)        KILLED
+10 a bush another job names is offered (AC 5)                SURVIVED
+11 an unheld meal is never retired (AC 5)                    KILLED
+12 a meal is the miner's trade (AC 5, trade None)            KILLED
+13 a meal eats no berry (AC 1, count)                        KILLED
+14 an item eaten to 0 stays (AC 1, despawn)                  KILLED
+15 a stored meal does not feed (AC 1, reset)                 KILLED
+16 a bush meal does not feed (AC 1, reset)                   KILLED
+17 a bush is preferred to stored berries (Q4/Q7)             KILLED
+18 retire_meals is not scheduled (AC 5)                      KILLED
+19 removing a pile keeps its meals (AC 6)                    KILLED
+20 the setting is not saved (AC 6)                           KILLED
+21 a dwarf's hunger is not saved (AC 6)                      KILLED
+22 a load forgets each dwarf's hunger (AC 6)                 KILLED
+23 a meal nobody holds loads (AC 6)                          KILLED
+24 a meal off the pile loads (AC 6)                          KILLED
+25 a meal of a stone loads (AC 6)                            KILLED
+26 two meals on one item load (AC 6)                         KILLED
+27 a bush meal does not share the job targets (AC 6)         KILLED
+28 a bush meal over no ripe plant loads (AC 6)               KILLED
+29 hunger on a world with hunger off loads (AC 6)            KILLED
+30 the fresh game is not hungry (Q1)                         KILLED
+31 a seed start ignores hunger (Q1)                          KILLED
+32 the end line counts no meal (AC 10, RED)                  KILLED
+33 a bush meal counts as a forage (AC 10)                    KILLED
+34 the wire says nobody is miserable (AC 7)                  KILLED
+35 the wire says nobody is hungry (AC 7)                     KILLED
+36 a miserable dwarf keeps his tunic (AC 7, Q6)              KILLED
+37 the status line ignores misery (AC 10, RED)               KILLED
+38 the roster names no need (AC 7, Q6)                       KILLED
+39 the slump is never registered (AC 10, RED)                KILLED
+40 the misery line never prints a change (AC 7)              KILLED
+41 the slump does not sink (Q5)                              KILLED
+42 the slump never clears (Q5)                               KILLED
+
+1 mutation(s) did not KILL. SURVIVED = the test is not pinning what it claims.
+NO-COMPILE / NO-COLLECT / APPLY-FAILED = the sabotage itself is broken and pins nothing; fix it.
+exit=1

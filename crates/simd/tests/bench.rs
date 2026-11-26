@@ -366,7 +366,10 @@ fn stored_counts_one_item_per_zone_tile_as_the_sim_does() {
 /// cells=770 foraged=32 food=9`: woodcutters foraged ahead of their cuts. After Amendment 1
 /// (`c1f74fca`, haulers forage on trips over 32 forage marks at tick 1) it reads
 /// `done=dig:287,cut:96 stored=66 cells=2304 foraged=32 food=31`: cuts are back, and `food`
-/// sums the counted loads.
+/// sums the counted loads. 13.10 (`cd2d3bce` plus `"hunger": true`, Q3 a) reads
+/// `done=dig:275,cut:90 stored=60 cells=2194 foraged=32 food=25 eaten=32 hungry=13 miserable=0`:
+/// hungry dwarves leave their work to eat, stored berries first and wild bushes after, and the
+/// forage order needed no widening for `food` to stay up.
 #[test]
 #[ignore = "release: steps 256² crew 200 for 2500 ticks"]
 fn the_two_hundred_on_256_scenario_does_real_work() {
@@ -407,6 +410,10 @@ fn the_two_hundred_on_256_scenario_does_real_work() {
         count(&field(&end, "food")) >= 1,
         "a hauler stored berries on the pile: {end}"
     );
+    // 13.10 AC 8: hungry dwarves ate, berries are still stored, and nobody is miserable (by Q2's
+    // numbers: every starting hunger is below EAT_AT, so none reaches MISERABLE_AT in 2,500 ticks).
+    assert!(count(&field(&end, "eaten")) >= 1, "a dwarf ate: {end}");
+    assert_eq!(field(&end, "miserable"), "0", "{end}");
 }
 
 #[test]

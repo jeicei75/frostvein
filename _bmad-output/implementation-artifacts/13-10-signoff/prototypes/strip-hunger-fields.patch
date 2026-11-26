@@ -1,0 +1,20 @@
+diff --git a/crates/sim-core/src/save.rs b/crates/sim-core/src/save.rs
+index a51607bf..b40d7f9d 100644
+--- a/crates/sim-core/src/save.rs
++++ b/crates/sim-core/src/save.rs
+@@ -37,6 +37,7 @@ pub struct SaveState {
+     pub plants: Vec<(Pos, u64)>,
+     // NOTE: deliberately no `#[serde(default)]`, like `arrivals` (13.10): a pre-13.10 save fails to
+     // decode and simd refuses it. The world's hunger setting.
++    #[serde(skip_serializing)]
+     pub hunger: bool,
+ }
+ 
+@@ -77,6 +78,7 @@ pub struct SavedDwarf {
+     pub arriving: Option<SavedArriving>,
+     // NOTE: deliberately no `#[serde(default)]`, like `profession` (13.10): a pre-13.10 save fails
+     // to decode and simd refuses it. Ticks since the dwarf last ate; 0 with the setting off.
++    #[serde(skip_serializing)]
+     pub hunger: u32,
+ }
+ 

@@ -6805,3 +6805,52 @@ fn removing_the_pile_ends_a_meal_of_its_berries_at_once() {
     );
     assert_eq!(holds(&world, miner, |_| true), None);
 }
+
+/// AC 5: one ripe bush and two hungry dwarves, no stored food. The first to look takes the bush;
+/// the second is never offered a bush another meal names, so he holds no job the sim does not
+/// have and keeps waiting while the bush regrows.
+#[test]
+fn one_ripe_bush_feeds_one_of_two_hungry_dwarves_and_the_other_waits() {
+    let world = World::generate(sim_core::DEFAULT_SEED, Dims::DEFAULT).with_hunger();
+    let dwarves: Vec<Id> = world.dwarves().into_iter().map(|(id, ..)| id).collect();
+    let (a, b) = (dwarves[0], dwarves[1]);
+    let at = dwarf_pos(&world, a);
+    let mut plants: Vec<Pos> = world.plants().into_iter().map(|(pos, _)| pos).collect();
+    plants.sort_by_key(|pos| (distance(*pos, at), *pos));
+    let bush = plants[0];
+    let world = edited(world, |save| save.plants.retain(|(pos, _)| *pos == bush));
+    let mut world = with_hungers(world, |id| {
+        if id == a.0 || id == b.0 {
+            sim_core::EAT_AT
+        } else {
+            0
+        }
+    });
+    let mut fed = BTreeSet::new();
+    for _ in 0..400 {
+        world.step();
+        let jobs = world.jobs();
+        for (dwarf, held) in world.claims() {
+            if let Some(held) = held {
+                assert!(
+                    jobs.iter().any(|job| job.id == held),
+                    "dwarf {dwarf:?} holds job {held:?}, which the sim does not have"
+                );
+            }
+        }
+        assert!(
+            jobs.iter()
+                .filter(|job| job.kind == JobKind::EatPlant)
+                .count()
+                <= 1,
+            "one meal per bush"
+        );
+        for dwarf in [a, b] {
+            if hunger_of(&world, dwarf) == 0 {
+                fed.insert(dwarf);
+            }
+        }
+    }
+    assert_eq!(fed.len(), 1, "one ate the bush");
+    assert_eq!(ripe(&world, bush), Some(false), "and it regrows");
+}

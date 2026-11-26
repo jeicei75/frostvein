@@ -1,0 +1,24 @@
+bench big-pile run 1/1: ticks=5006 commands=47/47 mean=0.0724 p99=0.3135 max=0.653 over10=0 state=0d782461eba7f65d
+bench big-pile end tick=5006 marks=14 items=32 zones=518 goals=0/3/0/0 done=dig:32,cut:0 stored=27 cells=32 crew=5 arriving=0 foraged=0 food=0
+bench deep-pit run 1/1: ticks=3000 commands=5/5 mean=0.0405 p99=0.1517 max=0.584 over10=0 state=67f3822f221940c7
+bench deep-pit end tick=3000 marks=0 items=28 zones=22 goals=0/0/0/0 done=dig:0,cut:0 stored=22 cells=38 crew=5 arriving=0 foraged=0 food=0
+bench dig-loop run 1/1: ticks=10000 commands=0/0 mean=0.0362 p99=0.1198 max=0.435 over10=0 state=f7f47fa0586dcdb6
+bench dig-loop end tick=17640 marks=10 items=44 zones=21 goals=0/0/0/0 done=dig:2,cut:0 stored=21 cells=12 crew=5 arriving=0 foraged=0 food=0
+bench full-pile-crowd run 1/1: ticks=10006 commands=47/47 mean=0.0445 p99=0.1525 max=0.534 over10=0 state=c88f2c45701e0d08
+bench full-pile-crowd end tick=10006 marks=0 items=46 zones=4 goals=0/0/0/0 done=dig:46,cut:0 stored=4 cells=46 crew=5 arriving=0 foraged=0 food=0
+bench plan-compact-piles run 1/1: ticks=10006 commands=55/55 mean=0.0720 p99=0.2911 max=0.881 over10=0 state=49e684a0bc0f36b8
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/6/1/0 done=dig:46,cut:3 stored=48 cells=109 crew=5 arriving=0 foraged=0 food=0
+bench plan-far-piles run 1/1: ticks=10006 commands=53/53 mean=0.0650 p99=0.2269 max=0.586 over10=0 state=d8cbf23be5f43294
+bench plan-far-piles end tick=10006 marks=0 items=58 zones=90 goals=12/10/1/0 done=dig:46,cut:3 stored=58 cells=109 crew=5 arriving=0 foraged=0 food=0
+bench plan-spread-piles run 1/1: ticks=10006 commands=55/55 mean=0.0736 p99=0.2842 max=2.005 over10=0 state=a07f82a0981d4834
+bench plan-spread-piles end tick=10006 marks=0 items=58 zones=203 goals=12/2/0/0 done=dig:46,cut:3 stored=40 cells=109 crew=5 arriving=0 foraged=0 food=0
+bench plan run 1/1: ticks=10006 commands=50/50 mean=0.0623 p99=0.2142 max=0.446 over10=0 state=e28db7ac240dc74c
+bench plan end tick=10006 marks=0 items=58 zones=78 goals=12/10/1/0 done=dig:46,cut:3 stored=58 cells=109 crew=5 arriving=0 foraged=0 food=0
+bench seat-slow run 1/1: ticks=3000 commands=0/0 mean=0.1116 p99=0.2907 max=0.806 over10=0 state=0b56de094b3bcace
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/11/1/0 done=dig:0,cut:0 stored=123 cells=0 crew=5 arriving=0 foraged=0 food=0
+bench stuck-tunnel run 1/1: ticks=10000 commands=0/0 mean=0.0340 p99=0.1174 max=0.662 over10=0 state=e17a23fbc777daa1
+bench stuck-tunnel end tick=28082 marks=0 items=60 zones=89 goals=38/4/1/0 done=dig:3,cut:0 stored=60 cells=3 crew=5 arriving=0 foraged=0 food=0
+bench they-keep-coming run 1/1: ticks=21000 commands=0/0 mean=0.1429 p99=0.3579 max=61.842 over10=34 state=72039a58df6b2ab6
+bench they-keep-coming end tick=21000 marks=0 items=0 zones=0 goals=0/0/0/0 done=dig:0,cut:0 stored=0 cells=0 crew=200 arriving=0 foraged=0 food=0
+bench two-hundred-on-256 run 1/1: ticks=2500 commands=1810/1810 mean=6.8958 p99=45.1424 max=71.628 over10=470 state=b9f67ecc34f14bcc
+bench two-hundred-on-256 end tick=2500 marks=1417 items=704 zones=1800 goals=29/0/0/31 done=dig:287,cut:96 stored=66 cells=2304 crew=200 arriving=0 foraged=32 food=31

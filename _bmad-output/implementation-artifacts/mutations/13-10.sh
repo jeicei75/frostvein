@@ -76,7 +76,7 @@ assert s.count(old) == 1
 p.write_text(s.replace(old, ''))
 PY
 
-mutation "10 a bush another job names is offered (AC 5)" sim-core two_hungry_dwarves_and_one_berry_one_eats_it_and_the_other_finds_a_bush <<'PY'
+mutation "10 a bush another job names is offered (AC 5)" sim-core one_ripe_bush_feeds_one_of_two_hungry_dwarves_and_the_other_waits <<'PY'
 import pathlib
 p = pathlib.Path('crates/sim-core/src/lib.rs'); s = p.read_text()
 old = '                    && !jobs.targets.contains(*pos)\n'

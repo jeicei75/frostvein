@@ -1,0 +1,27 @@
+# HEAD cd2d3bce, every committed scenario in release; two-hundred-on-256 is HEAD's file with "hunger": true (Task 8), the rest are HEAD's copies. The last two lines are the bench run on main's copy of the file (hunger off).
+bench big-pile run 1/1: ticks=5006 commands=47/47 mean=0.0701 p99=0.2970 max=0.915 over10=0 state=2873a10470cd686a
+bench big-pile end tick=5006 marks=14 items=32 zones=518 goals=0/3/0/0 done=dig:32,cut:0 stored=27 cells=32 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench deep-pit run 1/1: ticks=3000 commands=5/5 mean=0.0424 p99=0.1461 max=0.509 over10=0 state=cf4e385633e20bfe
+bench deep-pit end tick=3000 marks=0 items=28 zones=22 goals=0/0/0/0 done=dig:0,cut:0 stored=22 cells=38 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench dig-loop run 1/1: ticks=10000 commands=0/0 mean=0.0425 p99=0.1196 max=0.421 over10=0 state=fd293cb1adc4943d
+bench dig-loop end tick=17640 marks=10 items=44 zones=21 goals=0/0/0/0 done=dig:2,cut:0 stored=21 cells=12 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench full-pile-crowd run 1/1: ticks=10006 commands=47/47 mean=0.0475 p99=0.1561 max=0.587 over10=0 state=47fff5938cce8f27
+bench full-pile-crowd end tick=10006 marks=0 items=46 zones=4 goals=0/0/0/0 done=dig:46,cut:0 stored=4 cells=46 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench plan-compact-piles run 1/1: ticks=10006 commands=55/55 mean=0.0516 p99=0.2158 max=0.636 over10=0 state=c74232d9a28e8fff
+bench plan-compact-piles end tick=10006 marks=0 items=58 zones=203 goals=12/6/1/0 done=dig:46,cut:3 stored=48 cells=109 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench plan-far-piles run 1/1: ticks=10006 commands=53/53 mean=0.0444 p99=0.1562 max=3.056 over10=0 state=b24a35634bf78fa7
+bench plan-far-piles end tick=10006 marks=0 items=58 zones=90 goals=12/10/1/0 done=dig:46,cut:3 stored=58 cells=109 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench plan-spread-piles run 1/1: ticks=10006 commands=55/55 mean=0.0615 p99=0.2425 max=1.846 over10=0 state=094787ada87543bf
+bench plan-spread-piles end tick=10006 marks=0 items=58 zones=203 goals=12/2/0/0 done=dig:46,cut:3 stored=40 cells=109 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench plan run 1/1: ticks=10006 commands=50/50 mean=0.0396 p99=0.1298 max=0.728 over10=0 state=629a27dc68ba6317
+bench plan end tick=10006 marks=0 items=58 zones=78 goals=12/10/1/0 done=dig:46,cut:3 stored=58 cells=109 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench seat-slow run 1/1: ticks=3000 commands=0/0 mean=0.0693 p99=0.1549 max=0.567 over10=0 state=4a826206411a14c3
+bench seat-slow end tick=56759 marks=1 items=129 zones=222 goals=38/11/1/0 done=dig:0,cut:0 stored=123 cells=0 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench stuck-tunnel run 1/1: ticks=10000 commands=0/0 mean=0.0252 p99=0.0634 max=0.219 over10=0 state=1d59a671f663ad48
+bench stuck-tunnel end tick=28082 marks=0 items=60 zones=89 goals=38/4/1/0 done=dig:3,cut:0 stored=60 cells=3 crew=5 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench they-keep-coming run 1/1: ticks=21000 commands=0/0 mean=0.1053 p99=0.1893 max=52.073 over10=30 state=7e348f03fd3b4d3e
+bench they-keep-coming end tick=21000 marks=0 items=0 zones=0 goals=0/0/0/0 done=dig:0,cut:0 stored=0 cells=0 crew=200 arriving=0 foraged=0 food=0 eaten=0 hungry=0 miserable=0
+bench two-hundred-on-256 run 1/1: ticks=2500 commands=1810/1810 mean=5.3992 p99=37.6231 max=55.358 over10=382 state=e6f145d34466d0db
+bench two-hundred-on-256 end tick=2500 marks=1434 items=674 zones=1800 goals=28/0/0/25 done=dig:275,cut:90 stored=60 cells=2194 crew=200 arriving=0 foraged=32 food=25 eaten=32 hungry=13 miserable=0
+bench two-hundred-on-256 run 1/1: ticks=2500 commands=1810/1810 mean=5.6709 p99=35.5446 max=64.184 over10=425 state=b490c322a0a7fcd6
+bench two-hundred-on-256 end tick=2500 marks=1417 items=704 zones=1800 goals=29/0/0/31 done=dig:287,cut:96 stored=66 cells=2304 crew=200 arriving=0 foraged=32 food=31 eaten=0 hungry=0 miserable=0

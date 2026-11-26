@@ -1,0 +1,10 @@
+{
+  "name": "no-food",
+  "about": "13.10 seat card, the misery half (AC 12): 12-12-seat-slow.save (sim-written, plants: [], no berries) with hunger on and its five dwarves 600, 1000, 1400, 1800 and 2200 ticks short of MISERABLE_AT. Nothing to eat anywhere, so each turns hungry, keeps working, then turns miserable and stops. Made by a throwaway script that edited only the hunger keys.",
+  "start": {
+    "save": "../../../scenarios/saves/no-food.save"
+  },
+  "ticks": 20000,
+  "speed": "fast4x",
+  "commands": []
+}

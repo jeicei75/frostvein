@@ -1,0 +1,13 @@
+# Strip build: HEAD cd2d3bce with prototypes/strip-hunger-fields.patch (SaveState.hunger and SavedDwarf.hunger not serialized). Nine scenarios on main's files; dig-loop, seat-slow and stuck-tunnel on HEAD's files, whose saves carry the new keys (main's saves are refused by HEAD). Every state= equals state-main-0465969f.txt.
+bench big-pile run 1/1: ticks=5006 commands=47/47 mean=0.0449 p99=0.2156 max=0.962 over10=0 state=0d782461eba7f65d
+bench deep-pit run 1/1: ticks=3000 commands=5/5 mean=0.0248 p99=0.0801 max=0.154 over10=0 state=67f3822f221940c7
+bench full-pile-crowd run 1/1: ticks=10006 commands=47/47 mean=0.0331 p99=0.0955 max=5.181 over10=0 state=c88f2c45701e0d08
+bench plan-compact-piles run 1/1: ticks=10006 commands=55/55 mean=0.0484 p99=0.1913 max=0.807 over10=0 state=49e684a0bc0f36b8
+bench plan-far-piles run 1/1: ticks=10006 commands=53/53 mean=0.0432 p99=0.1582 max=0.366 over10=0 state=d8cbf23be5f43294
+bench plan-spread-piles run 1/1: ticks=10006 commands=55/55 mean=0.0495 p99=0.1874 max=1.450 over10=0 state=a07f82a0981d4834
+bench plan run 1/1: ticks=10006 commands=50/50 mean=0.0447 p99=0.1572 max=0.534 over10=0 state=e28db7ac240dc74c
+bench they-keep-coming run 1/1: ticks=21000 commands=0/0 mean=0.1318 p99=0.3163 max=54.383 over10=29 state=72039a58df6b2ab6
+bench two-hundred-on-256 run 1/1: ticks=2500 commands=1810/1810 mean=6.7445 p99=42.7109 max=152.688 over10=467 state=b9f67ecc34f14bcc
+bench dig-loop run 1/1: ticks=10000 commands=0/0 mean=0.0340 p99=0.1033 max=0.760 over10=0 state=f7f47fa0586dcdb6
+bench seat-slow run 1/1: ticks=3000 commands=0/0 mean=0.1012 p99=0.2681 max=1.070 over10=0 state=0b56de094b3bcace
+bench stuck-tunnel run 1/1: ticks=10000 commands=0/0 mean=0.0403 p99=0.1262 max=8.795 over10=0 state=e17a23fbc777daa1
