@@ -38,6 +38,8 @@ Every state hash therefore moves (memory: `state-hash-covers-save-encoding`). AC
 
 Each question has a recommendation, and the ACs and Tasks are written for it. A different answer amends the ACs it names.
 
+**Ruled 2026-11-26 (Wolf):** Q1, Q2, Q3, Q5, Q6 (a) ("otherwise I trust your recommendations"). Q4 (a), with the rule widened: "they should find food and eat if there are some available". Q7 (a): "should dwarves just find food if nothing is in storage? Can be also later AI functionality". Together these give one food rule for every hungry dwarf, not just a miserable one: **stored berries first, else the nearest reachable ripe bush with no forage job.** Misery now changes only the work rule. Its one difference is that it gives up its trade job even when no food is found. The ACs, Tasks and Dev Notes below are amended to match. Restocking the pile on their own, with no mark, is filed as #246 (route:undecided).
+
 - **Q1. Hunger is a world setting, like arrivals (Found A).**
   - (a) **Recommended:**
     - `Hunger(bool)` is a saved setting, on in the fresh game (`fresh_world`) and in any scenario whose `start` says `"hunger": true`.
@@ -51,13 +53,13 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
     - `MISERABLE_AT = 18_000`: 10 min later at 1x, 30 s later at fast4x.
     - `EAT_WORK_TICKS = 20`. One berry (one unit of an item's `count`) is one meal, and a meal sets hunger to 0.
     - Starting hunger is staggered, so 200 dwarves do not all get hungry on one tick: `start_hunger(seed, id) = fnv(seed, id) % EAT_AT`, the `reaction_delay` hash shape. It draws on no RNG stream, so no other draw shifts. It applies to the embark crew when the setting is turned on, and to each arrival at spawn.
-    - **Hungry** means `hunger >= EAT_AT`. A hungry dwarf eats a stored berries item if one is reachable.
-      - With none, it keeps working and looks again later.
+    - **Hungry** means `hunger >= EAT_AT`. A hungry dwarf eats a reachable stored berries item, or else the nearest reachable ripe bush that **has no forage job** (ruled Q4/Q7: it never takes a bush the player marked).
+      - With neither, it keeps working and looks again later.
       - A dwarf **carrying** something is not interrupted until his hands are empty, so hunger drops no stone or load on the ground. This applies to a delivery, a clearing set-down, or the end of a forage trip.
     - **Miserable** means `hunger >= MISERABLE_AT`.
-      - It holds no trade job and claims none.
-      - It eats a stored berries item, or else the nearest reachable ripe bush that **has no forage job** (it never takes a bush the player marked).
-      - Eating a bush regrows it as a forage does.
+      - It holds no trade job and claims none, even with no food found.
+      - It eats by the hungry rule above.
+      - Eating a bush regrows it as a forage does, for any eater.
       - It clears the moment hunger falls below `MISERABLE_AT`, which is at the meal.
     - The misery rule is one function, `fn miserable(hunger: u32) -> bool`, with a `// NOTE:` that cold (13.13) and tiredness (13.14) join it. There is no needs framework.
   - (b) Other numbers. With (a), no dwarf can be miserable inside the 2,500-tick bench window, because every starting hunger is below `EAT_AT` (Q3).
@@ -96,6 +98,7 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - Forage marks are one-time (13.9 Q8), so a regrown bush feeds nobody until it is marked again, and a fortress left alone runs out of berries.
   - The bench window does not reach that.
   - (a) **Recommended:** file it as an issue (`route:undecided`). This story changes no mark rule.
+  - **Ruled (a), amended:** a hungry dwarf eats wild bushes when storage is empty (Q2, Q4). A regrown bush is unmarked, so it feeds an eater again, and a fortress left alone does not starve while it has reachable bushes. What runs out is only the stored food. Restocking it with no mark is the later AI, filed as #246.
   - (b) Fold it into this story.
 - Then **ASK which implementer** (memory: `dev-implementer-is-sonnet-not-codex`).
 
@@ -124,6 +127,8 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
 1. **Hunger rises and a hungry dwarf eats (FR62, standing AC 13).**
    - With the setting on, each dwarf's hunger rises 1 a tick from its staggered start (Q2).
    - At `EAT_AT`, a dwarf that carries nothing lets go of its trade job, which stays queued and is later done by someone. It walks to a reachable stored berries item, eats for `EAT_WORK_TICKS`, and the item's count falls by 1 (the item is gone at 0). Its hunger is then 0.
+   - With no reachable stored berries, it walks instead to the nearest reachable ripe bush with no forage job, eats there for `EAT_WORK_TICKS`, and the bush regrows (`ripe_at = tick + REGROW_TICKS`). Its hunger is then 0. Stored berries win over a nearer bush (ruled Q4/Q7).
+   - With neither, it keeps its trade job and keeps working.
    - A dwarf carrying an item is interrupted only once its hands are empty.
 2. **Off changes nothing (standing AC 11, FR53).**
    - Every committed scenario run as on `main` (bench file per Q3) has `main`'s end line, apart from the new end-line fields.
@@ -131,8 +136,8 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
    - Every existing test passes unchanged.
 3. **Misery refuses trade work, never self-care (FR65, standing AC 13).**
    - At `MISERABLE_AT` a dwarf is miserable. It lets go of its trade job (once its hands are empty) and claims none until relieved.
-   - It eats a stored berries item, else the nearest reachable ripe bush with no forage job.
-   - A marked bush is never eaten.
+   - It eats by AC 1's rule. With no food, it holds no trade job anyway.
+   - A marked bush is never eaten, by a hungry or a miserable dwarf.
    - Its misery clears at the meal.
 4. **No food anywhere, then food back (FR65, success criterion 3).**
    - A world with the setting on, no plant and no berries starts from a sim-written save with every dwarf's hunger set to `MISERABLE_AT - 1`, and runs 5,000 ticks. Then: every dwarf is still in the world, the tick has advanced every step with no panic, every dwarf is miserable, and no miserable dwarf holds a trade job. (Stepping to `MISERABLE_AT` from a fresh start is about 18,000 debug ticks, so the save edit replaces them.)
@@ -151,7 +156,7 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
      - an Eat job nobody holds;
      - an Eat job whose item is not a stored berries item;
      - an `EatPlant` whose target holds no ripe plant, or holds a forage job;
-     - two Eat jobs on one item;
+     - two Eat jobs on one item, or two `EatPlant` on one bush;
      - a dwarf with hunger above 0 on a world with the setting off.
 7. **Both clients show it (NFR10).**
    - Each dwarf `Entity` carries `hungry` and `miserable`. The flags change on the threshold ticks only, not every tick.
@@ -167,14 +172,15 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
     - The gui headless test shows the slump appear and go with the mirror flag.
 11. **The mutation table kills** (Task 9), and `python3 scripts/audit-mutations.py` exits 0.
 12. **The seat (standing AC 16, 17; success criterion 3, hunger half).**
-    - In a fresh game, Wolf leaves the pile without food and sees dwarves turn miserable and stop work. They recover by eating unmarked bushes.
-    - He then marks bushes and sees stored berries eaten.
+    - In a fresh game with no forage marks, Wolf sees hungry dwarves leave their work, eat at unmarked bushes and go back to work.
+    - He then marks bushes and sees stored berries eaten at the pile.
+    - On the no-food save (Task 10), he sees dwarves turn miserable, slump and stop work.
     - His words on the plain slump and the tui look are recorded.
     - The gui frame rate is recorded beside 13.9's seat reading (NFR13).
 
 ## Tasks / Subtasks
 
-- [ ] **Task 0: Wolf's rulings (Q1–Q7).** Record them in the Change Log and amend the ACs they name. File Q7's issue if (a). Then ASK which implementer.
+- [x] **Task 0: Wolf's rulings (Q1–Q7).** Ruled 2026-11-26: see the Ruled line under Task 0 and the Change Log. #246 filed. Then ASK which implementer.
 - [ ] **Task 1: hunger state and the setting (AC 1, 2, 6).** UPDATE `crates/sim-core/src/lib.rs`, `src/save.rs`.
   - [ ] Constants beside `FORAGE_*` (`lib.rs:97-104`): `EAT_AT`, `MISERABLE_AT`, `EAT_WORK_TICKS`.
   - [ ] NEW `#[derive(Component)] struct Hunger(u32)` on every dwarf, at all three spawn sites: `spawn_dwarf` (`:4708`), `from_save`'s spawn (`:3970-3987`) and nothing else (`arrive` uses `spawn_dwarf`). It is a required component, not optional: see the `Carrying` NOTE (`:410-413`).
@@ -192,13 +198,13 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - [ ] NEW exclusive system `tend_hunger`, chained after `advance_tick`, which skips while paused (AD-2) and does nothing with the setting off:
     1. Retire every Eat job nobody holds.
     2. Add 1 to every dwarf's hunger, saturating.
-    3. For each dwarf, ascending `Id`, that is hungry, holds no Eat job and carries nothing, on its look tick (`(tick + id) % RETRY_COOLDOWN == 0`, stateless): run ONE search to the union of the work cells of the stored berries items with no Eat job. If the dwarf is miserable and that fails, run one search to the side cells of ripe bushes with no job, the forage turn's union-search shape (`:848-883`).
+    3. For each dwarf, ascending `Id`, that is hungry, holds no Eat job and carries nothing, on its look tick (`(tick + id) % RETRY_COOLDOWN == 0`, stateless): run ONE search to the union of the work cells of the stored berries items with no Eat job. If that fails, run one search to the side cells of ripe bushes with no job, the forage turn's union-search shape (`:848-883`). This applies to every hungry dwarf, miserable or not (ruled Q4/Q7).
     4. On a hit, `release_claim` its trade job, create the Eat job (`next_job_id`) and hand it over with its `Path`.
-    - `// NOTE:` the search cost: one flood per hungry dwarf per look when food is unreachable. AC 9 measures it.
+    - `// NOTE:` the search cost: two floods per hungry dwarf per look when no food is reachable. AC 9 measures it.
   - [ ] Misery in the claim: `can_try` is false for a miserable dwarf. `tend_hunger` releases a miserable dwarf's trade job once its hands are empty, whether or not food is found.
   - [ ] Completion in `execute_jobs`, beside Forage (`:3108`), dispatched before the terrain-change arm:
     - `Eat`: if the item is still a stored Berries item, take 1 from its `ItemCount` and despawn it at 0, setting `stale = true`. Then hunger goes to 0.
-    - `EatPlant`: if the bush is ripe and jobless, set `ripe_at = tick + REGROW_TICKS`, mark the plant `changed`, and set hunger to 0.
+    - `EatPlant`: if the bush is ripe and has no other job, set `ripe_at = tick + REGROW_TICKS`, mark the plant `changed`, and set hunger to 0.
     - In both: remove the job and `release_claim`.
   - [ ] Scenario tests in `tests/scenario.rs` for AC 1, 3, 4, 5. Build the hungry state from a sim-written save with edited hunger (`to_save` → edit → `from_save`), never by stepping 12,000 ticks in debug. Find a pile cell and a bush from the world's readers; never hardcode them.
 - [ ] **Task 3: the load validator (AC 6).** UPDATE `crates/simd/src/main.rs`, `tests/serve.rs`.
@@ -252,7 +258,8 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   Run `audit-mutations.py` before the first code commit (memory: `deleting-code-retires-rows-in-the-same-commit`). Rows on `trade`'s match (13-9 row 2, 12-7 row 4) will need re-pointing.
 - [ ] **Task 10: the seat card (AC 12).** NEW `13-10-signoff/vehicle-card.md` in 13.9's skeleton:
   - the run in the seat's form (WSL `simd 7451`; PowerShell `launch-gui.ps1` with `--perf-log` to an absolute `D:\Workspace\frostvein\.bin\` path);
-  - what to do at fast4x: leave the pile without food, watch dwarves turn hungry and miserable (the slump, the tui status count) and recover on unmarked bushes, then mark bushes and watch stored berries being eaten;
+  - what to do at fast4x in a fresh game: mark nothing, and watch hungry dwarves eat at unmarked bushes and go back to work (the tui `hungry` count). Then mark bushes and watch stored berries being eaten at the pile;
+  - the misery half: NEW committed `scenarios/saves/no-food.save`, a copy of a seat save (`plants: []`) with `"hunger": true` and each dwarf's hunger a few hundred ticks below `MISERABLE_AT`, made by a throwaway script from a sim-written save. Watch dwarves turn miserable, slump and stop work (the tui `miserable` count);
   - one question each on the slump and the tui look;
   - the sitting in Wolf's words.
 - [ ] **Task 11: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).
@@ -318,9 +325,10 @@ The seat run lives on the vehicle card (Task 10), in the seat's form: WSL `simd 
 - **Hunger is a counter, misery is derived.** Only `hunger` is saved, and both wire flags are computed from it in sim-core: clients hold no threshold (ADR 4).
 - **The look tick is stateless** (`(tick + id) % RETRY_COOLDOWN`), so nothing new is saved for it.
 - **A hungry dwarf with empty hands and no reachable food keeps its trade job.** Only misery takes the job without food.
+- **Stored berries win over a nearer bush** (ruled Q4/Q7), so marking bushes keeps eaters near the pile. The two searches run in that order, not as one union.
 - **Eating an item despawns it at count 0.** Set `stale = true` in `execute_jobs` (`:2704`), or the kept stone map goes wrong and its debug asserts (`:2748-2768`) fire.
-- **A miserable dwarf never eats a marked bush.** Its job sits in `Jobs.targets`, so `EatPlant` uniqueness enforces this too.
-- **Pixel guards stay inert.** In the fresh game nobody is miserable before tick `MISERABLE_AT - EAT_AT` = 6,000, and a hungry dwarf with no stored food keeps working. If a guard moves anyway, that is a finding: attribute it before re-baselining (13.9 Task 12).
+- **No eater takes a marked bush.** Its job sits in `Jobs.targets`, so `EatPlant` uniqueness enforces this too.
+- **Pixel guards may move in the fresh game.** Starting hungers are staggered below `EAT_AT`, so some dwarves turn hungry within the first ticks and walk to a bush. Nobody is miserable before tick 6,000. A guard that captures a fresh game with a frame count can therefore see a dwarf elsewhere. Attribute any moved guard to this before re-baselining (13.9 Task 12).
 - **`dwarf_clip` has no Eat arm** (`project.rs:484-500`), so an eating dwarf holds the Walk clip, standing still. That is plain and intended; no eat animation (no art round).
 - **The cage sweep hardcodes dwarves 0..5 and `STILL_BOUND = 500`** (`scenario.rs:3199-3207`). The setting is off there, so it must not move.
 
@@ -337,7 +345,7 @@ The seat run lives on the vehicle card (Task 10), in the seat's form: WSL `simd 
   - client-core: `crates/client-core/src/lib.rs` (entity literals only; a shared `need_text` beside `profession_text` `:80` if both clients spell the words)
   - tui: `crates/tui/src/view.rs`, `src/palette.rs`, `tests/client.rs`
   - gui: `crates/gui/src/project.rs`, `src/ingest.rs`, `tests/headless.rs`, plus the `Entity` literals in `src/capture.rs` and `tests/capture.rs`
-  - data: `scenarios/two-hundred-on-256.json`; `scenarios/saves/*.save` (data patch)
+  - data: `scenarios/two-hundred-on-256.json`; `scenarios/saves/*.save` (data patch); NEW `scenarios/saves/no-food.save` (Task 10, seat only)
 - NEW:
   - `_bmad-output/implementation-artifacts/mutations/13-10.sh`
   - `_bmad-output/implementation-artifacts/13-10-signoff/` (vehicle card, state lines, tick-bench, mutate runs)
@@ -364,3 +372,4 @@ The seat run lives on the vehicle card (Task 10), in the seat's form: WSL `simd 
 | Date | Change |
 |---|---|
 | 2026-11-26 | Created (claude-opus-5-5) from epics.md 13.10, on `main` `0465969f`. Baseline bench line re-read live (Found B). Task 0 Q1–Q7 open for Wolf. |
+| 2026-11-26 | Task 0 ruled by Wolf. Q1, Q2, Q3, Q5, Q6 (a). Q4 (a), widened: "they should find food and eat if there are some available". Q7 (a): "should dwarves just find food if nothing is in storage? Can be also later AI functionality". One food rule now covers every hungry dwarf: stored berries first, else the nearest unmarked ripe bush. Amended Q2, Q7, AC 1, 3, 6 (two `EatPlant` on one bush), 12, Tasks 2 and 10 (NEW `no-food.save` for the seat's misery half), and the Dev Notes. Self-restocking filed as #246 (route:undecided). |

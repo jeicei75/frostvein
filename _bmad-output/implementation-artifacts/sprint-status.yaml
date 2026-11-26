@@ -2909,6 +2909,8 @@ development_status:
   13-10-hungry-and-miserable: ready-for-dev
   # 13.10 CREATED 2026-11-26 (claude-opus-5-5) on branch story-13-10-hungry-and-miserable (off main 0465969f; first commit
   # de1940cf = 13.9 close-out). Task 0 Q1-Q7 open for Wolf (setting, constants, bench food, eat job, slump, tui look, FR67 marks).
+  # Task 0 RULED 2026-11-26: all (a); Q4/Q7 widened: every hungry dwarf eats stored berries, else nearest unmarked ripe
+  # bush. Self-restocking filed #246 (route:undecided). NEXT: ASK implementer.
   13-11-idle-at-the-fire: backlog
   # 13.11 carries #227 too (13.6 run 2, Wolf 2026-11-01): idle dwarves never move from crew ~50 up (wander home = camp,
   # WANDER_RADIUS 3); re-take 13.6's AC 8 NFR12 baseline once idle dwarves wander.
