@@ -2182,3 +2182,77 @@ fn the_forage_capture_shows_a_ripe_bush_turn_growing_and_its_berries_appear() {
     assert_eq!(drawn_of_held(&after, "ripe"), (2, 2), "{after}");
     assert_eq!(drawn_of_held(&after, "berries"), (1, 1), "{after}");
 }
+
+/// 13.10 AC 10: the status line's need counts follow the wire, through the real binary and with
+/// `NO_COLOR` set (the map's misery colour is suppressed there; the count is not). One dwarf, fed
+/// until the delta of tick 9 makes him miserable.
+#[test]
+fn the_status_line_counts_a_dwarf_turning_miserable_under_no_color() {
+    let dwarf = |miserable: bool| protocol::Entity {
+        id: 1,
+        kind: protocol::EntityKind::Dwarf,
+        pos: [0, 0, 1],
+        state: protocol::JobState::Idle,
+        light: None,
+        identity: None,
+        profession: None,
+        job: None,
+        carrying: None,
+        hungry: Some(miserable),
+        miserable: Some(miserable),
+    };
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind misery stub");
+    let port = listener.local_addr().unwrap().port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_tui"))
+        .arg(port.to_string())
+        .arg("--frames")
+        .arg("4")
+        .env("NO_COLOR", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn tui capture");
+    let server = thread::spawn(move || {
+        let mut stream = accept_with_timeout(&listener);
+        let mut snapshot: protocol::Snapshot =
+            serde_json::from_str(snapshot_line().trim_end()).unwrap();
+        snapshot.entities = vec![dwarf(false)];
+        stream
+            .write_all(format!("{}\n", serde_json::to_string(&snapshot).unwrap()).as_bytes())
+            .unwrap();
+        for tick in 8..=11 {
+            let mut delta: protocol::Delta =
+                serde_json::from_str(delta_line(tick).trim_end()).unwrap();
+            delta.entities = vec![dwarf(tick >= 9)];
+            stream
+                .write_all(format!("{}\n", serde_json::to_string(&delta).unwrap()).as_bytes())
+                .unwrap();
+            thread::sleep(Duration::from_millis(20));
+        }
+        thread::sleep(Duration::from_millis(500));
+    });
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .unwrap();
+    let status = child.wait().unwrap();
+    server.join().unwrap();
+    assert!(status.success(), "tui exited with {status}");
+    let frames: Vec<String> = stdout
+        .lines()
+        .map(strip_ansi)
+        .filter(|line| line.starts_with("tick "))
+        .collect();
+    assert_eq!(frames.len(), 4, "{frames:?}");
+    assert!(
+        frames[0].contains("dwarves 1") && !frames[0].contains("miserable"),
+        "{}",
+        frames[0]
+    );
+    for line in &frames[1..] {
+        assert!(line.contains("hungry 1  miserable 1"), "{line}");
+    }
+}

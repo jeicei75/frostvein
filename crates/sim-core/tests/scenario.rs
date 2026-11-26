@@ -6776,3 +6776,32 @@ fn two_hungry_dwarves_and_one_berry_one_eats_it_and_the_other_finds_a_bush() {
     assert_eq!(ate_berries.len(), 1, "one of them ate the berry");
     assert!(world.items().iter().all(|(id, _)| id.0 != item));
 }
+
+/// 13.10: berries a removed stockpile leaves are no meal: the eater walking to them lets go at
+/// once, so a save taken right after the command holds no meal of them.
+#[test]
+fn removing_the_pile_ends_a_meal_of_its_berries_at_once() {
+    let (world, zones, miner, _) = digging_miner();
+    let cell = free_pile_cell(&world, &zones);
+    let (world, item) = add_berries(world, cell, 2);
+    let mut world = with_hungers(world, |id| if id == miner.0 { sim_core::EAT_AT } else { 0 });
+    step_until(&mut world, 25, "the miner takes a meal", |w| {
+        holds(w, miner, is_meal).is_some()
+    });
+    let first = *zones.iter().next().unwrap();
+    let last = *zones.iter().last().unwrap();
+    assert_eq!(
+        world.apply_command(SimCommand::RemoveStockpile {
+            rect: rect(first, last),
+        }),
+        None
+    );
+    assert!(
+        world
+            .jobs()
+            .iter()
+            .all(|job| job.kind != JobKind::Eat { item }),
+        "the meal ended with the pile"
+    );
+    assert_eq!(holds(&world, miner, |_| true), None);
+}

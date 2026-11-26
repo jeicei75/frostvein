@@ -552,6 +552,11 @@ mod tests {
                 sim_core::JobKind::Forage,
                 r#"{"forage":{"target":[1,2,3]}}"#,
             ),
+            (
+                sim_core::JobKind::Eat { item: 5 },
+                r#"{"eat":{"target":[1,2,3]}}"#,
+            ),
+            (sim_core::JobKind::EatPlant, r#"{"eat":{"target":[1,2,3]}}"#),
         ] {
             let job = sim_core::Job {
                 id: sim_core::JobId(1),
@@ -562,6 +567,46 @@ mod tests {
             };
             assert_eq!(serde_json::to_string(&super::dwarf_job(job)).unwrap(), wire);
         }
+    }
+
+    /// 13.10 AC 7: each dwarf carries its own `hungry` and `miserable`, read from the sim; a torch
+    /// or the campfire carries neither.
+    #[test]
+    fn each_dwarf_carries_his_own_needs_and_an_emitter_none() {
+        let mut save = sim_core::World::generate(42, sim_core::Dims::DEFAULT)
+            .with_hunger()
+            .to_save();
+        for dwarf in &mut save.dwarves {
+            dwarf.hunger = match dwarf.id {
+                0 => sim_core::MISERABLE_AT,
+                1 => sim_core::EAT_AT,
+                _ => 0,
+            };
+        }
+        let world = sim_core::World::from_save(save);
+        let snap = snapshot(&world, protocol::Speed::Normal);
+        let needs: Vec<(u32, Option<bool>, Option<bool>)> = snap
+            .entities
+            .iter()
+            .filter(|entity| entity.kind == protocol::EntityKind::Dwarf)
+            .map(|entity| (entity.id, entity.hungry, entity.miserable))
+            .collect();
+        assert_eq!(
+            needs,
+            vec![
+                (0, Some(true), Some(true)),
+                (1, Some(true), Some(false)),
+                (2, Some(false), Some(false)),
+                (3, Some(false), Some(false)),
+                (4, Some(false), Some(false)),
+            ]
+        );
+        assert!(
+            snap.entities
+                .iter()
+                .filter(|entity| entity.kind != protocol::EntityKind::Dwarf)
+                .all(|entity| entity.hungry.is_none() && entity.miserable.is_none())
+        );
     }
 
     #[test]

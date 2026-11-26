@@ -577,6 +577,37 @@ mod tests {
         assert_eq!((schedule.applied(), schedule.total()), (3, 3));
     }
 
+    /// 13.10 Q1: a seed start may turn hunger on (off when absent); a save start may not name it.
+    #[test]
+    fn a_seed_start_may_turn_hunger_on_and_a_save_start_may_not() {
+        let dir =
+            std::env::temp_dir().join(format!("frostvein-hunger-start-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = |name: &str, start: &str| {
+            let path = dir.join(name);
+            fs::write(
+                &path,
+                format!(
+                    r#"{{"name":"{name}","about":"test","start":{start},"ticks":1,"speed":"normal","commands":[]}}"#
+                ),
+            )
+            .unwrap();
+            path
+        };
+        let on = Scenario::load(&file("on.json", r#"{"seed":1,"hunger":true}"#)).unwrap();
+        assert!(on.world().unwrap().hunger_on());
+        let off = Scenario::load(&file("off.json", r#"{"seed":1}"#)).unwrap();
+        assert!(!off.world().unwrap().hunger_on());
+        let refused = Scenario::load(&file("save.json", r#"{"save":"x.save","hunger":true}"#))
+            .err()
+            .expect("a save start names no hunger");
+        assert!(
+            format!("{refused:#}").contains("start hunger is for a seed start"),
+            "{refused:#}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_state_hash_follows_the_world() {
         let mut world = sim_core::World::generate(sim_core::DEFAULT_SEED, sim_core::Dims::DEFAULT);
