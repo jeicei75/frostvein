@@ -1,0 +1,14 @@
+frostvein gate
+  cargo fmt --check           ok  1s
+  cargo clippy -D warnings    ok  2s
+  cargo test                  ok  658s
+  cargo test (release real-work scenario)ok  29s
+  cargo test (pixel guards)   ok  1465s
+  tui has no sim-core edge                ok
+  client-core has no sim-core edge        ok
+  gui has no sim-core edge                ok
+  metrics ledger tests        ok  0s
+  bench tests                 ok  19s
+  mutation tables still apply ok  14s
+GATE GREEN  2189s
+exit=0

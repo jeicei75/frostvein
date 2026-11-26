@@ -1,0 +1,22 @@
+building 0465969f8a46d465e390c363104e433fbe93d413 ...
+building 1b0b00b4a9c3cee603a368bedb92b20869560e3e ...
+building control (0465969f8a46d465e390c363104e433fbe93d413) ...
+base 0465969f8a46d465e390c363104e433fbe93d413
+head 1b0b00b4a9c3cee603a368bedb92b20869560e3e
+control: base again, functions shuffled (--shuffle-sections=*=1)
+runs 5 per build, interleaved; load before: 4.55, 5.23, 6.30
+scenario                  base_ms    head_ms    delta  control base_floor head_floor  ctl_floor  state  verdict
+big-pile                   0.0395     0.0407    +3.0%    +2.0%       2.0%       4.9%       2.5%  differ within floor
+deep-pit                   0.0244     0.0244    +0.2%    +1.4%       4.1%       4.1%       7.3%  differ within floor
+dig-loop                   0.0225     0.0229    +2.0%    +4.6%       2.7%       4.8%       9.8%  differ within floor
+full-pile-crowd            0.0302     0.0299    -0.9%    +0.1%       1.7%       4.0%       2.6%  differ within floor
+plan-compact-piles         0.0461     0.0463    +0.4%    -0.7%       4.6%       3.5%       1.5%  differ within floor
+plan-far-piles             0.0414     0.0418    +1.2%    +2.2%       1.5%       3.6%       3.3%  differ within floor
+plan-spread-piles          0.0472     0.0483    +2.4%    +1.2%       3.0%       3.5%       3.1%  differ within floor
+plan                       0.0408     0.0395    -3.0%    +2.6%       2.9%       7.3%       6.9%  differ within floor
+seat-slow                  0.0738     0.0698    -5.4%    -2.0%       8.3%       7.2%       4.0%  differ within floor
+stuck-tunnel               0.0260     0.0256    -1.5%    +2.8%       9.2%       4.3%      13.5%  differ within floor
+they-keep-coming           0.1017     0.1023    +0.6%    +1.1%       2.1%       2.0%       1.6%  differ within floor
+two-hundred-on-256         4.9323     5.0761    +2.9%    +1.2%       1.5%       0.8%       1.2%  differ BEYOND FLOOR
+load after: 1.35, 2.56, 4.75
+exit=0

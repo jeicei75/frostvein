@@ -1,0 +1,11 @@
+# AC 9 HEAD-only rows: HEAD build cd2d3bce (sim source = HEAD), release, interleaved, --runs 1 each. on = HEAD's two-hundred-on-256.json ("hunger": true); off = main's copy (no hunger key). Means: on 5.175, off 5.111 ms (+1.3%).
+on mean=5.1676
+off mean=5.0949
+on mean=5.1443
+off mean=5.1098
+on mean=5.1532
+off mean=5.1045
+on mean=5.2041
+off mean=5.1257
+on mean=5.2042
+off mean=5.1194

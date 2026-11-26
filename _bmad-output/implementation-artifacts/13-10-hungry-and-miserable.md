@@ -5,7 +5,7 @@ baseline_commit: 0465969f
 
 # Story 13.10: Hungry and Miserable
 
-Status: in-progress
+Status: review
 
 ## Story
 
@@ -181,62 +181,62 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
 ## Tasks / Subtasks
 
 - [x] **Task 0: Wolf's rulings (Q1–Q7).** Ruled 2026-11-26: see the Ruled line under Task 0 and the Change Log. #246 filed. Then ASK which implementer.
-- [ ] **Task 1: hunger state and the setting (AC 1, 2, 6).** UPDATE `crates/sim-core/src/lib.rs`, `src/save.rs`.
-  - [ ] Constants beside `FORAGE_*` (`lib.rs:97-104`): `EAT_AT`, `MISERABLE_AT`, `EAT_WORK_TICKS`.
-  - [ ] NEW `#[derive(Component)] struct Hunger(u32)` on every dwarf, at all three spawn sites: `spawn_dwarf` (`:4708`), `from_save`'s spawn (`:3970-3987`) and nothing else (`arrive` uses `spawn_dwarf`). It is a required component, not optional: see the `Carrying` NOTE (`:410-413`).
-  - [ ] NEW resource `struct HungerOn(bool)` beside `Arrivals` (`:1011-1014`), passed through `assemble` (`:3636`). NEW `pub fn with_hunger(mut self) -> World`: it sets the resource and gives each dwarf `start_hunger(seed, id)`. `arrive` gives each arrival its start hunger when the setting is on.
-  - [ ] NEW `fn start_hunger(seed: u64, dwarf: Id) -> u32`, shaped like `reaction_delay` (`:695`), and `fn miserable(hunger: u32) -> bool` with the cold/tiredness `// NOTE:`.
-  - [ ] Readers: `pub fn hunger(&self) -> Vec<(Id, u32)>`, `pub fn hungry(&self) -> Vec<(Id, bool)>` and `pub fn miserable(&self) -> Vec<(Id, bool)>`, sorted by `Id` like `professions()` (`:4558`). `pub fn hunger_on(&self) -> bool`.
-  - [ ] Save: `SaveState.hunger: bool` and `SavedDwarf.hunger: u32`, with no `#[serde(default)]` (`save.rs:32-34` NOTE shape). Update `to_save` (`:3841`) and `from_save`, and the `SavedDwarf { .. }` literals (`tests/save_load.rs:547,567,680,706,966`; `tests/scenario.rs:1624,1644,4626`).
-- [ ] **Task 2: eating and misery (AC 1, 3, 4, 5).** UPDATE `lib.rs`.
-  - [ ] `JobKind::Eat { item: u32 }` and `JobKind::EatPlant` (`:383`). `trade` becomes `fn trade(kind: JobKind) -> Option<Profession>`, `None` for both; update `can_try` (`:780`) and `set_profession` (`:4437`).
-  - [ ] Extend every exhaustive site:
+- [x] **Task 1: hunger state and the setting (AC 1, 2, 6).** UPDATE `crates/sim-core/src/lib.rs`, `src/save.rs`.
+  - [x] Constants beside `FORAGE_*` (`lib.rs:97-104`): `EAT_AT`, `MISERABLE_AT`, `EAT_WORK_TICKS`.
+  - [x] NEW `#[derive(Component)] struct Hunger(u32)` on every dwarf, at all three spawn sites: `spawn_dwarf` (`:4708`), `from_save`'s spawn (`:3970-3987`) and nothing else (`arrive` uses `spawn_dwarf`). It is a required component, not optional: see the `Carrying` NOTE (`:410-413`).
+  - [x] NEW resource `struct HungerOn(bool)` beside `Arrivals` (`:1011-1014`), passed through `assemble` (`:3636`). NEW `pub fn with_hunger(mut self) -> World`: it sets the resource and gives each dwarf `start_hunger(seed, id)`. `arrive` gives each arrival its start hunger when the setting is on.
+  - [x] NEW `fn start_hunger(seed: u64, dwarf: Id) -> u32`, shaped like `reaction_delay` (`:695`), and `fn miserable(hunger: u32) -> bool` with the cold/tiredness `// NOTE:`.
+  - [x] Readers: `pub fn hunger(&self) -> Vec<(Id, u32)>`, `pub fn hungry(&self) -> Vec<(Id, bool)>` and `pub fn miserable(&self) -> Vec<(Id, bool)>`, sorted by `Id` like `professions()` (`:4558`). `pub fn hunger_on(&self) -> bool`.
+  - [x] Save: `SaveState.hunger: bool` and `SavedDwarf.hunger: u32`, with no `#[serde(default)]` (`save.rs:32-34` NOTE shape). Update `to_save` (`:3841`) and `from_save`, and the `SavedDwarf { .. }` literals (`tests/save_load.rs:547,567,680,706,966`; `tests/scenario.rs:1624,1644,4626`).
+- [x] **Task 2: eating and misery (AC 1, 3, 4, 5).** UPDATE `lib.rs`.
+  - [x] `JobKind::Eat { item: u32 }` and `JobKind::EatPlant` (`:383`). `trade` becomes `fn trade(kind: JobKind) -> Option<Profession>`, `None` for both; update `can_try` (`:780`) and `set_profession` (`:4437`).
+  - [x] Extend every exhaustive site:
     - `Jobs::insert`/`remove` (`:453-486`): `EatPlant` shares `targets`; `Eat` is unique by item through a NEW `eat_items` set.
     - `work_positions_with` (`:1795`): `Eat` uses the haul pick-up's cells for the item, or empty if it is not stored; `EatPlant` uses Forage's side neighbours.
     - The work-time match (`:2987-2992`).
     - `JobKind` matches in simd.
-  - [ ] NEW exclusive system `tend_hunger`, chained after `advance_tick`, which skips while paused (AD-2) and does nothing with the setting off:
+  - [x] NEW exclusive system `tend_hunger`, chained after `advance_tick`, which skips while paused (AD-2) and does nothing with the setting off:
     1. Retire every Eat job nobody holds.
     2. Add 1 to every dwarf's hunger, saturating.
     3. For each dwarf, ascending `Id`, that is hungry, holds no Eat job and carries nothing, on its look tick (`(tick + id) % RETRY_COOLDOWN == 0`, stateless): run ONE search to the union of the work cells of the stored berries items with no Eat job. If that fails, run one search to the side cells of ripe bushes with no job, the forage turn's union-search shape (`:848-883`). This applies to every hungry dwarf, miserable or not (ruled Q4/Q7).
     4. On a hit, `release_claim` its trade job, create the Eat job (`next_job_id`) and hand it over with its `Path`.
     - `// NOTE:` the search cost: two floods per hungry dwarf per look when no food is reachable. AC 9 measures it.
-  - [ ] Misery in the claim: `can_try` is false for a miserable dwarf. `tend_hunger` releases a miserable dwarf's trade job once its hands are empty, whether or not food is found.
-  - [ ] Completion in `execute_jobs`, beside Forage (`:3108`), dispatched before the terrain-change arm:
+  - [x] Misery in the claim: `can_try` is false for a miserable dwarf. `tend_hunger` releases a miserable dwarf's trade job once its hands are empty, whether or not food is found.
+  - [x] Completion in `execute_jobs`, beside Forage (`:3108`), dispatched before the terrain-change arm:
     - `Eat`: if the item is still a stored Berries item, take 1 from its `ItemCount` and despawn it at 0, setting `stale = true`. Then hunger goes to 0.
     - `EatPlant`: if the bush is ripe and has no other job, set `ripe_at = tick + REGROW_TICKS`, mark the plant `changed`, and set hunger to 0.
     - In both: remove the job and `release_claim`.
-  - [ ] Scenario tests in `tests/scenario.rs` for AC 1, 3, 4, 5. Build the hungry state from a sim-written save with edited hunger (`to_save` → edit → `from_save`), never by stepping 12,000 ticks in debug. Find a pile cell and a bush from the world's readers; never hardcode them.
-- [ ] **Task 3: the load validator (AC 6).** UPDATE `crates/simd/src/main.rs`, `tests/serve.rs`.
-  - [ ] In `try_load_world_from` (`:594`), Eat arms beside the Forage arm (`:766`): the AC 6 refusals. `EatPlant` shares `seen_job_targets`. Both are kept out of the tile-job and haul counts (`:701-704`). The per-dwarf loop (`:878`) gets the hunger-with-setting-off check.
-  - [ ] Refusal tests through a real daemon Load, each with a positive control written by the sim (13.9 review's lesson: prove it with a save the sim wrote).
-  - [ ] Patch `scenarios/saves/*.save` per AC 6 with a throwaway script, not committed.
-- [ ] **Task 4: the wire (AC 7).** UPDATE `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs`, `scenario.rs`, `main.rs`.
-  - [ ] `Entity.hungry`/`.miserable` and `DwarfJob::Eat { target }`, pinned in the wire-literal tests (`protocol :487`, `:512`, `:761`). Torches and the campfire stay byte-identical (the `:487` test).
-  - [ ] `dwarf_entities` (`bridge.rs:197-240`) joins `hungry()`/`miserable()`. `emitter_entity` (`:181`) gets `None`. `dwarf_job` (`:242`) maps both Eat kinds. Add the first per-dwarf-field bridge test.
-  - [ ] Scenario `StartFile.hunger: Option<bool>` (`scenario.rs:38-47`). A save start with `hunger` is refused, as `arrivals` is (`:150-155`). `generate_world` (`main.rs:111`) takes it, and `fresh_world` (`:134`) turns it on.
-  - [ ] Every `Entity { .. }` literal (Found G).
-- [ ] **Task 5: the tui (AC 7).** UPDATE `crates/tui/src/view.rs`, `palette.rs`.
-  - [ ] `MISERY_COLOUR` in `palette.rs`, pinned in `every_look_is_pinned` (`:326`). The identity override (`view.rs:453-459`, Found H) uses it for a miserable dwarf.
-  - [ ] The roster word (`:537-570`) and the status counts (`:488-519`), per Q6.
-  - [ ] Tests beside `a_named_dwarf_is_drawn_in_his_tunic_colour…` (`:1391`) and `status_line_reports_speed_z_and_dwarf_count` (`:2075`).
-- [ ] **Task 6: the gui (AC 7).** UPDATE `crates/gui/src/project.rs`, `ingest.rs`.
-  - [ ] NEW system `slump_miserable_dwarf`, modelled on `nudge_dwarf_for_cut` (`project.rs:2810`) and composed with it so neither overwrites the other's armature offset. Register it after `nudge_dwarf_for_cut` in the chain (`ingest.rs:797-807`). It reads `miserable` from the mirror entity.
-  - [ ] The selection word in `name_readout_spans` (`ingest.rs:1880-1932`), and the stderr `miserable on|off` line beside `report_trade_changes` (`:1843-1878`).
-  - [ ] Headless tests in `gui/tests/headless.rs`, modelled on `a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not` (`:6872`): the slump appears and goes with the flag, the entity transform is untouched, and a cutting miserable dwarf keeps both offsets.
-- [ ] **Task 7: the instruments (AC 8, 10).**
-  - [ ] The end line (`scenario.rs:443-455`) appends ` eaten=E hungry=H miserable=M` after `food=` (Found I). `eaten` counts completed meals (Eat and EatPlant). Check every end-line and `next_log` reader before changing the line (memory: `new-log-line-breaks-next-line-readers`).
-  - [ ] A test in `simd/tests/bench.rs`: a save written by `sim_core` in the test with hunger off reads `eaten=0`. The same save with the setting on, one dwarf's hunger set to `EAT_AT - 5` and a stored berries item reads `eaten>=1`.
-  - [ ] A tui test in `tui/tests/client.rs`, on the file's stub server: the status line's `miserable` count goes from 0 to 1 when one entity's `miserable` turns `Some(true)`.
-  - [ ] **RED first, for each instrument.** Restore each step with an edit, never `git checkout --` (memory: `sabotage-restore-trap`).
+  - [x] Scenario tests in `tests/scenario.rs` for AC 1, 3, 4, 5. Build the hungry state from a sim-written save with edited hunger (`to_save` → edit → `from_save`), never by stepping 12,000 ticks in debug. Find a pile cell and a bush from the world's readers; never hardcode them.
+- [x] **Task 3: the load validator (AC 6).** UPDATE `crates/simd/src/main.rs`, `tests/serve.rs`.
+  - [x] In `try_load_world_from` (`:594`), Eat arms beside the Forage arm (`:766`): the AC 6 refusals. `EatPlant` shares `seen_job_targets`. Both are kept out of the tile-job and haul counts (`:701-704`). The per-dwarf loop (`:878`) gets the hunger-with-setting-off check.
+  - [x] Refusal tests through a real daemon Load, each with a positive control written by the sim (13.9 review's lesson: prove it with a save the sim wrote).
+  - [x] Patch `scenarios/saves/*.save` per AC 6 with a throwaway script, not committed.
+- [x] **Task 4: the wire (AC 7).** UPDATE `crates/protocol/src/lib.rs`, `crates/simd/src/bridge.rs`, `scenario.rs`, `main.rs`.
+  - [x] `Entity.hungry`/`.miserable` and `DwarfJob::Eat { target }`, pinned in the wire-literal tests (`protocol :487`, `:512`, `:761`). Torches and the campfire stay byte-identical (the `:487` test).
+  - [x] `dwarf_entities` (`bridge.rs:197-240`) joins `hungry()`/`miserable()`. `emitter_entity` (`:181`) gets `None`. `dwarf_job` (`:242`) maps both Eat kinds. Add the first per-dwarf-field bridge test.
+  - [x] Scenario `StartFile.hunger: Option<bool>` (`scenario.rs:38-47`). A save start with `hunger` is refused, as `arrivals` is (`:150-155`). `generate_world` (`main.rs:111`) takes it, and `fresh_world` (`:134`) turns it on.
+  - [x] Every `Entity { .. }` literal (Found G).
+- [x] **Task 5: the tui (AC 7).** UPDATE `crates/tui/src/view.rs`, `palette.rs`.
+  - [x] `MISERY_COLOUR` in `palette.rs`, pinned in `every_look_is_pinned` (`:326`). The identity override (`view.rs:453-459`, Found H) uses it for a miserable dwarf.
+  - [x] The roster word (`:537-570`) and the status counts (`:488-519`), per Q6.
+  - [x] Tests beside `a_named_dwarf_is_drawn_in_his_tunic_colour…` (`:1391`) and `status_line_reports_speed_z_and_dwarf_count` (`:2075`).
+- [x] **Task 6: the gui (AC 7).** UPDATE `crates/gui/src/project.rs`, `ingest.rs`.
+  - [x] NEW system `slump_miserable_dwarf`, modelled on `nudge_dwarf_for_cut` (`project.rs:2810`) and composed with it so neither overwrites the other's armature offset. Register it after `nudge_dwarf_for_cut` in the chain (`ingest.rs:797-807`). It reads `miserable` from the mirror entity.
+  - [x] The selection word in `name_readout_spans` (`ingest.rs:1880-1932`), and the stderr `miserable on|off` line beside `report_trade_changes` (`:1843-1878`).
+  - [x] Headless tests in `gui/tests/headless.rs`, modelled on `a_cutting_dwarfs_armature_is_nudged_toward_the_trunk_and_his_entity_is_not` (`:6872`): the slump appears and goes with the flag, the entity transform is untouched, and a cutting miserable dwarf keeps both offsets.
+- [x] **Task 7: the instruments (AC 8, 10).**
+  - [x] The end line (`scenario.rs:443-455`) appends ` eaten=E hungry=H miserable=M` after `food=` (Found I). `eaten` counts completed meals (Eat and EatPlant). Check every end-line and `next_log` reader before changing the line (memory: `new-log-line-breaks-next-line-readers`).
+  - [x] A test in `simd/tests/bench.rs`: a save written by `sim_core` in the test with hunger off reads `eaten=0`. The same save with the setting on, one dwarf's hunger set to `EAT_AT - 5` and a stored berries item reads `eaten>=1`.
+  - [x] A tui test in `tui/tests/client.rs`, on the file's stub server: the status line's `miserable` count goes from 0 to 1 when one entity's `miserable` turns `Some(true)`.
+  - [x] **RED first, for each instrument.** Restore each step with an edit, never `git checkout --` (memory: `sabotage-restore-trap`).
     - Comment out the `eaten` increment: the bench test must fail on `eaten=0`.
     - Make the status line ignore `miserable`: the tui test must fail.
     - Leave `slump_miserable_dwarf` unregistered: the headless test must fail.
-- [ ] **Task 8: the bench file and the delta (AC 2, 8, 9).**
-  - [ ] Per Q3, set `"hunger": true` in `two-hundred-on-256.json` and widen the opening forage order with a throwaway script until AC 8 holds. Record the box, the bush count and the reason in `about`, and add a re-pin line to the `bench.rs:294-307` doc comment, plus the AC 8 asserts.
-  - [ ] AC 2: run the end lines on `main` and HEAD, saved to `13-10-signoff/state-{main,head}-<sha>.txt`. Run the strip build in a scratch worktree (memory: `mutation-run-poisons-concurrent-builds`).
-  - [ ] AC 9: `RUNS=5 scripts/tick-bench.sh main HEAD`, saved to `13-10-signoff/tick-bench-main-<sha>.txt`, plus the two HEAD-only rows. Record the delta table in the Debug Log, in 13.9's form.
-- [ ] **Task 9: the mutation table (AC 11).** NEW `_bmad-output/implementation-artifacts/mutations/13-10.sh`, with count-guarded anchors, run saved to `13-10-signoff/`. At least one row each for:
+- [x] **Task 8: the bench file and the delta (AC 2, 8, 9).**
+  - [x] Per Q3, set `"hunger": true` in `two-hundred-on-256.json` and widen the opening forage order with a throwaway script until AC 8 holds. Record the box, the bush count and the reason in `about`, and add a re-pin line to the `bench.rs:294-307` doc comment, plus the AC 8 asserts.
+  - [x] AC 2: run the end lines on `main` and HEAD, saved to `13-10-signoff/state-{main,head}-<sha>.txt`. Run the strip build in a scratch worktree (memory: `mutation-run-poisons-concurrent-builds`).
+  - [x] AC 9: `RUNS=5 scripts/tick-bench.sh main HEAD`, saved to `13-10-signoff/tick-bench-main-<sha>.txt`, plus the two HEAD-only rows. Record the delta table in the Debug Log, in 13.9's form.
+- [x] **Task 9: the mutation table (AC 11).** NEW `_bmad-output/implementation-artifacts/mutations/13-10.sh`, with count-guarded anchors, run saved to `13-10-signoff/`. At least one row each for:
   - the hunger increment;
   - the `HungerOn` gate;
   - `start_hunger`'s stagger;
@@ -256,13 +256,13 @@ Each question has a recommendation, and the ACs and Tasks are written for it. A 
   - the gui slump registration.
 
   Run `audit-mutations.py` before the first code commit (memory: `deleting-code-retires-rows-in-the-same-commit`). Rows on `trade`'s match (13-9 row 2, 12-7 row 4) will need re-pointing.
-- [ ] **Task 10: the seat card (AC 12).** NEW `13-10-signoff/vehicle-card.md` in 13.9's skeleton:
+- [x] **Task 10: the seat card (AC 12).** NEW `13-10-signoff/vehicle-card.md` in 13.9's skeleton:
   - the run in the seat's form (WSL `simd 7451`; PowerShell `launch-gui.ps1` with `--perf-log` to an absolute `D:\Workspace\frostvein\.bin\` path);
   - what to do at fast4x in a fresh game: mark nothing, and watch hungry dwarves eat at unmarked bushes and go back to work (the tui `hungry` count). Then mark bushes and watch stored berries being eaten at the pile;
   - the misery half: NEW committed `scenarios/saves/no-food.save`, a copy of a seat save (`plants: []`) with `"hunger": true` and each dwarf's hunger a few hundred ticks below `MISERABLE_AT`, made by a throwaway script from a sim-written save. Watch dwarves turn miserable, slump and stop work (the tui `miserable` count);
   - one question each on the slump and the tui look;
   - the sitting in Wolf's words.
-- [ ] **Task 11: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).
+- [x] **Task 11: the gate.** `RUST_TEST_THREADS=1 scripts/gate.sh`, once, at PR (memory: `gate-ooms-at-default-parallelism`).
 
 ## Verification
 
@@ -361,11 +361,71 @@ The seat run lives on the vehicle card (Task 10), in the seat's form: WSL `simd 
 
 ### Agent Model Used
 
+claude-opus-5-5 (Opus direct, Wolf's choice 2026-11-26), one session.
+
 ### Debug Log References
+
+- **AC 2, end lines** (release): `13-10-signoff/state-main-0465969f.txt`, `state-head-cd2d3bce.txt`. All 12 committed scenarios end as on `main`, apart from ` eaten=0 hungry=0 miserable=0`. The bench row was run on main's copy of the file (hunger off).
+- **AC 2, strip build:** `prototypes/strip-hunger-fields.patch` (`#[serde(skip_serializing)]` on both new keys) on HEAD `cd2d3bce`, recorded in `state-strip-cd2d3bce.txt`. Every `state=` equals main's on all 12.
+  - Nine ran on main's scenario files.
+  - `dig-loop`, `seat-slow` and `stuck-tunnel` ran on HEAD's files, because their saves need the new keys and HEAD refuses main's saves.
+- **AC 8, bench** (HEAD's file, `"hunger": true`): `done=dig:275,cut:90 stored=60 cells=2194 foraged=32 food=25 eaten=32 hungry=13 miserable=0`.
+  - No widening was needed (Q3 a's "until it holds" was met on the first run): hungry dwarves with no stored berry eat wild bushes.
+  - Against hunger off: dig 287 to 275, cut 96 to 90, food 31 to 25. That is the work time spent eating.
+- **AC 4:** recovery measured at 280 ticks (six berries on two pile cells, five eaters), so `RECOVERY_BOUND = 600`.
+- **No-food seat save:** `scenarios/saves/no-food.save`, probed through HEAD's validator. After 2,500 ticks it reads `hungry=5 miserable=5 eaten=0`.
+- **Mutation run 1** (`mutate-13-10-cd2d3bce.txt`): 41 of 42 KILLED.
+  - Row 10 (the job-targets filter in `find_meal`) SURVIVED: no test had two eaters competing for one bush.
+  - Added `one_ripe_bush_feeds_one_of_two_hungry_dwarves_and_the_other_waits` and re-pointed the row to it. The re-run is in `mutate-rerun-9a26560e.txt`.
+- **Re-pointed older rows**, re-run with mutate.sh in `mutate-rerun-9a26560e.txt`, not only audited (memory: backstop-makes-old-rows-inert):
+  - 12-11 23b; 12-4 ×2; 12-6 ×4; 12-7 4; 13-9 2; 2-4 ×3; 12-2 ×2; 13-6 5; 8-2 compass.
+  - Also 12-12 1 and 3-1 ×2. Their text was kept unchanged by spelling my new code around them.
+- **Fast-tier catch:** the first status line (`dwarves N  hungry H  miserable M  N up`, always shown) pushed three refusal texts past the 80-column test terminal (tui `client.rs` refusal tests).
+  - Now the counts show only while someone is hungry, appended after `N up`. The original format string and its three pins are unchanged.
+
+- **AC 9, bench delta** (`13-10-signoff/tick-bench-main-1b0b00b4.txt`, `RUNS=5`, main `0465969f` vs HEAD `1b0b00b4`, the bench row on main's copy of the file):
+  - 11 of 12 rows are within floor.
+  - `two-hundred-on-256` reads 4.932 to 5.076 ms, **+2.9% BEYOND FLOOR** (control +1.2%, floors 1.5/0.8/1.2%), with hunger OFF.
+  - The off path adds only `retire_meals`' scan of the jobs and `claim_jobs`' scan for miserable dwarves, each microseconds against a 5 ms tick. +2.9% is near 2× the control, which is weak evidence between two builds (memory: cross-build-layout-noise, identical code read 3–6%). It is recorded, not chased further. Review may rule otherwise.
+- **AC 9, HEAD-only rows** (`tick-bench-head-only-hunger-on-off.txt`, one build, 5 interleaved pairs): hunger on 5.175 ms against off 5.111 ms, **+1.3%** for the need at crew 200.
 
 ### Completion Notes List
 
+- **Sim (Tasks 1–2).**
+  - `Hunger(u32)` is on every dwarf. `HungerOn` is the setting, with `World::with_hunger`, `start_hunger` (FNV, no RNG stream) and `fn miserable`.
+  - `tend_hunger` runs after `advance_tick`. It handles the rise, the look tick, the meal search and the hand-over, and lets a miserable dwarf go.
+  - `retire_meals` runs last in the tick and after every rect command. It ends a meal whose eater or food is gone, so a sim-written save never holds a meal the validator refuses.
+  - `trade()` is now `Option<Profession>`, so meals never enter the claim market (AD-12).
+- **One deviation from Task 2's text.** The story put the retire inside `tend_hunger`, at the start of the tick. It runs at the end instead. A meal released mid-tick (food lifted, carried, or its pile removed) would otherwise sit in a save unheld or over no food until the next tick, and simd's own validator would then refuse a sim-written save. That is the #244 class 13.9's review caught.
+- **Food order (Wolf's Q4/Q7 ruling).** Stored berries are searched first, then unmarked ripe bushes, as two searches. A failed flood is kept for the rest of the call.
+- **The validator (Task 3)** has six refusals, each proven through a live daemon Load, with a positive control from a sim-written save of each meal kind. The three seat saves were patched as data (`"hunger": false`, `"hunger": 0`).
+- **Wire, bridge and scenario (Task 4).**
+  - `Entity.hungry` and `Entity.miserable` are added and are `None` on emitters, so those encode byte-identically. `DwarfJob::Eat { target }` is added.
+  - `StartFile.hunger` is added; a save start that names it is refused. The fresh game is hungry.
+  - 64 `Entity` literals were patched by a compile-error-driven script.
+- **tui (Task 5).**
+  - A miserable named dwarf is drawn in `MISERY_COLOUR`. The roster adds the need after the trade, through the shared `client_core::need_text`.
+  - The status line adds `hungry H  miserable M` only while someone is hungry, appended after `N up`. Always showing the counts truncated refusal text at 80 columns.
+- **gui (Task 6).** `slump_miserable_dwarf` runs after `nudge_dwarf_for_cut` and composes with it. The selection panel names the need. `gui dwarf N miserable on|off` prints at each change.
+- **Instruments (Task 7).**
+  - The end line adds `eaten=`, `hungry=` and `miserable=`. A meal is a hunger falling to 0, and a bush meal is taken off `foraged=`.
+  - The REDs are mutation rows 32, 37 and 39, all KILLED.
+- **Bench (Task 8).** `"hunger": true` is set, and no widening was needed.
+- **Mutation table (Task 9).** 42 rows. The first run killed 41. Row 10 needed a new test, then was killed. The 20 re-pointed rows were re-run, and all were killed.
+- **Seat card (Task 10).** `13-10-signoff/vehicle-card.md`, with the no-food save for the misery half. The sitting is Wolf's.
+
 ### File List
+
+- `crates/sim-core/src/lib.rs`, `src/save.rs`, `tests/scenario.rs`, `tests/save_load.rs`
+- `crates/protocol/src/lib.rs`
+- `crates/simd/src/main.rs`, `src/bridge.rs`, `src/scenario.rs`, `tests/bench.rs`, `tests/serve.rs`
+- `crates/client-core/src/lib.rs`
+- `crates/tui/src/view.rs`, `src/palette.rs`, `tests/client.rs`
+- `crates/gui/src/project.rs`, `src/ingest.rs`, `src/appearance.rs`, `src/capture.rs`, `tests/headless.rs`, `tests/capture.rs`
+- `scenarios/two-hundred-on-256.json`, `scenarios/saves/12-11-dig-loop-patched.save`, `12-12-seat-loop.save`, `12-12-seat-slow.save`, NEW `scenarios/saves/no-food.save`
+- NEW `_bmad-output/implementation-artifacts/mutations/13-10.sh`; re-pointed rows in `mutations/12-2.sh`, `12-4.sh`, `12-6.sh`, `12-7.sh`, `12-11.sh`, `13-6.sh`, `13-9.sh`, `2-4-the-world-endures.sh` (`8-2` touched and restored)
+- NEW `_bmad-output/implementation-artifacts/13-10-signoff/`: `vehicle-card.md`, `no-food.json`, `state-main-0465969f.txt`, `state-head-cd2d3bce.txt`, `state-strip-cd2d3bce.txt`, `mutate-13-10-cd2d3bce.txt`, `mutate-rerun-9a26560e.txt`, `tick-bench-main-1b0b00b4.txt`, `tick-bench-head-only-hunger-on-off.txt`, `gate-full.txt`, `prototypes/strip-hunger-fields.patch`, `prototypes/rerun-rows.sh`
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, this story file
 
 ## Change Log
 
@@ -373,3 +433,5 @@ The seat run lives on the vehicle card (Task 10), in the seat's form: WSL `simd 
 |---|---|
 | 2026-11-26 | Created (claude-opus-5-5) from epics.md 13.10, on `main` `0465969f`. Baseline bench line re-read live (Found B). Task 0 Q1–Q7 open for Wolf. |
 | 2026-11-26 | Task 0 ruled by Wolf. Q1, Q2, Q3, Q5, Q6 (a). Q4 (a), widened: "they should find food and eat if there are some available". Q7 (a): "should dwarves just find food if nothing is in storage? Can be also later AI functionality". One food rule now covers every hungry dwarf: stored berries first, else the nearest unmarked ripe bush. Amended Q2, Q7, AC 1, 3, 6 (two `EatPlant` on one bush), 12, Tasks 2 and 10 (NEW `no-food.save` for the seat's misery half), and the Dev Notes. Self-restocking filed as #246 (route:undecided). |
+| 2026-11-26 | Dev (claude-opus-5-5, Opus direct). Tasks 0–10 done: sim, validator, wire, both clients, instruments, bench, 42-row mutation table (all killed after one added test), 20 re-pointed older rows re-run (all killed), seat card. One deviation: meals are retired at the end of the tick (and after rect commands), not at its start, so no sim-written save can hold one the validator refuses. Task 11 (full gate) pending. |
+| 2026-11-26 | Full gate `RUST_TEST_THREADS=1 scripts/gate.sh` GREEN at `1b0b00b4` (2,189 s, exit 0; pixel guards included: hunger in the fresh game moved none), `13-10-signoff/gate-full.txt`. Status → review. The seat sitting (AC 12) is Wolf's. |
